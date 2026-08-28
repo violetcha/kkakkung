@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BLACK TRACE: 서로 다른 지도를 가진 술래와 탈출자가 미지의 미로에서 추격하는 웹 기반 2D 비대칭 게임 프로젝트 기획서" />
+  <title>BLACK TRACE — 2D 비대칭 미로 추격 게임 최종 기획</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #111111;
+      --panel-2: #181818;
+      --ink: #f5f5f0;
+      --muted: #a7a7a0;
+      --line: #31312f;
+      --white: #ffffff;
+      --black: #000000;
+      --acid: #d7ff45;
+      --acid-soft: rgba(215, 255, 69, 0.12);
+      --cyan: #75ecff;
+      --cyan-soft: rgba(117, 236, 255, 0.12);
+      --danger: #ff6d6d;
+      --danger-soft: rgba(255, 109, 109, 0.12);
+      --radius: 22px;
+      --shadow: 0 24px 80px rgba(0,0,0,.34);
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(215,255,69,.07), transparent 28rem),
+        radial-gradient(circle at 92% 18%, rgba(117,236,255,.06), transparent 30rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.72;
+      word-break: keep-all;
+    }
+
+    a { color: inherit; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .skip-link {
+      position: fixed;
+      left: 12px;
+      top: -60px;
+      z-index: 9999;
+      padding: 10px 14px;
+      background: var(--white);
+      color: var(--black);
+      border-radius: 10px;
+      transition: .2s;
+    }
+    .skip-link:focus { top: 12px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid rgba(255,255,255,.09);
+      background: rgba(10,10,10,.82);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      min-height: 62px;
+      padding: 0 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      transform: rotate(3deg);
+    }
+    .brand-mark i { display: block; background: var(--white); }
+    .brand-mark i:nth-child(2), .brand-mark i:nth-child(4), .brand-mark i:nth-child(8) { background: #303030; }
+    .brand-mark i:nth-child(5) { background: var(--acid); }
+
+    .nav {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a {
+      text-decoration: none;
+      color: #c9c9c3;
+      font-size: 13px;
+      font-weight: 750;
+      padding: 8px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .nav a:hover, .nav a:focus-visible { background: #242424; color: var(--white); outline: none; }
+
+    main { overflow: hidden; }
+    .container { max-width: var(--max); margin: 0 auto; padding: 0 22px; }
+
+    .hero {
+      padding: 84px 0 54px;
+      position: relative;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
+      gap: 48px;
+      align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 22px;
+      padding: 7px 11px;
+      border: 1px solid #353535;
+      border-radius: 999px;
+      background: rgba(255,255,255,.035);
+      color: #d6d6d0;
+      font-size: 13px;
+      font-weight: 780;
+      letter-spacing: .02em;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      background: var(--acid);
+      box-shadow: 0 0 20px rgba(215,255,69,.8);
+    }
+    h1 {
+      margin: 0;
+      max-width: 830px;
+      font-size: clamp(49px, 8vw, 106px);
+      line-height: .92;
+      letter-spacing: -.075em;
+      font-weight: 950;
+    }
+    h1 .outline {
+      color: transparent;
+      -webkit-text-stroke: 1.5px rgba(255,255,255,.72);
+      text-stroke: 1.5px rgba(255,255,255,.72);
+    }
+    .hero-subtitle {
+      margin: 28px 0 0;
+      max-width: 760px;
+      color: #cacac4;
+      font-size: clamp(18px, 2.2vw, 25px);
+      line-height: 1.55;
+      font-weight: 660;
+    }
+    .hero-subtitle strong { color: var(--white); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 28px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+      border-radius: 12px;
+      border: 1px solid #343434;
+      background: #151515;
+      color: #d5d5cf;
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .pill b { color: var(--acid); }
+
+    .hero-board {
+      position: relative;
+      min-height: 470px;
+      border: 1px solid #343434;
+      border-radius: 30px;
+      overflow: hidden;
+      background: #050505;
+      box-shadow: var(--shadow);
+      isolation: isolate;
+    }
+    .hero-board::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.075) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,.075) 1px, transparent 1px);
+      background-size: 25px 25px;
+      opacity: .72;
+      mask-image: linear-gradient(to bottom, #000, transparent 95%);
+    }
+    .hero-board::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 56% 42%, transparent 0 18%, rgba(0,0,0,.88) 54% 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+    .maze-blocks { position: absolute; inset: 0; z-index: 0; }
+    .maze-blocks span { position: absolute; background: #fff; opacity: .9; }
+    .maze-blocks span:nth-child(1) { left: 11%; top: 11%; width: 54%; height: 24px; }
+    .maze-blocks span:nth-child(2) { left: 11%; top: 11%; width: 24px; height: 46%; }
+    .maze-blocks span:nth-child(3) { left: 27%; top: 27%; width: 47%; height: 24px; }
+    .maze-blocks span:nth-child(4) { left: 71%; top: 27%; width: 24px; height: 39%; }
+    .maze-blocks span:nth-child(5) { left: 27%; top: 44%; width: 24px; height: 35%; }
+    .maze-blocks span:nth-child(6) { left: 27%; top: 75%; width: 51%; height: 24px; }
+    .maze-blocks span:nth-child(7) { left: 47%; top: 43%; width: 24%; height: 24px; }
+    .maze-blocks span:nth-child(8) { left: 47%; top: 43%; width: 24px; height: 18%; }
+    .maze-blocks span:nth-child(9) { left: 7%; top: 61%; width: 21%; height: 24px; }
+    .maze-blocks span:nth-child(10) { right: 7%; top: 10%; width: 24px; height: 28%; }
+    .maze-blocks span:nth-child(11) { right: 7%; bottom: 7%; width: 29%; height: 24px; }
+    .hero-token {
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: -.04em;
+      box-shadow: 0 0 0 5px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.5);
+    }
+    .hero-token.runner { left: 32%; top: 54%; color: #000; background: #fff; }
+    .hero-token.hunter { right: 24%; top: 41%; color: #fff; background: #111; border: 2px solid var(--danger); }
+    .hero-token.exit { right: 11%; bottom: 12%; width: 31px; height: 31px; border-radius: 4px; color: #000; background: var(--acid); }
+    .signal {
+      position: absolute;
+      z-index: 2;
+      right: 22%;
+      top: 36%;
+      width: 90px;
+      height: 90px;
+      border: 1px solid rgba(255,109,109,.7);
+      border-radius: 50%;
+      animation: pulse 2.2s infinite;
+    }
+    .signal::before, .signal::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(255,109,109,.38);
+      border-radius: 50%;
+      inset: -18px;
+    }
+    .signal::after { inset: -38px; opacity: .5; }
+    .board-caption {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      bottom: 18px;
+      z-index: 4;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 15px 16px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 16px;
+      background: rgba(5,5,5,.78);
+      backdrop-filter: blur(10px);
+    }
+    .board-caption strong { display: block; font-size: 15px; }
+    .board-caption span { color: #a7a7a1; font-size: 12px; }
+    .board-caption code { color: var(--acid); font-size: 12px; }
+    @keyframes pulse { 0%, 100% { transform: scale(.88); opacity: .25; } 50% { transform: scale(1.13); opacity: 1; } }
+
+    .summary-strip {
+      margin-top: 34px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255,255,255,.025);
+    }
+    .summary-item { padding: 19px 21px; border-right: 1px solid var(--line); }
+    .summary-item:last-child { border-right: 0; }
+    .summary-item small { display: block; color: #888882; font-size: 12px; font-weight: 760; }
+    .summary-item strong { display: block; margin-top: 5px; font-size: 16px; }
+
+    section { padding: 78px 0; scroll-margin-top: 70px; }
+    section + section { border-top: 1px solid rgba(255,255,255,.07); }
+    .section-head {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 34px;
+    }
+    .section-kicker {
+      padding-top: 7px;
+      color: var(--acid);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h2 {
+      margin: 0;
+      font-size: clamp(31px, 4.5vw, 56px);
+      line-height: 1.13;
+      letter-spacing: -.045em;
+    }
+    .section-intro {
+      max-width: 840px;
+      margin: 15px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .quote {
+      padding: 26px 28px;
+      border-left: 4px solid var(--acid);
+      background: linear-gradient(90deg, var(--acid-soft), transparent 74%);
+      border-radius: 0 20px 20px 0;
+      font-size: clamp(20px, 2.8vw, 31px);
+      font-weight: 840;
+      line-height: 1.48;
+      letter-spacing: -.025em;
+    }
+    .quote em { color: var(--acid); font-style: normal; }
+
+    .grid-2, .grid-3, .grid-4 { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.014));
+      padding: 24px;
+      min-width: 0;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 20px; letter-spacing: -.025em; }
+    .card p { margin: 0; color: var(--muted); }
+    .card p + p { margin-top: 10px; }
+    .card.acid { border-color: rgba(215,255,69,.35); background: linear-gradient(145deg, var(--acid-soft), rgba(255,255,255,.02) 58%); }
+    .card.cyan { border-color: rgba(117,236,255,.3); background: linear-gradient(145deg, var(--cyan-soft), rgba(255,255,255,.02) 58%); }
+    .card.danger { border-color: rgba(255,109,109,.3); background: linear-gradient(145deg, var(--danger-soft), rgba(255,255,255,.02) 58%); }
+    .mini-label {
+      display: inline-flex;
+      margin-bottom: 13px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      background: #262626;
+      color: #bdbdb6;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+    .acid .mini-label { background: var(--acid); color: #000; }
+    .cyan .mini-label { background: var(--cyan); color: #000; }
+    .danger .mini-label { background: var(--danger); color: #000; }
+
+    .role-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 340px;
+    }
+    .role-card::after {
+      position: absolute;
+      right: -20px;
+      bottom: -73px;
+      font-size: 180px;
+      line-height: 1;
+      font-weight: 950;
+      opacity: .045;
+      pointer-events: none;
+    }
+    .role-card.runner::after { content: "○"; }
+    .role-card.hunter::after { content: "●"; }
+    .role-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .role-icon {
+      width: 47px;
+      height: 47px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      font-weight: 950;
+    }
+    .runner .role-icon { background: white; color: black; }
+    .hunter .role-icon { background: #060606; color: white; border: 2px solid var(--danger); }
+    .role-title h3 { margin: 0; font-size: 26px; }
+    .role-title span { display: block; color: #85857f; font-size: 12px; font-weight: 760; }
+    .clean-list { list-style: none; padding: 0; margin: 17px 0 0; display: grid; gap: 10px; }
+    .clean-list li { position: relative; padding-left: 22px; color: #cacac4; }
+    .clean-list li::before { content: ""; position: absolute; left: 0; top: .68em; width: 8px; height: 8px; background: var(--acid); border-radius: 2px; }
+    .hunter .clean-list li::before { background: var(--danger); }
+
+    .demo-shell {
+      display: grid;
+      grid-template-columns: minmax(310px, .88fr) minmax(0, 1.12fr);
+      gap: 22px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: #0f0f0f;
+      box-shadow: var(--shadow);
+    }
+    .demo-control { padding: 8px 5px 5px; }
+    .demo-control h3 { margin: 0; font-size: 25px; }
+    .demo-control p { color: var(--muted); }
+    .switches { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+    .switches button {
+      border: 1px solid #393939;
+      background: #171717;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 820;
+      cursor: pointer;
+    }
+    .switches button[aria-pressed="true"] { background: var(--white); color: #000; border-color: #fff; }
+    .demo-notes { display: grid; gap: 9px; margin-top: 22px; }
+    .demo-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px; background: #171717; border-radius: 12px; color: #c7c7c1; font-size: 13px; }
+    .demo-note b { color: var(--acid); }
+    .demo-stage {
+      display: grid;
+      place-items: center;
+      min-height: 490px;
+      border: 1px solid #2d2d2d;
+      border-radius: 20px;
+      background: #050505;
+      overflow: hidden;
+      padding: 24px;
+    }
+    #mapGrid {
+      display: grid;
+      grid-template-columns: repeat(17, minmax(8px, 1fr));
+      width: min(100%, 510px);
+      aspect-ratio: 1 / 1;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 8px #101010, 0 22px 50px rgba(0,0,0,.55);
+      background: #080808;
+    }
+    .map-cell {
+      position: relative;
+      min-width: 0;
+      border: .5px solid rgba(255,255,255,.04);
+      display: grid;
+      place-items: center;
+      font-size: clamp(7px, 1.1vw, 11px);
+      font-weight: 900;
+      user-select: none;
+    }
+    .map-cell.wall { background: #f4f4ef; }
+    .map-cell.floor { background: #0a0a0a; }
+    .map-cell.unknown { background: #151515; color: #454545; }
+    .map-cell.dim-floor { background: #090909; }
+    .map-cell.dim-wall { background: #b6b6af; }
+    .map-cell.own-wall { background: var(--danger); }
+    .map-cell.trail-runner::after, .map-cell.trail-hunter::after {
+      content: "";
+      width: 27%;
+      height: 27%;
+      border-radius: 50%;
+      position: absolute;
+    }
+    .map-cell.trail-runner::after { background: rgba(117,236,255,.65); }
+    .map-cell.trail-hunter::after { background: rgba(255,109,109,.55); }
+    .map-cell.token-runner::before, .map-cell.token-hunter::before, .map-cell.real-exit::before, .map-cell.fake-exit::before, .map-cell.sensor::before {
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      inset: 13%;
+      line-height: 1;
+    }
+    .map-cell.token-runner::before { content: ""; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 2px #000; }
+    .map-cell.token-hunter::before { content: ""; border-radius: 50%; background: #050505; border: 2px solid var(--danger); box-shadow: 0 0 0 1px #000; }
+    .map-cell.real-exit::before { content: "E"; background: var(--acid); color: #000; inset: 8%; font-size: clamp(7px, 1vw, 10px); }
+    .map-cell.fake-exit::before { content: "?"; border: 1px solid #fff; color: #fff; inset: 8%; font-size: clamp(7px, 1vw, 10px); }
+    .map-cell.sensor::before { content: "S"; background: var(--danger); color: #000; inset: 18%; font-size: clamp(6px, .9vw, 9px); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .flow-step {
+      position: relative;
+      min-height: 175px;
+      padding: 19px 15px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: #141414;
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      transform: translate(50%, -50%);
+      z-index: 3;
+      width: 23px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--acid);
+      color: #000;
+      font-weight: 950;
+    }
+    .flow-step b { display: block; color: var(--acid); font-size: 12px; letter-spacing: .08em; }
+    .flow-step strong { display: block; margin-top: 10px; font-size: 16px; line-height: 1.35; }
+    .flow-step span { display: block; margin-top: 9px; color: #8e8e88; font-size: 12px; line-height: 1.55; }
+
+    .rules-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 20px; }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { padding: 15px 17px; border-bottom: 1px solid #2c2c2c; text-align: left; vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    th { background: #181818; color: #9e9e98; font-size: 12px; letter-spacing: .06em; }
+    td { color: #d7d7d1; }
+    td:first-child { color: var(--white); font-weight: 800; }
+    .recommended { color: var(--acid); font-weight: 900; }
+
+    .mechanic {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .mechanic-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 13px;
+      border: 1px solid #3b3b3b;
+      background: #0b0b0b;
+      color: var(--acid);
+      font-weight: 950;
+    }
+    .mechanic h3 { margin: 2px 0 6px; font-size: 18px; }
+    .mechanic p { font-size: 14px; }
+
+    .compare-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
+    .compare-card { display: flex; flex-direction: column; min-height: 286px; }
+    .compare-card h3 { font-size: 18px; }
+    .compare-card .overlap { margin-top: 15px; color: #c8c8c2; font-size: 13px; }
+    .compare-card .difference { margin-top: 12px; padding-top: 12px; border-top: 1px solid #303030; color: var(--acid); font-size: 13px; font-weight: 720; }
+    .compare-card a { margin-top: auto; padding-top: 18px; color: #999992; font-size: 12px; text-underline-offset: 3px; }
+
+    .differentiator {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+    }
+    .big-number {
+      font-size: clamp(76px, 10vw, 140px);
+      line-height: .8;
+      font-weight: 950;
+      letter-spacing: -.09em;
+      color: var(--acid);
+    }
+    .difference-list { counter-reset: diff; display: grid; gap: 10px; margin-top: 18px; }
+    .difference-list div { counter-increment: diff; padding: 13px 14px; border-radius: 13px; background: #171717; color: #cecec8; }
+    .difference-list div::before { content: "0" counter(diff); display: inline-block; width: 32px; color: var(--acid); font-size: 11px; font-weight: 950; letter-spacing: .08em; }
+
+    .ai-pipeline {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .ai-node {
+      position: relative;
+      min-height: 175px;
+      padding: 17px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #121212;
+    }
+    .ai-node:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 33px;
+      width: 19px;
+      height: 2px;
+      background: var(--cyan);
+      z-index: 2;
+    }
+    .ai-node b { color: var(--cyan); font-size: 11px; letter-spacing: .08em; }
+    .ai-node strong { display: block; margin-top: 8px; font-size: 15px; line-height: 1.4; }
+    .ai-node span { display: block; margin-top: 9px; color: #8e8e88; font-size: 12px; line-height: 1.5; }
+
+    .event-code {
+      margin: 0;
+      padding: 19px;
+      border: 1px solid #333;
+      border-radius: 16px;
+      background: #060606;
+      overflow-x: auto;
+      color: #d8d8d2;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .event-code .key { color: var(--cyan); }
+    .event-code .string { color: var(--acid); }
+    .event-code .number { color: #ffb86b; }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 1fr 46px 1.1fr 46px 1fr;
+      gap: 11px;
+      align-items: stretch;
+    }
+    .arch-box {
+      padding: 21px;
+      border: 1px solid var(--line);
+      border-radius: 19px;
+      background: #141414;
+    }
+    .arch-box h3 { margin: 0 0 12px; font-size: 18px; }
+    .arch-box ul { margin: 0; padding-left: 18px; color: #b4b4ae; font-size: 14px; }
+    .arch-arrow { display: grid; place-items: center; color: var(--acid); font-size: 26px; font-weight: 950; }
+    .arch-subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+    .arch-tag { padding: 10px; border-radius: 10px; background: #202020; color: #c9c9c3; font-size: 12px; }
+
+    .roadmap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .phase { position: relative; min-height: 330px; padding-top: 58px; }
+    .phase-num {
+      position: absolute;
+      left: 22px;
+      top: 18px;
+      font-size: 58px;
+      line-height: 1;
+      font-weight: 950;
+      letter-spacing: -.08em;
+      color: #2b2b2b;
+    }
+    .phase h3 { position: relative; font-size: 19px; }
+    .phase ul { padding-left: 19px; margin: 14px 0 0; color: #bcbcb6; font-size: 14px; }
+    .phase li + li { margin-top: 7px; }
+    .phase .result { margin-top: 17px; padding: 11px; border-radius: 11px; background: var(--acid-soft); color: var(--acid); font-size: 12px; font-weight: 800; }
+
+    .scope-guard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .do, .dont { padding: 24px; border-radius: 22px; border: 1px solid var(--line); }
+    .do { background: linear-gradient(145deg, var(--acid-soft), #111 60%); border-color: rgba(215,255,69,.3); }
+    .dont { background: linear-gradient(145deg, var(--danger-soft), #111 60%); border-color: rgba(255,109,109,.3); }
+    .scope-guard h3 { margin: 0 0 14px; font-size: 23px; }
+    .scope-guard ul { padding-left: 20px; margin: 0; color: #cecec8; }
+    .scope-guard li + li { margin-top: 7px; }
+
+    .risk-grid { display: grid; gap: 11px; }
+    .risk-row {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1.4fr;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #121212;
+    }
+    .risk-row strong { font-size: 14px; }
+    .risk-row span { color: #aaa; font-size: 13px; }
+    .risk-row span:last-child { color: #d0d0ca; }
+
+    .pitch-box {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(32px, 6vw, 70px);
+      border: 1px solid rgba(215,255,69,.45);
+      border-radius: 32px;
+      background:
+        linear-gradient(135deg, rgba(215,255,69,.13), transparent 48%),
+        #101010;
+    }
+    .pitch-box::after {
+      content: "?";
+      position: absolute;
+      right: -2%;
+      bottom: -35%;
+      font-size: 360px;
+      line-height: 1;
+      font-weight: 950;
+      color: rgba(255,255,255,.025);
+      pointer-events: none;
+    }
+    .pitch-box h2 { max-width: 930px; }
+    .pitch-box .final-line { margin-top: 27px; max-width: 900px; color: #deded8; font-size: 20px; font-weight: 710; }
+    .pitch-box .final-line em { color: var(--acid); font-style: normal; }
+
+    .sources { display: grid; gap: 10px; }
+    .source {
+      display: grid;
+      grid-template-columns: 145px 1fr auto;
+      gap: 15px;
+      align-items: center;
+      padding: 14px 15px;
+      border: 1px solid #2f2f2f;
+      border-radius: 13px;
+      background: #111;
+      font-size: 13px;
+    }
+    .source strong { color: #fff; }
+    .source span { color: #999993; }
+    .source a { color: var(--acid); text-underline-offset: 3px; font-weight: 800; }
+
+    footer {
+      padding: 42px 0 56px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      color: #7f7f79;
+      font-size: 12px;
+    }
+    .footer-inner { display: flex; justify-content: space-between; gap: 20px; }
+    .footer-inner b { color: #d1d1cb; }
+
+    .print-only { display: none; }
+
+    @media (max-width: 1060px) {
+      .hero-grid { grid-template-columns: 1fr; }
+      .hero-board { min-height: 420px; }
+      .flow { grid-template-columns: repeat(4, minmax(0,1fr)); }
+      .flow-step:nth-child(4)::after { display: none; }
+      .compare-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .ai-pipeline { grid-template-columns: repeat(3, minmax(0,1fr)); }
+      .ai-node:nth-child(3)::after { display: none; }
+      .architecture { grid-template-columns: 1fr; }
+      .arch-arrow { min-height: 30px; transform: rotate(90deg); }
+      .roadmap { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+
+    @media (max-width: 780px) {
+      .topbar-inner { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 10px; }
+      .nav { width: 100%; }
+      .hero { padding-top: 55px; }
+      .hero-board { min-height: 365px; }
+      .summary-strip { grid-template-columns: 1fr 1fr; }
+      .summary-item:nth-child(2) { border-right: 0; }
+      .summary-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .section-head { grid-template-columns: 1fr; gap: 7px; }
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .demo-shell { grid-template-columns: 1fr; }
+      .demo-stage { min-height: auto; }
+      .flow { grid-template-columns: 1fr 1fr; }
+      .flow-step:nth-child(even)::after { display: none; }
+      .flow-step:nth-child(4)::after { display: none; }
+      .compare-grid { grid-template-columns: 1fr; }
+      .differentiator { grid-template-columns: 1fr; }
+      .ai-pipeline { grid-template-columns: 1fr 1fr; }
+      .ai-node:nth-child(even)::after { display: none; }
+      .ai-node:nth-child(3)::after { display: block; }
+      .roadmap { grid-template-columns: 1fr; }
+      .scope-guard { grid-template-columns: 1fr; }
+      .risk-row { grid-template-columns: 1fr; }
+      .sources .source { grid-template-columns: 1fr; gap: 5px; }
+      .footer-inner { flex-direction: column; }
+    }
+
+    @media (max-width: 520px) {
+      .container { padding-left: 16px; padding-right: 16px; }
+      .topbar-inner { padding-left: 16px; padding-right: 16px; }
+      h1 { font-size: 50px; }
+      .hero-board { min-height: 325px; border-radius: 22px; }
+      .summary-strip { grid-template-columns: 1fr; }
+      .summary-item { border-right: 0; border-bottom: 1px solid var(--line); }
+      .summary-item:last-child { border-bottom: 0; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step::after { display: none !important; }
+      .ai-pipeline { grid-template-columns: 1fr; }
+      .ai-node::after { display: none !important; }
+      .board-caption { align-items: flex-start; flex-direction: column; gap: 5px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+
+    @media print {
+      :root { --bg: #fff; --ink: #111; --muted: #555; --line: #bbb; }
+      body { background: #fff; color: #111; font-size: 10pt; }
+      .topbar, .hero-board, .demo-shell, .nav, .hero-actions { display: none !important; }
+      .print-only { display: block; }
+      .hero { padding-top: 20px; }
+      h1 .outline { color: #111; -webkit-text-stroke: 0; }
+      .card, .flow-step, .ai-node, .arch-box, .phase, .risk-row, .source, .do, .dont, .pitch-box { background: #fff !important; color: #111 !important; break-inside: avoid; box-shadow: none; }
+      .card p, .flow-step span, .ai-node span, .arch-box ul, .phase ul, .risk-row span, .source span { color: #444 !important; }
+      section { padding: 30px 0; }
+      a { color: #111; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip-link">본문으로 이동</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="#top" class="brand" aria-label="BLACK TRACE 문서 상단으로 이동">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        BLACK TRACE
+      </a>
+      <nav class="nav" aria-label="문서 목차">
+        <a href="#concept">핵심 개념</a>
+        <a href="#roles">역할</a>
+        <a href="#flow">게임 흐름</a>
+        <a href="#mechanics">재미 요소</a>
+        <a href="#difference">차별성</a>
+        <a href="#ai-video">AI 영상</a>
+        <a href="#mvp">MVP</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <div id="top" class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">팀 공유용 최종 기획 · 2026.08.27</div>
+            <h1>BLACK<br><span class="outline">TRACE</span></h1>
+            <p class="hero-subtitle">
+              <strong>탈출자는 지나온 길을 기억하고, 술래는 자신이 만든 것만 기억한다.</strong><br>
+              서로 다른 지도를 가진 플레이어들이 같은 미로에서 추격하는 웹 기반 2D 비대칭 게임.
+            </p>
+            <div class="hero-actions" aria-label="프로젝트 핵심 제약">
+              <span class="pill"><b>WEB</b> 브라우저 즉시 플레이</span>
+              <span class="pill"><b>2D</b> Canvas 격자 렌더링</span>
+              <span class="pill"><b>1 : 3</b> 비대칭 멀티플레이</span>
+              <span class="pill"><b>AI</b> 경기 후 영상 재구성</span>
+            </div>
+          </div>
+
+          <div class="hero-board" aria-label="흑백 미로에서 술래와 탈출자가 추격하는 개념 이미지">
+            <div class="maze-blocks" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="signal" aria-hidden="true"></div>
+            <div class="hero-token runner" aria-label="탈출자">R</div>
+            <div class="hero-token hunter" aria-label="술래">H</div>
+            <div class="hero-token exit" aria-label="출구">E</div>
+            <div class="board-caption">
+              <div>
+                <strong>같은 공간, 다른 기억</strong>
+                <span>탈출자는 개인 지도를 만들고 술래는 설치물을 랜드마크로 삼는다.</span>
+              </div>
+              <code>64 × 64 GRID</code>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-strip" aria-label="프로젝트 요약">
+          <div class="summary-item"><small>플랫폼</small><strong>React + HTML Canvas</strong></div>
+          <div class="summary-item"><small>한 판 길이</small><strong>약 4~5분</strong></div>
+          <div class="summary-item"><small>핵심 규칙</small><strong>비대칭 지도·기억</strong></div>
+          <div class="summary-item"><small>AI 결과물</small><strong>15초 픽셀 하이라이트</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <section id="concept">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">01 / CONCEPT</div>
+          <div>
+            <h2>이 프로젝트가 정확히 무엇인가</h2>
+            <p class="section-intro">Unity나 Unreal로 만드는 정교한 액션 게임이 아니다. 흰색 길과 검은색 벽, 원형 캐릭터, 제한된 시야만으로 성립하는 짧은 웹 게임이다.</p>
+          </div>
+        </div>
+
+        <div class="quote">
+          술래가 제한된 블록과 가짜 출구를 준비하고, 탈출자들은 직접 걸어 다니며 <em>각자의 지도</em>를 완성해 진짜 출구를 찾는다. 경기 종료 후에야 전체 미로와 모든 사건이 공개된다.
+        </div>
+
+        <div class="grid-3" style="margin-top:18px">
+          <article class="card acid">
+            <span class="mini-label">핵심 경험</span>
+            <h3>정보를 모으는 추격전</h3>
+            <p>빠른 조작보다 “내가 아는 길”, “상대가 알 것 같은 길”, “소리가 발생한 방향”을 조합하는 판단이 중심이다.</p>
+          </article>
+          <article class="card">
+            <span class="mini-label">플레이 범위</span>
+            <h3>단순한 칸 단위 이동</h3>
+            <p>WASD 또는 방향키로 한 칸씩 이동한다. 충돌, 시야, 출구 판정 모두 격자 좌표로 처리한다.</p>
+          </article>
+          <article class="card cyan">
+            <span class="mini-label">AI의 위치</span>
+            <h3>게임 밖에서 강하게</h3>
+            <p>AI는 승패를 판단하지 않는다. 정확한 서버 로그를 바탕으로 주요 장면을 고르고 짧은 2D 영상을 만든다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="roles">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">02 / ROLES</div>
+          <div>
+            <h2>같은 미로를 보지만, 저장되는 정보가 다르다</h2>
+            <p class="section-intro">이 프로젝트의 가장 중요한 차별점이다. 단순히 능력치가 다른 것이 아니라, 두 진영이 기억하는 세계 자체가 다르다.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card role-card runner cyan">
+            <div class="role-title">
+              <div class="role-icon">R</div>
+              <div><h3>탈출자</h3><span>RUNNER · 탐색과 협동</span></div>
+            </div>
+            <p>현재 주변을 보며 이동하고, 직접 확인한 길과 벽은 개인 지도에 계속 남는다. 팀원과 만나야 서로의 지도 정보가 합쳐진다.</p>
+            <ul class="clean-list">
+              <li>방문한 통로와 발견한 벽을 영구 기록</li>
+              <li>아직 탐색하지 않은 영역은 안개 처리</li>
+              <li>팀원과 인접하면 지도 일부 동기화</li>
+              <li>소리 미끼 또는 팀 공용 벽 파괴권 사용</li>
+              <li>장치 2개를 활성화해 진짜 출구 개방</li>
+            </ul>
+          </article>
+
+          <article class="card role-card hunter danger">
+            <div class="role-title">
+              <div class="role-icon">H</div>
+              <div><h3>술래</h3><span>HUNTER · 기억과 추론</span></div>
+            </div>
+            <p>현재 주변은 볼 수 있지만 일반 경로는 지도에 남지 않는다. 준비 단계에서 자신이 설치한 벽·가짜 출구·센서만 영구 표식으로 보인다.</p>
+            <ul class="clean-list">
+              <li>경기 전 제한된 구역에 검은 블록 배치</li>
+              <li>자신이 설치한 구조물을 랜드마크로 활용</li>
+              <li>센서와 발소리로 대략적인 방향 추적</li>
+              <li>전체 지도와 진짜 출구 위치는 알 수 없음</li>
+              <li>기억과 설치물 배치를 이용해 동선 예측</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="demo-shell" style="margin-top:20px">
+          <div class="demo-control">
+            <span class="mini-label">INTERACTIVE MOCKUP</span>
+            <h3>역할별로 지도가 어떻게 달라지는가</h3>
+            <p>버튼을 눌러 같은 순간을 탈출자, 술래, 전체 진실의 관점으로 비교할 수 있다.</p>
+            <div class="switches" role="group" aria-label="지도 관점 선택">
+              <button type="button" data-view="runner" aria-pressed="true">탈출자 지도</button>
+              <button type="button" data-view="hunter" aria-pressed="false">술래 지도</button>
+              <button type="button" data-view="truth" aria-pressed="false">경기 후 진실</button>
+            </div>
+            <div id="viewDescription" class="demo-notes" aria-live="polite"></div>
+          </div>
+          <div class="demo-stage">
+            <div id="mapGrid" aria-label="역할별 미로 정보 차이 예시"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">03 / GAME FLOW</div>
+          <div>
+            <h2>한 판은 준비 45초, 추격 4분으로 끝난다</h2>
+            <p class="section-intro">탐색만 하다 끝나거나 우연히 출구를 바로 찾는 문제를 막기 위해, 출구를 열기 위한 공동 목표를 둔다.</p>
+          </div>
+        </div>
+
+        <div class="flow" aria-label="게임 진행 순서">
+          <div class="flow-step"><b>STEP 01</b><strong>기본 미로 생성</strong><span>순환 통로가 포함된 64×64 맵과 진짜 출구를 서버가 생성한다.</span></div>
+          <div class="flow-step"><b>STEP 02</b><strong>술래 준비</strong><span>일부 건설 구역에서 제한된 블록·가짜 출구·센서를 배치한다.</span></div>
+          <div class="flow-step"><b>STEP 03</b><strong>조건부 랜덤 배치</strong><span>출구·상대와 일정 거리 이상 떨어진 위치에서 모두 시작한다.</span></div>
+          <div class="flow-step"><b>STEP 04</b><strong>개인 탐색</strong><span>탈출자는 지도를 만들고, 술래는 소리와 자기 설치물을 따라 움직인다.</span></div>
+          <div class="flow-step"><b>STEP 05</b><strong>장치 활성화</strong><span>탈출자 팀이 맵 안의 장치 2개를 찾아 작동시킨다.</span></div>
+          <div class="flow-step"><b>STEP 06</b><strong>최종 추격</strong><span>진짜 출구가 열리며 술래에게도 대략적인 출구 방향이 알려진다.</span></div>
+          <div class="flow-step"><b>STEP 07</b><strong>진실 공개</strong><span>전체 맵·이동 경로·엇갈린 순간을 공개하고 AI 영상을 만든다.</span></div>
+        </div>
+
+        <div class="rules-table-wrap" style="margin-top:22px">
+          <table aria-label="권장 MVP 게임 규칙">
+            <thead><tr><th>항목</th><th>권장값</th><th>설계 이유</th></tr></thead>
+            <tbody>
+              <tr><td>논리 맵</td><td class="recommended">64 × 64</td><td>브라우저 렌더링과 조우 밀도의 균형. 화면에서는 칸을 확대해 큰 픽셀판처럼 표현한다.</td></tr>
+              <tr><td>인원</td><td class="recommended">술래 1명 : 탈출자 3명</td><td>웹 프로젝트에서 매칭과 실시간 동기화 범위를 통제하면서도 협동이 성립한다.</td></tr>
+              <tr><td>준비 시간</td><td>45초</td><td>설치 전략은 주되, 실제 플레이보다 준비가 길어지는 것을 방지한다.</td></tr>
+              <tr><td>추격 시간</td><td>4분</td><td>간단히 접속해 즐길 수 있는 짧은 라운드 구조를 유지한다.</td></tr>
+              <tr><td>술래 예산</td><td>벽 18칸 · 가짜 출구 1개 · 센서 2개</td><td>무제한 봉쇄를 막고 배치 선택에 의미를 준다.</td></tr>
+              <tr><td>탈출 조건</td><td>장치 2개 → 출구 개방 → 2명 이상 탈출</td><td>우연한 조기 탈출을 방지하고 중반 협동 목표를 만든다.</td></tr>
+              <tr><td>술래 승리</td><td>2명 포획 또는 시간 종료</td><td>한 명을 계속 쫓는 캠핑보다 전체 동선 통제를 유도한다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="mechanics">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">04 / FUN</div>
+          <div>
+            <h2>복잡한 그래픽 없이도 재미를 만드는 블록 규칙</h2>
+            <p class="section-intro">새 기능은 모두 “칸의 상태”와 “정보 공개 방식”으로 구현한다. 3D 함정, 물리 엔진, 복잡한 캐릭터 스킬은 넣지 않는다.</p>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <article class="card mechanic"><div class="mechanic-icon">?</div><div><h3>가짜 출구</h3><p>진짜 출구처럼 보이지만 2초간 상호작용하면 경보가 발생한다. 술래에게 방향을 알려주고 탈출자 지도에는 가짜로 기록된다.</p></div></article>
+          <article class="card mechanic"><div class="mechanic-icon">S</div><div><h3>소리 센서</h3><p>탈출자가 지나가면 정확한 좌표가 아니라 방향 신호만 술래에게 전달한다. 술래가 직접 배치했기 때문에 추론이 가능하다.</p></div></article>
+          <article class="card mechanic"><div class="mechanic-icon">↗</div><div><h3>소리 미끼</h3><p>탈출자가 다른 위치에 가짜 신호를 발생시켜 술래를 유인한다. 술래는 실제 발소리인지 미끼인지 판단해야 한다.</p></div></article>
+          <article class="card mechanic"><div class="mechanic-icon">⇄</div><div><h3>지도 동기화</h3><p>탈출자끼리 인접했을 때만 서로의 탐색 영역이 합쳐진다. 흩어져 탐색할지 모여 정보를 합칠지 선택하게 한다.</p></div></article>
+          <article class="card mechanic"><div class="mechanic-icon">□</div><div><h3>팀 공용 벽 파괴</h3><p>술래가 설치한 벽 한 칸을 제거할 수 있지만 큰 소리가 난다. 우회와 위치 노출 사이의 선택을 만든다.</p></div></article>
+          <article class="card mechanic"><div class="mechanic-icon">⌁</div><div><h3>잔향 모드</h3><p>잡힌 탈출자는 관전만 하지 않고 일정 시간마다 미탐색 구역 또는 위험 방향 핑을 한 번 보낼 수 있다.</p></div></article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="card acid">
+            <span class="mini-label">가장 중요한 설계</span>
+            <h3>모든 행동은 정보를 만들거나 왜곡해야 한다</h3>
+            <p>달리기, 센서 통과, 가짜 출구 조사, 벽 파괴, 지도 교환이 모두 상대에게 신호를 주거나 팀의 지식을 갱신한다. 단순 이동 시간도 의사결정이 된다.</p>
+          </article>
+          <article class="card danger">
+            <span class="mini-label">피해야 할 설계</span>
+            <h3>벽 한 칸으로 출구를 완전히 봉쇄하는 상황</h3>
+            <p>술래가 블록을 놓을 때마다 서버가 BFS로 모든 필수 지점에서 출구까지 최소 한 경로가 남는지 검사하고, 조건을 깨는 배치는 거부한다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="difference">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">05 / POSITIONING</div>
+          <div>
+            <h2>비슷한 게임은 있지만, 핵심 조합은 다르다</h2>
+            <p class="section-intro">2026년 8월 27일 기준 공식 소개 페이지에서 확인한 비교작이다. “비대칭 추격” 자체는 새롭지 않으므로 차별성을 정보 구조에 고정해야 한다.</p>
+          </div>
+        </div>
+
+        <div class="compare-grid">
+          <article class="card compare-card">
+            <span class="mini-label">SAW: GENESIS</span>
+            <h3>3대1 · 절차 생성 미로</h3>
+            <p class="overlap">겹침: 한 명이 재판을 조작하고 세 명이 협력해 절차 생성 미로를 탈출한다.</p>
+            <p class="difference">차이: BLACK TRACE는 브라우저 2D 격자이며 술래도 전체 지도를 모르고 자기 설치물만 기억한다.</p>
+            <a href="https://store.steampowered.com/app/2865960/SAW_Genesis/" target="_blank" rel="noreferrer">Steam 공식 페이지 ↗</a>
+          </article>
+          <article class="card compare-card">
+            <span class="mini-label">BANDIT TRAP</span>
+            <h3>3대1 · 준비형 함정</h3>
+            <p class="overlap">겹침: Trapper가 함정을 구성하고 세 명의 Bandit이 물건을 훔쳐 탈출한다.</p>
+            <p class="difference">차이: 물리 기반 3D 난장판이 아니라 개인 지도·기억·격자 경로를 이용하는 정보전이다.</p>
+            <a href="https://store.steampowered.com/app/2982360/Bandit_Trap/" target="_blank" rel="noreferrer">Steam 공식 페이지 ↗</a>
+          </article>
+          <article class="card compare-card">
+            <span class="mini-label">IN SILENCE</span>
+            <h3>거의 보지 못하는 술래</h3>
+            <p class="overlap">겹침: 괴물은 거의 장님이고 민감한 청각으로 2~6명의 생존자를 추적한다.</p>
+            <p class="difference">차이: BLACK TRACE에서는 술래가 미리 만든 구조물이 영구 기억이자 길 찾기 도구가 된다.</p>
+            <a href="https://store.steampowered.com/app/1361000/In_Silence/" target="_blank" rel="noreferrer">Steam 공식 페이지 ↗</a>
+          </article>
+          <article class="card compare-card">
+            <span class="mini-label">MEET YOUR MAKER</span>
+            <h3>건설과 침투</h3>
+            <p class="overlap">겹침: 사용자가 블록과 함정으로 전초기지를 만들고 다른 플레이어가 침투한다.</p>
+            <p class="difference">차이: 비동기 3D 건설·공략이 아니라 같은 방에서 동시에 진행하는 4분짜리 1대3 웹 게임이다.</p>
+            <a href="https://www.playstation.com/en-hk/games/meet-your-maker/" target="_blank" rel="noreferrer">PlayStation 공식 페이지 ↗</a>
+          </article>
+        </div>
+
+        <div class="differentiator">
+          <article class="card acid">
+            <div class="big-number">5</div>
+            <h3>반드시 지켜야 할 차별점</h3>
+            <div class="difference-list">
+              <div>탈출자마다 서로 다른 개인 지도를 가진다.</div>
+              <div>술래는 일반 경로를 저장하지 못하고 자기 설치물만 기억한다.</div>
+              <div>지도 공유는 팀원이 실제로 만나야 가능하다.</div>
+              <div>경기 중 누구도 전체 사건을 볼 수 없다.</div>
+              <div>경기 후 AI 영상이 각자의 관점과 객관적 진실을 비교한다.</div>
+            </div>
+          </article>
+          <article class="card">
+            <span class="mini-label">포지셔닝 문장</span>
+            <h3>“미로 탈출 게임”으로 소개하지 않는다</h3>
+            <p style="font-size:18px;color:#fff;font-weight:800">서로 다른 기억을 가진 플레이어들이 정보의 빈틈을 이용해 추격하는 2D 웹 게임</p>
+            <p style="margin-top:16px">벽 설치나 가짜 출구는 이 핵심 경험을 강화하는 도구이며, 프로젝트의 정체성 그 자체는 아니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="ai-video">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">06 / AI VIDEO</div>
+          <div>
+            <h2>AI 영상은 “상상해서 만들기”가 아니라 “경기를 재구성하기”다</h2>
+            <p class="section-intro">게임은 항상 정확한 2D 리플레이를 먼저 만든다. AI는 실제 로그에서 하이라이트를 고르고, 픽셀 스타일의 짧은 영상으로 연출하는 역할만 맡는다.</p>
+          </div>
+        </div>
+
+        <div class="ai-pipeline" aria-label="AI 영상 생성 파이프라인">
+          <div class="ai-node"><b>01 · LOG</b><strong>서버 이벤트 기록</strong><span>좌표, 이동, 센서, 가짜 출구, 포획, 탈출을 정확히 저장</span></div>
+          <div class="ai-node"><b>02 · DETECT</b><strong>주요 사건 탐지</strong><span>벽 하나 사이 엇갈림, 미끼 유인, 종료 직전 탈출 등을 규칙으로 검출</span></div>
+          <div class="ai-node"><b>03 · STORY</b><strong>장면 순서 구성</strong><span>도입 → 오판 → 추격 → 반전 → 결과의 15초 구조 생성</span></div>
+          <div class="ai-node"><b>04 · RENDER</b><strong>정확한 2D 원본</strong><span>실제 맵과 좌표로 시작·종료 프레임 및 원본 클립 렌더링</span></div>
+          <div class="ai-node"><b>05 · GENERATE</b><strong>AI 스타일 변환</strong><span>픽셀, CCTV, 먹물, 청사진 중 하나의 2D 스타일로 재해석</span></div>
+          <div class="ai-node"><b>06 · VERIFY</b><strong>검증과 합성</strong><span>인원·역할·핵심 사건 불일치 시 원본 리플레이로 대체</span></div>
+        </div>
+
+        <div class="grid-2" style="margin-top:20px">
+          <div>
+            <pre class="event-code" aria-label="경기 이벤트 로그 예시"><span class="key">{</span>
+  <span class="key">"time"</span>: <span class="number">188.4</span>,
+  <span class="key">"eventType"</span>: <span class="string">"NEAR_MISS"</span>,
+  <span class="key">"runnerId"</span>: <span class="string">"R2"</span>,
+  <span class="key">"hunterId"</span>: <span class="string">"H1"</span>,
+  <span class="key">"distance"</span>: <span class="number">1</span>,
+  <span class="key">"wallBetween"</span>: <span class="string">true</span>,
+  <span class="key">"detected"</span>: <span class="string">false</span>
+<span class="key">}</span></pre>
+          </div>
+          <article class="card cyan">
+            <span class="mini-label">하이라이트 예시</span>
+            <h3>같은 경기에서 세 관점 생성</h3>
+            <ul class="clean-list">
+              <li><strong>탈출자 컷:</strong> 안개 속 탐색과 가짜 출구의 경보</li>
+              <li><strong>술래 컷:</strong> 센서 파동과 자신이 만든 벽을 따라가는 추적</li>
+              <li><strong>진실 컷:</strong> 벽 하나를 사이에 두고 서로 지나친 실제 상황</li>
+            </ul>
+            <p style="margin-top:16px">AI 생성이 실패해도 사용자는 즉시 정확한 원본 리플레이를 볼 수 있으므로 게임 경험이 깨지지 않는다.</p>
+          </article>
+        </div>
+
+        <div class="grid-4" style="margin-top:16px">
+          <article class="card"><h3>픽셀 느와르</h3><p>흑백 격자와 잔상, 강한 명암으로 원본 정체성을 유지한다.</p></article>
+          <article class="card"><h3>CCTV 기록</h3><p>타임코드, 고정 카메라, 노이즈로 사건 기록처럼 보여준다.</p></article>
+          <article class="card"><h3>먹물 애니메이션</h3><p>검은 벽이 번지고 흰 경로가 지워지는 2D 연출을 사용한다.</p></article>
+          <article class="card"><h3>청사진 리플레이</h3><p>탐색된 길과 미탐색 영역을 설계도처럼 시각화한다.</p></article>
+        </div>
+
+        <div class="grid-3" style="margin-top:16px">
+          <article class="card acid"><span class="mini-label">AI 평가 1</span><h3>사건 일치도</h3><p>실제 등장 인원, 역할, 출구 결과, 핵심 사건이 영상과 일치하는지 사람이 평가한다.</p></article>
+          <article class="card"><span class="mini-label">AI 평가 2</span><h3>하이라이트 품질</h3><p>사람이 선정한 결정적 장면과 자동 탐지 결과의 정밀도·재현율을 비교한다.</p></article>
+          <article class="card cyan"><span class="mini-label">AI 평가 3</span><h3>콘텐츠 가치</h3><p>원본 리플레이 대비 긴장감, 다시 보기, 공유 의향이 얼마나 높아지는지 측정한다.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">07 / SYSTEM</div>
+          <div>
+            <h2>Unity 없이 구성하는 웹 아키텍처</h2>
+            <p class="section-intro">게임 상태는 서버가 권위 있게 관리하고, 브라우저는 Canvas로 필요한 시야만 렌더링한다. AI 영상 처리는 경기 종료 후 비동기 파이프라인으로 분리한다.</p>
+          </div>
+        </div>
+
+        <div class="architecture">
+          <div class="arch-box">
+            <h3>Web Client</h3>
+            <ul>
+              <li>React + TypeScript</li>
+              <li>HTML Canvas 2D</li>
+              <li>WASD / 방향키 입력</li>
+              <li>Fog of War · 개인 지도</li>
+              <li>WebSocket 상태 수신</li>
+            </ul>
+            <div class="arch-subgrid"><div class="arch-tag">게임 화면</div><div class="arch-tag">리플레이 화면</div></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true">↔</div>
+          <div class="arch-box">
+            <h3>Game Server</h3>
+            <ul>
+              <li>Spring Boot · Java 21</li>
+              <li>WebSocket 방·이동 동기화</li>
+              <li>서버 기준 충돌·포획·승패 판정</li>
+              <li>미로 생성 · BFS 경로 검증</li>
+              <li>개인별 가시 정보 필터링</li>
+            </ul>
+            <div class="arch-subgrid"><div class="arch-tag">PostgreSQL</div><div class="arch-tag">Redis 선택</div></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true">→</div>
+          <div class="arch-box">
+            <h3>AI Video Worker</h3>
+            <ul>
+              <li>Python · FastAPI Worker</li>
+              <li>이벤트 하이라이트 탐지</li>
+              <li>LLM 스토리보드 구성</li>
+              <li>2D 클립 렌더링·영상 생성</li>
+              <li>검증·합성·Object Storage 저장</li>
+            </ul>
+            <div class="arch-subgrid"><div class="arch-tag">Queue</div><div class="arch-tag">SSE 진행률</div></div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top:17px">
+          <article class="card"><span class="mini-label">MAP</span><h3>미로 생성</h3><p>Randomized Prim 또는 Backtracker로 기본 미로를 만든 뒤 일부 벽을 제거해 순환 경로를 추가한다.</p></article>
+          <article class="card"><span class="mini-label">VALIDATION</span><h3>배치 검증</h3><p>술래의 벽 배치마다 장치·시작 후보·출구 사이의 도달 가능성을 BFS로 재검사한다.</p></article>
+          <article class="card"><span class="mini-label">SYNC</span><h3>실시간 통신</h3><p>클라이언트는 이동 요청을 보내고 서버는 승인 좌표와 각 사용자에게 허용된 시야 정보만 전송한다.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="mvp">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">08 / MVP</div>
+          <div>
+            <h2>게임을 먼저 완성하고, AI 영상을 단계적으로 붙인다</h2>
+            <p class="section-intro">한 번에 모든 기능을 구현하지 않는다. 각 단계가 독립적으로 시연 가능해야 한다.</p>
+          </div>
+        </div>
+
+        <div class="roadmap">
+          <article class="card phase">
+            <div class="phase-num">01</div>
+            <h3>코어 게임</h3>
+            <ul><li>64×64 미로 생성</li><li>칸 단위 이동·충돌</li><li>출구·포획·타이머</li><li>시야와 탈출자 개인 지도</li></ul>
+            <div class="result">결과: 혼자서도 규칙 검증 가능한 로컬 데모</div>
+          </article>
+          <article class="card phase">
+            <div class="phase-num">02</div>
+            <h3>비대칭 멀티플레이</h3>
+            <ul><li>방 생성·입장</li><li>WebSocket 위치 동기화</li><li>술래 준비 단계</li><li>사용자별 정보 필터링</li></ul>
+            <div class="result">결과: 1대3 실제 플레이 가능</div>
+          </article>
+          <article class="card phase">
+            <div class="phase-num">03</div>
+            <h3>재미와 리플레이</h3>
+            <ul><li>가짜 출구·센서·미끼</li><li>지도 동기화·잔향 모드</li><li>전체 이동 로그</li><li>정확한 2D 경기 리플레이</li></ul>
+            <div class="result">결과: AI가 없어도 완결된 게임</div>
+          </article>
+          <article class="card phase acid">
+            <div class="phase-num">04</div>
+            <h3>AI 영상</h3>
+            <ul><li>하이라이트 자동 탐지</li><li>15초 스토리보드</li><li>2D 스타일 영상 생성</li><li>검증·재생성·공유 링크</li></ul>
+            <div class="result">결과: 실제 경기 기반 AI 콘텐츠</div>
+          </article>
+        </div>
+
+        <div class="scope-guard" style="margin-top:20px">
+          <div class="do">
+            <h3>반드시 구현할 것</h3>
+            <ul>
+              <li>브라우저에서 바로 실행되는 2D Canvas 게임</li>
+              <li>탈출자 개인 지도와 술래의 설치물 기억</li>
+              <li>서버 권위형 실시간 판정</li>
+              <li>경기 후 전체 진실 리플레이</li>
+              <li>로그에 근거한 AI 영상 생성</li>
+            </ul>
+          </div>
+          <div class="dont">
+            <h3>이번 프로젝트에서 제외할 것</h3>
+            <ul>
+              <li>Unity·Unreal·3D 캐릭터·물리 엔진</li>
+              <li>1000×1000 실제 논리 맵</li>
+              <li>복잡한 전투·아이템·성장 시스템</li>
+              <li>AI가 실시간 플레이 또는 승패에 개입하는 구조</li>
+              <li>음성 채팅·오픈월드·장기 운영형 경제 시스템</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">09 / RISKS</div>
+          <div>
+            <h2>예상되는 실패 지점과 방지책</h2>
+            <p class="section-intro">재미와 기술 양쪽에서 가장 위험한 부분을 먼저 검증해야 한다.</p>
+          </div>
+        </div>
+        <div class="risk-grid">
+          <div class="risk-row"><strong>플레이어가 서로 만나지 못함</strong><span>맵이 크거나 순환 경로가 너무 많으면 추격이 발생하지 않는다.</span><span>64×64부터 시작하고 센서·장치·출구 개방 신호로 후반 동선을 수렴시킨다.</span></div>
+          <div class="risk-row"><strong>술래가 무작위로 걷기만 함</strong><span>정보가 너무 적으면 추론이 아니라 운에 의존한다.</span><span>자기 설치물 영구 표시, 소리 방향, 센서 발동, 출구 개방 신호를 제공한다.</span></div>
+          <div class="risk-row"><strong>탈출자가 완전한 지도를 너무 빨리 공유</strong><span>한 명의 탐색이 곧 팀 전체 정보가 되면 안개가 의미를 잃는다.</span><span>직접 만남 또는 송신 지점에서만 정보가 합쳐지도록 제한한다.</span></div>
+          <div class="risk-row"><strong>술래가 출구를 봉쇄</strong><span>설치 자유도가 게임 불가능 상태를 만들 수 있다.</span><span>설치 예산, 보호 구역, BFS 도달성 검증을 함께 적용한다.</span></div>
+          <div class="risk-row"><strong>AI 영상이 실제 경기와 다름</strong><span>생성 모델이 인물·장면·결과를 임의로 바꿀 수 있다.</span><span>정확한 2D 리플레이를 기준 원본으로 사용하고 불일치 영상은 폐기 또는 원본으로 대체한다.</span></div>
+          <div class="risk-row"><strong>AI가 API 연결로만 보임</strong><span>프롬프트 한 번 전송하는 구조는 프로젝트 기여가 약하다.</span><span>사건 탐지, 장면 점수화, 스토리 구성, 조건 프레임 제작, 결과 검증을 자체 파이프라인으로 구현한다.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="final-pitch">
+      <div class="container">
+        <div class="pitch-box">
+          <span class="mini-label">FINAL PITCH</span>
+          <h2>탈출자는 길을 기억하지만,<br>술래는 자신이 만든 것만 기억한다.</h2>
+          <p class="final-line">
+            <em>BLACK TRACE</em>는 흰색 길과 검은색 벽으로 구성된 미로에서 서로 다른 정보를 가진 플레이어들이 추격하는 짧은 웹 게임이다. 경기 중에는 누구도 전체 상황을 알 수 없으며, 종료 후에야 전체 맵과 모든 이동이 공개된다. AI는 이 진실을 실제 로그에 기반한 15초짜리 픽셀 영상으로 재구성한다.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">10 / SOURCES</div>
+          <div>
+            <h2>유사 사례 확인 출처</h2>
+            <p class="section-intro">비교는 각 게임의 공식 소개에 기재된 핵심 구조를 기준으로 했다. 동일한 서비스가 존재하지 않는다는 절대적 증명이 아니라, 검색·확인한 주요 비교작과의 차이를 정리한 것이다.</p>
+          </div>
+        </div>
+        <div class="sources">
+          <div class="source"><strong>SAW: Genesis</strong><span>3대1 대립과 절차 생성 맵, 미로 탈출</span><a href="https://store.steampowered.com/app/2865960/SAW_Genesis/" target="_blank" rel="noreferrer">공식 페이지</a></div>
+          <div class="source"><strong>Bandit Trap</strong><span>Trapper의 함정 설치와 Bandit 3명의 탈출</span><a href="https://store.steampowered.com/app/2982360/Bandit_Trap/" target="_blank" rel="noreferrer">공식 페이지</a></div>
+          <div class="source"><strong>In Silence</strong><span>거의 보지 못하고 청각으로 추적하는 괴물</span><a href="https://store.steampowered.com/app/1361000/In_Silence/" target="_blank" rel="noreferrer">공식 페이지</a></div>
+          <div class="source"><strong>Meet Your Maker</strong><span>블록·함정 기반 전초기지 건설과 침투</span><a href="https://www.playstation.com/en-hk/games/meet-your-maker/" target="_blank" rel="noreferrer">공식 페이지</a></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><b>BLACK TRACE</b> · 웹 기반 2D 비대칭 미로 추격 게임</div>
+      <div>단일 반응형 HTML · 모바일 / PC / 인쇄 대응</div>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const size = 17;
+      const rows = [
+        "#################",
+        "#.....#.........#",
+        "#.###.#.#####.#.#",
+        "#...#.#.....#.#.#",
+        "###.#.#####.#.#.#",
+        "#...#.....#...#.#",
+        "#.#######.#####.#",
+        "#.......#.......#",
+        "#.#####.#####.#.#",
+        "#.#...#.....#.#.#",
+        "#.#.#.#####.#.#.#",
+        "#...#.....#...#.#",
+        "#.#######.#####.#",
+        "#.......#.......#",
+        "#.#####.#######.#",
+        "#...............#",
+        "#################"
+      ];
+      const runnerPos = [7, 9];
+      const hunterPos = [11, 7];
+      const realExit = [15, 15];
+      const fakeExit = [1, 15];
+      const sensors = new Set(["5,13", "13,9"]);
+      const ownWalls = new Set(["4,9", "5,9", "6,9", "10,5", "10,6", "10,7"]);
+      const runnerVisited = new Set([
+        "1,1","1,2","1,3","1,4","1,5","2,1","3,1","3,2","3,3","4,3","5,1","5,2","5,3","6,1","7,1","7,2","7,3","7,4","7,5","7,6","7,7","8,7","9,7","9,8","9,9","9,10","9,11","10,11","11,11","11,10","11,9","12,9","13,9","13,10","13,11","13,12","13,13","13,14","13,15"
+      ]);
+      const runnerTrail = new Set(["7,5","7,6","7,7","8,7","9,7","9,8","9,9"]);
+      const hunterTrail = new Set(["13,13","13,12","13,11","13,10","13,9","12,9","11,9","11,8","11,7"]);
+
+      const descriptions = {
+        runner: [
+          ["보이는 것", "직접 방문한 길·주변 벽·개인 이동 흔적"],
+          ["보이지 않는 것", "미탐색 영역·술래가 다른 곳에 설치한 장치"],
+          ["목표", "팀원을 만나 지도를 합치고 장치를 찾아 출구를 연다"]
+        ],
+        hunter: [
+          ["보이는 것", "현재 주변과 자신이 설치한 벽·센서·가짜 출구"],
+          ["보이지 않는 것", "전체 미로·진짜 출구·지나온 일반 경로"],
+          ["목표", "설치물을 기준점으로 삼고 소리 방향을 추적한다"]
+        ],
+        truth: [
+          ["경기 후 공개", "전체 미로·진짜/가짜 출구·모든 이동 경로"],
+          ["하이라이트", "서로 한 칸 차이로 지나친 순간과 잘못된 선택"],
+          ["AI 영상", "이 객관적 로그를 기준으로 15초 장면을 생성한다"]
+        ]
+      };
+
+      const grid = document.getElementById("mapGrid");
+      const desc = document.getElementById("viewDescription");
+      const buttons = document.querySelectorAll("[data-view]");
+
+      const key = (r,c) => `${r},${c}`;
+      const manhattan = (a,b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]);
+      const nearby = (r,c,pos,rad) => manhattan([r,c], pos) <= rad;
+
+      function render(view) {
+        grid.innerHTML = "";
+        for (let r=0; r<size; r++) {
+          for (let c=0; c<size; c++) {
+            const el = document.createElement("div");
+            el.className = "map-cell";
+            const k = key(r,c);
+            const wall = rows[r][c] === "#";
+
+            let visible = true;
+            if (view === "runner") visible = runnerVisited.has(k) || nearby(r,c,runnerPos,2);
+            if (view === "hunter") visible = nearby(r,c,hunterPos,3) || ownWalls.has(k) || sensors.has(k) || k === key(...fakeExit);
+
+            if (!visible) {
+              el.classList.add("unknown");
+              if ((r+c)%3===0) el.textContent = "·";
+            } else if (wall) {
+              el.classList.add(view === "hunter" && ownWalls.has(k) ? "own-wall" : (view === "runner" ? "dim-wall" : "wall"));
+            } else {
+              el.classList.add(view === "runner" ? "dim-floor" : "floor");
+            }
+
+            if (visible || view === "truth") {
+              if (view !== "hunter" && runnerTrail.has(k)) el.classList.add("trail-runner");
+              if (view === "truth" && hunterTrail.has(k)) el.classList.add("trail-hunter");
+              if (view === "hunter" && hunterTrail.has(k) && nearby(r,c,hunterPos,3)) el.classList.add("trail-hunter");
+
+              if (r === runnerPos[0] && c === runnerPos[1] && view !== "hunter") el.classList.add("token-runner");
+              if (r === hunterPos[0] && c === hunterPos[1] && view !== "runner") el.classList.add("token-hunter");
+
+              if (r === fakeExit[0] && c === fakeExit[1] && (view !== "runner" || runnerVisited.has(k))) el.classList.add("fake-exit");
+              if (r === realExit[0] && c === realExit[1] && view === "truth") el.classList.add("real-exit");
+              if (sensors.has(k) && view !== "runner") el.classList.add("sensor");
+            }
+
+            grid.appendChild(el);
+          }
+        }
+
+        desc.innerHTML = descriptions[view].map(([title,text]) => `<div class="demo-note"><b>${title}</b><span>${text}</span></div>`).join("");
+      }
+
+      buttons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          buttons.forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+          render(btn.dataset.view);
+        });
+      });
+      render("runner");
+    })();
+  </script>
+</body>
+</html>
