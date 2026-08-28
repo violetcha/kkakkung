@@ -1,0 +1,1494 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="사고 친 AI를 수사하고 고치며 배우는 한국어 AI 사건 해결 학습 플랫폼 최종 기획안" />
+  <title>오늘도 AI가 사고쳤다 — 한국어 AI 사건 해결 학습 플랫폼</title>
+  <style>
+    :root {
+      --bg: #081018;
+      --bg-soft: #0d1823;
+      --panel: #111f2c;
+      --panel-2: #162738;
+      --line: rgba(255,255,255,.11);
+      --line-strong: rgba(255,255,255,.22);
+      --text: #edf5fb;
+      --muted: #a9bac8;
+      --dim: #7890a1;
+      --red: #ff5964;
+      --red-soft: rgba(255,89,100,.13);
+      --amber: #ffbd59;
+      --amber-soft: rgba(255,189,89,.13);
+      --cyan: #61d6e8;
+      --cyan-soft: rgba(97,214,232,.12);
+      --green: #66df9a;
+      --green-soft: rgba(102,223,154,.12);
+      --purple: #a98cff;
+      --shadow: 0 24px 80px rgba(0,0,0,.34);
+      --radius: 20px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(255,89,100,.12), transparent 29rem),
+        radial-gradient(circle at 93% 12%, rgba(97,214,232,.10), transparent 28rem),
+        linear-gradient(180deg, #071019 0%, #09141e 55%, #071019 100%);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+
+    a { color: var(--cyan); text-underline-offset: 3px; }
+    a:hover { color: #a8f4ff; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+
+    .progress-line {
+      position: fixed;
+      inset: 0 auto auto 0;
+      z-index: 100;
+      width: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--red), var(--amber), var(--cyan));
+      box-shadow: 0 0 16px rgba(97,214,232,.55);
+    }
+
+    .wrap { width: min(calc(100% - 40px), var(--max)); margin: 0 auto; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--line);
+      background: rgba(7,16,25,.82);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner {
+      min-height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--text);
+      font-weight: 850;
+      text-decoration: none;
+      letter-spacing: -.03em;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--red), #d9376d);
+      box-shadow: 0 8px 22px rgba(255,89,100,.25);
+    }
+    .nav {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a {
+      padding: 8px 11px;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .nav a:hover, .nav a.active { color: var(--text); background: rgba(255,255,255,.07); }
+
+    .hero {
+      position: relative;
+      padding: 90px 0 66px;
+      overflow: hidden;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 18px;
+      padding: 7px 12px;
+      border: 1px solid rgba(255,189,89,.25);
+      border-radius: 999px;
+      color: #ffd38d;
+      background: var(--amber-soft);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--red);
+      box-shadow: 0 0 0 0 rgba(255,89,100,.55);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      70% { box-shadow: 0 0 0 10px rgba(255,89,100,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,89,100,0); }
+    }
+    h1 {
+      margin: 0;
+      max-width: 780px;
+      font-size: clamp(44px, 7vw, 82px);
+      line-height: .99;
+      letter-spacing: -.065em;
+    }
+    h1 .accent { color: var(--red); }
+    .hero-sub {
+      margin: 25px 0 0;
+      max-width: 720px;
+      color: #c3d1dc;
+      font-size: clamp(18px, 2.2vw, 24px);
+      line-height: 1.55;
+      letter-spacing: -.02em;
+    }
+    .hero-copy {
+      margin: 20px 0 0;
+      max-width: 700px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .hero-badges { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
+    .badge {
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .badge strong { color: var(--text); }
+
+    .case-board {
+      position: relative;
+      min-height: 485px;
+      border: 1px solid var(--line-strong);
+      border-radius: 28px;
+      background:
+        linear-gradient(rgba(255,255,255,.026) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.026) 1px, transparent 1px),
+        linear-gradient(145deg, #10202e, #0c1722);
+      background-size: 24px 24px, 24px 24px, auto;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .case-board::before {
+      content: "CASE 001";
+      position: absolute;
+      top: 23px; right: -24px;
+      padding: 8px 42px;
+      transform: rotate(10deg);
+      color: #fff;
+      background: var(--red);
+      font-weight: 950;
+      font-size: 12px;
+      letter-spacing: .18em;
+      box-shadow: 0 8px 24px rgba(255,89,100,.25);
+    }
+    .board-label {
+      position: absolute;
+      left: 24px; top: 20px;
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+    .paper {
+      position: absolute;
+      padding: 17px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 7px;
+      color: #17212b;
+      background: #f0eee5;
+      box-shadow: 0 18px 34px rgba(0,0,0,.35);
+    }
+    .paper h3 { margin: 0 0 8px; font-size: 15px; line-height: 1.35; }
+    .paper p { margin: 0; font-size: 11px; line-height: 1.55; color: #4a5157; }
+    .paper.one { width: 245px; left: 29px; top: 76px; transform: rotate(-3deg); }
+    .paper.two { width: 228px; right: 29px; top: 168px; transform: rotate(4deg); }
+    .paper.three { width: 250px; left: 78px; bottom: 37px; transform: rotate(2deg); }
+    .red-string {
+      position: absolute;
+      height: 2px;
+      transform-origin: left center;
+      background: var(--red);
+      box-shadow: 0 0 8px rgba(255,89,100,.6);
+    }
+    .string-a { width: 205px; left: 228px; top: 153px; transform: rotate(19deg); }
+    .string-b { width: 168px; left: 220px; top: 180px; transform: rotate(67deg); }
+    .pin { position: absolute; width: 13px; height: 13px; border: 3px solid #ffbac0; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 3px rgba(255,89,100,.18); }
+    .pin-a { left: 220px; top: 147px; }
+    .pin-b { right: 76px; top: 215px; }
+    .pin-c { left: 335px; bottom: 105px; }
+    .metric-stamp {
+      display: inline-block;
+      margin-top: 11px;
+      padding: 6px 8px;
+      border: 2px solid #d33145;
+      color: #d33145;
+      font-weight: 950;
+      font-size: 11px;
+      transform: rotate(-2deg);
+    }
+
+    main section { scroll-margin-top: 86px; }
+    .section { padding: 78px 0; }
+    .section + .section { border-top: 1px solid var(--line); }
+    .section-kicker {
+      margin-bottom: 9px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h2 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(31px, 4.5vw, 53px);
+      line-height: 1.12;
+      letter-spacing: -.045em;
+    }
+    .lead {
+      max-width: 850px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    h3 { letter-spacing: -.025em; }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap: 1px;
+      margin-top: 34px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+      box-shadow: var(--shadow);
+    }
+    .decision > div { padding: 30px; background: var(--panel); }
+    .decision-main { background: linear-gradient(145deg, rgba(255,89,100,.10), var(--panel)) !important; }
+    .decision-label { color: var(--red); font-size: 12px; font-weight: 900; letter-spacing: .13em; }
+    .decision h3 { margin: 9px 0 11px; font-size: 27px; line-height: 1.28; }
+    .decision p { margin: 0; color: var(--muted); }
+    .quote {
+      display: flex;
+      height: 100%;
+      align-items: center;
+      font-size: 21px;
+      font-weight: 850;
+      line-height: 1.45;
+      color: #fff2f4;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; margin-top: 30px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; margin-top: 30px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-top: 30px; }
+    .card {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.015));
+    }
+    .card h3 { margin: 8px 0 10px; font-size: 20px; }
+    .card p { margin: 0; color: var(--muted); }
+    .card-icon {
+      width: 42px; height: 42px; display: grid; place-items: center;
+      border-radius: 12px; background: var(--cyan-soft); color: var(--cyan); font-size: 21px;
+    }
+    .card.danger .card-icon { color: var(--red); background: var(--red-soft); }
+    .card.warn .card-icon { color: var(--amber); background: var(--amber-soft); }
+    .card.good .card-icon { color: var(--green); background: var(--green-soft); }
+
+    .before-after {
+      display: grid;
+      grid-template-columns: 1fr 86px 1fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 31px;
+    }
+    .flow-box { padding: 25px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .flow-box.old { opacity: .82; }
+    .flow-box.new { border-color: rgba(255,89,100,.35); background: linear-gradient(145deg, var(--red-soft), var(--panel)); }
+    .flow-box h3 { margin: 0 0 16px; }
+    .flow-list { display: grid; gap: 10px; }
+    .flow-step { padding: 11px 13px; border-radius: 10px; background: rgba(255,255,255,.05); color: var(--muted); font-weight: 750; }
+    .new .flow-step { color: #f1dfe2; }
+    .flow-arrow { display: grid; place-items: center; color: var(--red); font-size: 42px; font-weight: 200; }
+
+    .table-wrap { margin-top: 31px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; min-width: 900px; border-collapse: collapse; background: rgba(255,255,255,.018); }
+    th, td { padding: 16px 17px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { position: sticky; top: 0; color: #dfeaf2; background: #12202d; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+    td { color: var(--muted); font-size: 14px; }
+    tr:last-child td { border-bottom: 0; }
+    td strong { color: var(--text); }
+    .check { color: var(--green); font-weight: 900; }
+    .partial { color: var(--amber); font-weight: 900; }
+    .no { color: var(--dim); }
+    .source-link { display: inline-block; margin-top: 5px; font-size: 12px; font-weight: 800; }
+
+    .gap-banner {
+      margin-top: 22px;
+      padding: 22px 24px;
+      border: 1px solid rgba(97,214,232,.25);
+      border-radius: 16px;
+      background: linear-gradient(90deg, var(--cyan-soft), rgba(97,214,232,.025));
+    }
+    .gap-banner strong { color: #dffbff; }
+
+    .loop {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(118px,1fr));
+      gap: 10px;
+      margin-top: 34px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    .loop-step {
+      position: relative;
+      min-height: 140px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+    .loop-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -10px; top: 50%; z-index: 2;
+      transform: translate(50%,-50%);
+      color: var(--dim);
+      font-weight: 900;
+    }
+    .loop-num { color: var(--red); font-size: 12px; font-weight: 950; letter-spacing: .09em; }
+    .loop-step strong { display: block; margin: 7px 0 6px; font-size: 16px; line-height: 1.35; }
+    .loop-step span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+    .demo-shell {
+      margin-top: 34px;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 26px;
+      background: #0a141e;
+      box-shadow: var(--shadow);
+    }
+    .demo-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 22px 25px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(255,89,100,.16), transparent);
+    }
+    .demo-head h3 { margin: 0 0 4px; font-size: 22px; }
+    .demo-head p { margin: 0; color: var(--muted); font-size: 14px; }
+    .budget { align-self: center; padding: 9px 12px; border-radius: 10px; color: #ffe0a8; background: var(--amber-soft); font-size: 13px; font-weight: 900; white-space: nowrap; }
+    .demo-body { display: grid; grid-template-columns: .82fr 1.18fr; }
+    .demo-sidebar { padding: 24px; border-right: 1px solid var(--line); background: rgba(255,255,255,.02); }
+    .demo-content { padding: 24px; min-height: 540px; }
+    .demo-caption { margin: 0 0 13px; color: var(--dim); font-size: 11px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+    .incident-summary { margin-bottom: 22px; padding: 16px; border-left: 3px solid var(--red); border-radius: 0 12px 12px 0; background: var(--red-soft); color: #f5dfe2; }
+    .evidence-buttons { display: grid; gap: 9px; }
+    .evidence-btn, .action-btn, .choice {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: .18s ease;
+    }
+    .evidence-btn {
+      padding: 12px 13px;
+      text-align: left;
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+    }
+    .evidence-btn:hover:not(:disabled) { transform: translateY(-1px); color: var(--text); border-color: var(--line-strong); background: rgba(255,255,255,.065); }
+    .evidence-btn.opened { color: var(--green); border-color: rgba(102,223,154,.28); background: var(--green-soft); }
+    .evidence-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .demo-note { margin-top: 13px; color: var(--dim); font-size: 12px; }
+    .evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+    .evidence-card {
+      min-height: 148px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      animation: reveal .25s ease;
+    }
+    @keyframes reveal { from { opacity: 0; transform: translateY(5px); } }
+    .evidence-card h4 { margin: 0 0 10px; font-size: 14px; }
+    .evidence-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .metric-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+    .metric-row:last-child { border-bottom: 0; }
+    .metric-row span { color: var(--muted); }
+    .metric-row strong { color: var(--text); }
+    .mini-bars { display: grid; gap: 8px; margin-top: 8px; }
+    .bar { display: grid; grid-template-columns: 72px 1fr 42px; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; }
+    .bar-track { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.08); }
+    .bar-fill { height: 100%; border-radius: 999px; background: var(--cyan); }
+    .bar-fill.red { background: var(--red); }
+    .empty-state { height: 250px; display: grid; place-items: center; text-align: center; color: var(--dim); border: 1px dashed var(--line); border-radius: 15px; }
+    .stage { margin-top: 22px; padding-top: 21px; border-top: 1px solid var(--line); }
+    .stage h4 { margin: 0 0 12px; font-size: 16px; }
+    .choices { display: grid; gap: 8px; }
+    .choice {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 11px 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,.025);
+    }
+    .choice:hover { color: var(--text); background: rgba(255,255,255,.045); }
+    .choice input { margin-top: 4px; accent-color: var(--red); }
+    .action-btn {
+      margin-top: 13px;
+      padding: 12px 15px;
+      border-color: rgba(255,89,100,.36);
+      color: #fff;
+      background: linear-gradient(135deg, #e9445a, #c82f68);
+      font-weight: 900;
+      box-shadow: 0 9px 24px rgba(255,89,100,.19);
+    }
+    .action-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+    .feedback { display: none; margin-top: 13px; padding: 13px 14px; border-radius: 12px; font-size: 13px; }
+    .feedback.show { display: block; }
+    .feedback.bad { color: #ffd8dc; background: var(--red-soft); border: 1px solid rgba(255,89,100,.28); }
+    .feedback.good { color: #d7ffe9; background: var(--green-soft); border: 1px solid rgba(102,223,154,.28); }
+    .result-panel { display: none; margin-top: 18px; padding: 18px; border: 1px solid rgba(97,214,232,.25); border-radius: 15px; background: var(--cyan-soft); }
+    .result-panel.show { display: block; animation: reveal .3s ease; }
+    .result-panel h4 { margin: 0 0 12px; }
+    .result-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; }
+    .result-metric { padding: 12px; border-radius: 10px; background: rgba(7,16,25,.42); }
+    .result-metric span { display: block; color: var(--muted); font-size: 11px; }
+    .result-metric strong { display: block; margin-top: 4px; font-size: 18px; }
+    .tradeoff { margin: 13px 0 0; color: #c7e7eb; font-size: 13px; }
+
+    .mode-card {
+      position: relative;
+      min-height: 260px;
+      overflow: hidden;
+    }
+    .mode-card::after {
+      content: attr(data-number);
+      position: absolute;
+      right: 13px; bottom: -27px;
+      color: rgba(255,255,255,.035);
+      font-size: 116px;
+      font-weight: 950;
+      line-height: 1;
+    }
+    .mode-tag { display: inline-flex; padding: 5px 8px; border-radius: 8px; color: var(--cyan); background: var(--cyan-soft); font-size: 11px; font-weight: 900; }
+    .mode-card ul { position: relative; z-index: 1; margin: 14px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+
+    .curriculum { margin-top: 30px; display: grid; gap: 14px; }
+    .track {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 20px;
+      align-items: start;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.02);
+    }
+    .track-title { color: var(--amber); font-weight: 900; }
+    .case-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .case-chip { padding: 8px 10px; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.05); font-size: 13px; }
+
+    .positioning {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+    }
+    .positioning > div { padding: 25px; background: var(--panel); }
+    .positioning .focus { background: linear-gradient(145deg, rgba(255,89,100,.14), var(--panel)); }
+    .positioning small { color: var(--dim); font-weight: 900; letter-spacing: .1em; }
+    .positioning h3 { margin: 8px 0 10px; }
+    .positioning p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .must-list { margin-top: 30px; display: grid; gap: 11px; }
+    .must {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 15px;
+      align-items: start;
+      padding: 19px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgba(255,255,255,.025);
+    }
+    .must-num { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: var(--red); background: var(--red-soft); font-weight: 950; }
+    .must h3 { margin: 0 0 5px; font-size: 18px; }
+    .must p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .mvp-box {
+      margin-top: 32px;
+      padding: 30px;
+      border: 1px solid rgba(255,189,89,.28);
+      border-radius: 22px;
+      background: linear-gradient(145deg, var(--amber-soft), rgba(255,255,255,.015));
+    }
+    .mvp-box h3 { margin: 0 0 7px; font-size: 25px; }
+    .mvp-box > p { margin: 0; color: #dbc9a9; }
+    .mvp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 22px; }
+    .compact-list { margin: 0; padding-left: 19px; color: var(--muted); }
+    .compact-list li + li { margin-top: 7px; }
+    .not-needed { padding: 18px; border-radius: 14px; background: rgba(7,16,25,.36); }
+    .not-needed h4 { margin: 0 0 9px; color: #ffd895; }
+
+    .arch-flow {
+      display: grid;
+      grid-template-columns: repeat(5,1fr);
+      gap: 12px;
+      margin-top: 30px;
+    }
+    .arch-node {
+      min-height: 145px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--panel);
+    }
+    .arch-node strong { display: block; margin-bottom: 7px; }
+    .arch-node span { color: var(--muted); font-size: 13px; }
+    .arch-node .tech { display: inline-flex; margin-top: 12px; padding: 5px 8px; border-radius: 7px; color: var(--cyan); background: var(--cyan-soft); font-size: 11px; font-weight: 900; }
+    pre {
+      overflow: auto;
+      margin: 24px 0 0;
+      padding: 19px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      color: #d9e8f2;
+      background: #050c12;
+      font-size: 12px;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    .roadmap { margin-top: 31px; display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+    .phase { padding: 21px; border-top: 3px solid var(--cyan); border-radius: 8px 8px 16px 16px; background: var(--panel); }
+    .phase:nth-child(2) { border-color: var(--green); }
+    .phase:nth-child(3) { border-color: var(--amber); }
+    .phase:nth-child(4) { border-color: var(--purple); }
+    .phase small { color: var(--dim); font-weight: 900; }
+    .phase h3 { margin: 7px 0 9px; font-size: 18px; }
+    .phase p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .risk-table td:first-child { color: var(--text); font-weight: 800; }
+
+    .sources {
+      margin-top: 30px;
+      columns: 2;
+      column-gap: 35px;
+    }
+    .source {
+      break-inside: avoid;
+      margin: 0 0 13px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.02);
+      font-size: 13px;
+    }
+    .source strong { display: block; color: var(--text); }
+    .source span { color: var(--muted); }
+
+    .final {
+      padding: 82px 0 100px;
+      text-align: center;
+    }
+    .final-box {
+      padding: 53px 30px;
+      border: 1px solid rgba(255,89,100,.3);
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255,89,100,.17), transparent 34rem),
+        var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .final-box h2 { margin-inline: auto; }
+    .final-box p { max-width: 760px; margin: 18px auto 0; color: var(--muted); font-size: 18px; }
+    .one-line {
+      display: inline-block;
+      margin-top: 26px;
+      padding: 15px 20px;
+      border-radius: 13px;
+      color: #fff;
+      background: linear-gradient(135deg, #e9445a, #c72f68);
+      font-size: 17px;
+      font-weight: 900;
+      box-shadow: 0 12px 30px rgba(255,89,100,.23);
+    }
+    .final-note { margin-top: 19px !important; color: var(--dim) !important; font-size: 13px !important; }
+    footer { padding: 24px 0 38px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; text-align: center; }
+
+    @media (max-width: 980px) {
+      .hero-grid, .decision, .demo-body { grid-template-columns: 1fr; }
+      .case-board { min-height: 430px; }
+      .decision { gap: 1px; }
+      .grid-4 { grid-template-columns: repeat(2,1fr); }
+      .arch-flow { grid-template-columns: repeat(2,1fr); }
+      .arch-node:last-child { grid-column: 1 / -1; }
+      .roadmap { grid-template-columns: repeat(2,1fr); }
+      .demo-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 760px) {
+      .wrap { width: min(calc(100% - 24px), var(--max)); }
+      .topbar-inner { min-height: 58px; }
+      .brand span:last-child { display: none; }
+      .nav a { padding: 7px 9px; font-size: 12px; }
+      .hero { padding: 65px 0 46px; }
+      .hero-grid { gap: 38px; }
+      h1 { font-size: clamp(42px, 15vw, 67px); }
+      .section { padding: 58px 0; }
+      .grid-2, .grid-3, .grid-4, .mvp-grid, .positioning, .result-metrics { grid-template-columns: 1fr; }
+      .before-after { grid-template-columns: 1fr; }
+      .flow-arrow { transform: rotate(90deg); min-height: 46px; }
+      .track { grid-template-columns: 1fr; gap: 10px; }
+      .evidence-grid { grid-template-columns: 1fr; }
+      .sources { columns: 1; }
+      .case-board { min-height: 390px; }
+      .paper.one { width: 205px; left: 17px; }
+      .paper.two { width: 190px; right: 15px; top: 155px; }
+      .paper.three { width: 208px; left: 43px; bottom: 25px; }
+      .string-a { width: 130px; left: 184px; }
+      .string-b { width: 130px; left: 183px; }
+      .pin-a { left: 178px; }
+      .pin-b { right: 52px; top: 203px; }
+      .pin-c { left: 262px; bottom: 91px; }
+      .roadmap, .arch-flow { grid-template-columns: 1fr; }
+      .arch-node:last-child { grid-column: auto; }
+      .demo-head { flex-direction: column; }
+      .budget { align-self: flex-start; }
+    }
+
+    @media print {
+      :root {
+        --bg: #fff; --panel: #fff; --panel-2: #fff; --text: #17212b; --muted: #4f5f6c; --dim: #647584;
+        --line: rgba(0,0,0,.15); --line-strong: rgba(0,0,0,.25);
+      }
+      body { background: #fff; color: #17212b; font-size: 10.5pt; }
+      .progress-line, .topbar, .demo-shell { display: none !important; }
+      .hero { padding-top: 32px; }
+      .hero-grid { grid-template-columns: 1fr; }
+      .case-board { display: none; }
+      .section { padding: 34px 0; page-break-inside: avoid; }
+      .card, .flow-box, .track, .must, .phase, .arch-node, .source, .decision > div, .positioning > div { background: #fff !important; box-shadow: none; }
+      .decision, .table-wrap, .final-box { box-shadow: none; }
+      a { color: #165a76; }
+      .loop { grid-template-columns: repeat(4,1fr); overflow: visible; }
+      .loop-step:not(:last-child)::after { display: none; }
+      .final { padding: 45px 0; }
+      .one-line { color: #fff !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-line" id="progressLine"></div>
+
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top" aria-label="문서 맨 위로">
+        <span class="brand-mark">⚠</span>
+        <span>오늘도 AI가 사고쳤다</span>
+      </a>
+      <nav class="nav" aria-label="문서 목차">
+        <a href="#decision">결론</a>
+        <a href="#market">경쟁 검증</a>
+        <a href="#concept">핵심 경험</a>
+        <a href="#demo">미니 데모</a>
+        <a href="#modes">서비스 구조</a>
+        <a href="#mvp">MVP</a>
+        <a href="#tech">구현</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow"><span class="pulse-dot"></span> FINAL PRODUCT CONCEPT · 2026.08</div>
+          <h1>오늘도 AI가 <span class="accent">사고쳤다</span></h1>
+          <p class="hero-sub">사고 친 AI의 증거를 조사하고, 원인을 진단하고, 직접 고치며 배우는 <strong>한국어 AI 사건 해결 학습 게임</strong></p>
+          <p class="hero-copy">설명을 먼저 듣는 강의가 아니다. 사용자는 AI 조사관이 되어 잘못된 데이터, 평가지표, 모델 구조, 운영 방식의 흔적을 찾고 처방의 부작용까지 확인한다. 개념명은 사건을 해결한 뒤에 등장한다.</p>
+          <div class="hero-badges">
+            <span class="badge"><strong>1차 타깃</strong> 한국 대학생·부트캠프·AI 입문자</span>
+            <span class="badge"><strong>핵심 행동</strong> 수사 → 진단 → 처방 → 재실험</span>
+            <span class="badge"><strong>MVP</strong> 사전 계산된 6개 사건</span>
+          </div>
+        </div>
+
+        <div class="case-board" aria-hidden="true">
+          <div class="board-label">INCIDENT ANALYSIS BOARD</div>
+          <div class="paper one">
+            <h3>정확도 99.2%의<br />완벽한 무능력자</h3>
+            <p>사기 거래 탐지 AI가 실제 사기 10건 중 8건을 놓쳤다. 경영진은 정확도가 높으니 문제없다고 주장한다.</p>
+            <span class="metric-stamp">RECALL 20%</span>
+          </div>
+          <div class="paper two">
+            <h3>증거 B — 데이터 분포</h3>
+            <p>일반 거래 9,920건<br />사기 거래 80건<br /><strong>클래스 비율 124 : 1</strong></p>
+          </div>
+          <div class="paper three">
+            <h3>잠정 결론</h3>
+            <p>높은 Accuracy가 실제 업무 목표를 대변하지 않는다. 임곗값을 바꾸면 탐지율은 높아지지만 오탐도 증가한다.</p>
+          </div>
+          <span class="red-string string-a"></span>
+          <span class="red-string string-b"></span>
+          <span class="pin pin-a"></span>
+          <span class="pin pin-b"></span>
+          <span class="pin pin-c"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="decision">
+      <div class="wrap">
+        <div class="section-kicker">Executive decision</div>
+        <h2>블록형 AI 강의가 아니라, <br />AI 고장 진단 게임으로 방향을 튼다</h2>
+        <p class="lead">기존의 “이전 모델에 기술 블록을 추가해 다음 모델로 진화한다”는 아이디어는 버리지 않는다. 다만 그것을 서비스 전체의 정체성이 아니라, <strong>모델 구조 사고를 수리할 때만 사용하는 전문 도구</strong>로 배치한다.</p>
+
+        <div class="decision">
+          <div class="decision-main">
+            <div class="decision-label">최종 제품 정의</div>
+            <h3>AI가 낸 잘못된 결과를 보고 원인을 추론하고, 데이터·지표·모델·운영을 고쳐 같은 사건을 다시 실행하는 에피소드형 학습 플랫폼</h3>
+            <p>학습의 최소 단위는 강의 영상이나 모델 페이지가 아니라 <strong>하나의 AI 사고 사건</strong>이다. 사용자가 무엇을 조사했고, 어떤 가설을 세웠고, 어떤 처방을 선택했는지가 학습 기록이 된다.</p>
+          </div>
+          <div class="quote">“AI를 공부하지 마세요.<br />망가뜨리고 고치세요.”</div>
+        </div>
+
+        <div class="grid-4">
+          <article class="card danger">
+            <div class="card-icon">01</div>
+            <h3>사건이 먼저</h3>
+            <p>과적합·편향·데이터 누수 같은 용어를 먼저 외우지 않는다. 이상한 결과를 먼저 관찰한다.</p>
+          </article>
+          <article class="card warn">
+            <div class="card-icon">02</div>
+            <h3>조사권이 제한됨</h3>
+            <p>모든 차트를 무작정 보는 대신 어떤 증거가 진단에 필요한지 선택하게 한다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">03</div>
+            <h3>처방에 대가가 있음</h3>
+            <p>Recall을 높이면 오탐이 늘듯이, 정답 버튼이 아니라 현실적인 Trade-off를 경험한다.</p>
+          </article>
+          <article class="card good">
+            <div class="card-icon">04</div>
+            <h3>개념은 사후 부검</h3>
+            <p>문제를 해결한 뒤 자신이 본 현상에 정확한 AI 용어·수식·코드를 연결한다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="problem">
+      <div class="wrap">
+        <div class="section-kicker">Problem</div>
+        <h2>현재 AI 교육의 문제는 콘텐츠가 아니라<br />학습자가 하는 행동이 비슷하다는 점이다</h2>
+        <p class="lead">영상이 짧아지고, 그림이 예뻐지고, Colab 실습이 붙어도 대부분의 흐름은 “설명을 받은 뒤 정답을 재현”하는 방식이다. 그래서 들을 때는 이해한 것 같지만, 결과가 이상할 때 무엇부터 확인해야 하는지는 배우기 어렵다.</p>
+
+        <div class="before-after">
+          <div class="flow-box old">
+            <h3>일반적인 강의</h3>
+            <div class="flow-list">
+              <div class="flow-step">개념 설명을 듣는다</div>
+              <div class="flow-step">완성된 예제를 본다</div>
+              <div class="flow-step">코드를 따라 실행한다</div>
+              <div class="flow-step">객관식 퀴즈를 푼다</div>
+              <div class="flow-step">진도율이 올라간다</div>
+            </div>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box new">
+            <h3>AI 사건 해결 학습</h3>
+            <div class="flow-list">
+              <div class="flow-step">이상한 결과를 목격한다</div>
+              <div class="flow-step">원인 가설을 세운다</div>
+              <div class="flow-step">필요한 증거를 고른다</div>
+              <div class="flow-step">처방하고 다시 실행한다</div>
+              <div class="flow-step">부작용과 원리를 설명한다</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="market">
+      <div class="wrap">
+        <div class="section-kicker">Competitive validation</div>
+        <h2>해외에는 각 요소가 이미 있다.<br />차별점은 요소가 아니라 결합된 학습 루프다</h2>
+        <p class="lead">공개된 대표 서비스를 기준으로 확인하면 한국어 강의, 인터랙티브 실습, 블록 모델 제작, AI 게임, 탐정형 AI 리터러시, 직무 시뮬레이션, AI 버그바운티가 각각 존재한다. 따라서 “한국어·게임·블록·탐정” 중 하나를 최초 기능처럼 주장하면 방어하기 어렵다.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>대표 서비스</th>
+                <th>이미 제공하는 핵심 경험</th>
+                <th>우리와 겹치는 지점</th>
+                <th>남는 차이</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Google ML Crash Course</strong><br /><a class="source-link" href="https://developers.google.com/machine-learning/crash-course" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>영상, 텍스트, 인터랙티브 시각화, 실습 문제를 포함한 머신러닝 입문 과정. 한국어 제공.</td>
+                <td><span class="check">✓</span> 한국어 · 실습 · 퀴즈</td>
+                <td>사건의 원인을 제한된 증거로 진단하고 처방의 부작용을 확인하는 게임 루프는 중심이 아님.</td>
+              </tr>
+              <tr>
+                <td><strong>ENNUI</strong><br /><a class="source-link" href="https://math.mit.edu/ennui/" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>브라우저에서 신경망을 Drag & Drop으로 설계·학습·시각화하고 Python·Julia 코드로 내보냄.</td>
+                <td><span class="check">✓</span> 블록 설계 · 학습 · 결과 시각화</td>
+                <td>자유 제작 도구에 가깝다. 실제 사고 상황에서 원인을 진단하고 수리 도구로 블록을 쓰는 구조와 다름.</td>
+              </tr>
+              <tr>
+                <td><strong>BlockDL</strong><br /><a class="source-link" href="https://github.com/Aryagm/blockdl" target="_blank" rel="noreferrer">GitHub ↗</a></td>
+                <td>시각적 신경망 편집, Shape 검증, Keras·PyTorch 코드 생성, 관련 학습 콘텐츠.</td>
+                <td><span class="check">✓</span> 블록 · 오류 검증 · 코드 연결</td>
+                <td>블록 제작이 제품 중심. 우리는 블록을 여러 진단 도구 중 하나로 제한한다.</td>
+              </tr>
+              <tr>
+                <td><strong>while True: learn()</strong><br /><a class="source-link" href="https://luden.io/wtl/" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>머신러닝 전문가 역할로 시각 프로그래밍 퍼즐을 풀고 고양이 번역 시스템을 만드는 시뮬레이션 게임.</td>
+                <td><span class="check">✓</span> 스토리 · 퍼즐 · 시각 프로그래밍</td>
+                <td>주어진 노드를 조합해 목적을 달성하는 퍼즐. 실제 모델 실패의 원인 감별과 운영 Trade-off가 핵심은 아님.</td>
+              </tr>
+              <tr>
+                <td><strong>Little Learning Machines</strong><br /><a class="source-link" href="https://www.transforms.ai/little-learning-machines" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>No-code 방식으로 실제 AI 동료를 훈련해 섬의 도전을 해결하는 시뮬레이션.</td>
+                <td><span class="check">✓</span> AI 훈련 · 캐릭터 · 게임</td>
+                <td>AI 동료 육성과 도전 해결 중심. 기술적 고장 원인·지표·데이터 문제를 수사하는 학습 구조와 다름.</td>
+              </tr>
+              <tr>
+                <td><strong>Minecraft: Reed Smart AI Detective</strong><br /><a class="source-link" href="https://education.minecraft.net/en-us/lessons/reed-smart-ai-detective" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>AI 오용 사건을 조사하며 딥페이크·AI 생성 콘텐츠·정보 신뢰성을 배우는 탐정형 콘텐츠.</td>
+                <td><span class="check">✓</span> 사건 · 증거 · 탐정 역할</td>
+                <td>AI 미디어·정보 리터러시가 중심. 모델의 데이터·지표·학습·아키텍처를 진단하고 수정하는 기술 학습과 구분됨.</td>
+              </tr>
+              <tr>
+                <td><strong>Forage</strong><br /><a class="source-link" href="https://www.theforage.com/simulations" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>실제 직무를 모사한 과제를 수행하고 모범 답안과 비교하는 무료 직무 시뮬레이션.</td>
+                <td><span class="partial">△</span> 실제 상황 · 업무형 과제</td>
+                <td>수 시간 단위 직무 체험에 가깝다. 5~15분짜리 반복 가능한 사건 게임과는 사용 맥락이 다름.</td>
+              </tr>
+              <tr>
+                <td><strong>huntr</strong><br /><a class="source-link" href="https://huntr.com/" target="_blank" rel="noreferrer">공식 페이지 ↗</a></td>
+                <td>AI·ML 애플리케이션의 취약점을 찾는 실제 버그바운티와 랭킹·보상 제공.</td>
+                <td><span class="partial">△</span> AI를 깨뜨리고 원인 보고</td>
+                <td>보안 연구자를 위한 실제 취약점 경쟁. 일반 학습자의 개념 습득을 위한 통제된 사건·힌트·부검 구조와 다름.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="gap-banner">
+          <strong>공개 검증 기준으로 남는 제품 공백:</strong> 기술적 AI 사고 제시 → 제한된 증거 선택 → 원인 진단 → 데이터·지표·모델 처방 → 동일 사건 재실행 → 부작용 비교 → 개념 부검 → 새로운 사건으로 전이하는 짧은 대중형 학습 루프.
+        </div>
+
+        <div class="positioning">
+          <div>
+            <small>NOT THIS</small>
+            <h3>강의를 게임처럼 포장</h3>
+            <p>설명·영상·퀴즈의 순서는 그대로 두고 캐릭터와 점수만 붙이는 방식.</p>
+          </div>
+          <div class="focus">
+            <small>CORE POSITION</small>
+            <h3>AI 고장 진단 게임</h3>
+            <p>증상에서 출발해 원인을 감별하고, 처방의 대가까지 확인하는 문제 해결 경험.</p>
+          </div>
+          <div>
+            <small>NOT THIS</small>
+            <h3>범용 No-code 모델 제작기</h3>
+            <p>빈 캔버스에서 자유롭게 모델을 만드는 도구. 경쟁이 많고 초보자에게 목적이 불명확함.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="concept">
+      <div class="wrap">
+        <div class="section-kicker">Core experience</div>
+        <h2>한 사건은 여덟 단계로 진행된다</h2>
+        <p class="lead">각 단계가 AI 실무의 사고방식을 게임 규칙으로 바꾼다. 정답을 빨리 고르는 것보다 어떤 증거를 봤고 어떤 부작용을 감수했는지가 중요하다.</p>
+
+        <div class="loop" aria-label="핵심 학습 루프">
+          <div class="loop-step"><div class="loop-num">STEP 01</div><strong>사고 접수</strong><span>이상한 모델 결과와 업무 피해를 확인한다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 02</div><strong>초기 가설</strong><span>데이터·지표·모델·운영 중 의심 지점을 고른다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 03</div><strong>증거 선택</strong><span>제한된 조사권으로 필요한 차트와 샘플만 연다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 04</div><strong>원인 진단</strong><span>증상과 근본 원인을 구분해 사건 보고서를 쓴다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 05</div><strong>처방 선택</strong><span>데이터·임곗값·구조·학습법 중 수정안을 정한다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 06</div><strong>재실험</strong><span>같은 조건에서 패치 전후 결과를 비교한다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 07</div><strong>부검 보고서</strong><span>현상에 정확한 개념·수식·코드 이름을 붙인다.</span></div>
+          <div class="loop-step"><div class="loop-num">STEP 08</div><strong>전이 사건</strong><span>겉모습이 다른 다음 사건에 같은 원리를 적용한다.</span></div>
+        </div>
+
+        <div class="must-list">
+          <div class="must">
+            <div class="must-num">1</div>
+            <div><h3>“정답 찾기”가 아니라 감별 진단이어야 한다</h3><p>과적합, 데이터 누수, 분포 변화는 비슷한 증상을 만들 수 있다. 사건마다 한 개의 키워드를 맞히는 퀴즈가 아니라, 증거로 다른 원인을 배제하도록 설계한다.</p></div>
+          </div>
+          <div class="must">
+            <div class="must-num">2</div>
+            <div><h3>처방은 항상 Trade-off를 만든다</h3><p>Recall을 높이면 False Positive가 늘고, 모델을 크게 하면 비용과 지연이 증가한다. “성능이 올랐으니 성공”으로 끝내지 않는다.</p></div>
+          </div>
+          <div class="must">
+            <div class="must-num">3</div>
+            <div><h3>블록 편집기는 필요할 때만 열린다</h3><p>Plain CNN의 Degradation처럼 구조가 원인인 사건에서만 Residual Connection·1×1 Projection 등의 수리 도구를 해금한다.</p></div>
+          </div>
+          <div class="must">
+            <div class="must-num">4</div>
+            <div><h3>플레이 이후 설명이 더 깊어져야 한다</h3><p>게임이 쉬운 비유에서 끝나지 않도록 직관 → 지표 → 수식 → PyTorch 코드 → 논문 용어로 단계적으로 연결한다.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="demo">
+      <div class="wrap">
+        <div class="section-kicker">Playable preview</div>
+        <h2>대표 사건을 직접 눌러보면<br />제품 경험이 바로 보인다</h2>
+        <p class="lead">아래는 실제 서비스의 축소 데모다. 증거를 최대 네 개 확인한 뒤 원인과 처방을 선택해보자. 수치는 교육용으로 고정된 시뮬레이션이다.</p>
+
+        <div class="demo-shell">
+          <div class="demo-head">
+            <div>
+              <h3>사건 001 — 정확도 99.2%의 완벽한 무능력자</h3>
+              <p>사기 거래 탐지 AI가 실제 사기의 80%를 놓쳤다.</p>
+            </div>
+            <div class="budget">남은 조사권 <span id="budgetCount">4</span>회</div>
+          </div>
+          <div class="demo-body">
+            <aside class="demo-sidebar">
+              <p class="demo-caption">Incident brief</p>
+              <div class="incident-summary">경영진은 “Accuracy가 99%인데 왜 문제냐”고 묻는다. 모델을 폐기하기 전에 어떤 문제가 숨어 있는지 밝혀야 한다.</div>
+              <p class="demo-caption">Choose evidence</p>
+              <div class="evidence-buttons">
+                <button class="evidence-btn" data-evidence="distribution">데이터 클래스 비율 확인</button>
+                <button class="evidence-btn" data-evidence="matrix">혼동 행렬 확인</button>
+                <button class="evidence-btn" data-evidence="curve">학습 곡선 확인</button>
+                <button class="evidence-btn" data-evidence="threshold">임곗값별 결과 확인</button>
+                <button class="evidence-btn" data-evidence="samples">랜덤 예측 샘플 확인</button>
+                <button class="evidence-btn" data-evidence="architecture">모델 구조 확인</button>
+              </div>
+              <p class="demo-note">모든 증거를 볼 수 없다. 사건 해결에 정보가 큰 자료를 우선 선택해야 한다.</p>
+            </aside>
+
+            <div class="demo-content">
+              <p class="demo-caption">Evidence board</p>
+              <div id="evidenceArea" class="empty-state">왼쪽에서 증거를 선택하세요.<br />선택한 자료가 이곳에 누적됩니다.</div>
+
+              <div class="stage" id="diagnosisStage">
+                <h4>1. 근본 원인을 모두 선택하세요</h4>
+                <div class="choices">
+                  <label class="choice"><input type="checkbox" name="diagnosis" value="imbalance" /> 클래스 불균형이 매우 심하다</label>
+                  <label class="choice"><input type="checkbox" name="diagnosis" value="metric" /> 업무 목표와 맞지 않는 Accuracy만 보고 있다</label>
+                  <label class="choice"><input type="checkbox" name="diagnosis" value="overfit" /> 훈련 데이터 과적합이 핵심 원인이다</label>
+                  <label class="choice"><input type="checkbox" name="diagnosis" value="small" /> 모델 파라미터 수가 너무 적다</label>
+                </div>
+                <button class="action-btn" id="diagnoseBtn">진단 제출</button>
+                <div class="feedback" id="diagnosisFeedback"></div>
+              </div>
+
+              <div class="stage" id="patchStage" hidden>
+                <h4>2. 적용할 처방을 선택하세요</h4>
+                <div class="choices">
+                  <label class="choice"><input type="checkbox" name="patch" value="metric" /> Recall·Precision·PR-AUC를 주요 지표로 추가한다</label>
+                  <label class="choice"><input type="checkbox" name="patch" value="weight" /> 사기 클래스에 Class Weight를 적용해 재학습한다</label>
+                  <label class="choice"><input type="checkbox" name="patch" value="threshold" /> 업무 비용에 맞춰 Decision Threshold를 조정한다</label>
+                  <label class="choice"><input type="checkbox" name="patch" value="accuracy" /> Accuracy가 더 높아지도록 일반 거래 예측을 강화한다</label>
+                </div>
+                <button class="action-btn" id="runBtn">패치 후 재실험</button>
+                <div class="feedback" id="patchFeedback"></div>
+                <div class="result-panel" id="resultPanel">
+                  <h4>패치 전후 비교</h4>
+                  <div class="result-metrics">
+                    <div class="result-metric"><span>Accuracy</span><strong id="resultAccuracy">—</strong></div>
+                    <div class="result-metric"><span>Fraud Recall</span><strong id="resultRecall">—</strong></div>
+                    <div class="result-metric"><span>Precision</span><strong id="resultPrecision">—</strong></div>
+                    <div class="result-metric"><span>False Positive Rate</span><strong id="resultFpr">—</strong></div>
+                  </div>
+                  <p class="tradeoff" id="tradeoffText"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="modes">
+      <div class="wrap">
+        <div class="section-kicker">Product structure</div>
+        <h2>하나의 콘셉트를 네 가지 사용 모드로 확장한다</h2>
+        <p class="lead">초기에는 ‘AI 사건파일’ 하나만 구현하되, 장기적으로 유입·핵심 학습·심화 학습·경쟁 콘텐츠가 자연스럽게 이어지도록 설계한다.</p>
+
+        <div class="grid-4">
+          <article class="card mode-card" data-number="01">
+            <span class="mode-tag">무료 유입</span>
+            <h3>오늘의 블랙박스</h3>
+            <p>숨겨진 모델에 다섯 번만 질문해 편향·규칙·약점을 추리하는 3분짜리 일일 퍼즐.</p>
+            <ul>
+              <li>하루 한 문제</li>
+              <li>질문 설계 능력</li>
+              <li>Wordle형 결과 공유</li>
+            </ul>
+          </article>
+          <article class="card mode-card danger" data-number="02">
+            <span class="mode-tag" style="color:var(--red);background:var(--red-soft)">핵심 제품</span>
+            <h3>AI 사건파일</h3>
+            <p>데이터·평가지표·학습·모델·운영의 사고를 조사하고 수정하는 5~15분 에피소드.</p>
+            <ul>
+              <li>증거 예산</li>
+              <li>감별 진단</li>
+              <li>패치와 부작용</li>
+            </ul>
+          </article>
+          <article class="card mode-card warn" data-number="03">
+            <span class="mode-tag" style="color:var(--amber);background:var(--amber-soft)">심화 캠페인</span>
+            <h3>AI 타임슬립 연구소</h3>
+            <p>당시의 기술 제약 속에서 유명 돌파구를 다시 발견하고 논문 Reviewer의 반론에 대응한다.</p>
+            <ul>
+              <li>연도별 제한 기술</li>
+              <li>실험 횟수 제한</li>
+              <li>모델 발전사 재발명</li>
+            </ul>
+          </article>
+          <article class="card mode-card good" data-number="04">
+            <span class="mode-tag" style="color:var(--green);background:var(--green-soft)">전문 수리 도구</span>
+            <h3>블록 수리 모드</h3>
+            <p>아키텍처가 원인인 사건에서만 구조를 직접 연결하고 Shape 오류를 해결한다.</p>
+            <ul>
+              <li>Residual Connection</li>
+              <li>Attention·Tokenizer 확장</li>
+              <li>구조·성능 Diff</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="curriculum">
+          <div class="track">
+            <div class="track-title">기초 데이터·평가</div>
+            <div class="case-chips">
+              <span class="case-chip">정확도 99.2%의 무능력자 — 클래스 불균형</span>
+              <span class="case-chip">미래를 본 예측 AI — Data Leakage</span>
+              <span class="case-chip">어제부터 망가진 추천 — Data Drift</span>
+            </div>
+          </div>
+          <div class="track">
+            <div class="track-title">머신러닝·딥러닝</div>
+            <div class="case-chips">
+              <span class="case-chip">시험지를 외운 AI — Overfitting</span>
+              <span class="case-chip">층을 쌓았더니 더 멍청 — ResNet</span>
+              <span class="case-chip">배경만 보고 동물을 맞힘 — Spurious Correlation</span>
+            </div>
+          </div>
+          <div class="track">
+            <div class="track-title">한국어 NLP</div>
+            <div class="case-chips">
+              <span class="case-chip">“안 나쁜 말”을 욕설로 차단 — Negation</span>
+              <span class="case-chip">띄어쓰기 하나에 사람이 바뀜 — Tokenization</span>
+              <span class="case-chip">사투리 고객을 악성으로 분류 — Slice Bias</span>
+            </div>
+          </div>
+          <div class="track">
+            <div class="track-title">생성형 AI·운영</div>
+            <div class="case-chips">
+              <span class="case-chip">없는 환불 규정을 만든 챗봇 — Hallucination</span>
+              <span class="case-chip">고객 한마디에 지침을 잊음 — Prompt Injection</span>
+              <span class="case-chip">좋은 답인데 출처가 없음 — Grounding·RAG</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="korea">
+      <div class="wrap">
+        <div class="section-kicker">Korean-first design</div>
+        <h2>한국어는 번역 기능이 아니라<br />사건 데이터와 오개념 설계에 들어간다</h2>
+        <p class="lead">한국어 UI만으로는 차별화가 약하다. 한국 사용자가 실제로 만날 법한 상황, 한국어 처리에서 생기는 오류, 국내 학습자가 자주 혼동하는 용어를 콘텐츠의 중심으로 만들어야 한다.</p>
+
+        <div class="grid-3">
+          <article class="card">
+            <div class="card-icon">가</div>
+            <h3>한영 용어 브리지</h3>
+            <p><strong>재현율(Recall)</strong>, <strong>데이터 누수(Data Leakage)</strong>처럼 한국어 설명과 논문 원어를 항상 연결해 이후 영문 자료로 넘어갈 수 있게 한다.</p>
+          </article>
+          <article class="card warn">
+            <div class="card-icon">말</div>
+            <h3>한국어 자체가 사건 데이터</h3>
+            <p>조사·어미·부정 표현·띄어쓰기·사투리·신조어·존댓말 때문에 토큰화와 분류가 실패하는 사건을 만든다.</p>
+          </article>
+          <article class="card good">
+            <div class="card-icon">?</div>
+            <h3>오개념 프로파일</h3>
+            <p>“Accuracy가 높으면 좋은 모델”, “ResNet은 과적합 해결 모델”처럼 반복되는 오개념을 사용자별 사건 기록으로 탐지한다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="mvp">
+      <div class="wrap">
+        <div class="section-kicker">MVP scope</div>
+        <h2>첫 버전은 GPU 플랫폼이 아니라<br />완성도 높은 사건 여섯 개다</h2>
+        <p class="lead">핵심 가설은 “사건을 풀며 배우는 방식이 설명 중심 강의보다 재미있고 기억에 남는가”다. 자유로운 모델 학습 인프라보다 콘텐츠 경험을 먼저 검증해야 한다.</p>
+
+        <div class="mvp-box">
+          <h3>MVP 정의</h3>
+          <p>웹에서 5~10분 안에 한 사건을 완료하고, 원인·처방·부작용을 자기 말로 설명할 수 있는 한국어 AI 진단 게임.</p>
+          <div class="mvp-grid">
+            <div>
+              <h4>포함할 6개 사건</h4>
+              <ol class="compact-list">
+                <li>클래스 불균형과 잘못된 평가지표</li>
+                <li>과적합과 Train·Validation Gap</li>
+                <li>Data Leakage와 잘못된 Split</li>
+                <li>한국어 부정 표현·Tokenization 오류</li>
+                <li>Hallucination과 Grounding</li>
+                <li>Plain CNN → Residual Connection 수리</li>
+              </ol>
+            </div>
+            <div class="not-needed">
+              <h4>MVP에 없어도 되는 것</h4>
+              <ul class="compact-list">
+                <li>실시간 GPU 학습 서버</li>
+                <li>범용 자유형 블록 에디터</li>
+                <li>수십 개 모델 전체 구현</li>
+                <li>LLM이 즉석에서 만든 무검수 사건</li>
+                <li>복잡한 경제·아이템 시스템</li>
+                <li>완전한 멀티플레이 경쟁</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <div class="card-icon">⏱</div>
+            <h3>행동 지표</h3>
+            <p>첫 사건 완료율, 평균 완료 시간, 선택한 증거 수, 힌트 사용률, 다음 사건 시작률을 본다.</p>
+          </article>
+          <article class="card warn">
+            <div class="card-icon">↻</div>
+            <h3>학습 지표</h3>
+            <p>같은 개념을 다른 상황에 적용하는 전이 문제 정답률과 일주일 후 재진단 정확도를 측정한다.</p>
+          </article>
+          <article class="card good">
+            <div class="card-icon">♥</div>
+            <h3>제품 지표</h3>
+            <p>“강의보다 재미있다”가 아니라 자발적 재방문, 사건 공유, 다음 시즌 알림 신청으로 수요를 검증한다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="tech">
+      <div class="wrap">
+        <div class="section-kicker">Implementation</div>
+        <h2>사건 엔진을 데이터 중심으로 만들면<br />MVP 구현은 예상보다 단순하다</h2>
+        <p class="lead">각 사건을 코드에 하드코딩하지 않고 JSON 기반의 상태 전이 콘텐츠로 저장한다. 실험 결과는 초기에 사전 계산값을 사용하고, 실제 학습 Worker는 검증 후 추가한다.</p>
+
+        <div class="arch-flow">
+          <div class="arch-node"><strong>React Client</strong><span>사건 접수, 증거 보드, 진단·처방, 결과 비교, 학습 기록 UI</span><div class="tech">React + TypeScript</div></div>
+          <div class="arch-node"><strong>Scenario Engine</strong><span>증거 예산, 조건 분기, 정답 규칙, 힌트, 패치 결과 상태 전이</span><div class="tech">JSON Schema</div></div>
+          <div class="arch-node"><strong>Spring Boot API</strong><span>사용자, 사건, 시도 이력, 진행도, 콘텐츠 버전, 관리자 기능</span><div class="tech">Java 21</div></div>
+          <div class="arch-node"><strong>PostgreSQL</strong><span>Incident, Evidence, Diagnosis, Patch, Outcome, Attempt 저장</span><div class="tech">PostgreSQL</div></div>
+          <div class="arch-node"><strong>Python Worker · 후속</strong><span>블록 그래프 검증, 축소 모델 학습, Feature·Gradient 결과 생성</span><div class="tech">PyTorch + Queue</div></div>
+        </div>
+
+        <pre aria-label="사건 JSON 예시"><code>{
+  "incidentId": "INC-001",
+  "title": "정확도 99.2%의 완벽한 무능력자",
+  "evidenceBudget": 4,
+  "evidence": [
+    { "id": "class_distribution", "informationValue": "high" },
+    { "id": "confusion_matrix", "informationValue": "high" },
+    { "id": "training_curve", "informationValue": "low" },
+    { "id": "threshold_chart", "informationValue": "high" }
+  ],
+  "diagnosisRules": {
+    "required": ["class_imbalance", "wrong_primary_metric"],
+    "misconceptions": ["accuracy_is_enough", "bigger_model_fixes_all"]
+  },
+  "patches": ["metric_change", "class_weight", "threshold_tuning"],
+  "concepts": ["accuracy", "precision", "recall", "pr_auc"]
+}</code></pre>
+
+        <div class="roadmap">
+          <article class="phase">
+            <small>PHASE 0</small>
+            <h3>1개 사건 프로토타입</h3>
+            <p>클래스 불균형 사건 하나로 재미·이해·완료율을 사용자 테스트한다.</p>
+          </article>
+          <article class="phase">
+            <small>PHASE 1</small>
+            <h3>6개 사건 MVP</h3>
+            <p>공통 사건 엔진, 사용자 기록, 힌트와 부검 보고서를 완성한다.</p>
+          </article>
+          <article class="phase">
+            <small>PHASE 2</small>
+            <h3>블록 수리 모드</h3>
+            <p>ResNet 사건에 제한형 그래프 편집기와 Shape 검증을 붙인다.</p>
+          </article>
+          <article class="phase">
+            <small>PHASE 3</small>
+            <h3>콘텐츠 생태계</h3>
+            <p>교수자 사건 제작기, 반별 대시보드, 데일리 블랙박스와 시즌제 확장.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="risk">
+      <div class="wrap">
+        <div class="section-kicker">Risk control</div>
+        <h2>재미를 붙인다고 자동으로 좋은 학습이 되지는 않는다</h2>
+        <div class="table-wrap risk-table">
+          <table>
+            <thead><tr><th>위험</th><th>잘못 만들었을 때</th><th>대응 원칙</th></tr></thead>
+            <tbody>
+              <tr><td>탐정 스킨만 씌움</td><td>텍스트를 읽고 객관식 정답을 고르는 기존 강의와 동일해진다.</td><td>증거 선택이 실제로 진단 가능성을 바꾸고, 불필요한 증거에는 비용이 있어야 한다.</td></tr>
+              <tr><td>모든 사건에 정답 하나</td><td>현실의 복합 원인을 “키워드 맞히기”로 왜곡한다.</td><td>주원인·기여 원인·관찰된 증상을 구분하고 부분 점수를 제공한다.</td></tr>
+              <tr><td>성능 상승만 성공 처리</td><td>비용, 지연, 공정성, 오탐 같은 운영 문제를 숨긴다.</td><td>각 패치마다 최소 한 개의 Trade-off와 이해관계자 반응을 함께 보여준다.</td></tr>
+              <tr><td>AI가 사건을 즉석 생성</td><td>기술적으로 부정확한 설명과 재현되지 않는 수치가 쌓인다.</td><td>검수된 사건 템플릿과 사전 계산 결과를 사용하고 LLM은 힌트 표현만 담당한다.</td></tr>
+              <tr><td>게임이 너무 복잡함</td><td>AI를 배우기 전에 규칙을 익히느라 이탈한다.</td><td>한 사건 5~10분, 핵심 행동 3개 이내, UI는 증거·진단·처방에 집중한다.</td></tr>
+              <tr><td>블록 에디터 과투자</td><td>범용 제작 도구 개발에 시간을 쓰고 콘텐츠 차별성이 약해진다.</td><td>MVP에서는 ResNet 한 사건에 필요한 블록만 구현한다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sources">
+      <div class="wrap">
+        <div class="section-kicker">Validation sources</div>
+        <h2>경쟁 검증에 사용한 대표 공개 자료</h2>
+        <p class="lead">조사 기준일은 2026년 8월 27일이다. 공개 서비스와 공식 설명을 기준으로 했으며, 비공개 강좌·사내 교육·모든 국가의 소규모 프로젝트까지 포함한 전수조사는 아니다. 따라서 “세계 최초”보다 통합 학습 루프의 차별성을 주장하는 편이 안전하다.</p>
+        <div class="sources">
+          <div class="source"><strong>Google Machine Learning Crash Course</strong><span>한국어 지원, 영상·인터랙티브 시각화·실습 문제.</span><br /><a href="https://developers.google.com/machine-learning/crash-course" target="_blank" rel="noreferrer">developers.google.com ↗</a></div>
+          <div class="source"><strong>ENNUI — MIT Mathematics</strong><span>Drag & Drop 신경망 설계, 브라우저 학습·시각화, 코드 내보내기.</span><br /><a href="https://math.mit.edu/ennui/" target="_blank" rel="noreferrer">math.mit.edu ↗</a></div>
+          <div class="source"><strong>BlockDL</strong><span>시각적 모델 편집, Shape 검증, Keras·PyTorch 코드 생성.</span><br /><a href="https://github.com/Aryagm/blockdl" target="_blank" rel="noreferrer">github.com ↗</a></div>
+          <div class="source"><strong>while True: learn()</strong><span>머신러닝 전문가 역할과 시각 프로그래밍 퍼즐·시뮬레이션.</span><br /><a href="https://luden.io/wtl/" target="_blank" rel="noreferrer">luden.io ↗</a></div>
+          <div class="source"><strong>Little Learning Machines</strong><span>No-code 방식으로 실제 AI 동료를 훈련하는 게임.</span><br /><a href="https://www.transforms.ai/little-learning-machines" target="_blank" rel="noreferrer">transforms.ai ↗</a></div>
+          <div class="source"><strong>Reed Smart: AI Detective</strong><span>AI 오용 사건을 조사하는 Minecraft Education의 AI 리터러시 콘텐츠.</span><br /><a href="https://education.minecraft.net/en-us/lessons/reed-smart-ai-detective" target="_blank" rel="noreferrer">education.minecraft.net ↗</a></div>
+          <div class="source"><strong>Forage Job Simulations</strong><span>실제 업무를 모사한 자기주도형 직무 과제와 모범 답안 비교.</span><br /><a href="https://www.theforage.com/simulations" target="_blank" rel="noreferrer">theforage.com ↗</a></div>
+          <div class="source"><strong>huntr</strong><span>AI·ML 애플리케이션의 실제 취약점 챌린지·버그바운티.</span><br /><a href="https://huntr.com/" target="_blank" rel="noreferrer">huntr.com ↗</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap">
+        <div class="final-box">
+          <div class="section-kicker">Final positioning</div>
+          <h2>우리가 만드는 것은<br />“재미있는 AI 강의”가 아니다</h2>
+          <p>기존 서비스가 AI를 설명하고, 조립하고, 체험하게 한다면 이 서비스는 <strong>AI가 왜 잘못됐는지 증거로 밝혀내고 직접 고치게 한다.</strong> 블록, 스토리, 한국어, AI 튜터는 이 핵심 행동을 강화하는 수단이다.</p>
+          <div class="one-line">사고 친 AI를 수사하고 고치며 배우는 한국어 AI 사건 해결 게임</div>
+          <p class="final-note">외부 설명용 짧은 이름: <strong>오늘도 AI가 사고쳤다</strong> · 제품 카테고리: <strong>AI Diagnostic Learning Game</strong></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">AI 사건 해결 학습 플랫폼 최종 기획안 · 단일 반응형 HTML · 모바일 / 데스크톱 / 인쇄 대응</div>
+  </footer>
+
+  <script>
+    const progressLine = document.getElementById('progressLine');
+    const navLinks = [...document.querySelectorAll('.nav a')];
+    const sections = navLinks.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+
+    function updateScrollUI() {
+      const scrollTop = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      progressLine.style.width = `${docHeight > 0 ? (scrollTop / docHeight) * 100 : 0}%`;
+      let current = sections[0];
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= 120) current = section;
+      }
+      navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === `#${current?.id}`));
+    }
+    window.addEventListener('scroll', updateScrollUI, { passive: true });
+    updateScrollUI();
+
+    const evidenceTemplates = {
+      distribution: `
+        <div class="evidence-card"><h4>증거 — 클래스 분포</h4>
+          <div class="metric-row"><span>일반 거래</span><strong>9,920건</strong></div>
+          <div class="metric-row"><span>사기 거래</span><strong>80건</strong></div>
+          <div class="metric-row"><span>비율</span><strong>124 : 1</strong></div>
+        </div>`,
+      matrix: `
+        <div class="evidence-card"><h4>증거 — 혼동 행렬</h4>
+          <div class="metric-row"><span>True Positive</span><strong>16</strong></div>
+          <div class="metric-row"><span>False Negative</span><strong style="color:var(--red)">64</strong></div>
+          <div class="metric-row"><span>Fraud Recall</span><strong>20.0%</strong></div>
+        </div>`,
+      curve: `
+        <div class="evidence-card"><h4>증거 — 학습 곡선</h4>
+          <p>Train Loss와 Validation Loss가 모두 안정적으로 감소했다. 큰 폭의 Train·Validation Gap은 보이지 않는다.</p>
+          <div class="mini-bars"><div class="bar"><span>Train loss</span><div class="bar-track"><div class="bar-fill" style="width:31%"></div></div><b>0.12</b></div><div class="bar"><span>Valid loss</span><div class="bar-track"><div class="bar-fill" style="width:37%"></div></div><b>0.15</b></div></div>
+        </div>`,
+      threshold: `
+        <div class="evidence-card"><h4>증거 — Decision Threshold</h4>
+          <div class="metric-row"><span>Threshold 0.70</span><strong>Recall 11%</strong></div>
+          <div class="metric-row"><span>Threshold 0.50</span><strong>Recall 20%</strong></div>
+          <div class="metric-row"><span>Threshold 0.25</span><strong>Recall 72%</strong></div>
+          <p style="margin-top:8px">임곗값을 낮출수록 사기를 더 잡지만 오탐이 증가한다.</p>
+        </div>`,
+      samples: `
+        <div class="evidence-card"><h4>증거 — 예측 샘플</h4>
+          <p>모델은 일반 거래에는 거의 항상 0.01 이하 확률을 주지만, 일부 사기 거래에도 0.18~0.42의 낮은 확률을 부여한다. 완전히 무작위인 모델은 아니다.</p>
+        </div>`,
+      architecture: `
+        <div class="evidence-card"><h4>증거 — 모델 구조</h4>
+          <p>중간 규모 Gradient Boosting 모델. 입력 Feature 34개, 학습 오류 없음. 파라미터 수 부족이나 구조적 실행 오류의 직접 증거는 없다.</p>
+        </div>`
+    };
+
+    let budget = 4;
+    const opened = new Set();
+    const evidenceArea = document.getElementById('evidenceArea');
+    const budgetCount = document.getElementById('budgetCount');
+    const evidenceButtons = [...document.querySelectorAll('.evidence-btn')];
+
+    evidenceButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.evidence;
+        if (opened.has(key) || budget <= 0) return;
+        opened.add(key);
+        budget -= 1;
+        budgetCount.textContent = budget;
+        btn.classList.add('opened');
+        btn.textContent = `✓ ${btn.textContent}`;
+        if (opened.size === 1) {
+          evidenceArea.className = 'evidence-grid';
+          evidenceArea.innerHTML = '';
+        }
+        evidenceArea.insertAdjacentHTML('beforeend', evidenceTemplates[key]);
+        if (budget === 0) {
+          evidenceButtons.forEach(b => { if (!b.classList.contains('opened')) b.disabled = true; });
+        }
+      });
+    });
+
+    const diagnoseBtn = document.getElementById('diagnoseBtn');
+    const diagnosisFeedback = document.getElementById('diagnosisFeedback');
+    const patchStage = document.getElementById('patchStage');
+
+    diagnoseBtn.addEventListener('click', () => {
+      const selected = [...document.querySelectorAll('input[name="diagnosis"]:checked')].map(x => x.value);
+      const hasCore = selected.includes('imbalance') && selected.includes('metric');
+      const hasWrong = selected.includes('overfit') || selected.includes('small');
+      diagnosisFeedback.className = `feedback show ${hasCore && !hasWrong ? 'good' : 'bad'}`;
+      if (hasCore && !hasWrong) {
+        diagnosisFeedback.innerHTML = '<strong>핵심 진단 성공.</strong> 다수 클래스가 Accuracy를 지배하고 있으며, 사기 탐지 업무에는 Recall·Precision과 비용 기반 임곗값이 더 중요합니다.';
+        patchStage.hidden = false;
+        patchStage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else if (hasCore) {
+        diagnosisFeedback.innerHTML = '<strong>주원인은 찾았지만 불필요한 원인이 포함됐습니다.</strong> 학습 곡선과 모델 구조 증거로 과적합·용량 부족을 배제할 수 있는지 확인해보세요.';
+      } else {
+        diagnosisFeedback.innerHTML = '<strong>증상과 원인을 다시 구분해보세요.</strong> 전체 Accuracy가 높은데 사기 Recall만 낮은 이유를 데이터 비율과 혼동 행렬에서 찾을 수 있습니다.';
+      }
+    });
+
+    const runBtn = document.getElementById('runBtn');
+    const patchFeedback = document.getElementById('patchFeedback');
+    const resultPanel = document.getElementById('resultPanel');
+    const resultAccuracy = document.getElementById('resultAccuracy');
+    const resultRecall = document.getElementById('resultRecall');
+    const resultPrecision = document.getElementById('resultPrecision');
+    const resultFpr = document.getElementById('resultFpr');
+    const tradeoffText = document.getElementById('tradeoffText');
+
+    runBtn.addEventListener('click', () => {
+      const selected = [...document.querySelectorAll('input[name="patch"]:checked')].map(x => x.value);
+      if (selected.length === 0) {
+        patchFeedback.className = 'feedback show bad';
+        patchFeedback.textContent = '최소 한 개의 처방을 선택하세요.';
+        resultPanel.classList.remove('show');
+        return;
+      }
+      const hasMetric = selected.includes('metric');
+      const hasWeight = selected.includes('weight');
+      const hasThreshold = selected.includes('threshold');
+      const badAccuracy = selected.includes('accuracy');
+
+      let accuracy = '99.3%';
+      let recall = '20%';
+      let precision = '61.5%';
+      let fpr = '0.10%';
+      let message = '';
+
+      if (badAccuracy && !hasWeight && !hasThreshold) {
+        accuracy = '99.4%'; recall = '12%'; precision = '66.7%'; fpr = '0.05%';
+        message = 'Accuracy는 조금 올랐지만 사기 탐지라는 업무 목표는 더 악화됐습니다. 지표 최적화가 실제 가치 최적화와 같지 않습니다.';
+      } else if (hasWeight && hasThreshold) {
+        accuracy = '97.1%'; recall = '78%'; precision = '46%'; fpr = '2.6%';
+        message = '사기 탐지율은 크게 개선됐지만 정상 거래 오탐이 늘었습니다. 이제 고객 문의 비용과 놓친 사기 비용을 함께 고려해 운영 임곗값을 정해야 합니다.';
+      } else if (hasWeight) {
+        accuracy = '98.2%'; recall = '64%'; precision = '38%'; fpr = '1.8%';
+        message = '재학습으로 소수 클래스를 더 잘 보게 됐지만 Precision이 낮아졌습니다. 임곗값과 비용 기준의 추가 조정이 필요합니다.';
+      } else if (hasThreshold) {
+        accuracy = '97.0%'; recall = '72%'; precision = '29%'; fpr = '2.7%';
+        message = '모델을 다시 학습하지 않고도 Recall을 높였지만 오탐이 크게 증가했습니다. 빠른 운영 조치로는 유효하나 최종 해결은 아닙니다.';
+      } else if (hasMetric) {
+        message = '보고 지표를 바꾸자 문제가 선명해졌지만 모델의 예측 자체는 아직 바뀌지 않았습니다. 측정의 수정과 모델의 수정은 구분해야 합니다.';
+      }
+
+      if (hasMetric && (hasWeight || hasThreshold)) {
+        message += ' Recall·Precision·PR-AUC를 함께 모니터링하면 이후 회귀를 더 빨리 발견할 수 있습니다.';
+      }
+
+      resultAccuracy.textContent = accuracy;
+      resultRecall.textContent = recall;
+      resultPrecision.textContent = precision;
+      resultFpr.textContent = fpr;
+      tradeoffText.textContent = message;
+      patchFeedback.className = `feedback show ${(hasWeight || hasThreshold) && !badAccuracy ? 'good' : 'bad'}`;
+      patchFeedback.innerHTML = (hasWeight || hasThreshold) && !badAccuracy
+        ? '<strong>재실험 완료.</strong> 숫자가 좋아졌는지가 아니라 어떤 비용이 새로 생겼는지까지 확인하세요.'
+        : '<strong>부분 처방.</strong> 측정 방식만 바꾸거나 Accuracy를 더 높이는 것으로는 업무 문제를 해결하지 못합니다.';
+      resultPanel.classList.add('show');
+    });
+  </script>
+</body>
+</html>
