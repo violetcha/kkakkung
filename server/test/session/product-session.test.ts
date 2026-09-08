@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { ProductSessionStore, SESSION_LIMITS } from '../../src/session/ProductSessionStore.js';
+
+function store() {
+  let now = 1_000_000;
+  const sessions = new ProductSessionStore({ now: () => now });
+  return { sessions, advance: (ms: number) => (now += ms), now: () => now };
+}
+
+describe('ProductSessionStore', () => {
+  it('issues random ids, authenticates without consuming and refuses a second concurrent connection', () => {
+    const h = store();
+    const a = h.sessions.issue({ nickname: '같은이름', inviteId: 'inv', roomCode: 'ABC234' });
+    const b = h.sessions.issue({ nickname: '같은이름', inviteId: 'inv', roomCode: 'ABC234' });
+    expect(a.playerId).not.toBe(b.playerId);
+    expect(h.sessions.authenticate(a.sessionToken)?.playerId).toBe(a.playerId);
+    expect(h.sessions.authenticate(a.sessionToken)?.playerId).toBe(a.playerId);
+    expect(h.sessions.authenticate('not-issued')).toBeNull();
+    expect(h.sessions.claimConnection(a.sessionId, 'conn-1')).toBe('claimed');
+    expect(h.sessions.claimConnection(a.sessionId, 'conn-2')).toBe('busy');
+    expect(h.sessions.claimConnection(a.sessionId, 'conn-1')).toBe('claimed');
+    expect(h.sessions.activeConnection(a.sessionId)).toBe('conn-1');
+    h.sessions.releaseConnection(a.sessionId, 'conn-2');
+    expect(h.sessions.activeConnection(a.sessionId)).toBe('conn-1');
+    h.sessions.releaseConnection(a.sessionId, 'conn-1');
+    expect(h.sessions.claimConnection(a.sessionId, 'conn-2')).toBe('claimed');
+  });
+
+  it('extends the lease on real activity only and never beyond two hours from issue', () => {
+    const h = store();
+    const issued = h.sessions.issue({ nickname: 'n', inviteId: 'inv', roomCode: 'ABC234' });
+    expect(issued.expiresAt).toBe(h.now() + SESSION_LIMITS.leaseTtlMs);
+    h.advance(SESSION_LIMITS.leaseTtlMs - 1);
+    expect(h.sessions.authenticate(issued.sessionToken)).not.toBeNull();
+    // Presenting the token does not extend; the lease expires at the deadline.
+    h.advance(1);
+    expect(h.sessions.authenticate(issued.sessionToken)).toBeNull();
+    const second = h.sessions.issue({ nickname: 'n', inviteId: 'inv', roomCode: 'ABC234' });
+    for (let i = 0; i < 10; i++) {
+      h.advance(SESSION_LIMITS.leaseTtlMs - 1000);
+      h.sessions.touch(second.sessionId);
+    }
+    const auth = h.sessions.get(second.sessionId);
+    expect(auth).toBeNull();
+  });
+
+  it('invalidates sessions on room end and refuses rejoin with the old token', () => {
+    const h = store();
+    const a = h.sessions.issue({ nickname: 'a', inviteId: 'inv', roomCode: 'ABC234' });
+    const other = h.sessions.issue({ nickname: 'b', inviteId: 'inv', roomCode: 'ZZZ234' });
+    h.sessions.claimConnection(a.sessionId, 'c1');
+    h.sessions.invalidateRoom('ABC234');
+    expect(h.sessions.authenticate(a.sessionToken)).toBeNull();
+    expect(h.sessions.claimConnection(a.sessionId, 'c2')).toBe('invalid');
+    expect(h.sessions.authenticate(other.sessionToken)).not.toBeNull();
+    expect(h.sessions.sessionsInRoom('ABC234')).toEqual([]);
+    h.sessions.prune();
+    expect(h.sessions.size).toBe(1);
+  });
+});
