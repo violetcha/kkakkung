@@ -140,6 +140,42 @@ export {
   type PriorityOrder,
 } from './priority.js';
 
+export * from './core-types.js';
+
+export {
+  EMPTY_SURFACES,
+  commandPhase,
+  isTerminal,
+  type HeldMove,
+  type KnowledgeRecord,
+  type MatchMode,
+  type MatchState,
+  type PendingTurn,
+  type PlayerRecord,
+} from './state.js';
+
+export {
+  canStartAction,
+  completeActions,
+  moveTarget,
+  reserveMove,
+  type CompletedMove,
+  type CompletionResult,
+  type MoveDirection,
+} from './movement.js';
+
+export {
+  createMatch,
+  createPractice,
+  getFrame,
+  getPlayerKnowledge,
+  getPlayerSelf,
+  getVisibleEntities,
+  getVisibleSurfaces,
+  matchCore,
+  stepMatch,
+} from './engine.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
