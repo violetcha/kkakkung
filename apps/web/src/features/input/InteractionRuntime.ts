@@ -43,6 +43,13 @@ import {
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
 import { createMediaSession, type MediaSession } from '../media/media-session';
 import { IDLE_MEDIA_STATUS, type MediaRoomFactory } from '../media/media-types';
+import {
+  createTrackPublisher,
+  type PublisherPort,
+  type PublicationRecord,
+  type QualityPreset,
+  type TrackPublisher,
+} from '../media/track-publisher';
 import { createCalibrator, isNeutralUsable, relativeToNeutral } from './calibration';
 import { createContextStore, type ContextStore } from './interaction-context';
 import {
@@ -198,6 +205,9 @@ export interface InteractionRuntime {
   applyMediaBindings(bindings: MediaBindings): void;
   setQualityPreset(preset: 'medium' | 'low'): void;
   retireMediaGeneration(): Promise<void>;
+  /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
+  publishMedia(): Promise<string | null>;
+  getPublications(): readonly PublicationRecord[];
   endParticipation(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -232,6 +242,8 @@ export type InteractionRuntimeOptions = Readonly<{
   compositor?: CompositorEnvironment;
   /** SDK Room 주입점. 생략하면 실제 livekit-client Room을 만든다. */
   createMediaRoom?: MediaRoomFactory;
+  /** SDK LocalParticipant 주입점. 생략하면 게시를 시도하지 않는다. */
+  getPublisher?: () => PublisherPort | null;
   epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
   keyboardTarget?: KeyboardTarget;
@@ -371,6 +383,16 @@ export const createInteractionRuntime = (
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
   const calibrator = createCalibrator(tuning);
   const context: ContextStore = createContextStore();
+  let publisher: TrackPublisher | null = null;
+  let qualityPreset: QualityPreset = 'medium';
+
+  const ensurePublisher = (): TrackPublisher | null => {
+    if (publisher) return publisher;
+    const participant = options.getPublisher?.() ?? null;
+    if (!participant) return null;
+    publisher = createTrackPublisher({ participant, now: () => vision.now() });
+    return publisher;
+  };
   const media: MediaSession = createMediaSession({
     createRoom: () => {
       if (!options.createMediaRoom)
@@ -732,12 +754,32 @@ export const createInteractionRuntime = (
       throw new InteractionNotImplementedError('applyMediaBindings', 'D-15 / ME-05');
     },
 
-    setQualityPreset() {
-      throw new InteractionNotImplementedError('setQualityPreset', 'D-14 / ME-04');
+    /** C VI-05의 저사양 전환. 이후 게시부터 낮은 인코딩을 쓴다. */
+    setQualityPreset(preset) {
+      qualityPreset = preset;
+    },
+
+    /** 가공 얼굴과 선택 마이크만 게시한다. 원본은 handle 검사에서 거절된다. */
+    async publishMedia() {
+      const scope = media.getScope();
+      const target = ensurePublisher();
+      if (!scope || !target) return null;
+      const handle = compositor?.getHandle() ?? null;
+      if (!handle) return null;
+      const faceSid = await target.publishFace(handle, scope, qualityPreset);
+      const microphone = devices?.getMicrophoneTrack() ?? null;
+      if (microphone) await target.publishMicrophone(microphone, scope);
+      return faceSid;
+    },
+
+    getPublications() {
+      return publisher?.getPublications() ?? [];
     },
 
     /** 미디어 세대만 끝낸다. 논리 참가 종료(D-17)와 분리한다. */
     async retireMediaGeneration() {
+      await publisher?.unpublishAll();
+      publisher = null;
       await media.retire();
     },
 
@@ -747,6 +789,8 @@ export const createInteractionRuntime = (
       clearHolds();
       context.clear();
       fallback.reset();
+      await publisher?.unpublishAll();
+      publisher = null;
       await media.dispose();
       deps.onMediaStatus(IDLE_MEDIA_STATUS);
       stopVision();
@@ -761,6 +805,8 @@ export const createInteractionRuntime = (
       unbindKeyboard();
       clearHolds();
       context.clear();
+      await publisher?.unpublishAll();
+      publisher = null;
       await media.dispose();
       disposed = true;
       stopVision();
