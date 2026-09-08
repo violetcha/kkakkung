@@ -1,0 +1,2502 @@
+# F · 공통 설정·Jenkins·배포·통합 검증 실행 문서
+
+작성 기준: 2026-09-07 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-2**  
+담당 범위: 의존성/공통 설정, 실행 환경, 인프라와 G1–G6 실측 증거  
+원본 작업: **19개** · 리뷰 상대: **E** · 현재 상태: **모두 구현 계획**
+
+이 문서와 [기획서 v0.0.8](../spec/README.md)을 실행 입력으로 사용한다. AI는 기존 코드와 저장소 지침을 직접 읽는다. 팀원에게 다른 담당 문서의 내용을 찾아 오도록 요구하지 않는다. [6인 전체 일정](README.md)은 인계 시점을 확인하는 안내다.
+
+목표는 **9월 8일(화)·9일(수) 핵심 구현, 10일(목) 통합·검증·수정, 11일(금) 오전 MVP 인수**다. 작업 개수는 소요시간이나 완료 보증이 아니다. 선행 작업·실제 Cloud·장치가 준비되지 않은 조건은 완료로 계산하지 않는다.
+
+## 날짜별 오늘 작업표
+
+각 날짜에서 오늘 번호를 1부터 다시 센다. 예를 들어 9월 9일에 “오늘 1번부터 5번”을 요청하면 **D2 표의 1–5번**을 수행한다. `F-01` 같은 고정 번호와 원본 ID는 날짜가 지나도 바꾸지 않는다. 일정 이후에는 날짜 또는 고정 번호를 명시한다.
+
+### D1 · 2026-09-08 화요일
+
+계약·환경과 병렬 구현 기반을 만들고 권위 이동·장치 점검을 연결. 새 원본 작업 6개.
+
+| 오늘 번호 | 고정 번호                  | 원본 ID | 완료할 결과                          |
+| --------- | -------------------------- | ------- | ------------------------------------ |
+| 1         | [F-01](f-infra-qa.md#f-01) | DP-01   | 실제 배포·Cloud·검증 환경 확인       |
+| 2         | [F-02](f-infra-qa.md#f-02) | QA-01   | 합성 미디어·실효 지연·장애 계측 도구 |
+| 3         | [F-03](f-infra-qa.md#f-03) | QA-02   | 비전·얼굴·3D 동시 성능 조기 측정     |
+| 4         | [F-04](f-infra-qa.md#f-04) | DP-04   | Jenkins 검증과 GitLab 결과 연결      |
+| 5         | [F-05](f-infra-qa.md#f-05) | DP-02   | 단일 서버 운영 이미지·Compose        |
+| 6         | [F-06](f-infra-qa.md#f-06) | DP-03   | 도메인·TLS·WSS·접근 제한             |
+
+### D2 · 2026-09-09 수요일
+
+MVP 핵심 기능을 구현하고 생산자·소비자를 통합. 새 원본 작업 8개.
+
+| 오늘 번호 | 고정 번호                  | 원본 ID | 완료할 결과                        |
+| --------- | -------------------------- | ------- | ---------------------------------- |
+| 1         | [F-07](f-infra-qa.md#f-07) | DP-05   | 게임·미디어·복구 지표와 경보       |
+| 2         | [F-08](f-infra-qa.md#f-08) | QA-03   | G1-A 지연·결과 불명 회귀           |
+| 3         | [F-09](f-infra-qa.md#f-09) | QA-04   | G1-D 탈락 중 회수·늦은 허용 회귀   |
+| 4         | [F-10](f-infra-qa.md#f-10) | QA-06   | G1-C 재게시·전체 재연결 회귀       |
+| 5         | [F-11](f-infra-qa.md#f-11) | QA-05   | G1-B 강제 종료·재시작·옛 토큰 회귀 |
+| 6         | [F-12](f-infra-qa.md#f-12) | QA-07   | G3 실제 Room 동시 판정 회귀        |
+| 7         | [F-13](f-infra-qa.md#f-13) | QA-08   | G4 수신자별 정보 은폐 회귀         |
+| 8         | [F-14](f-infra-qa.md#f-14) | QA-10   | 60 게임 클라이언트 30분 진단       |
+
+### D3 · 2026-09-10 목요일
+
+최종 흐름·실기기·Cloud·부하 검증과 결함 수정. 새 원본 작업 5개.
+
+| 오늘 번호 | 고정 번호                  | 원본 ID | 완료할 결과                   |
+| --------- | -------------------------- | ------- | ----------------------------- |
+| 1         | [F-15](f-infra-qa.md#f-15) | QA-09   | G5 대표 6대 장치 5판 완주     |
+| 2         | [F-16](f-infra-qa.md#f-16) | DP-06   | Jenkins 배포·배수·실패 복귀   |
+| 3         | [F-17](f-infra-qa.md#f-17) | QA-11   | 실제 미디어 1·3·5방 단계 검증 |
+| 4         | [F-18](f-infra-qa.md#f-18) | QA-12   | G2·G6 10방 60세션 15분 통합   |
+| 5         | [F-19](f-infra-qa.md#f-19) | QA-13   | MVP 관문 보고와 운영 인계     |
+
+D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 늘리지 않는다. 수정한 파일 소유자가 검증 후 `fix:` 커밋과 MR 본문을 남긴다. 도망자 아이템의 종류·효과·획득·사용과 관련 G3-C·G5 행동은 결정 대기다. 해당 항목을 구현하거나 필수 통과로 강제하지 않으며 확정된 술래 장비·자연 구속·포즈·6대 5판 검증은 유지한다.
+
+<!-- BEGIN EXEC-CONTRACT-2 COMMON -->
+
+# 공통 실행 계약 원본
+
+버전: **EXEC-CONTRACT-2** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
+
+이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. 기존 EXEC-CONTRACT-1의 미정 아이템과 불완전한 연결 계약을 대체한다. 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다.
+
+## 이 문서로 실행하는 방법
+
+담당자가 작업 번호의 실행을 요청하면 구현·검증·작업별 로컬 커밋·MR 본문 작성까지 수행한다. 푸시·GitLab MR 생성·원격 병합은 담당자가 직접 한다. 문서를 검토하거나 읽는 요청만으로 제품 구현을 시작하지 않는다.
+
+```text
+내 담당 실행 문서와 docs/spec/decisions.md, v0.0.8 기획서를 기준으로
+오늘 작업표 1번부터 5번까지 진행해줘.
+결정 대기 작업은 구현하지 말고 해당 번호를 보류한 뒤 다음 번호를 진행해줘.
+검증된 중간 산출물과 완료 작업은 내 Git 신원으로 각각 로컬 커밋해줘.
+작업별 MR 본문과 이번 실행분 합본을 작성하고 전체 본문을 보여줘.
+푸시·MR 생성·원격 병합은 하지 마.
+```
+
+- 오늘 번호는 날짜별 표에서 찾고 고정 번호·원본 ID는 유지한다. 같은 작업 재요청 시 코드·Git 로그·진행 기록으로 중복 커밋을 방지한다.
+- 코드·지침·설치된 SDK 타입·계약 파일은 AI가 직접 읽는다. 사람에게 함수명·파일 위치를 찾아 전달하도록 요구하지 않는다.
+- **MP-06, EQ-06, EQ-07, EQ-08, EQ-09, EQ-12는 PRODUCT_DECISION_PENDING**이다. 종류·효과·수량·획득·소지·사용이 정해지기 전 구현·가짜 완료·대체 아이템 설계를 하지 않는다.
+- EQ-11은 구속 상태 HUD만 진행한다. 술래 감지기·덫, 자연 구속 만료·유예, 회전·포획, 공통 후보 우선순위는 유지한다.
+- 제품 계약에 아이템 종류·인벤토리·아이템 사용 명령·아이템 엔티티를 추가하지 않는다. 결정 대기 상태는 완료나 승인된 범위 제외로 바꾸지 않는다.
+- 목표는 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 금요일 오전 인수다. 확정 범위의 G1–G6 증거와 미정 아이템의 상태를 함께 보고한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
+
+## 설치와 공통 검사
+
+Node.js 24.19.0 / pnpm 11.19.0 / TypeScript 6.0.3과 루트 lockfile을 유지한다.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm setup:env
+pnpm exec playwright install chromium
+pnpm build:packages
+node scripts/check-execution-plan.mjs
+```
+
+공통 계약·fixture의 타입 검사는 계획 정합성 검사다. 실제 모듈 통합·Cloud·장치·부하 검증이 아니다. 새 시험/runner는 해당 작업에서 만들 산출물이며 파일이 없다고 skip 또는 성공으로 처리하지 않는다. 작업별 검증 후 타입·lint·빌드를 확인하고 일차 인계 전에는 `pnpm verify`를 실행한다. 기본 verify는 실제 Cloud나 장시간 부하를 자동 실행하지 않는다.
+
+## 단독 수정 영역과 공통 계약 변경
+
+| 담당 | 단독 수정 영역                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A    | game-core의 match 소스/시험, server/content, server/config/tuning, 기존 server/src/domain/index.ts·types.ts 재노출                                                              |
+| B    | protocol의 src/test, server/src/rooms·game·session, bootstrap.ts/index.ts/main.ts, 서버 room/protocol/session 시험과 기존 server/tests/integration·tick.test.ts·session.test.ts |
+| C    | 웹 app, features/room·game, styles.css, 화면/장면 시험, 3D 자산                                                                                                                 |
+| D    | 웹 features/devices·vision·input·media와 해당 시험, public/models, tsconfig.worker.json                                                                                         |
+| E    | server/src/media·operations·health와 해당 server/test                                                                                                                           |
+| F    | manifest/lockfile·공통 설정·env.ts, infra/Jenkins/scripts/tests, server/src/observability, 검증·배포 문서                                                                       |
+
+B만 서버 최종 조립을, C만 웹 최종 조립을, F만 공통 설정과 의존성을 수정한다. A는 protocol을 import하지 않고 B가 변환한다. 웹은 서버 실제 맵·game-core·운영 내부값을 import하지 않는다. 제품은 0.2.0의 kkakkung, sandbox 0.1.0은 개발 진단용으로 격리한다. 기존 공개 maze·빈 입장·Playground와 개발 adapter는 production 라우트에서 차단한다. 개발 회귀용 경로만 유지하며 제품 기능을 위해 진단 API를 확장하지 않는다.
+
+공통 의미 변경은 B가 총괄하여 `docs/execution/common.md`와 `contracts/types.ts`·fixture를 수정한다. D 센서·E 미디어처럼 실제 생산자/소비자가 검토한다. F는 동기화 검사기를 소유한다. A–F 문서의 공통 블록은 직접 편집하지 않고 아래 명령으로 갱신한다.
+
+```bash
+node scripts/check-execution-plan.mjs --sync
+node scripts/check-execution-plan.mjs
+```
+
+일반 리뷰 쌍은 A↔B, C↔D, E↔F다. 공개 경계 변경에는 해당 소비자를 추가한다: B 명령/개인 뷰는 C·D, E 세대/바인딩은 B·D, D callback은 C, F Worker/CSP/모델은 D, readiness는 B·E. 모든 사람이 모든 변경을 리뷰할 필요는 없다.
+
+## 좌표·시간·라운드 수명
+
+- Cell은 정수 x/y=0–31, Dir은 0북(y−1)/1동(x+1)/2남(y+1)/3서(x−1)다. 3D는 x=cell.x,z=cell.y, 셀 크기 1이며 기존 −15.5 보정을 섞지 않는다. TracePoint만 교환 중점의 0.5 좌표를 허용한다.
+- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가한다. 본 경기 로딩에서 matchId와 Tick을 다시 만들지 않는다.
+- PLAYING startTick과 deadlineTick=startTick+3600을 고정한다. 이동 9 Tick·회전 6 Tick이다. startAt/서버 timeout은 서버 monotonic ms, JWT 만료/회수는 epoch 초다.
+- 웹 표시 시간은 `clock-probe/clock-reply`로 추정한다. 시작·재접속 뒤 5회 probe를 250ms 간격으로 보내고 RTT가 가장 작은 3회의 offset 중앙값을 사용한다. RTT=(수신클라이언트시각−clientSentAtMs)−(serverSentAtMs−serverReceivedAtMs), offset=((serverReceivedAtMs−clientSentAtMs)+(serverSentAtMs−클라이언트수신시각))/2다. 음수/RTT>1000ms 표본은 버리고 10초마다 재측정한다. serverEpoch가 바뀌면 표본을 폐기한다.
+- 클라이언트 추정 시각은 렌더링/안내용이다. serverTick·startAt·포즈 최소 시간을 브라우저 시계와 직접 비교하지 않고 환산한다. 실제 성공 판정은 서버가 한다.
+- B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
+
+## 명령의 접수와 종결
+
+채널은 아래 ClientMessages/ServerMessages의 정확한 키를 사용한다. 구조는 `contracts/types.ts`의 판별 가능한 타입을 기준으로 strict 런타임 스키마로 구현한다. 모르는 필드·범위 밖 좌표·안전 정수가 아닌 sequence·잘못된 UUID는 거절한다. 신원은 인증된 연결에서만 주입한다.
+
+1. B는 인증·봉투·단계별 기본 조건·큐 한도를 검사하고 `command-result`를 보낸다. accepted는 큐 접수다. rejected이면 큐에 넣지 않으며 별도 실행 결과는 없다.
+2. **accepted인 모든 명령은 반드시 한 개의 논리적 command-outcome으로 종결한다.** A의 순수 명령은 StepResult.outcomes, B의 READY/LOAD_READY/REMATCH는 B 단계 처리 결과에서 만든다. 실패로 상태가 전혀 변하지 않아도 requestId/sequence에 연결해 보낸다.
+3. applied는 의도 반영·행동 예약·교환/도전 생성 등이 처리됐다는 뜻이다. 이동 도착·설치 완료·탈출 성공은 이후 권위 상태/사건으로 확인한다. 적용 후 다른 판정으로 취소되어도 같은 명령의 terminal 결과를 다시 바꾸지 않는다.
+4. 동일 requestId/동일 내용은 최초 접수/종결 결과를 재전송하고 core를 다시 호출하지 않는다. 다른 내용 재사용은 STALE_REQUEST로 거절한다. pending 요청은 캐시에서 퇴출하지 않는다. 연결별 pending 최대 64, completed 최대 512개/2분으로 제한하고 큐를 넣기 전에 한도를 검사한다. 매치 종료 때 미처리 수용 요청은 ROUND_ENDED의 canceled로 정리한다.
+5. C는 접수 결과가 rejected이면 즉시 pending을 끝내고 안전 code와 재요청 UI를 표시한다. 이 경우 outcome·조회 타이머를 기다리지 않는다. accepted만으로 spinner를 끝내거나 성공을 표시하지 않는다. outcome을 받으면 요청 pending은 끝내고 필요한 private-view/event를 별도로 기다린다. EXIT_START가 rejected/canceled이면 재요청 UI를 복구하며 challenge를 만들어내지 않는다.
+6. accepted 후 2초 동안 종결이 없으면 request-status를 요청한다. 2초 간격 최대 3회, done이면 결과 적용, pending이면 대기한다. unknown/연속 무응답은 개인 뷰 resync와 UNCONFIRMED 안내로 spinner를 끝내며 성공/실패로 추정하거나 자동 재실행하지 않는다.
+7. command-outcome.stateVersion은 수신자가 필요한 개인 뷰 버전이다. 개인 내용 변경이 없으면 마지막 개인 뷰 버전을 사용한다. 아직 개인 뷰가 없는 로비의 READY 결과는 해당 공개 라운드 버전이며 C는 존재하지 않는 개인 뷰를 기다리지 않는다.
+
+필수 연결 시험은 **accepted → core 거절(상태 불변) → requestId에 맞는 outcome → UI pending 종료 → 새 요청 가능**이다. 동일 요청 재전송·매치 종료·결과 지연·상태 조회도 실제 A/B/C 코드로 검사한다.
+
+## 개인 상태·출구·교환·준비
+
+개인 뷰는 초기/허용 내용 변경/명시적 resync 때 전체 교체한다. stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·중복·만료 사건은 폐기한다.
+
+- visibleEntities는 종류별 필수 필드가 다르다. **가시 sensor는 wall이 필수**이며 자기 기억인 ownedEquipment와 분리한다. sensor.cell은 접근 셀, wall은 실제 부착 면이다. 다른 장비 위치를 전원에게 전송하지 않는다.
+- self.exchange의 incoming/outgoing은 수신자 기준이다. C는 incoming만 D의 incomingExchangeId로 보내고 요청자는 outgoing 대기를 표시한다. 서버는 toPlayerId만 수락할 수 있게 검사한다.
+- C는 현재 가시 아군만 교환 후보로 삼는다. 기존 후보가 계속 보이면 유지하고, 없으면 셀 제곱 거리·동률 playerId 순으로 고른다. 후보 선택은 서버의 거리·활동·지식 차이 검사를 대신하지 않는다.
+- **READY true는 DEVICE_CHECK에서 로컬 장치 점검을 완료했다는 클라이언트 신고**다. 카메라·vision·calibration이 ready일 때만 보내고 장치 장애·취소는 false로 갱신한다. 마이크는 선택이다. 서버는 신고·인원·단계를 검증하며 원격 웹캠 정상 여부를 독립 증명한다고 쓰지 않는다.
+- vision ready는 모델 로드만 뜻하지 않는다. 현재 유효 얼굴·첫 안전 가공 프레임·살아있는 가공 트랙까지 확보해야 한다. 실패 원인은 DeviceStatus.errorCode로 보고한다.
+- 미니맵은 기억한 허용 출구를 표시할 수 있지만, **3D 포털·소유자 식별은 현재 관찰 중인 출구 벽면에만** 그린다. 폐쇄 시 같은 벽면의 일반 벽을 복원한다. 술래에게 출구를 보내지 않는다.
+- 포즈 탈출 완료는 C가 단독 전송한다. 새롭고 유효한 동일 pose 관측으로 1.2초 유지하고 minSuccessTick도 충족해야 한다. 키 폴백은 challengeId 해시로 고정한 4방향 순환 순서를 사용한다. 최소 시간 조기 거절은 동일 도전·기한·유효 조건을 재확인한 경우에만 새 requestId로 제한 재시도한다.
+
+## 서버 미디어와 브라우저 결합
+
+mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다. receiverGeneration은 이 메시지를 받는 플레이어 자신의 연결 세대, participants의 publisherGeneration은 원격 송신자 세대다. bindingRevision은 수신자·인스턴스·연결 세대 안에서 증가하며, 한 사람만 재연결했다고 다른 다섯 명의 receiverGeneration을 바꾸지 않는다. 새 Identity는 회수 완료 후에만 발급한다.
+
+- E는 내부 Gateway·Journal·예산 큐를 소유한다. B가 주입하는 deps/config와 요청·trusted frame·비동기 결과는 아래 정확한 타입을 따른다. E 콜백은 B의 큐로만 들어가며 Tick 상태를 직접 변경하지 않는다.
+- prepareGeneration은 expectedPreviousGeneration을 검사하고 E가 새 세대를 할당한다. 동일 requestId는 같은 논리 결과를 반환한다. Promise 결과는 HTTP 응답용이고 enqueueControl 결과는 게임 큐용이며 B는 requestId+scope로 중복 적용을 막는다. rejected/unknown이면 grant는 null이고, 세대 할당 전 rejected의 receiverGeneration은 null이다. ready는 grant 발급 완료이며 게시 확인 완료가 아니다. 요청 없이 생긴 MEDIA_FAILED는 eventId+scope로 중복 제거한다.
+- media-bindings에는 자기 게시를 서버가 확인한 self 항목도 포함할 수 있다. 이때 publisherGeneration=receiverGeneration이다. B는 현재 scope의 self faceTrackSid 확인과 클라이언트 LOAD_READY를 모두 받아 로딩 장벽을 통과시킨다. D는 self 항목을 원격 얼굴/음성 attach 대상으로 사용하지 않는다. A의 self.loading은 null이며 B가 로딩 조정 상태를 덧붙인다.
+- observeFrame은 게임의 권위 좌표·지형·현재 참가 상태만 받는다. E가 자신의 확인된 Identity/SID 레지스트리와 결합한다. 동기 호출 구간에 네트워크 대기·파일 쓰기·긴 계산을 넣지 않는다.
+- 서버는 `media-bindings`, `audio-policy` 채널로 전체 허용 목록을 전송한다. AudioPolicy의 scope·bindingRevision이 현재 바인딩과 맞아야 적용한다. 같거나 낮은 policyRevision은 중복/과거로 폐기한다. 비어 있는 최신 voices는 기존 음성을 즉시 닫는다.
+- D는 트랙·바인딩·음향 정책을 각각 저장하고 **어느 입력이 바뀌어도 reconcile**한다. 알 수 없는 트랙은 화면/오디오에 붙이지 않는다. 보류는 최대 12개/2초, 넘으면 detach/구독 중지 및 bindings-refresh를 요청한다. 바인딩이 뒤늦게 오면 SDK에 이미 존재하는 publication도 다시 대조한다. nickname/metadata로 매핑을 추측하지 않는다.
+- 바인딩 refresh는 B의 현재 검증 목록 재전송이며 임의 Cloud 조회 증폭을 허용하지 않는다. 수신자당 1초에 1회로 제한한다. 목록이 불명확하면 E의 공유 예산 대조 큐에 합쳐 신규 허용을 막는다.
+- AudioPolicy가 바인딩보다 미래이면 최대 1개 최신 정책을 2초 보류한다. 과거 바인딩 정책은 폐기한다. 트랙 없이 온 정책은 최신 상태로 보관하고 트랙 도착 시 재대조한다. scope가 바뀌면 pending과 실제 그래프를 함께 비운다.
+- 가청은 미허용 pair의 거리≤5에서 진입, 이미 허용된 pair의 거리>6에서 이탈한다. 시험은 **5→6→7→6→5**로 하며 이전 허용 상태를 함께 기록한다.
+- 서버 Webhook은 track_published/track_unpublished/participant_joined/participant_left/participant_connection_aborted 등 실제 서버 이름을 쓴다. D의 RoomEvent와 B의 클라이언트 신고를 혼합하지 않는다. 서명 검증·역순/중복 처리, 누락 대비 대조는 공유 API 예산 안에서 실행한다.
+- **새 SID 게시**는 기본 차단→확인→현재 정책 허용, **같은 SID replaceTrack**은 기존 권한·새 표식·불허 수신 유지, **전체 재연결**은 옛 Identity 회수·새 세대 격리로 각각 시험한다. 같은 SID 소스 교체에 새 Webhook이 반드시 온다고 가정하지 않는다.
+- D가 video/track·장치를, C가 VideoTexture를 소유한다. onFaceTrack의 null은 기존 텍스처 해제 신호다. onLocalPreview는 DEVICE_CHECK용 원본 미리보기이며 게시 트랙이 아니다.
+
+## 센서·입력 callback 수명
+
+한 SensorSnapshot의 emittedAtMs를 새 센서 관측으로 해석하지 않는다. 각 Sample은 실제 프레임의 sampledAtMs/frameId를 보존한다. 해당 모델을 실행하지 않은 발행에서는 Sample을 갱신하지 않는다. 미검출은 새 frameId의 missing/null이며, 세대 시작부터 아직 실행하지 않은 센서는 null이다.
+
+- sampledAtMs/receivedAtMs/emittedAtMs는 브라우저 main performance 시간축이다. Worker는 main이 전달한 frameId·sampledAtMs를 그대로 돌려주고 main이 receivedAtMs를 붙인다. 서버 시계와 섞지 않는다.
+- face/pose age>300ms, gesture age>400ms면 사용 불가다. C의 pose 유지 누적은 증가한 pose.frameId만 사용하고 유효 표본 사이 간격≤300ms여야 한다. 미검출·uncertain·만료·구 세대는 누적을 초기화한다.
+- 두 손이 서로 다른 유효 제스처를 보이면 none이다. 같은 종류면 최고 score 한 개를 선택한다. 손별 후보 배열을 다른 모듈로 넘기지 않는다.
+- D는 위치/좌우/유효성을 정규화하고 C는 탈출 포즈 임계값을 소유한다. sensorTuningVersion은 D, poseTuningVersion은 C가 검사 증거에 남긴다.
+- startDevices는 중복 카메라 취득을 합치고 dispose 중 늦은 결과는 즉시 닫는다. callback 등록은 기동 전이다. 새 세대 시작 시 이전 onFaceTrack null·미디어 closed를 먼저 알리고 새 상태를 내보낸다. dispose 완료 뒤 callback은 발생하지 않는다.
+- pageActive=false이면 입력·버퍼를 비우고 새 의도를 막는다. 복귀 때 새 키/중립 복귀를 요구하며 서버 phase를 꾸며내지 않는다.
+- C가 장치/미디어·교환·출구 문맥을 setContext로 반영한다. D가 슬롯·입력 모드를 바꾸면 onInteractionState로 알리고 같은 값의 재적용은 callback을 반복하지 않는다.
+
+## 운영 HTTP 계약
+
+B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
+
+B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSnapshot/getStatus를 각 경로에 연결한다. submit은 accepted+snapshot 또는 conflict를 즉시 반환하고 긴 작업은 E 내부 큐에서 처리한다. drain 접수 시 admission을 먼저 DRAINING으로 바꾼다. B는 입장 승인 직전에 getStatus().admission을 검사하며 await 뒤에도 재검사한다. E는 주입된 getGameActivity()의 진행 경기·연습·입장 수가 모두 0이고 회수가 확인되어야 drain을 succeeded로 바꾼다. 시간 초과는 failed로 종결하고 신규 입장 차단을 유지한다. E가 B의 Room registry를 직접 수정하거나 정의되지 않은 callback을 추가하지 않는다.
+
+- POST /api/sessions: SessionRequest → SessionResponse. 신원은 서버가 발급하고 no-store·메모리 보관, fragment 초대는 읽은 뒤 주소에서 지운다. SessionResponse.expiresAt은 epoch ms이며 MediaGrant.expiresAt은 epoch 초다.
+- POST /api/media/grants: Bearer 세션 + MediaGrantRequest → MediaGrant. 이전 회수/예산/phase 불충족은 409, 인증 오류 401/403, 공급자 불명 503으로 안전 code만 반환한다.
+- POST /api/media/report: Bearer 세션 + MediaStatusReport → 204. 수신자 신원과 scope를 검사한다. 신고만으로 원격 회수·권한 성공을 확정하지 않는다.
+- POST /api/livekit/webhook: raw body + 공급자 Authorization을 E가 검증하며 JSON 재직렬화·인증 생략을 하지 않는다.
+- POST /api/operations/commands: OPS_TOKEN + OperationsCommand → 202 OperationSnapshot(pending). 같은 requestId/같은 본문은 같은 operationId, 다른 본문 재사용은 409다. retry-retirement에만 retirementId를 요구한다.
+- GET /api/operations/commands/:requestId: OPS_TOKEN → 200 OperationSnapshot 또는 404. 완료 상태는 succeeded/failed이며 HTTP 202를 작업 성공으로 해석하지 않는다.
+- GET /api/operations/status: OPS_TOKEN → OperationsStatus. remaining 값이 null이면 미확인이고 0으로 바꾸지 않는다.
+- /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
+- admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
+- checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
+
+## 작업 상태·커밋·MR·인계
+
+실행 상태는 PLANNED → CONTRACT_READY → LOCAL_VERIFIED → INTEGRATED → ACCEPTED로 기록한다. 외부 전제 부재는 BLOCKED, 미정 콘텐츠는 PRODUCT_DECISION_PENDING이다. 이 상태는 문서/로컬 진행 기록이며 Jira 상태를 자동 변경하지 않는다.
+
+1. 계약/fixture 또는 단위 구현이 검증되면 **중간 커밋을 허용한다.** 작업 ID·이번 단계·실제 검증·미통합 조건을 커밋/MR에 적는다. 깨진 빌드·빈 성공 stub을 인계하지 않는다.
+2. 담당의 완료 조건과 실제 생산자·소비자 연결, 필요한 Cloud/장치 증거가 있어야 ACCEPTED다. 중간 커밋/합병을 기능 완료로 세지 않는다. 완료마다 최종 변경 커밋을 남기되 같은 결과를 중복 커밋하지 않는다.
+3. git status/name/email을 확인하고 실제 담당자 신원을 유지한다. 타인 --author·신원 변경·AI 공동 저자·기존 커밋 재작성은 하지 않는다. 신원 누락 시 구현은 진행하되 커밋만 보류한다.
+4. 실제 Jira가 있으면 정상 브랜치 형식을 사용한다. 없으면 담당/일차 feat/mvp-a-d1(F는 ci/mvp-f-d1)처럼 쓰고 가짜 키를 만들지 않는다. 기존 담당 브랜치와 다른 미커밋 변경을 먼저 확인한다.
+5. 해당 파일만 명시적으로 stage하고 diff를 확인한다. 제목은 scope 없는 type: 변경 내용, Jira 키는 실제 키만 마지막 문단에 단독 줄로 넣는다. Refs:와 AI 공동 저자는 넣지 않는다. 한글 메시지는 UTF-8 파일과 git commit -F로 전달한다.
+6. .local/execution/<담당>.json에 ID/단계/검증/commit/선행 통합/결정 대기를 기록한다. .local/mr/<담당>/<ID>.md와 <일차>-combined.md에 아래 다섯 항목의 완성된 MR 본문을 작성하고 파일 링크와 전체 본문을 담당자에게 제공한다.
+7. 중간 인계 시점마다 담당자가 직접 push·MR 생성·리뷰·병합한다. AI가 원격 작업을 대신하지 않는다. 이후 선행 코드를 반영해 연결 시험을 수행한다.
+
+```markdown
+## 관련 Jira
+
+실제 키 또는 미등록 사유, 담당 고정 번호와 원본 ID
+
+## 변경 사항
+
+실제 변경 동작·파일·commit SHA, CONTRACT_READY/LOCAL_VERIFIED/INTEGRATED/ACCEPTED 단계
+
+## 변경 이유
+
+이전 동작의 문제와 이번 단계에서 가능해진 동작
+
+## 리뷰 포인트
+
+공개 타입·실패 처리·수명·정보 은폐, 필요한 생산자/소비자 확인, 선행 반영 상태
+
+## see also
+
+기획 장·최신 결정·계약 버전·실제 검사 결과·미검증/결정 대기 항목
+```
+
+## 타입·fixture와 필수 연결 시험
+
+아래 타입은 [검사 가능한 원본](contracts/types.ts)에서 자동 삽입한다. [fixture](contracts/fixtures.ts)는 정상/실패·순서 교차 입력과 기대 상태를 제공하고 [검사](contracts/fixtures.test.ts)는 계약 자료의 정합성을 확인한다. 제품 타입·serializer·reducer·Room·Coordinator 구현과 실제 연결은 각 담당 작업에서 수행한다. 문서용 타입을 제품 런타임 의존성으로 import하지 않는다. 필요한 공개 타입은 해당 소유 모듈에 옮기고 원본과 소비자 호환을 검사한다.
+
+필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
+
+<!-- BEGIN CONTRACT-TYPES -->
+
+```ts
+// EXEC-CONTRACT-2. Planning contracts; product modules do not exist merely because these types do.
+export const CONTRACT_VERSION = 'EXEC-CONTRACT-2' as const;
+export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
+export type Cell = Readonly<{ x: number; y: number }>;
+export type TracePoint = Readonly<{ x: number; y: number }>;
+export type Dir = 0 | 1 | 2 | 3;
+export type WallFace = Cell & Readonly<{ side: Dir }>;
+export type Role = 'runner' | 'tagger';
+export type SessionRequest = Readonly<{ nickname: string; inviteToken: string }> &
+  ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export type SessionResponse = Readonly<{
+  sessionToken: string;
+  playerId: string;
+  roomCode: string;
+  expiresAt: number;
+  protocolVersion: '0.2.0';
+}>;
+export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
+export type Phase =
+  | 'LOBBY'
+  | 'DEVICE_CHECK'
+  | 'TEAM_PRACTICE'
+  | 'MAP_FINALIZING'
+  | 'GAME_LOADING'
+  | 'COUNTDOWN'
+  | 'PLAYING'
+  | 'RESULT'
+  | 'ABORTED';
+export type EquipmentKind = 'sensor' | 'trap';
+export type PoseKind = 'left' | 'right' | 'y';
+export type Action = Readonly<{
+  kind: 'move' | 'turn';
+  from: Cell & { dir: Dir };
+  to: Cell & { dir: Dir };
+  startTick: number;
+  endTick: number;
+}>;
+export type CommandCode =
+  | 'INVALID_COMMAND'
+  | 'PROTOCOL_MISMATCH'
+  | 'WRONG_MATCH'
+  | 'RATE_LIMITED'
+  | 'INVALID_PHASE'
+  | 'NOT_ACTIVE'
+  | 'NOT_ALLOWED'
+  | 'EXPIRED'
+  | 'STALE_REQUEST'
+  | 'NOT_READY'
+  | 'QUEUE_FULL'
+  | 'ROUND_ENDED'
+  | 'CANCELED';
+export type CommandPayloads = {
+  MOVE_INTENT: { direction: 'forward' | 'back' | null };
+  TURN: { direction: 'left' | 'right' };
+  READY: { ready: boolean };
+  PRACTICE_READY: { ready: boolean };
+  LOAD_READY: { loadId: string; mediaInstanceId: string; receiverGeneration: number };
+  EXCHANGE_REQUEST: { targetPlayerId: string };
+  EXCHANGE_ACCEPT: { exchangeId: string };
+  EXCHANGE_CANCEL: { exchangeId: string };
+  INSTALL: { kind: EquipmentKind };
+  INSTALL_CANCEL: { installationId: string };
+  EXIT_START: { exitId: string };
+  EXIT_CANCEL: { challengeId: string };
+  EXIT_PROGRESS: { challengeId: string; method: 'pose' | 'keys'; completed: boolean };
+  REMATCH: { mode: 'same' | 'swap' | 'lobby' };
+};
+export type CommandType = keyof CommandPayloads;
+export type CommandEnvelope<K extends CommandType = CommandType> = {
+  [T in K]: Readonly<{
+    matchId: string;
+    requestId: string;
+    sequence: number;
+    type: T;
+    payload: CommandPayloads[T];
+  }>;
+}[K];
+export type CommandReceipt = Readonly<{
+  matchId: string;
+  requestId: string;
+  sequence: number;
+  stateVersion: number;
+}> &
+  ({ status: 'accepted'; code: null } | { status: 'rejected'; code: CommandCode });
+export type OutcomeResult =
+  { result: 'applied'; code: null } | { result: 'rejected' | 'canceled'; code: CommandCode };
+export type CommandOutcome = Readonly<{
+  matchId: string;
+  requestId: string;
+  sequence: number;
+  tick: number;
+  stateVersion: number;
+}> &
+  OutcomeResult;
+export type RequestStatus = Readonly<{ matchId: string; requestId: string }>;
+export type RequestStatusResult = RequestStatus &
+  ({ status: 'done'; outcome: CommandOutcome } | { status: 'pending' | 'unknown'; outcome: null });
+export type ExchangeView = Readonly<{
+  exchangeId: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  direction: 'incoming' | 'outgoing';
+  expiresAtTick: number;
+}>;
+export type InstallationView = Readonly<{
+  installationId: string;
+  kind: EquipmentKind;
+  startTick: number;
+  endTick: number;
+  armedTick: number;
+}>;
+export type ChallengeView = Readonly<{
+  challengeId: string;
+  exitId: string;
+  poseKind: PoseKind;
+  startedAtTick: number;
+  minSuccessTick: number;
+  expiresAtTick: number;
+}>;
+export type LoadingView = Readonly<{
+  loadId: string;
+  initialViewVersion: number;
+  mediaInstanceId: string;
+  receiverGeneration: number;
+  assetVersion: string;
+}>;
+export type OwnedEquipment = Readonly<{
+  equipmentId: string;
+  state: 'UNARMED' | 'ARMED' | 'SPENT';
+  armedTick: number;
+}> &
+  ({ kind: 'sensor'; cell: Cell; wall: WallFace } | { kind: 'trap'; cell: Cell });
+export type ActiveSelf = Readonly<{
+  playerId: string;
+  role: Role;
+  status: 'ACTIVE';
+  cell: Cell;
+  dir: Dir;
+  action: Action | null;
+  equipment: { sensor: number; trap: number };
+  ownedEquipment: readonly OwnedEquipment[];
+  restraintUntilTick: number | null;
+  restraintImmuneUntilTick: number | null;
+  installation: InstallationView | null;
+  exchange: ExchangeView | null;
+  challenge: ChallengeView | null;
+  loading: LoadingView | null;
+}>;
+export type EndedSelf = Readonly<{ playerId: string; role: Role; status: 'ESCAPED' | 'CAPTURED' }>;
+export type VisibleEntity =
+  | Readonly<{
+      id: string;
+      kind: 'player';
+      cell: Cell;
+      dir: Dir;
+      action: Action | null;
+      role?: Role;
+    }>
+  | Readonly<{ id: string; kind: 'sensor'; cell: Cell; wall: WallFace; state: 'UNARMED' | 'ARMED' }>
+  | Readonly<{ id: string; kind: 'trap'; cell: Cell; state: 'UNARMED' | 'ARMED' }>;
+export type KnownTerrain =
+  Readonly<Cell & { kind: 'floor' }> | Readonly<WallFace & { kind: 'wall' }>;
+export type KnownExit = Readonly<{
+  exitId: string;
+  ownerId: string;
+  wall: WallFace;
+  approach: Cell;
+}>;
+export type PlayerKnowledge = Readonly<{
+  mapVersion: number;
+  knownTerrain: readonly KnownTerrain[];
+  knownActiveExits: readonly KnownExit[];
+}>;
+export type PrivateView = PlayerKnowledge &
+  Readonly<{
+    matchId: string;
+    stateVersion: number;
+    self: ActiveSelf | EndedSelf | null;
+    visibleCells: readonly Cell[];
+    visibleWallFaces: readonly WallFace[];
+    visibleEntities: readonly VisibleEntity[];
+  }>;
+export type Counts = Readonly<{ escaped: number; captured: number }>;
+export type RoundResult = Readonly<{
+  winner: 'runners' | 'taggers';
+  reason: 'two-escaped' | 'two-captured' | 'timeout';
+}>;
+export type AbortReason =
+  'GAME_CONNECTION_LOST' | 'SERVER_TICK_OVERLOAD' | 'MEDIA_POLICY_UNCERTAIN' | 'MEDIA_UNAVAILABLE';
+export type PublicRoundState = Readonly<{
+  phase: Phase;
+  matchId: string;
+  stateVersion: number;
+  serverTick: number;
+  startTick: number | null;
+  startAt: number | null;
+  deadlineTick: number | null;
+  counts: Counts;
+  result: RoundResult | null;
+  abortReason: AbortReason | null;
+}>;
+export type RoomRoster = Readonly<{
+  matchId: string;
+  stateVersion: number;
+  phase: Phase;
+  hostId: string;
+  players: readonly { playerId: string; nickname: string; ready: boolean; connected: boolean }[];
+}>;
+export type EventPayloads = {
+  EXCHANGE_OFFER: { exchangeId: string; fromPlayerId: string; expiresAtTick: number };
+  EXCHANGE_CANCELED: { exchangeId: string; reason: CommandCode };
+  EXCHANGE_COMPLETED: { exchangeId: string; mapVersion: number };
+  HUNTER_MARKER: {
+    markerId: string;
+    kind: 'exchange' | 'sensor' | 'trap';
+    point: TracePoint;
+    occurredTick: number;
+    showAtTick: number;
+    expiresTick: number;
+  };
+  EXIT_CHALLENGE: ChallengeView;
+  EXIT_CHALLENGE_ENDED: {
+    challengeId: string;
+    result: 'canceled' | 'failed' | 'escaped';
+    reason: CommandCode | null;
+  };
+};
+export type EventType = keyof EventPayloads;
+export type PrivateEvent = {
+  [K in EventType]: Readonly<{
+    matchId: string;
+    eventId: string;
+    tick: number;
+    stateVersion: number;
+    type: K;
+    payload: EventPayloads[K];
+  }>;
+}[EventType];
+export type GameHeartbeat = Readonly<{
+  serverEpoch: string;
+  matchId: string;
+  heartbeatSeq: number;
+  serverTick: number;
+  serverTimeMs: number;
+}>;
+export type HeartbeatAck = Readonly<{ serverEpoch: string; matchId: string; heartbeatSeq: number }>;
+export type ClockProbe = Readonly<{ probeId: string; clientSentAtMs: number }>;
+export type ClockReply = ClockProbe &
+  Readonly<{ serverReceivedAtMs: number; serverSentAtMs: number; serverEpoch: string }>;
+export type ViewResync = Readonly<{ matchId: string; lastStateVersion: number }>;
+export type CoreCommandType = Exclude<
+  CommandType,
+  'READY' | 'PRACTICE_READY' | 'LOAD_READY' | 'REMATCH'
+>;
+export type CoreCommand = CommandEnvelope<CoreCommandType> & Readonly<{ actorId: string }>;
+export type ControlIntent =
+  | Readonly<{ type: 'EXPIRE_MOVE'; playerId: string; sequence: number }>
+  | Readonly<{ type: 'CONNECTION_LOST'; playerId: string }>
+  | Readonly<{ type: 'ABORT_MATCH'; reason: AbortReason }>
+  | Readonly<{ type: 'START_PLAYING'; startTick: number }>;
+export type CoreOutcome = Omit<CommandOutcome, 'stateVersion' | 'result' | 'code'> &
+  OutcomeResult &
+  Readonly<{ actorId: string }>;
+export type DomainEvent =
+  | {
+      [K in EventType]: Readonly<{
+        eventId: string;
+        tick: number;
+        audience: readonly string[];
+        type: K;
+        payload: EventPayloads[K];
+      }>;
+    }[EventType]
+  | Readonly<{ type: 'SPATIAL_SOUND'; sound: SpatialSoundEvent }>;
+export type MediaIntent =
+  | Readonly<{
+      type: 'RETIRE_PLAYER';
+      playerId: string;
+      reason: 'personal-ended' | 'connection-lost';
+    }>
+  | Readonly<{ type: 'RETIRE_INSTANCE'; reason: 'phase-change' | 'round-ended' | 'aborted' }>;
+export type StepResult<State> = Readonly<{
+  state: State;
+  outcomes: readonly CoreOutcome[];
+  events: readonly DomainEvent[];
+  mediaIntents: readonly MediaIntent[];
+}>;
+export type Topology = Readonly<{
+  topologyVersion: string;
+  width: number;
+  height: number;
+  walkable: readonly boolean[];
+}>;
+export type MatchLayout = Readonly<{
+  layoutId: string;
+  topology: Topology;
+  players: readonly { playerId: string; role: Role; cell: Cell; dir: Dir }[];
+  exits: readonly (KnownExit & { poseKind: PoseKind })[];
+  territories: readonly { playerId: string; cells: readonly Cell[] }[];
+}>;
+export type MatchTuning = Readonly<{
+  tuningVersion: string;
+  tickMs: 50;
+  moveTicks: 9;
+  turnTicks: 6;
+  roundTicks: 3600;
+  installationTicks: 10;
+  armTicks: 20;
+  restraintTicks: 30;
+  restraintImmunityTicks: 40;
+  exchangeExpiryTicks: 40;
+  exitMinimumTicks: 40;
+  exitExpiryTicks: 160;
+  exitRetryTicks: 10;
+}>;
+export type CreateMatchInput = Readonly<{
+  matchId: string;
+  seed: number;
+  tuning: MatchTuning;
+  layout: MatchLayout;
+  players: readonly { playerId: string; role: Role }[];
+}>;
+export type CreatePracticeInput = CreateMatchInput &
+  Readonly<{ mediaInstanceId: string; role: Role }>;
+export type GameSubject = Readonly<{
+  playerId: string;
+  role: Role;
+  status: PlayerStatus;
+  cell: Cell;
+  dir: Dir;
+  action: Action | null;
+}>;
+export type CoreReadFrame = Readonly<{
+  matchId: string;
+  tick: number;
+  phase: Phase;
+  counts: Counts;
+  result: RoundResult | null;
+  abortReason: AbortReason | null;
+  participants: readonly GameSubject[];
+}>;
+export interface CorePort<State> {
+  createMatch(input: CreateMatchInput): State;
+  createPractice(input: CreatePracticeInput): State;
+  stepMatch(
+    state: State,
+    input: { tick: number; commands: readonly CoreCommand[]; controls: readonly ControlIntent[] },
+  ): StepResult<State>;
+  getPlayerKnowledge(state: State, playerId: string): PlayerKnowledge;
+  getVisibleEntities(state: State, playerId: string): readonly VisibleEntity[];
+  getPlayerSelf(state: State, playerId: string): ActiveSelf | EndedSelf | null;
+  getVisibleSurfaces(
+    state: State,
+    playerId: string,
+  ): { visibleCells: readonly Cell[]; visibleWallFaces: readonly WallFace[] };
+  getFrame(state: State): CoreReadFrame;
+}
+export type SelectionProgress = Readonly<{ attempted: number; batchAttempts: number }>;
+export type LayoutSelectionResult =
+  | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
+  | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
+export type LayoutSelectionInput = Readonly<{
+  template: Topology;
+  players: readonly { playerId: string; role: Role }[];
+  spawnCandidates: readonly Cell[];
+  exitCandidates: readonly WallFace[];
+  territories: MatchLayout['territories'];
+  seed: number;
+  maxAttempts: number;
+  fallback: MatchLayout;
+}>;
+export interface LayoutSelectionPort {
+  certifyFallback(input: LayoutSelectionInput): LayoutSelectionResult;
+  selectWithFallback(
+    input: LayoutSelectionInput,
+  ): Generator<SelectionProgress, LayoutSelectionResult, void>;
+}
+export type MediaScope = Readonly<{
+  matchId: string;
+  mediaInstanceId: string;
+  receiverGeneration: number;
+}>;
+export type MediaBinding = Readonly<{
+  playerId: string;
+  publisherGeneration: number;
+  mediaIdentity: string;
+  participantSid: string;
+  faceTrackSid?: string;
+  audioTrackSid?: string;
+}>;
+export type MediaBindings = MediaScope &
+  Readonly<{ bindingRevision: number; participants: readonly MediaBinding[] }>;
+export type AudioPolicy = MediaScope &
+  Readonly<{
+    policyRevision: number;
+    bindingRevision: number;
+    stateVersion: number;
+    voices: readonly {
+      playerId: string;
+      trackSid: string;
+      gain: number;
+      azimuthRad: number;
+      lowpassHz: number;
+    }[];
+    effects: readonly {
+      eventId: string;
+      kind: 'footstep' | 'sensor' | 'trap';
+      gain: number;
+      azimuthRad: number;
+      lowpassHz: number;
+      tick: number;
+    }[];
+  }>;
+export type MediaGrant = MediaScope &
+  Readonly<{
+    url: string;
+    token: string;
+    roomName: string;
+    mediaIdentity: string;
+    expiresAt: number;
+  }>;
+export type MediaGrantRequest = Readonly<{
+  matchId: string;
+  purpose: 'practice' | 'game';
+  previousReceiverGeneration?: number;
+}>;
+export type MediaStatusReport = MediaScope &
+  Readonly<{ status: 'ready' | 'recovering' | 'failed' | 'closed' }>;
+export type MediaRefreshRequest = MediaScope & Readonly<{ lastBindingRevision: number }>;
+export type MediaFailureCode =
+  | 'NOT_READY'
+  | 'WRONG_SCOPE'
+  | 'BUDGET_EXHAUSTED'
+  | 'RETIREMENT_UNCONFIRMED'
+  | 'POLICY_UNKNOWN'
+  | 'REMOTE_UNAVAILABLE'
+  | 'STALE_GENERATION'
+  | 'TIMEOUT';
+export type PrepareGenerationRequest = Readonly<{
+  requestId: string;
+  matchId: string;
+  playerId: string;
+  mediaInstanceId: string;
+  purpose: 'practice' | 'game';
+  expectedPreviousGeneration: number | null;
+}>;
+export type PreparationResult = Readonly<{
+  requestId: string;
+  matchId: string;
+  playerId: string;
+  mediaInstanceId: string;
+}> &
+  (
+    | { status: 'ready'; receiverGeneration: number; grant: MediaGrant; code: null }
+    | { status: 'unknown'; receiverGeneration: number; grant: null; code: MediaFailureCode }
+    | { status: 'rejected'; receiverGeneration: number | null; grant: null; code: MediaFailureCode }
+  );
+export type RetireGenerationRequest = MediaScope &
+  Readonly<{
+    requestId: string;
+    playerId: string;
+    reason:
+      | 'phase-change'
+      | 'personal-ended'
+      | 'connection-lost'
+      | 'policy-unknown'
+      | 'round-ended'
+      | 'reconnect'
+      | 'shutdown';
+  }>;
+export type RetirementResult = RetireGenerationRequest &
+  ({ status: 'confirmed'; code: null } | { status: 'unknown'; code: MediaFailureCode });
+export type TrustedMediaFrame = Readonly<{
+  matchId: string;
+  mediaInstanceId: string;
+  instancePurpose: 'practice' | 'game';
+  frameRevision: number;
+  tick: number;
+  phase: Phase;
+  topology: Topology;
+  participants: readonly GameSubject[];
+  events: readonly SpatialSoundEvent[];
+}>;
+export type SpatialSoundEvent = Readonly<{
+  eventId: string;
+  tick: number;
+  kind: 'footstep' | 'sensor' | 'trap';
+  cell: Cell;
+  sourcePlayerId?: string;
+}>;
+export type MediaControl =
+  | Readonly<{ type: 'MEDIA_PREPARED'; result: PreparationResult }>
+  | Readonly<{ type: 'MEDIA_RETIRED'; result: RetirementResult }>
+  | Readonly<
+      MediaScope & {
+        type: 'MEDIA_FAILED';
+        eventId: string;
+        playerId: string;
+        code: MediaFailureCode;
+      }
+    >;
+export type Readiness = Readonly<{
+  state: 'READY' | 'RECOVERING' | 'LOCKED';
+  reasonCodes: readonly string[];
+  historyComplete: boolean;
+  unresolvedCount: number;
+}>;
+export interface MediaCoordinator {
+  prepareGeneration(input: PrepareGenerationRequest): Promise<PreparationResult>;
+  observeFrame(frame: TrustedMediaFrame): void;
+  retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult>;
+  handleWebhook(
+    rawBody: string,
+    authorization: string,
+  ): Promise<{ status: 'accepted' | 'ignored' }>;
+  getReadiness(): Readiness;
+  getOperations(): OperationsPort;
+  close(): Promise<void>;
+}
+export type MediaCoordinatorDeps = Readonly<{
+  config: MediaConfiguration;
+  enqueueControl: (control: MediaControl) => void;
+  enqueueBindings: (playerId: string, message: MediaBindings) => void;
+  enqueueAudioPolicy: (playerId: string, message: AudioPolicy) => void;
+  monotonicNow: () => number;
+  epochNowSeconds: () => number;
+  getGameActivity: () => Readonly<{
+    activeMatches: number;
+    activePractices: number;
+    pendingAdmissions: number;
+  }>;
+}>;
+export type MediaConfiguration = Readonly<{
+  httpUrl: string;
+  wsUrl: string;
+  apiKey: string;
+  apiSecret: string;
+  namespace: string;
+  opsDataDir: string;
+  initialBudget: {
+    remainingMinutes: number;
+    remainingBytes: number;
+    checkedAtEpochMs: number;
+  } | null;
+  maxConcurrentParticipants: number;
+  maxNormalApiCallsPer60s: number;
+  maxTotalApiCallsPer60s: number;
+}>;
+export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
+export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
+export type FaceSensor = Readonly<{
+  landmarks: readonly NormalizedLandmark[];
+  yawRad: number;
+  quality: 'valid' | 'uncertain' | 'missing';
+}>;
+export type PoseSensor = Readonly<{
+  landmarks: readonly (NormalizedLandmark & { visibility: number })[];
+  quality: 'valid' | 'uncertain' | 'missing';
+}>;
+export type GestureSensor = Readonly<{ kind: 'palm' | 'victory' | 'none'; score: number }>;
+export type Sample<T> = Readonly<{ frameId: number; sampledAtMs: number; receivedAtMs: number }> &
+  ({ status: 'valid'; data: T } | { status: 'missing'; data: null });
+export type SensorSnapshot = Readonly<{
+  runtimeGeneration: number;
+  emittedAtMs: number;
+  face: Sample<FaceSensor> | null;
+  pose: Sample<PoseSensor> | null;
+  gesture: Sample<GestureSensor> | null;
+}>;
+export type DeviceStatus = Readonly<{
+  camera: 'idle' | 'requesting' | 'ready' | 'failed';
+  microphone: 'off' | 'requesting' | 'ready' | 'denied' | 'failed';
+  vision: 'idle' | 'loading' | 'ready' | 'failed';
+  calibration: 'idle' | 'running' | 'ready' | 'failed';
+  audioPlayback: 'locked' | 'ready' | 'failed';
+  errorCode: string | null;
+}>;
+export type MediaStatus = Readonly<{
+  matchId: string | null;
+  mediaInstanceId: string | null;
+  receiverGeneration: number | null;
+  state: 'idle' | 'connecting' | 'connected' | 'recovering' | 'closed' | 'failed';
+  code: string | null;
+}>;
+export type InteractionContext = Readonly<{
+  matchId: string;
+  selfPlayerId: string;
+  role: Role | null;
+  phase: Phase;
+  status: PlayerStatus;
+  targetPlayerId?: string;
+  incomingExchangeId?: string;
+  outgoingExchangeId?: string;
+  challengeId?: string;
+  exitId?: string;
+  poseKind?: PoseKind;
+  selectedEquipment?: EquipmentKind;
+  installationId?: string;
+  mode: 'motion' | 'keyboard';
+  pageActive: boolean;
+}>;
+export type InteractionState = Readonly<{
+  selectedEquipment: EquipmentKind;
+  mode: 'motion' | 'keyboard';
+}>;
+export type FaceTrackEvent = MediaScope &
+  Readonly<{
+    playerId: string;
+    publisherGeneration: number;
+    trackSid: string;
+    element: HTMLVideoElement | null;
+  }>;
+export type CommandInput = {
+  [K in CommandType]: { type: K; payload: CommandPayloads[K] };
+}[CommandType];
+export type InteractionDeps = Readonly<{
+  sendCommand: (command: CommandInput) => string;
+  requestMediaGrant: (request: MediaGrantRequest) => Promise<MediaGrant>;
+  reportMediaStatus: (report: MediaStatusReport) => Promise<void>;
+  requestBindingsRefresh: (request: MediaRefreshRequest) => void;
+  onDeviceStatus: (status: DeviceStatus) => void;
+  onFaceTrack: (event: FaceTrackEvent) => void;
+  onMediaStatus: (status: MediaStatus) => void;
+  onSensors: (snapshot: SensorSnapshot) => void;
+  onInteractionState: (state: InteractionState) => void;
+  onLocalPreview: (element: HTMLVideoElement | null) => void;
+}>;
+export interface InteractionRuntime {
+  startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  calibrate(): Promise<DeviceStatus>;
+  setContext(context: InteractionContext): void;
+  connectMedia(grant: MediaGrant): Promise<void>;
+  applyAudioPolicy(policy: AudioPolicy): void;
+  applyMediaBindings(bindings: MediaBindings): void;
+  setQualityPreset(preset: 'medium' | 'low'): void;
+  retireMediaGeneration(): Promise<void>;
+  endParticipation(): Promise<void>;
+  dispose(): Promise<void>;
+}
+export type CreateInteractionRuntime = (deps: InteractionDeps) => InteractionRuntime;
+export type OperationsCommand =
+  | Readonly<{ requestId: string; action: 'drain' | 'resume' | 'checkpoint' }>
+  | Readonly<{ requestId: string; action: 'retry-retirement'; retirementId: string }>;
+export type OperationSnapshot = Readonly<{
+  requestId: string;
+  operationId: string;
+  action: OperationsCommand['action'];
+  status: 'pending' | 'succeeded' | 'failed';
+  code: string | null;
+  updatedAtEpochMs: number;
+}>;
+export type OperationsStatus = Readonly<{
+  admission: 'OPEN' | 'DRAINING' | 'LOCKED';
+  readiness: Readiness['state'];
+  unresolvedCount: number;
+  remainingMinutes: number | null;
+  remainingBytes: number | null;
+  checkedAtEpochMs: number | null;
+}>;
+export type OperationSubmission =
+  | Readonly<{ status: 'accepted'; snapshot: OperationSnapshot }>
+  | Readonly<{ status: 'conflict'; code: 'REQUEST_ID_CONFLICT' }>;
+export interface OperationsPort {
+  submit(command: OperationsCommand): OperationSubmission;
+  getSnapshot(requestId: string): OperationSnapshot | null;
+  getStatus(): OperationsStatus;
+}
+export type OfficialBudgetCheckpoint = Readonly<{
+  projectAlias: string;
+  remainingMinutes: number;
+  remainingBytes: number;
+  checkedAtEpochMs: number;
+  source: 'cloud-dashboard';
+  checkedBy: string;
+}>;
+export type ClientMessages = {
+  command: CommandEnvelope;
+  'request-status': RequestStatus;
+  'view-resync': ViewResync;
+  'game-heartbeat-ack': HeartbeatAck;
+  'clock-probe': ClockProbe;
+  'media-bindings-refresh': MediaRefreshRequest;
+};
+export type ServerMessages = {
+  'command-result': CommandReceipt;
+  'command-outcome': CommandOutcome;
+  'request-status-result': RequestStatusResult;
+  'room-roster': RoomRoster;
+  'private-view': PrivateView;
+  'private-event': PrivateEvent;
+  'game-heartbeat': GameHeartbeat;
+  'clock-reply': ClockReply;
+  'media-bindings': MediaBindings;
+  'audio-policy': AudioPolicy;
+};
+```
+
+<!-- END CONTRACT-TYPES -->
+
+<!-- END EXEC-CONTRACT-2 COMMON -->
+
+## 작업별 구현 지시
+
+각 항목의 파일은 **수정 또는 생성할 예정 경로**다. 현재 존재 여부는 AI가 확인한다. 아래 순서를 그대로 수행하되 선행 결과가 없는 항목은 계약에 따른 단위 구현까지만 진행하고 실제 연결 완료를 별도 기록한다. 모든 완료 항목은 작업별 커밋과 MR 본문으로 끝낸다.
+
+### F-01
+
+**DP-01 · [DevOps] 실제 배포·Cloud·검증 환경 확인**  
+일정: D1 2026-09-08 · **오늘 1번**  
+기획 근거: v0.0.8 **02, 21, 23, 27장**  
+선행 완료 결과: 문서 내부 선행 없음; 외부 실행 전제는 F-01에서 확인
+
+**수정·생성 파일**
+
+- `package.json`
+- `pnpm-lock.yaml`
+- `apps/web/package.json`
+- `server/package.json`
+- `packages/protocol/package.json`
+- `packages/game-core/package.json`
+- `vitest.config.ts`
+- `vitest.cloud.config.ts`
+- `apps/web/tsconfig.json`
+- `apps/web/vite.config.ts`
+- `tsconfig.base.json`
+- `tsconfig.packages.json`
+- `server/src/config/env.ts`
+- `scripts/check-execution-environment.mjs`
+- `scripts/check-execution-plan.mjs`
+- `scripts/run-cloud-check.mjs`
+- `tests/contracts/environment.test.ts`
+- `tests/cloud/probe.html`
+- `tests/cloud/probe.ts`
+- `tests/cloud/vite.config.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. D0에 실제 도구 버전 node/pnpm/docker/브라우저와 manifests/lockfile을 읽고 Node24.19.0·pnpm11.19.0·SDK정확버전을 기록한다. 설치는 frozen-lockfile 기준이며 모든manifest/lock/rootconfig 수정은 F가 단독 담당한다. 다른 담당자의 요청은 목록으로 모아 동일 버전 의존성만 추가하고 업데이트를 섞지 않는다.
+2. 현재 Vitest include는 packages/apps/server뿐이다. `tests/contracts/**/*.test.ts`와 `tests/load/**/*.test.ts`를 기본 include에 추가하고 `**/*.cloud.test.ts`는 기본 exclude한다. vitest.cloud.config.ts는 `server/test/media/**/*.cloud.test.ts`와 `tests/cloud/**/*.cloud.test.ts`만 포함하고 workers 1·긴 시험 timeout을 둔다. 기본 pnpm verify가 실제 Cloud/장시간 부하를 자동 시작하지 않게 유지한다.
+3. D가 만드는 features/vision/vision.worker.ts를 apps/web/tsconfig.json의 **/*.worker.ts exclude로 DOM컴파일에서 제외한다. D의 apps/web/tsconfig.worker.json(WebWorker lib) 파일이 실제 인계된 뒤 web typecheck에 tsc -p tsconfig.worker.json --noEmit을 추가한다. 준비중에 없는파일을 skip하여 완료표시하지 않는다.
+4. check-execution-environment는 값 자체를 출력하지 않고 LIVEKIT_HTTP_URL/WS_URL/API_KEY/API_SECRET, OPS_TOKEN·OPS_DATA_DIR·namespace·AWS 접속/도메인·Jenkins 연결의 존재와 확인 상태만 점검한다. 배포 제품 모드와 admission/예산 설정 확장은 E/B의 실제 readiness·인증 통합 후에만 허용하고 기존 disabled production 차단은 유지한다.
+5. 운영자에게 필요한 입력을 정확히 기록한다: 실제 AWS 상품/세대·리전·OS·공인주소·포함전송량·DNS/TLS관리경로, Cloud프로젝트별칭·잔여분/GB/API공유상황·확인시각·시험namespace, 자격주입위치, 실제6대장치 OS/브라우저/CPU/GPU/카메라와 부하발생기 목록. 접근/자료가 없으면 해당 전제 BLOCKED로 두며 사양/잔량을 추정하지 않는다.
+6. MC-01용 최소 합성 probe를 F소유 tests/cloud에 만든다. Vite로 현재고정 livekit-client를 bundle하고 연결/합성track게시/직접setSubscribed/메모리상 토큰재연결만 제공한다. 자동촬영/녹화기능은 넣지 않는다. QA-01 고급계측 없이도 E가 초기Cloud지원여부를 확인할 수 있게 한다.
+7. run-cloud-check는 case allowlist→preflight문서 확인→대상namespace/시각/예산/장치체크→별도 Vitest 실행 순서다. 전제 누락은 nonzero와 BLOCKED, 실패/정리미확인도 nonzero로 종료한다. schema에는 secrets 대신 주입환경변수명만 둔다.
+8. 모델 다운로드·manifest는 D가 담당한다. F는 /models/mediapipe/1.0.1/wasm과각task파일이manifest hash와맞고HTTPS/MIME/CSP/Worker기동이정상인지준비지원한다. 실제모델/장치/Cloud부재를 dummy파일·mock결과로 채우지 않는다.
+9. 이번 문서 보완에서 추가되는 `scripts/check-execution-plan.mjs`를 읽고 루트 pnpm verify의 format:check 바로 뒤에 `node scripts/check-execution-plan.mjs`를 연결한다. 공통 계약 원본·A–F 사본·fixture·버전·문서 링크 불일치는 nonzero로 전파한다. 이 검사는 실행 계획의 일관성만 확인하며 제품 구현·Cloud 관문 통과를 뜻하지 않는다.
+
+**연결 계약과 경계**
+
+- D0준비/D1화요일착수/D2수요일구현/D3목요일통합/금요일오전확인 일정은 목표다. 준비불가 전제는 담당 실행계획의BLOCKED로공유한다.
+- CloudPreflight={projectAlias,checkedAt,namespace,remainingMinutes,remainingBytes,allowedCases,budgetReservation,credentialEnvNames,deviceManifest,evidenceDir};민감값없음.
+- 새 runner/config/probe는 향후이작업에서생성할대상이다. 현재존재한다고가정하지말고파일과명령실행을확인한뒤인계한다.
+- 루트 직접 실행하는 QA harness에 추가 의존성이 필요하면 현재 lock에있는 @colyseus/sdk0.18.2/livekit-client2.22.2 등 정확버전만 F가root devDependency로 선언한다. E/D소유소스파일은변경하지않는다.
+- 각 Cloud test의 beforeAll도 RUN_CLOUD_TESTS=1과 현재 case에 맞는 유효한 preflight를 검사한다. runner만 검증 뒤 child 환경에 이 플래그를 주입한다. 직접 Vitest 호출로 preflight를 우회하면 test.skip이 아니라 실패/BLOCKED로 종료한다. 별도 cloud config는 기본 cloud exclude를 그대로 상속하지 않고 대상 include를 명시한다.
+- Cloud case allowlist를 정확히 고정한다: MC-01 → server/test/media/capability.cloud.test.ts; QA-02 → tests/cloud/performance.cloud.test.ts; QA-03 → tests/cloud/g1-a.cloud.test.ts; QA-04 → tests/cloud/g1-d.cloud.test.ts; QA-05 → tests/cloud/g1-b.cloud.test.ts; QA-06 → tests/cloud/g1-c.cloud.test.ts; QA-08 → tests/cloud/g4-metadata.cloud.test.ts; QA-09 → tests/cloud/mvp-flow.cloud.test.ts; QA-11 → tests/cloud/staged-load.cloud.test.ts; QA-12 → tests/cloud/ten-room-integrated.cloud.test.ts. case는 정확히 한 파일만 선택한다. 등록되지 않은 ID, 아직 인계되지 않은 파일, 발견된 테스트 0개는 nonzero/BLOCKED다. QA-01·QA-07·QA-10·QA-13은 Cloud allowlist가 아니다.
+- scripts/run-cloud-check.mjs는 인자를 배열로 전달하여 pnpm exec vitest run --config vitest.cloud.config.ts <allowlist의 정확한 파일>을 실행한다. SDK/브라우저를 여는 동작은 검증된 beforeAll 또는 명시적 run() 안에만 둔다. tests/load/**/*.test.ts는 짧은 fixture·통계·스케줄러 단위시험이며 모듈 import 시 서버 기동, 실시간 대기, 네트워크, 실제 부하 실행을 하지 않는다.
+- 별도 Cloud config는 Node 환경·동시 worker 1개·기본 testTimeout 120000ms·hookTimeout 30000ms로 시작한다. 긴 사례는 preflight에서 검증한 maxDurationSeconds와 cleanupAllowanceSeconds의 합으로 해당 test/hook 제한을 늘린다. QA-12의 실제 900초 구간과 준비·회수 시간을 기본 120초 안에서 강제 종료하지 않으며, 실행 상한과 예산을 명시하지 않은 무제한 timeout은 허용하지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- tests/contracts/environment.test.ts를추가한후선택실행→test1개이상발견;No test files found를성공으로취급금지.
+- Cloud환경변수/잔량누락→runner nonzero/BLOCKED·원격호출0회.
+- vision.worker.ts에Worker전용API사용→mainDOM컴파일에서제외·별도Worker타입검사대상.
+- pnpm verify실행→기존단위/E2E와새로컬계약은실행,cloud파일/30분부하는실행0회.
+- 공통 블록 한 사본/계약 fixture의 버전 불일치 → format:check 뒤 check-execution-plan 단계 실패, 뒤 제품 검사로 성공을 덮지 않음.
+- 버전불일치·대표장치미확보→각항목미확정표시,DP-01 전체완료커밋주장금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/environment.test.ts`
+
+**실행할 검사**
+
+```bash
+node --version
+pnpm --version
+pnpm install --frozen-lockfile
+pnpm setup:env
+pnpm exec playwright install chromium
+pnpm build:packages
+pnpm exec vitest run tests/contracts/environment.test.ts
+node scripts/check-execution-environment.mjs --output .local/qa/environment.json
+pnpm verify
+```
+
+**완료 조건**
+
+AWS 상품/세대·리전·OS·주소·포함 전송량·도메인과 Cloud 계정의 현재 잔량/한도·SDK 버전을 확인해 기록한다. 테스트 namespace·자격 증명 주입 경로·6대 대표 장치·부하 발생 환경을 확보한다. pnpm verify의 format:check 뒤 문서·계약 동기 검사와 새 로컬 계약 시험을 실행하고 Cloud·장시간 부하는 명시적 runner로만 실행한다. 제품 모듈과 fixture의 로컬 통과를 실제 Cloud/장치 증거로 합산하지 않으며 비밀값을 문서에 넣지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+chore: MVP 실행 환경과 검증 설정 준비
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 환경사실확인표·비용시험preflight·로컬/Cloud시험분리를추가한다.
+- 담당 공통 버전/Worker 타입 검사/QA 탐색 경로와 실행 계획 동기 검사를 고정한다.
+
+**MR 리뷰 포인트**
+
+- Cloud자격·잔량·실제장치미확보를형식적체크로완료하지않는지확인한다.
+- F소유manifest/lock변경만묶이며Worker파일은D인계내용인지확인한다.
+
+**완료 인계**
+
+- A–E에고정버전·테스트include·환경변수명·BLOCKED항목을D0–D1early전달한다.
+- D에게Worker경로와모델정적배포지원을, E에게MC-01 probe/CloudPreflight/namespace를먼저전달한다.
+- B에게제품모드env확장은인증/OP-08통합후라는조건을전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-01.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-02
+
+**QA-01 · [QA] 합성 미디어·실효 지연·장애 계측 도구**  
+일정: D1 2026-09-08 · **오늘 2번**  
+기획 근거: v0.0.8 **19, 26장**  
+선행 완료 결과: [E-01](e-media-operations.md#e-01) (MC-01, D1)
+
+**수정·생성 파일**
+
+- `tests/contracts/fault-adapter.test.ts`
+- `tests/contracts/evidence-format.test.ts`
+- `tests/cloud/SyntheticMedia.ts`
+- `tests/cloud/MediaObserver.ts`
+- `tests/cloud/GatewayFaultAdapter.ts`
+- `tests/cloud/ProbeHarness.ts`
+- `tests/cloud/probe.ts`
+- `scripts/run-cloud-check.mjs`
+
+**구현 순서**
+
+1. MC-01 gateway 포트를 감싸는 FaultAdapter를만들고 normal/delay-before-send/drop-response/remote-success-then-local-timeout 모드를requestId별로선택한다. fake원격상태와실제gatewaywrapper를구분하고생산서버코드에테스트backdoor를넣지않는다.
+2. 합성 얼굴Canvas에frameSerial/색상패턴, 합성오디오Oscillator/AudioWorklet에시간/sequence표식을넣는다. 카메라/사용자음성취득없이publish하고사용후track/context를닫는다.
+3. 수신 MediaObserver는 mediaInstanceId/receiverGeneration/발신자 publisherGeneration/trackSid별 getRTCStatsReport()와 표식 검출을 수집하고 bindingRevision을 증거에 연결한다. byte 증가만으로 새 미디어 허용 증거를 삼지 않는다. 새 SID·새 세대에는 기준 통계를 초기화하고, 같은 SID replaceTrack에는 누적 counter를 유지한 채 교체 전후 표식을 구분한다.
+4. 서버policyAt/enqueueAt/sentAt/respondedAt와브라우저effectAt을수집한다. 서로다른clock은왕복ping으로offset/오차범위를추정하고raw delta를직접빼지않는다. 측정오차가기준판정을불가능하게하면표본을미확인으로기록한다.
+5. 정책허용은첫신규표식도착, 차단은cutoff이후생성된표식의지속미수신및트랙통계로정의한다. 이미도착한buffer재생과새로전송된표식을분리한다. evidence writer는민감필드allowlist와결과최소표본을검사한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- SDK2.22.2 설치타입: RemoteTrack.getRTCStatsReport():Promise<RTCStatsReport|undefined>, RemoteTrackPublication.setSubscribed(boolean), LocalTrack.replaceTrack(MediaStreamTrack). [클라이언트 SDK](https://docs.livekit.io/reference/client-sdk-js/classes/RemoteTrackPublication.html).
+- FaultAdapter는원격취소보장이아니며drop-response모드는실제원격성공후호출자의응답만유실시키는경우를포함한다.
+
+**시험 입력 → 기대 결과**
+
+- 원격성공후응답유실→원격상태변화있음·caller UNKNOWN·양쪽timeline보존.
+- SID변경→기존bytesReceived와새counter합산0,새표식검출로재개판정.
+- 이미버퍼된음성+정책차단후새표식없음→buffer잔향과신규전달을구분.
+- evidence에token/rawSDP키주입→저장거절·원문로그출력0.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/fault-adapter.test.ts`
+- `tests/contracts/evidence-format.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/fault-adapter.test.ts
+pnpm exec vitest run tests/contracts/evidence-format.test.ts
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+합성 얼굴/음성 표식, trackSid별 수신 통계 초기화, 정책 결정/발송/응답/실효 수신 시각을 기록한다. 지연·응답 유실·원격 성공 후 timeout을 주입할 어댑터를 준비하고 실제 미디어 원본/토큰을 저장하지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 합성 미디어와 장애 계측 도구 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 실효미디어표식·시각대조·지연/응답유실주입과비밀없는증거형식을추가한다.
+
+**MR 리뷰 포인트**
+
+- API응답을실효수신으로대체하거나다른시계원점을직접빼지않는지확인한다.
+
+**완료 인계**
+
+- E MC-04/05에콜백metric필드와FaultAdapter시나리오를전달한다.
+- QA-03–06/11–12에공통ProbeHarness와증거writer를인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-01.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-03
+
+**QA-02 · [QA] 비전·얼굴·3D 동시 성능 조기 측정**  
+일정: D1 2026-09-08 · **오늘 3번**  
+기획 근거: v0.0.8 **15, 20, 26, 27장**  
+선행 완료 결과: [C-01](c-web-ui.md#c-01) (VI-01, D1), [D-03](d-vision-media.md#d-03) (IN-03, D1), [D-04](d-vision-media.md#d-04) (IN-04, D1), [D-05](d-vision-media.md#d-05) (IN-05, D1), [D-07](d-vision-media.md#d-07) (ME-01, D1), [E-01](e-media-operations.md#e-01) (MC-01, D1), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/cloud/performance.cloud.test.ts`
+- `tests/cloud/PerformanceScenario.ts`
+- `tests/contracts/performance-summary.test.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. VI-01·IN-03/04/05·ME-01의실제D/C공개facade가통합브랜치에도착했는지확인한다. 계약mock만있으면fixture측정으로표시하고실제대표장치결과와분리한다.
+2. 실제6대중중간/저사양장치를선택해실제GPU기본브라우저로실행한다. SwiftShader강제·가상카메라자동성공을성능실측으로사용하지않는다.
+3. 3개모델의15/10/8fps분산주기·단일진행frame·R3F렌더·160x16010fps가공얼굴송출·원격얼굴5개수신을동시에켜워밍업후일정시간표본을모은다.
+4. requestAnimationFrame FPS, inferencequeue/drop·모델별지연,WebRTC인코딩/디코딩프레임·bitrate·CPU/GPU지원정보를기록한다. 모델하나씩/미디어off/3Doff비교구간으로병목을분리한다.
+5. 128x1288fps/렌더30fps하위preset을별도시험하고D/C에게바꿀설정과영향을제안한다. 허용되지않은얼굴정지사진이나필수모델제거로수치를맞추지않는다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- 이작업은격리PoC의조기성능진단이다. G1/G5완주합격을대신하지않는다.
+- 실제대표장치없음·모델미다운로드·카메라거부면해당실측BLOCKED;결함수정은D/C소유로반환한다.
+
+**시험 입력 → 기대 결과**
+
+- 얼굴/자세/손모두요구fps→한프레임중첩추론없음·queue무한증가없음.
+- 미디어수신5개추가→FPS/decoder증가비용을독립표본으로기록.
+- 저사양장치평균30fps미만→성능미달기록·preset조정인계.
+- headless소프트웨어렌더결과만있음→대표장치성능통과표시금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/cloud/performance.cloud.test.ts`
+- `tests/contracts/performance-summary.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/performance-summary.test.ts
+node scripts/run-cloud-check.mjs --case QA-02 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-02
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+대표 장치에서 세 모델의 분산 주기·R3F·가공 송출·5명 얼굴 수신을 함께 실행해 FPS/추론/인코딩/디코딩을 측정한다. 격리된 PoC Cloud 환경을 사용하며 제품 권한/완주 통과로 기록하지 않는다. VI-05 조정에 사용할 병목과 기준값을 남긴다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 얼굴 비전 3D 동시 성능 측정 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 대표장치의복합부하와병목비교시나리오를추가한다.
+
+**MR 리뷰 포인트**
+
+- 원격얼굴5수신과실제장치GPU가측정에포함되는지확인한다.
+
+**완료 인계**
+
+- D VI-05/C VI-05에장치별병목·preset별지연/FPS를D1end전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-02.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-04
+
+**DP-04 · [DevOps] Jenkins 검증과 GitLab 결과 연결**  
+일정: D1 2026-09-08 · **오늘 4번**  
+기획 근거: v0.0.8 **16, 23; 사용자 Jenkins 방향장**  
+선행 완료 결과: [F-01](f-infra-qa.md#f-01) (DP-01, D1)
+
+**수정·생성 파일**
+
+- `Jenkinsfile`
+- `scripts/ci-verify.mjs`
+- `tests/contracts/ci-contract.test.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 실제Jenkins의Pipeline/Git/GitLab플러그인존재·버전·credentialId·webhook권한을DP-01에서확인한다. plugin이나권한이없으면로컬Jenkinsfile작성과원격연동검증BLOCKED를구분한다.
+2. GitLab의검증대상source commitSHA를파라미터/SCM환경에서받고체크아웃뒤git rev-parse HEAD와동일함을검사한다. 임의의develop최신값으로바꾸거나untrusted MR내용을쉘문자열로연결하지않는다.
+3. 검증 단계는 Node24.19.0/pnpm11.19.0 확인→frozen install→Linux Chromium --with-deps 설치→pnpm verify 순서다. verify 내부의 format:check 직후 check-execution-plan이 공통 계약·fixture·문서 동기를 검사하도록 DP-01과 같은 진입점을 사용한다. 단계 실패는 즉시 실패로 남기고 기본 job에 Cloud/유료 시험 secret을 주입하지 않는다.
+4. 빌드결과·커밋SHA·실패단계·테스트산출물URL을GitLab결과에연결한다. 실제설치된GitLab플러그인의gitlabCommitStatus/updateGitlabCommitStatus기능을공식문서와Jenkins스니펫생성기로확인한뒤사용하고지원플러그인을가정하지않는다.
+5. post always에서서버/브라우저자식프로세스를회수하고비밀없는시험산출물만보관한다. 실패를테스트실패0으로치환하지않고정상build와같은commit이미지만후속배포에전달한다.
+
+**연결 계약과 경계**
+
+- [Jenkins Pipeline syntax](https://www.jenkins.io/doc/book/pipeline/syntax/), [GitLab plugin](https://plugins.jenkins.io/gitlab-plugin/)을실제설치환경과대조한다. Jenkins job/webhook/credential외부설정은실행요청범위가확보된환경에서만적용한다.
+- Cloud시험/실제장치측정은별도명시실행job이다. 검증job은모든MR에서무료Cloud예산을소비하지않는다.
+- scripts/ci-verify.mjs가 내부에서 pnpm verify를 정확히 한 번 실행하고 exit code를 전달한다. commands 목록에서 같은 전체 검증을 다시 반복하지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- SHA불일치→install이전실패·다른commit성공보고없음.
+- lint실패→build/deploy중지·GitLab에실패단계연결.
+- Cloudcredential없음→로컬verify수행가능·Cloudcase실행0.
+- GitLab플러그인미설치→연동BLOCKED·가짜성공상태게시없음.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/ci-contract.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/ci-contract.test.ts
+node scripts/ci-verify.mjs
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+GitLab 변경의 정확한 commit으로 Node/pnpm 고정·frozen install·Chromium 준비·pnpm verify를 수행한다. 실패 단계·결과/산출물을 MR에서 추적하고 비밀값을 마스킹한다. Cloud 비용 시험은 기본 검증에 자동 포함하지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+ci: Jenkins 검증과 GitLab 결과 연결 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 정확한커밋검증·고정도구체인·실패보고와산출물연결을추가한다.
+
+**MR 리뷰 포인트**
+
+- MR체크아웃SHA와GitLab결과대상이일치하는지확인한다.
+- 비밀이로그/산출물에포함되지않는지확인한다.
+
+**완료 인계**
+
+- 팀원A–E에게검증잡URL·sourceSHA·필수체크목록을전달한다.
+- DP-06에검증된commitSHA와이미지생성조건을인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-04.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-05
+
+**DP-02 · [DevOps] 단일 서버 운영 이미지·Compose**  
+일정: D1 2026-09-08 · **오늘 5번**  
+기획 근거: v0.0.8 **16, 23장**  
+선행 완료 결과: [E-02](e-media-operations.md#e-02) (OP-01, D1)
+
+**수정·생성 파일**
+
+- `infra/compose.yaml`
+- `infra/compose.production.yaml`
+- `infra/docker/Dockerfile.game-server`
+- `infra/docker/Dockerfile.web`
+- `infra/nginx/default.conf`
+- `infra/.env.example`
+- `server/package.json`
+- `server/src/config/env.ts`
+- `tests/contracts/container-layout.test.ts`
+- `scripts/container-smoke.mjs`
+
+**구현 순서**
+
+1. 기존개발Compose는local명시를유지하고운영override를분리한다. web-proxy/game-server만기본서비스로두고Node진입점은server/src/index→dist/index흐름과맞춘다. 한process/복제본1개를고정한다.
+2. 같은검증commit으로이미지2개를빌드하고label/tag에SHA를기록한다. pnpm deploy의server files목록에A가실제로추가한content/config를포함하고D모델은web정적출력에같은hash로포함한다.
+3. runtime는비root유저·내부Node포트·OPS_DATA_DIR지속볼륨·write권한·단일writerlock으로구성한다. secret은환경파일/secretmount로주입하고이미지COPY/ARG/VITE변수에넣지않는다.
+4. 로그회전용max-size/max-file,health live/ready용도,종료grace를설정한다. RECOVERING을재시작루프로우회하지않고readiness가false인동안신규입장을막는다.
+5. D1에는 실제 Docker daemon의 이미지 빌드·컨테이너 실행 기반·지속 볼륨·쓰기 권한·단일 쓰기자 구성을 먼저 E에 인계한다. 이것이 OP-08 구현의 선행 결과다. 제품 production 활성화와 READY/재시작 최종 시험은 B 초대 인증과 E Cloud/OP-08 코드 통합 뒤 D2에 F/E가 함께 완료한다. 이 마지막 시험을 OP-08의 선행으로 다시 요구하지 않으며 D1 기반 인계와 DP-02 전체 완료를 별도로 기록한다.
+6. 운영프록시에서/dev-sessions/playground/monitor진단라우트를노출하지않도록B와등록/보호를확인한다. nginx차단만으로서버인증없음을덮지않는다.
+
+**연결 계약과 경계**
+
+- 게임상태는인메모리며volume은사용량/회수저널만보존한다. DB/Redis/게임스냅샷복원추가금지.
+- 이미지태그sha동일·secret없는layers·모델hash·contentpackaging확인이완료조건. daemon없으면실행BLOCKED.
+- container-smoke.mjs는 --compose 기본 파일과 --override 운영 파일을 함께 받아 동일 docker compose -f 순서로 config/build/up/status를 검사한다. override 파일 하나만 완성 Compose인 것처럼 실행하지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- 컨테이너재생성→운영저널/예약남음·진행Match는복원하지않음.
+- 두번째serverinstance기동→writerlock거절·새발급불가.
+- 외부진단라우트/Node2567접근→차단,정상HTTPSproxy만허용.
+- model/content누락이미지→smoke실패·배포준비완료금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/container-layout.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/container-layout.test.ts
+docker compose -f infra/compose.yaml -f infra/compose.production.yaml config --quiet
+docker compose -f infra/compose.yaml -f infra/compose.production.yaml build
+node scripts/container-smoke.mjs --compose infra/compose.yaml --override infra/compose.production.yaml
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+같은 commit의 웹/모델 정적 파일과 게임 서버 이미지를 만든다. web-proxy+game-server, Node 1프로세스/복제본 1개, 비밀값 주입·지속 저널 볼륨·로그 회전을 실제 컨테이너로 검증한다. 개발 전용 API/모드가 외부 운영에 노출되지 않게 한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+ci: 단일 서버 운영 컨테이너 구성 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- commit일치이미지·운영볼륨·secret주입·비공개서버포트를구성한다.
+
+**MR 리뷰 포인트**
+
+- volume이container writable layer로바뀌지않는지확인한다.
+- production검사제거로부팅성공을만들지않는지확인한다.
+
+**완료 인계**
+
+- E OP-01/08에실제volume권한·lock·health조건을인계한다.
+- B에운영진단라우트차단·gracefulclose등록을요청한다.
+- A/D에content/model이미지포함hash증거를전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-02.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-06
+
+**DP-03 · [DevOps] 도메인·TLS·WSS·접근 제한**  
+일정: D1 2026-09-08 · **오늘 6번**  
+기획 근거: v0.0.8 **20, 23장**  
+선행 완료 결과: [F-01](f-infra-qa.md#f-01) (DP-01, D1), [F-05](f-infra-qa.md#f-05) (DP-02, D1)
+
+**수정·생성 파일**
+
+- `infra/nginx/default.conf`
+- `infra/compose.production.yaml`
+- `scripts/deployment-smoke.mjs`
+- `tests/contracts/proxy-contract.test.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. DP-01확인실제도메인과관리주체를기준으로DNS→공인주소→TLS인증서체인/만료를확인한다. 미확인상품명·IP·credential을문서에예시값으로채워운영하지않는다.
+2. nginx정적파일/모델응답과/api/ColyseusWebSocket Upgrade를설정한다. HTTPS리다이렉트·SNI·인증서갱신방법·idle timeout을명시하고모델wasmMIME과Worker/CSP실행을실제브라우저로확인한다.
+3. 공용인바운드는80/443,Node2567은Docker내부,SSH는확인된운영자대역으로제한한다. 방화벽변경은실제접속보존경로를확인하며일괄삭제로대체하지않는다.
+4. 배포smoke는health live/ready 구분·초대거절/허용·WSS연결2초heartbeat유지·모델로드·카메라securecontext·마이크거부독립성을검사한다. 원격서버의productionready미완이면미완원인을기록한다.
+5. 인증서갱신dryrun/서비스reload가현재검증대상연결에미치는영향을확인하고운영일정·담당자·실패알람경로를기록한다.
+
+**연결 계약과 경계**
+
+- Jenkins이전첫검증배포는이환경에서시행하며DP-06완료를선행조건으로두어순환시키지않는다.
+- 실제6인/fullMVP완주는QA-09,이작업은접속/TLS/모델/장치권한배포경계검증이다.
+
+**시험 입력 → 기대 결과**
+
+- HTTP주소접근→HTTPS안내/리다이렉트·카메라오류를무시하지않음.
+- 올바른OriginWSS→upgrade/heartbeat유지;잘못된Origin→거절.
+- 외부2567/monitor/playground→차단,정적wasm/task→올바른MIME/내용hash.
+- 마이크거부·카메라허용→장치체크가마이크거부만으로실패하지않음.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/proxy-contract.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/proxy-contract.test.ts
+node scripts/deployment-smoke.mjs --base-url $env:QA_BASE_URL --evidence .local/qa/DP-03
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+DNS·인증서 자동 갱신·HTTPS/WSS Upgrade·idle timeout을 배포 환경에서 확인한다. 80/443만 공용, Node 포트는 내부, SSH는 운영자 허용 주소로 제한하고 정적 모델 로딩·웹캠 권한 경로를 점검한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+ci: HTTPS WSS와 운영 접근 제한 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- TLS·proxy·정적모델·운영네트워크접근경계와배포smoke를추가한다.
+
+**MR 리뷰 포인트**
+
+- Node포트를외부에다시publish하지않는지확인한다.
+- TLS갱신/Worker/MIME가문서설명만아닌실제환경확인인지확인한다.
+
+**완료 인계**
+
+- C/D에실제HTTPS주소·CSP·모델public경로·장치권한결과를인계한다.
+- QA-09/DP-06에초기검증환경과smoke명령을전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-03.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-07
+
+**DP-05 · [DevOps] 게임·미디어·복구 지표와 경보**  
+일정: D2 2026-09-09 · **오늘 1번**  
+기획 근거: v0.0.8 **23, 25, 26장**  
+선행 완료 결과: [B-05](b-game-server.md#b-05) (SV-05, D1), [E-08](e-media-operations.md#e-08) (MC-05, D2), [E-11](e-media-operations.md#e-11) (OP-04, D2)
+
+**수정·생성 파일**
+
+- `server/src/observability/MetricRegistry.ts`
+- `server/src/observability/StructuredEvents.ts`
+- `server/src/observability/AlertPolicy.ts`
+- `scripts/collect-observability.mjs`
+- `tests/contracts/observability.test.ts`
+- `infra/compose.production.yaml`
+
+**구현 순서**
+
+1. B/E가내보내는숫자/enumcallback을한곳에서수집한다. Tickduration/due/catchup/overload,queue,inputreject,processmemory/CPU,eventlooplag,API60초/429,policyqueue/response/effect,unresolved/reservation/writable를고정단위로정의한다.
+2. Node perf_hooks의monitorEventLoopDelay는ns값을ms로변환하고process.memoryUsage는bytes를보존한다. 여러Room의같은Tick시간을합산한분포와개별Room분포를별도보고한다.
+3. F소유Pino출력formatter/정적allowlist에서sensitive키와과도한nestedpayload를거절한다. Bbootstrap에는logger/callback factory연결만요청하고B소유코드를직접편집하지않는다.
+4. 예산900접근·429·1초권한불명·10초미회수·디스크쓰기실패·ready잠금을경보상태로만든다. 통지대상외부채널이없으면로컬경보/운영화면기록으로남기고외부알림전송을완료했다고하지않는다.
+5. 격리테스트에서slowtick/diskerror/response timeout을주입해경보발생→운영잠금→해소조건을확인한다. 로그max-size/max-file과메트릭retention을제한하고일반게임화면에운영세부정보를노출하지않는다.
+
+**연결 계약과 경계**
+
+- MetricSample={name,value,unit,atMs,matchRef?,generation?,requestId?};원본identity/playernickname/좌표/맵/token을labels로쓰지않음.
+- B/E가계산하는원래정책은수정하지않고F는callback소비·관측만소유한다.
+- 관측 TypeScript 구현의 최종 경로는 server/src/observability/MetricRegistry.ts, StructuredEvents.ts, AlertPolicy.ts이며 F가 소유한다. server/tsconfig.json의 src include와 서버 build에 포함한다. B는 bootstrap에서 이 factory/callback을 조립하고 E는 metric emit 계약만 연결한다. 루트 observability/*.ts에 런타임 코드를 두지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- eventLoopDelay20000000ns→20ms,단위1000000배오차없음.
+- 10개Roomtick2ms씩→동일회차합산20ms표본,각분포평균으로대체금지.
+- token/rawSDP/map필드주입→저장제외또는writer거절.
+- UNRESOLVED발생→경보활성·해소확인없이시간만지나자동green금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/observability.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/observability.test.ts
+node scripts/collect-observability.mjs --input .local/qa/events.ndjson --output .local/qa/metrics.json
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+Tick/due/catch-up·lag·메모리·큐·전체 API/429·정책 응답/실효 지연·세대/잔존/예산·디스크를 계측한다. Pino 로그 회전·상한·경보를 실제 장애로 확인하고 토큰·SDP·프레임·음성·전체 출구 맵을 남기지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+feat: 게임 미디어 운영 지표와 경보 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 공통단위의계측·민감정보제외·경보조건과로그용량제한을추가한다.
+
+**MR 리뷰 포인트**
+
+- API응답/실효지연분리·합산Tick분포·민감label제외를확인한다.
+
+**완료 인계**
+
+- A–E에metriccallback동일schema를전달하고내부파일편집은각담당자에게요청한다.
+- QA-10/12/DP-06에계측수집명령과임계값을전달한다.
+- B에게 server/src/observability/StructuredEvents.ts 및 MetricRegistry.ts의 factory import 경로를 전달하고 bootstrap 연결은 B가 수정하도록 한다. E의 관측 callback도 같은 이벤트 타입을 참조한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-05.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-08
+
+**QA-03 · [QA] G1-A 지연·결과 불명 회귀**  
+일정: D2 2026-09-09 · **오늘 2번**  
+기획 근거: v0.0.8 **26.1 G1-A장**  
+선행 완료 결과: [E-08](e-media-operations.md#e-08) (MC-05, D2), [E-10](e-media-operations.md#e-10) (MC-07, D2), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/contracts/g1-a.test.ts`
+- `tests/cloud/g1-a.cloud.test.ts`
+- `tests/cloud/scenarios/g1-a.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. E MC-05/07의실제gateway와B권위control을ProbeHarness에연결한다. allowed v10을만든뒤requestId를멈추고v11이탈/차단목표를생성한다.
+2. 확정응답지연999ms·응답유실·원격apply후localtimeout을각각독립case로실행한다. target별inFlight가1인지와v11차단전새허용이동시발송되지않는지기록한다.
+3. timeout이후terminal/retire·MEDIA_POLICY_UNCERTAIN control을확인하고,보류한v10성공응답을늦게풀어구Identity/새세대가열리지않는지검사한다.
+4. 실제Cloudcase에서는합성허용/불허표식과SDK직접subscribe시도로권한효과를확인한다. adapter만통과시로컬회귀통과·Cloud미실시로나눠보고한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- 파괴적실패주입구간은G2정상지연백분위와구분하되정상구간의실패를자의적으로삭제하지않는다.
+
+**시험 입력 → 기대 결과**
+
+- v10정상지연중v11→응답후차단수렴·inFlight최대1.
+- v10원격성공후응답유실→UNKNOWN/retire·신규grant차단.
+- terminal후v10성공반환→새허용/ACTIVE전환0.
+- 모의어댑터만통과→G1-A실제Cloud결과미실시.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/g1-a.test.ts`
+- `tests/cloud/g1-a.cloud.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/g1-a.test.ts
+node scripts/run-cloud-check.mjs --case QA-03 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-03
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+v10 허용 지연 중 v11 이탈을 만들고 정상 응답·응답 유실·원격 성공 후 timeout을 각각 재현한다. 어댑터와 실제 Cloud 증거로 직렬화·UNKNOWN 종료·옛 응답에 의한 재허용 방지를 확인한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 미디어 권한 지연과 결과 불명 회귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- G1-A의응답순서·결과유실·원격성공후timeout을분리검증한다.
+
+**MR 리뷰 포인트**
+
+- 로컬abort가원격apply도취소한다고주장하지않는지확인한다.
+
+**완료 인계**
+
+- 실패requesttimeline/seed를E MC-04/05소유자에게돌려수정받는다.
+- G1-A의로컬/Cloud각결과를QA-09전제에기록한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-03.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-09
+
+**QA-04 · [QA] G1-D 탈락 중 회수·늦은 허용 회귀**  
+일정: D2 2026-09-09 · **오늘 3번**  
+기획 근거: v0.0.8 **26.1 G1-D장**  
+선행 완료 결과: [E-10](e-media-operations.md#e-10) (MC-07, D2), [E-11](e-media-operations.md#e-11) (OP-04, D2), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/contracts/g1-d.test.ts`
+- `tests/cloud/g1-d.cloud.test.ts`
+- `tests/cloud/scenarios/g1-d.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 허용request를inFlight로만든동일Identity에B의개인종료를입력하여MC-07retire를시작한다. RemoveParticipant발송시점과보류된UpdateSubscriptions응답시점을순열로제어한다.
+2. Remove먼저/늦은허용먼저/Remove원격성공후timeout을각각주입하고terminalflag·REVOKING/REVOKED/UNRESOLVED·예약상태를검사한다.
+3. 브라우저메모리에만보관한옛JWT로새연결을시도하고직접setSubscribed(true)도시도한다.회수확인과새표식미수신증거를같은Identity·세대·requestId로연결한다.
+4. 정리불명은예약유지/새grant거절이어야하며,완료후late허용을해제해도새generationbinding에영향이없는지확인한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- SDKremoveParticipant부재오류와회수cutoff프로필은MC-01실증결과를쓴다. 임의sleep후성공으로보지않고거절/표식증거를남긴다.
+
+**시험 입력 → 기대 결과**
+
+- Remove확정뒤늦은허용응답→terminal유지·oldtoken재접속거절.
+- Remove적용불명→UNRESOLVED·reservation유지.
+- 폐기Identity에grant재요청→거절,새generation으로몰래재발급없음.
+- 다른새Identity동시활성→oldrequest는그binding에적용0.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/g1-d.test.ts`
+- `tests/cloud/g1-d.cloud.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/g1-d.test.ts
+node scripts/run-cloud-check.mjs --case QA-04 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-04
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+허용 진행 중 탈락과 RemoveParticipant를 겹치고 늦은 응답·옛 토큰 재입장을 시도한다. 실제 Cloud에서 terminal 재사용 금지·토큰 거절·미확인 결과 보존을 증명한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 탈락 중 회수와 늦은 허용 경쟁 검증 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- G1-D의제거·늦은응답·옛토큰재입장경쟁을검증한다.
+
+**MR 리뷰 포인트**
+
+- Remove성공만으로token모든경계를통과했다고표시하지않는지확인한다.
+
+**완료 인계**
+
+- E MC-07/OP-04에미해결재현순서·회수evidence를전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-04.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-10
+
+**QA-06 · [QA] G1-C 재게시·전체 재연결 회귀**  
+일정: D2 2026-09-09 · **오늘 4번**  
+기획 근거: v0.0.8 **26.1 G1-C장**  
+선행 완료 결과: [E-09](e-media-operations.md#e-09) (MC-06, D2), [E-16](e-media-operations.md#e-16) (MC-08, D2), [D-17](d-vision-media.md#d-17) (ME-07, D2), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/contracts/g1-c.test.ts`
+- `tests/cloud/g1-c.cloud.test.ts`
+- `tests/cloud/scenarios/g1-c.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 가까이정지한두참가자의음성관계를허용하고CloudgetParticipant게시목록과Bmedia-bindings를기록한다. 위치변화없이세종류트랙전환을실행한다.
+2. 마이크unpublish→새trackpublish로newSID를만들고,LocalTrack.replaceTrack(newSyntheticMediaStreamTrack)로SID가유지되는교체를별도수행한다. 실제SID가예상과다르면관측된변화를기록하고case를다시구성한다.
+3. 전체연결교체는MC-08의old회수확인→새Identity/generation→새binding순서로실행한다. 구SDK세션의일시reconnect와구분한다.
+4. 새 SID는 기본 차단→현재 게시 목록과 바인딩 검증→현재 정책으로 허용 순서를 확인한다. 같은 SID replaceTrack은 새 Webhook/재승인을 전제하지 않고 기존 허용 관계·새 표식 수신·불허자의 계속 미수신을 확인한다. 전체 교체는 구 Identity 회수 확인→새 세대/Identity→새 바인딩을 확인한다. 새 SID/세대일 때만 counter 기준을 초기화하고 같은 SID에는 교체 시각과 새 표식을 사용한다.
+5. 6명 중 한 사람만 전체 연결을 교체한다. 나머지 다섯 명 receiverGeneration은 유지하고 교체자의 publisherGeneration/Identity/SID와 bindingRevision만 갱신되는지 검사한다. 바인딩·TrackSubscribed·audio-policy의 도착 순서를 바꾸고 오래된 응답이 새 출력을 부활시키거나 닫지 않는지 확인한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- B의 EXEC-CONTRACT-2 `media-bindings`만 앱 매핑 근거로 사용한다. mediaInstanceId/receiverGeneration/bindingRevision과 참가자별 publisherGeneration/Identity/participantSid/trackSid를 검증하고 `audio-policy`의 bindingRevision과 맞춘다.
+- replaceTrack는설치livekit-client LocalTrack.d.ts에서확인된API. source속성을바꾼것만으로Cloud게시목록이바뀐다고추정하지않는다.
+
+**시험 입력 → 기대 결과**
+
+- 정지쌍newSID게시→policy재계산·기본차단후허용.
+- SID 유지 replaceTrack→새 표식 관측·기존 mapping/허용 정합성 유지·불허자 미수신, 새 서버 Webhook이 없어도 실패로 만들지 않음.
+- 한 사람만 full reconnect→그 사람 세대/Identity 교체, 다른 다섯 명 수신자 세대 유지, 구 응답/구 바인딩의 새 출력 변경 0.
+- fullreconnect→oldtoken회수·새Identity·oldrequest적용0.
+- 불허수신자직접subscribe→새표식미수신.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/g1-c.test.ts`
+- `tests/cloud/g1-c.cloud.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/g1-c.test.ts
+node scripts/run-cloud-check.mjs --case QA-06 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-06
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+가까이 정지한 쌍에서 새 SID 게시·같은 SID replaceTrack·한 사람만 전체 재연결을 각각 실행한다. 새 SID는 기본 차단 후 서버 확인/허용, 같은 SID는 기존 권한 정합성·새 표식·불허 유지, 전체 교체는 구 Identity 회수와 다른 다섯 명 세대 유지로 검증한다. 실제 Cloud 증거와 로컬 순서 fixture 결과를 구분한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 재게시와 미디어 세대 변경 회귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- G1-C의SID변경·유지교체·전체연결교체를독립검증한다.
+
+**MR 리뷰 포인트**
+
+- 거리변화가없어도검증이실행되는지와SID통계혼합을확인한다.
+
+**완료 인계**
+
+- E MC-06/08·D ME-07에실제SDK이벤트순서와실패case를전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-06.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-11
+
+**QA-05 · [QA] G1-B 강제 종료·재시작·옛 토큰 회귀**  
+일정: D2 2026-09-09 · **오늘 5번**  
+기획 근거: v0.0.8 **26.1 G1-B장**  
+선행 완료 결과: [E-15](e-media-operations.md#e-15) (OP-08, D2), [C-14](c-web-ui.md#c-14) (FL-10, D2), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/contracts/recovery-fixtures.test.ts`
+- `tests/cloud/g1-b.cloud.test.ts`
+- `tests/cloud/scenarios/g1-b.ts`
+- `scripts/isolated-server-process.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 시험전용namespace/지속저널/운영volume을만들고참가상태3종을준비한다:PREPARED미입장,Cloud갱신token을받은연결,이미퇴장한Identity. 공유개발/운영서버가아닌runner가생성한PID/컨테이너ID만기록한다.
+2. 갱신token은고정2.22.2의Room.engine.on('tokenRefreshed', handler) 타입을실행시재확인해시험harness메모리에만받는다. private token필드읽기·로그/HAR기록금지. 갱신이실제발생하지않으면그case는BLOCKED/미실시로남기고초기token시험으로대체하지않는다.
+3. 브라우저를유지한채시험Linux컨테이너에SIGKILL을보낸다. 정상클라이언트가socketclose즉시또는마지막유효heartbeat6초후입력/미디어/자동재연결을멈추는지확인한다.
+4. 같은지속volume으로서버를재시작하고RECOVERING에서새입장/grant거절→구Identity회수→잔존조회→예약/공식잔량정합→READY순서를기록한다. 타서비스fixture방에는변경호출이없어야한다.
+5. 보관한3종token으로Cloud재연결을시도하고거절을확인한다. 저널부분레코드/유실/회수timeout을추가주입해READY가끝까지false인지확인한다. 종료후시험namespace정리상태와소비예산을남긴다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- 설치타입근거 apps/web/node_modules/livekit-client/dist/src/room/{Room,RTCEngine,events}.d.ts: Room.engine, tokenRefreshed callback. 이저수준관측은고정버전시험harness한정,제품의미공개토큰추출API로노출하지않는다.
+- 전체호스트상실중변조단말즉시원격회수는별도감시자가없는MVP보장범위밖이다. 복구후회수와정상단말heartbeat를각각판정한다.
+
+**시험 입력 → 기대 결과**
+
+- SIGKILL·브라우저유지→6초내정상단말수명종료,자동재입장0.
+- PREPARED미입장옛token→재시작회수후Cloud거절.
+- Cloud갱신token/기존퇴장token→각각재입장거절증거.
+- 저널손상·회수불명→live200가능/ready503·발급0.
+- 타서비스Cloud방→변경요청0.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/recovery-fixtures.test.ts`
+- `tests/cloud/g1-b.cloud.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/recovery-fixtures.test.ts
+node scripts/run-cloud-check.mjs --case QA-05 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-05
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+브라우저 유지 상태에서 서버 SIGKILL을 주입한다. 정상 단말 heartbeat 종료, 미입장·Cloud 갱신·이미 퇴장 토큰의 재입장 거절, 이전 세대 회수 전 READY 불가를 실제 Cloud로 확인한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 강제 종료와 이전 미디어 토큰 회귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- G1-B서버상실·지속기록복구·미입장/갱신/퇴장token회수경계를검증한다.
+
+**MR 리뷰 포인트**
+
+- 살아있는프로세스를임의PID로종료하지않고시험소유대상인지확인한다.
+- 갱신token을실제로얻지못한시험을갱신검증통과로쓰지않는지확인한다.
+
+**완료 인계**
+
+- E OP-05–08·B FL-10·D수명cleanup에실패증거를전달한다.
+- QA-09전제에3종토큰별실제결과와BLOCKED를분리한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-05.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-12
+
+**QA-07 · [QA] G3 실제 Room 동시 판정 회귀**  
+일정: D2 2026-09-09 · **오늘 6번**  
+기획 근거: v0.0.8 **07, 26.1 G3-A/B/D장**, 최신 아이템 결정 대기 정정, EXEC-CONTRACT-2 경계 계약  
+선행 완료 결과: [A-15](a-game-core.md#a-15) (RL-08, D1), [A-33](a-game-core.md#a-33) (EX-03, D2), [A-21](a-game-core.md#a-21) (KN-07, D2), [B-05](b-game-server.md#b-05) (SV-05, D1), [B-18](b-game-server.md#b-18) (FL-08, D2). 경계별 시험은 해당 실제 A/B/C/D/E 모듈을 인계받은 뒤 추가하며 미인계 항목을 mock으로 완료 처리하지 않는다.
+
+**수정·생성 파일**
+
+- `tests/contracts/g3-room.test.ts`
+- `tests/contracts/g3-overload.test.ts`
+- `tests/contracts/producer-consumer.test.ts`
+- `tests/fixtures/g3-scenarios.ts`
+- `tests/fixtures/execution-boundaries.ts`
+- `scripts/isolated-server-process.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. A의seeded맵/순수Corefixture와B의실제KkakkungRoomfactory를조합하고prototype/stub판정으로바꾸지않는다. authenticated6명·protocol0.2.0명령·권위tick을하네스에서구동한다.
+2. G3-A는포획/탈출commit과socketclose를동일Tick/서로다른순서로넣고누계/폐쇄출구/활동자경기계속을검사한다. ACTIVE도망자/술래close는ABORTED와구분한다.
+3. G3-B는 덫 2명 동시 진입·유예자만·유예+일반·유예 끝 Tick·무장 시 기존 점유를 순열로 검사한다. 자연 구속 시간 만료와 포획·탈출 우선순위는 계속 검증한다. 도망자 아이템의 종류·효과·획득·사용 및 기존 G3-C는 PRODUCT_DECISION_PENDING으로 별도 기록하고 성공/실패 판정이나 기능 완료의 필수 조건으로 넣지 않는다.
+4. G3-D는주입clock으로100/200ms지연을재현하고격리서버eventloop에실제2초정지를넣는별도case를둔다. 최대4catchup·250ms초과ABORTED·TTL500ms만료·deadline불연장을확인한다.
+5. 실패는seed/초기상태/입력/최종state/event를비민감fixture로축약해A/B에게전달한다. F가규칙모듈을고쳐시험만통과시키지않는다.
+6. `docs/execution/contracts/{types.ts,fixtures.ts,fixtures.test.ts}`의 기준 계약·순서 사례를 참고하여 실제 A stepMatch→B command 응답/serializer→C reducer/D runtime, E 바인딩→B 송신→D 소비자를 `producer-consumer.test.ts`에 조합한다. 서로 다른 생산자/소비자 구현을 실제로 import하고 시간·transport·SDK의 외부 경계만 통제한다. fixture 자체의 validator 통과를 모듈 통합 통과로 표시하지 않는다.
+7. accepted 접수 뒤 core 규칙 거절→terminal 실행 결과→UI pending 해제, command 결과 중복/역순/조회 복구, 바인딩·트랙·audio-policy 도착 순열, 6명 중 한 명 재연결을 검증한다. 바인딩 삭제·옛 publisherGeneration/receiverGeneration/revision은 새 출력에 적용되지 않아야 한다.
+8. 얼굴만 갱신되는 동안 오래된 자세의 유효 시간이 연장되지 않는지, 교환 요청자/수락자 UI와 D 입력이 다른지, READY true가 로컬 장치 점검 완료 신고이고 취소/카메라 장애가 READY false로 이어지는지 검사한다. 서버가 웹캠 영상을 독립 검증했다고 주장하거나 별도 DEVICE_REPORT 명령을 만들지 않는다. 다른 사람의 가시 감지기 wall과 출구 포털 발견→폐쇄 표현도 실제 serializer/소비자에 연결한다.
+
+**연결 계약과 경계**
+
+- 기본Vitest tests/contracts include로실행되며Cloudcredential없어야한다. 실제Room조합/순수Core검증은별도식별한다.
+- 실제eventloop정지는runner가소유한child process에서만실행하고15초기본timeout을case수준으로필요분만늘린다.
+- 원본 계약 fixture의 정적 검사와 실제 제품 모듈의 로컬 통합 증거는 구분한다. 둘 다 G1 실제 Cloud·G5 장치·G6 부하 완료 증거를 대신하지 않는다. C/D 모듈은 DOM/미디어 포트를 주입해 네트워크 없이 실행하고 비전 모델/실제 Cloud를 기본 verify에서 기동하지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- ESCAPEDcommit+close→탈출누계/출구폐쇄유지·남은경기계속.
+- 덫유예자2명만진입→발동/소모0;일반후보함께→1명만선정.
+- 아이템 미정 + G3-A/B/D 통과 → 확정 범위 통과와 G3-C PRODUCT_DECISION_PENDING을 별도 기록, 미정 아이템 자동 통과/필수 실패 처리 없음.
+- 2초정지→catchup대량실행0·SERVER_TICK_OVERLOAD·deadline연장0.
+- accepted 이후 A가 현재 규칙으로 거절 → B terminal rejected가 C에 도달해 pending 해제, 같은 결과 재전송은 UI 중복 갱신 0.
+- 트랙→바인딩→정책 / 정책→바인딩→트랙 → 같은 최종 얼굴/음성 출력, 검증 전 출력 0·종료 후 보류 0.
+- P2만 재연결 + P2 구 binding/control 후도착 → 나머지 5명 receiverGeneration 유지, P2 최신 publisherGeneration만 사용.
+- face sampledAt만 증가·pose는 오래된 frame → C 포즈 유지시간 증가 0; 새 유효 pose frame만 누적.
+- 같은 exchange의 요청자와 대상자 → 대상자만 수락 명령 가능, 요청자 입력으로 수락 전환 0.
+- 장치 점검 통과→READY true, 점검 취소/카메라 장애→READY false → B roster의 ready 해제·준비 장벽 잠금, 영상 독립 검증 성공 표시 없음.
+- PreparationResult ready만 수신·self faceTrackSid 없음 → B LOAD_READY 장벽 닫힘; E가 검증한 self entry와 현재 scope 신고 일치 → 장벽 준비 조건 충족, D의 원격 self 출력 0.
+- 가시 감지기 wall/출구 폐쇄를 B가 serialize → C가 같은 벽면 렌더/폐쇄 복원, 숨은 벽면 추가 노출 0.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/g3-room.test.ts`
+- `tests/contracts/g3-overload.test.ts`
+- `tests/contracts/producer-consumer.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/g3-room.test.ts
+pnpm exec vitest run tests/contracts/g3-overload.test.ts
+pnpm exec vitest run tests/contracts/producer-consumer.test.ts
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+G3-A 개인 종료와 이탈, G3-B 덫 동시 후보/유예/기존 점유와 자연 구속, G3-D 지연/2초 정지/마감/TTL을 실제 Room 조합으로 검증한다. 명령 최종 결과·바인딩 도착 순서·한 명 세대 교체·센서 신선도·교환 방향·준비 신고·가시 벽면/포털을 실제 생산자·소비자 모듈로 연결한다. 순수 시험/제품 모듈 로컬 통합/실제 Cloud 증거를 구분하고 미정 아이템 G3-C는 PRODUCT_DECISION_PENDING으로 남긴다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 실제 Room의 게임 규칙 회귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 확정 범위 G3-A/B/D와 실제 생산자·소비자 경계를 권위 순서·실패 주입으로 검증하고 아이템 결정 대기를 별도 보고한다.
+
+**MR 리뷰 포인트**
+
+- 개인종료누계를연결삭제와함께지우지않는지확인한다.
+- Fixture/순회순서를바꿔도동일결과인지확인한다.
+
+**완료 인계**
+
+- A/B의관련작업ID로축약재현을전달하고수정commit도착후해당case를다시검증한다.
+- C/D/E에는 실제 소비자 실패 fixture와 바인딩·센서·UI 재현 순서를 전달한다. 인터페이스 변경은 고정 리뷰 상대 외에 해당 생산자/소비자도 검토한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-07.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-13
+
+**QA-08 · [QA] G4 수신자별 정보 은폐 회귀**  
+일정: D2 2026-09-09 · **오늘 7번**  
+기획 근거: v0.0.8 **08, 09, 17, 26장**  
+선행 완료 결과: [B-14](b-game-server.md#b-14) (KN-04, D2), [A-22](a-game-core.md#a-22) (KN-08, D2), [C-08](c-web-ui.md#c-08) (EQ-10, D2), [E-09](e-media-operations.md#e-09) (MC-06, D2), [C-07](c-web-ui.md#c-07) (VI-03, D2), [A-14](a-game-core.md#a-14) (RL-07, D1), [F-07](f-infra-qa.md#f-07) (DP-05, D2)
+
+**수정·생성 파일**
+
+- `tests/contracts/g4-packets.test.ts`
+- `tests/contracts/g4-bundle.test.ts`
+- `tests/cloud/g4-metadata.cloud.test.ts`
+- `tests/fixtures/private-view-scenarios.ts`
+- `scripts/inspect-public-bundle.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 한서버에술래/도망자/개인종료자연결을붙이고초기Schema/patch·private-view전체교체·resync·private-event·command-result를수신자별로저장한다. hiddenfixture에식별가능한sentinel맵/seed/출구좌표를넣는다.
+2. 술래에게개인출구/미탐색지형/시야밖좌표가없는지엄격schema와필드값양쪽으로검사한다. 개인종료후새map/entity/음성policy갱신이없고종료된출구표식이현재전체집합에서제거되는지검사한다.
+3. 확정된 과거 지도 교환/감지 사건 위치는 고정 Tick의 과거점만 전달되는지 확인한다. 미정 아이템의 해제 사건 좌표는 구현하지 않는다. 허용 과거점을 모든 좌표 금지 정규식으로 차단하거나 현재 위치 추적으로 확장하지 않는다.
+4. productionweb번들과sourcemap·정적JSON·error/log를검사해서버content/seed/전체맵sentinel이없는지확인한다. LiveKitroomName/identity/metadata/attributes도actualCloudcase에서검사하고얼굴사전수신동의범위와위치정보를구분한다.
+5. 비밀원문이있는증거는공유산출물로옮기지말고테스트내불일치필드명/위반코드만요약한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- B public state는좌표없음;private-view는큰stateVersion만수용. metadata검증을SDKmock만으로끝내면Cloud부분미실시.
+- 웹public모델/일반기하자산은허용되며실제서버맵/seed를구분해서검사한다.
+- g4-bundle.test.ts의 기본 verify 실행은 내장 합성 fixture에 대한 번들 탐지기 단위시험만 수행한다. 실제 apps/web/dist 탐지는 pnpm build 후 inspect-public-bundle.mjs가 수행한다. 기본 verify의 test 단계가 build보다 앞선 기존 순서를 깨끗한 checkout에서도 지원한다.
+
+**시험 입력 → 기대 결과**
+
+- 술래초기뷰/resync→runner출구sentinel없음.
+- 개인종료뒤가까운생존자이동→새visibleEntities/음성binding정보수신없음.
+- 지도교환과거사건→허용된과거점만남고현재위치갱신없음.
+- 웹bundle에서server맵sentinel발견→G4실패·정상출력묻기금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/g4-packets.test.ts`
+- `tests/contracts/g4-bundle.test.ts`
+- `tests/cloud/g4-metadata.cloud.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build
+pnpm exec vitest run tests/contracts/g4-packets.test.ts
+pnpm exec vitest run tests/contracts/g4-bundle.test.ts
+node scripts/inspect-public-bundle.mjs --directory apps/web/dist
+node scripts/run-cloud-check.mjs --case QA-08 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-08
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+역할별 Schema/patch·초기 뷰·resync·이벤트·오류·로그·metadata를 검사한다. 술래 출구, 미탐색 지형, 시야 밖 좌표와 웹 번들의 서버 맵/seed 유출이 없고 허용된 과거 사건만 전달되는지 확인한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 수신자별 게임 정보 은폐 회귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 패킷·resync·오류·번들·Cloudmetadata의정보경계를검증한다.
+
+**MR 리뷰 포인트**
+
+- 과거사건의허용정보와시야밖현재좌표를혼동하지않는지확인한다.
+
+**완료 인계**
+
+- B projection/C view/E metadata각소유자에게누출필드/재현상태를전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-08.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-14
+
+**QA-10 · [QA] 60 게임 클라이언트 30분 진단**  
+일정: D2 2026-09-09 · **오늘 8번**  
+기획 근거: v0.0.8 **26장**  
+선행 완료 결과: [F-12](f-infra-qa.md#f-12) (QA-07, D2), [F-07](f-infra-qa.md#f-07) (DP-05, D2), [B-09](b-game-server.md#b-09) (AC-04, D1)
+
+**수정·생성 파일**
+
+- `tests/load/GameLoadClient.ts`
+- `tests/load/GameLoadScenario.ts`
+- `tests/load/game-load.test.ts`
+- `scripts/run-game-load.mjs`
+- `scripts/summarize-load.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. Cloud SDK를연결하지않는명시적진단profile로실제게임Room을1→3→5→10방구동한다. 제품인증/계약과규칙은실제모듈을쓰고MEDIA_MODE=disabled가제품ready를보장한다고표시하지않는다.
+2. 각방6개클라이언트가protocol0.2.0으로ready/이동/회전/상호작용을보낸다. 3분deadline과결과후새matchId/재경기를지키며30분동안하나의무한경기를만들지않는다.
+3. 최종10방60클라이언트동시구간을30분이상유지하고B/F계측의같은Tick합산duration·lag·commandack·queue·RSS를수집한다. 연결만유지한idle부하는본진단합격으로삼지않는다.
+4. runner는maxRooms/maxSlots를검증된진단대상에만주입하고단계실패시상승을중지한다.입력p95는명령수용까지이며9/6Tick행동완료시간과분리한다.
+5. 결과에서p95/p99·최대queue·abort수·메모리기울기·대상commit/장치/네트워크를계산하고cleanup후자식서버/클라이언트0을확인한다. 이결과를G6미디어통합으로표시하지않는다.
+
+**연결 계약과 경계**
+
+- 테스트파일 game-load.test.ts는scheduler/통계짧은단위시험만기본verify로실행한다. 실제30분은run-game-load 명시명령이며기본Vitest에넣지않는다.
+- 합격목표:10방합산Tick p95≤20ms/p99≤40ms,lag p95≤20ms,명령수용p95≤200ms;network조건기록필수.
+- run-game-load.mjs만 실제 부하를 시작한다. GameLoadClient/GameLoadScenario import에는 연결/타이머 부작용을 두지 않으며 game-load.test.ts는 주입 fake clock과 fake socket으로 짧은 스케줄러·통계 시험만 수행한다. --final-duration-seconds 1800 실행 결과가 없으면 30분 진단은 미실시로 남긴다.
+
+**시험 입력 → 기대 결과**
+
+- 1방단계에서overload→3방진행중지·실패기록.
+- 60개idle연결만30분→능동입력coverage실패.
+- 30분중matchId변경없이3분초과→시나리오오류.
+- quantilefixture에느린상위1%→p99에반영,평균만으로통과금지.
+
+**추가·보완할 시험 파일**
+
+- `tests/load/game-load.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/load/game-load.test.ts
+node scripts/run-game-load.mjs --stages 1,3,5,10 --final-duration-seconds 1800 --evidence .local/qa/QA-10
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+Cloud 없이 1→3→5→10방의 실제 게임 입력을 실행하고 최종 60클라이언트 30분 이상을 측정한다. 10방 합산 Tick p95≤20ms/p99≤40ms, lag p95≤20ms, 명령 수용 p95≤200ms와 큐/메모리/과부하 무효를 확인한다. G6 통합 통과로 대신 기록하지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 60 게임 클라이언트 부하 진단 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 실제게임입력·라운드재시작·합산지표를포함한30분진단을추가한다.
+
+**MR 리뷰 포인트**
+
+- Cloud요청0회와진단결과/G6구분을확인한다.
+
+**완료 인계**
+
+- B SV-05·A규칙병목·F DP-05에부하별실측결과를인계한다.
+- QA-11에통과한게임단독방수와잔여병목을전달한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-10.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-15
+
+**QA-09 · [QA] G5 대표 6대 장치 5판 완주**  
+일정: D3 2026-09-10 · **오늘 1번**  
+기획 근거: v0.0.8 **20, 25, 26 G5장**  
+선행 완료 결과: [C-17](c-web-ui.md#c-17) (FL-04, D2), [C-18](c-web-ui.md#c-18) (FL-07, D3), [C-19](c-web-ui.md#c-19) (FL-09, D3), [C-14](c-web-ui.md#c-14) (FL-10, D2), [C-16](c-web-ui.md#c-16) (EX-05, D2), [C-09](c-web-ui.md#c-09) (EQ-11, D2), [C-13](c-web-ui.md#c-13) (VI-04, D2), [C-05](c-web-ui.md#c-05) (VI-05, D2), [F-08](f-infra-qa.md#f-08) (QA-03, D2), [F-09](f-infra-qa.md#f-09) (QA-04, D2), [F-11](f-infra-qa.md#f-11) (QA-05, D2), [F-10](f-infra-qa.md#f-10) (QA-06, D2), [F-12](f-infra-qa.md#f-12) (QA-07, D2), [F-13](f-infra-qa.md#f-13) (QA-08, D2), [E-15](e-media-operations.md#e-15) (OP-08, D2), [F-06](f-infra-qa.md#f-06) (DP-03, D1), [C-02](c-web-ui.md#c-02) (AC-06, D1), [C-12](c-web-ui.md#c-12) (KN-11, D2). 아이템 전용 C-10은 결정 대기로 필수 선행에서 제외한다.
+
+**수정·생성 파일**
+
+- `tests/cloud/mvp-flow.cloud.test.ts`
+- `tests/fixtures/manual-six-device.md`
+- `scripts/collect-six-device-results.mjs`
+- `tests/contracts/six-device-report.test.ts`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 선행ID의코드와G1-A–D·G3·G4·ready·TLS실제결과를확인한다. 하나라도Cloud미실시/핵심기능미완이면5판검증진행여부와선행BLOCKED를분명히표시하고MVP완료라하지않는다.
+2. DP-01의실제장치6대·사용자6명·네트워크·중간/하위preset을등록하고공식분/GB예산을확인한다. 테스트동의를받은사용자는촬영/녹음저장없이실시간기능만사용한다.
+3. 초대→카메라/마이크독립권한→보정→팀연습→로딩/3초countdown→실제3분경기→결과→같은역할/교대/로비재경기를5판연속실행한다.
+4. 5판에 지도 교환·감지기/덫·자연 구속/포획·3포즈/폴백·확정된 과거 교환/감지 사건·개인 종료자 퇴장·게임 연결 상실 안내를 분산 배치한다. 아이템 종류·효과·획득·사용과 전용 음향/해제 사건은 PRODUCT_DECISION_PENDING 별도 목록에 두고 5판 필수 coverage로 강제하지 않는다.
+5. 장치별FPS/입력·원격얼굴·근거리음성·오디오중복/재생권한·종료후Track/Worker/Texture/Room수를기록한다. 실패단계/수정commit/재시험판을추적하고중간45fps·하위30fps목표를검사한다.
+6. 보조 자동 브라우저 시나리오는 tests/cloud/mvp-flow.cloud.test.ts에서 QA-01 ProbeHarness의 Playwright 브라우저를 사용하며 QA-09 Cloud allowlist로만 실행한다. 기존 tests/e2e에 제품 Cloud 시나리오를 추가하지 않는다. 기본 pnpm verify는 기존 로컬 E2E와 six-device-report의 형식·누락 단위시험만 실행한다.
+
+**연결 계약과 경계**
+
+- 자동E2E는재현가능UI흐름의보조증거이며6대실제장치5판을대체하지않는다.
+- 수동 결과 수집기는 장치 id별 5판 증거와 확정된 필수 행동 coverage가 빠지면 nonzero를 반환한다. 결정 대기 아이템은 현재 필수 목록에서 제외하고 미실시/미정으로만 기록한다.
+- G5 실장치 완료의 기준 파일은 tests/fixtures/manual-six-device.md에 따른 수동 결과이며 .local/qa/six-device 안에 장치 ID 6개·장치 사양·실측 네트워크·판 ID 5개·행동 coverage·결과·시각·sourceCommit을 기록한다. collect-six-device-results는 실제 기록만 검증하고 빈 칸을 자동 통과로 채우지 않는다. QA-09 Cloud 브라우저 보조 결과만 있어도 G5 PASS를 만들지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- 브라우저6context·물리장치1대→실제6대조건미충족.
+- 5판 중 감지기/덫·자연 구속·포즈 필수 행동 누락 → coverage 실패; 미정 아이템 미사용은 실패 항목이 아님.
+- 5판째누적Worker/Track/Texture증가→누수실패,재경기완주만으로통과금지.
+- 마이크 거부 사용자→카메라 준비·수신 음성·지도 교환/탈출 가능.
+
+**추가·보완할 시험 파일**
+
+- `tests/cloud/mvp-flow.cloud.test.ts`
+- `tests/contracts/six-device-report.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/six-device-report.test.ts
+node scripts/run-cloud-check.mjs --case QA-09 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-09-browser
+node scripts/collect-six-device-results.mjs --input .local/qa/six-device --output .local/qa/QA-09.json
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+초대 입장부터 실제 얼굴·음성·모션·지도 교환·감지기/덫·자연 구속/포획·포즈/폴백·확정된 과거 사건 점을 포함해 6대에서 5판 연속 결과/재경기를 수행한다. 미정 아이템 종류·효과·획득·사용은 필수 coverage에서 제외하고 결정 대기로 기록한다. 중간 평균45fps·하위30fps 목표, 반복 종료의 Room/Track/Worker/텍스처 누수와 입력 오류·사용성을 기록한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 대표 장치 6인 MVP 완주 검증 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 필수기능coverage와5판재경기·장치성능·수명누수를검증한다.
+
+**MR 리뷰 포인트**
+
+- 실제장치/사용자수와자동브라우저context수를섞지않는지확인한다.
+- 기본 tests/e2e/와 verify에 실제 Cloud 접속이 섞이지 않는지, QA-09-browser 결과와 실제 6대·5판 수동 결과를 구분하는지 확인한다.
+
+**완료 인계**
+
+- A–E에게작업ID별실패단계와재현영상을대신할비민감step로그를전달한다.
+- DP-06/QA-11에완주commit과G5증거목록을인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-09.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-16
+
+**DP-06 · [DevOps] Jenkins 배포·배수·실패 복귀**  
+일정: D3 2026-09-10 · **오늘 2번**  
+기획 근거: v0.0.8 **23, 24장**  
+선행 완료 결과: [F-05](f-infra-qa.md#f-05) (DP-02, D1), [F-06](f-infra-qa.md#f-06) (DP-03, D1), [F-04](f-infra-qa.md#f-04) (DP-04, D1), [F-07](f-infra-qa.md#f-07) (DP-05, D2), [E-15](e-media-operations.md#e-15) (OP-08, D2), [F-15](f-infra-qa.md#f-15) (QA-09, D3)
+
+**수정·생성 파일**
+
+- `Jenkinsfile`
+- `scripts/deploy-release.mjs`
+- `scripts/verify-release.mjs`
+- `tests/contracts/deployment-sequence.test.ts`
+- `infra/compose.production.yaml`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. 검증된commitSHA·두이미지digest·이전정상release를입력으로받고Jenkinsverify결과와일치하는지검사한다. 최신태그latest를원본으로추측하지않는다.
+2. OPS_TOKEN Bearer로 `POST /api/operations/commands`에 `{requestId,action:'drain'}`을 전송한다. 202 pending은 접수일 뿐이다. 같은 requestId의 `GET /api/operations/commands/:requestId`를 한정된 backoff/기한으로 조회해 succeeded를 확인하고 GET `/api/operations/status`의 DRAINING·미해결 0을 확인한 뒤 진행한다. pending/failed/기한 초과에는 새 배포·공개 재개를 중단하고 기존 입장 잠금을 유지한다. requestId를 바꿔 중복 drain을 만들지 않는다.
+3. 같은SHA이미지로교체하고지속운영volume/Secret/namespace를유지한다. 기존진행Match를메모리스냅샷으로복원하거나blue-green두권위서버를동시에열지않는다.
+4. 재시작RECOVERING→이전세대정리→ready200을기다린뒤6인배포smoke를수행한다. 연결만되는health를완주/G1/G6증거로대체하지않는다.
+5. 실패하면 새 입장 잠금을 유지한 채 이전 이미지 digest로 복귀하고 같은 RECOVERING/ready/smoke 장벽을 다시 통과한다. 성공 후 별도 requestId의 `{action:'resume'}` 명령을 전송하고 terminal succeeded 및 GET status의 admission=OPEN/readiness=READY를 확인한다. 공개창·검증된 방수·잔량이 미확정이면 재개하지 않는다.
+6. Jenkinsjob외부설정/원격배포는실제실행요청과연결환경이있을때수행한다. 현재문서작성에서는외부호출을하지않고명령·완료조건만기록한다.
+
+**연결 계약과 경계**
+
+- 배포상태={releaseSha,previousDigest,phase:'DRAINING'|'DEPLOYING'|'RECOVERING'|'SMOKE'|'READY'|'ROLLBACK_BLOCKED',reason};원격상태실패를로컬script0종료로숨기지않는다.
+- 진행게임복원·DB·다중서버확장추가금지. 최초시험환경은DP-03에서준비하며이작업과순환하지않는다.
+- 운영 경로·body·OperationSnapshot/OperationsStatus는 EXEC-CONTRACT-2와 E OP-07을 사용한다. retry-retirement에만 retirementId를 보내며 checkpoint는 추가 payload 없이 구성된 공식잔량 입력의 검증/저장 작업을 요청한다. script는 secret 원문·Authorization 헤더를 출력하지 않고 모든 HTTP/terminal 실패를 nonzero로 전달한다.
+- 공식 잔량은 운영자가 실제 Cloud dashboard를 확인한 후 `OPS_DATA_DIR/official-usage-input.json`으로 제공한다. JSON 필드는 `{projectAlias,remainingMinutes,remainingBytes,checkedAtEpochMs,source:'cloud-dashboard',checkedBy}`이며 숫자·계정·확인 시각·확인자를 실제 값으로 채운다. F는 schema/파일 권한/전달 위치만 준비하고 dummy 값을 만들지 않는다. POST checkpoint의 terminal succeeded 뒤 GET status에 같은 확인 시각·잔량이 반영됐는지 검사한다. 미확인/누락/기한 만료면 재개를 막는다.
+- 정상 배수는 readiness=READY/admission=DRAINING일 수 있다. 건강 확인과 입장 허용을 같은 boolean으로 만들지 않으며 재개는 READY 확인 후 resume 성공과 OPEN을 별도로 확인한다.
+
+**시험 입력 → 기대 결과**
+
+- 새SHA와verifySHA불일치→배포0.
+- 회수UNRESOLVED→공개재개0·잠금/경보유지.
+- 새이미지ready실패→이전digest복귀·복구장벽다시실행.
+- 롤백이미지도ready실패→ROLLBACK_BLOCKED·입장잠금유지.
+- drain POST 202 + GET pending→이미지 교체 0; GET failed/timeout→nonzero와 입장 잠금 유지.
+- resume POST 202 + GET succeeded + admission LOCKED→완료 불일치로 실패, 공개 성공 표시 0.
+- 같은 drain requestId 재전송→같은 operationId 추적·B 제어 큐 중복 배수 0.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/deployment-sequence.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/deployment-sequence.test.ts
+node scripts/deploy-release.mjs --manifest .local/releases/candidate.json --preflight .local/qa/cloud-preflight.json --evidence .local/qa/DP-06
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+고정 운영 API의 drain 접수→GET terminal succeeded→진행 경기 종료/회수 확인→같은 검증 commit 배포→RECOVERING 장벽→ready/6인 smoke→resume terminal succeeded/OPEN 확인 순서를 검증한다. checkpoint는 운영자가 제공한 official-usage-input.json을 실제 확인값으로 검증하고 HTTP 202만으로 배포/공개 성공을 표시하지 않는다. 실패 시 이전 이미지도 복구 장벽을 다시 통과하며 진행 매치는 복원하지 않는다. 최초 검증 배포는 DP-03에서 수행한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+ci: Jenkins 배포 배수와 실패 복귀 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 검증commit배포·미디어배수·복구장벽·smoke·실패복귀순서를추가한다.
+
+**MR 리뷰 포인트**
+
+- 롤백이회수저널/예산을되돌리거나권위서버2개를동시에띄우지않는지확인한다.
+
+**완료 인계**
+
+- 운영담당에게실제release/digest·잠금해제조건·미해결복귀경로를전달한다.
+- QA-13에배포/롤백실행증거와남은BLOCKED를인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-06.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-17
+
+**QA-11 · [QA] 실제 미디어 1·3·5방 단계 검증**  
+일정: D3 2026-09-10 · **오늘 3번**  
+기획 근거: v0.0.8 **02, 22, 26장**  
+선행 완료 결과: [F-15](f-infra-qa.md#f-15) (QA-09, D3), [F-14](f-infra-qa.md#f-14) (QA-10, D2), [E-03](e-media-operations.md#e-03) (OP-02, D1), [F-02](f-infra-qa.md#f-02) (QA-01, D1)
+
+**수정·생성 파일**
+
+- `tests/cloud/staged-load.cloud.test.ts`
+- `tests/load/MediaLoadScenario.ts`
+- `tests/load/media-load.test.ts`
+- `scripts/run-media-load.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. QA-09완주·QA-10게임단독결과·G1/ready실제통과commit을확인하고같은빌드로시작한다. 각단계연결분/GB·준비/정리오버헤드를사전예약한다.
+2. 1→3→5방에 각 6명의 실제 WebRTC 합성 트랙과 게임 입력을 연결한다. 가청 최단 경로 5→6→7→6→5셀 왕복·회전·한 사람 세대 변경을 분산시키고 idle 연결 대기만 측정하지 않는다. 미허용 6 유지/5 허용/허용 6 유지/7 차단을 모두 관측한다.
+3. 각단계동일구간의전체API/429·실효권한지연·합산Tick·lag·bytes/frame표식을기록한다. 실패시다음확대와운영상한상승을막고정리/공식잔량조정을우선한다.
+4. 단계종료후모든Identity회수·Room/Track/Worker정리와미해결예약을점검한다. F예산비용이QA-12의900+300을잠식했다면남은한도로재계획하고추가과금으로메우지않는다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- 실제Cloud부하단계는run-media-load 명시명령이며tests/load/media-load.test.ts는스케줄러짧은단위시험이다. 기본verify는Cloud를호출하지않는다.
+- scripts/run-media-load.mjs --stages 1,3,5는 QA-11 case를 선택하고 run-cloud-check의 공통 preflight·namespace·예산 검사를 재사용한 뒤 vitest.cloud.config.ts의 staged-load.cloud.test.ts만 호출한다. 실제 단계당 시간은 preflight의 stageDurationSeconds로 필수 지정하며 자동 기본값으로 비용을 소비하지 않는다. 단계 duration·예산·허용 방 수 누락은 nonzero/BLOCKED다.
+- tests/load/MediaLoadScenario.ts는 buildScenario()만 export하고 import 때 실행하지 않는다. tests/load/media-load.test.ts는 주입된 가짜 clock·gateway로 유한 fixture만 검사한다. 실제 Cloud 및 경과 시간 대기는 명시적 Cloud case 내부에서만 시작한다.
+
+**시험 입력 → 기대 결과**
+
+- 1방권한지연초과→3방실행0.
+- 3방15세션만연결→18세션단계미달표시.
+- 5방정리불명1개→다음단계/새grant잠금·예약유지.
+- 공식잔량부족→비용시험BLOCKED·가짜클라이언트로Cloud대체없음.
+
+**추가·보완할 시험 파일**
+
+- `tests/cloud/staged-load.cloud.test.ts`
+- `tests/load/media-load.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/load/media-load.test.ts
+node scripts/run-media-load.mjs --stages 1,3,5 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-11
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+실제 게임·Cloud 송수신·가청 경계 이동을 1→3→5방으로 늘린다. 단계별 예산·전체 API·권한 실효 지연·Tick·수신을 함께 기록하고 실패 시 다음 단계 확대를 보류한다. 아직 검증하지 않은 방 수를 운영 상한으로 열지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 실제 미디어 단계별 수용량 검증 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 1·3·5방실제게임/Cloud결합과실패시확대차단을추가한다.
+
+**MR 리뷰 포인트**
+
+- 시험전후공식잔량·예약·회수상태가각단계보고에있는지확인한다.
+
+**완료 인계**
+
+- E/B에게방수별API/지연/Tick병목을전달한다.
+- QA-12에검증된5방결과·남은예산·재시험여유를인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-11.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-18
+
+**QA-12 · [QA] G2·G6 10방 60세션 15분 통합**  
+일정: D3 2026-09-10 · **오늘 4번**  
+기획 근거: v0.0.8 **21, 22, 26.2 G2·G6장**  
+선행 완료 결과: [F-17](f-infra-qa.md#f-17) (QA-11, D3), [E-03](e-media-operations.md#e-03) (OP-02, D1), [F-02](f-infra-qa.md#f-02) (QA-01, D1), [F-07](f-infra-qa.md#f-07) (DP-05, D2)
+
+**수정·생성 파일**
+
+- `tests/cloud/ten-room-integrated.cloud.test.ts`
+- `tests/load/TenRoomSchedule.ts`
+- `tests/load/integrated-summary.test.ts`
+- `scripts/run-media-load.mjs`
+- `scripts/summarize-integrated-load.mjs`
+- `docs/verification.md`
+
+**구현 순서**
+
+1. QA-11의5방통과·실제부하발생기여유·sourcecommit·분/GB를확인한다. 본시험900참가자분+준비/종료/재연결계획300을공식잔량에대조하고bytes도동시에예약한다. 예산/장치가없으면60세션통합미실시로중단한다.
+2. 0–3분:10게임Room과1대1로묶은60WebRTC세션에서합성얼굴/음성모두송수신한다. 역할·관계와표식이실제Cloud에연결되는지확인하고연결/초기API집중을계측한다.
+3. 3–8분: 10방 모두 실제 이동/회전으로 가청 최단 경로를 5→6→7→6→5셀로 왕복한다. 최초 미허용 상태의 6셀은 차단 유지, 5셀은 허용, 허용 후 6셀은 유지, 7셀은 차단이다. 같은 구간에 게임 입력→E 정책→실제 관리 API→트랙별 새 표식 변화를 연결해 기록한다.
+4. 8–11분: 목표 60세션에서 정지쌍 재게시·같은 SID 교체·한 사람 full reconnect를 분산 주입한다. old 회수 뒤 new 발급 사이의 실제 59세션 공백은 시각/길이를 따로 기록하고 중복 연결·새 논리 참가자로 채우지 않는다. 실제 60동시 구간과 전환 구간을 분리 집계하며 기준 미달을 PASS로 완화하지 않는다. 3분 규칙은 유지하고 라운드마다 새 matchId로 재경기한다.
+5. 11–15분:동시시작/재경기·탈출/포획·개인종료·전체정리를넣는다. 진행중슬롯충원은금지하고개인종료로60미만이되는구간은초기60동시구간과별도보고한다.
+6. 같은정상통합구간에서전체API≤600/60초·429=0·실효허용/차단p95≤500ms/p99≤1000ms·합산Tick/lag/수신목표를동시에판정한다. 참가자별6초폴링으로호출만낮추거나실패표본을정상구간에서삭제하지않는다.
+7. 시험뒤회수확인/잔여Room·Track/예약/실제공식분GB를정합하고증거집계기의조건하나라도미달이면G2/G6실패로남긴다. 6대실제대표장치는1실제방에포함가능하며나머지자동브라우저와구분한다.
+
+**연결 계약과 경계**
+
+- 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
+- G2/G6의정상구간과G1/G3파괴적SIGKILL/의도적2초정지는별도태그로구분한다. 정상실패를태그변경으로빼지않는다.
+- 60동시시간은실측해야한다. 10방제어량을1방수치×10으로추정하지않으며900참가자분산술을청구확정값으로쓰지않는다.
+- scripts/run-media-load.mjs --stages 10 --duration-seconds 900 --scenario integrated-v0.0.8는 QA-12 case로 대응하고 동일 preflight를 거쳐 vitest.cloud.config.ts의 ten-room-integrated.cloud.test.ts만 실행한다. 다른 stage/scenario 조합은 거절한다. preflight.maxDurationSeconds는 연결 준비와 본 900초 구간을 포함하고 cleanupAllowanceSeconds를 별도로 두어 회수를 수행한다. 종료 기한을 늘리기 전에 전체 참가자분·GB 예약에 들어오는지 검사한다.
+- tests/load/TenRoomSchedule.ts는 순수 일정 데이터/계산만 export한다. integrated-summary.test.ts는 저장된 합성 fixture의 quantile·API 창·세션 coverage만 검사하므로 기본 pnpm verify가 15분을 기다리거나 Cloud 세션을 만들지 않는다.
+
+**시험 입력 → 기대 결과**
+
+- 정상전체API550·p99차단1500ms→G2실패.
+- 실효지연통과·정상API650→G2실패,900긴급상한으로합격변경금지.
+- 60연결idle·실제이동/정책변경0→G6통합미달.
+- 개인종료후54세션→종료구간으로분리보고·진행중대체참가0.
+- 15분종료후UNRESOLVED1→정리미완료·공개확대보류.
+
+**추가·보완할 시험 파일**
+
+- `tests/cloud/ten-room-integrated.cloud.test.ts`
+- `tests/load/integrated-summary.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/load/integrated-summary.test.ts
+node scripts/run-media-load.mjs --stages 10 --duration-seconds 900 --scenario integrated-v0.0.8 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/QA-12
+node scripts/summarize-integrated-load.mjs --input .local/qa/QA-12 --output .local/qa/QA-12-summary.json
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+실제 WebRTC 60세션/10게임방을 연결해 이동·가청 경로 5→6→7→6→5셀 왕복·새 SID 게시/같은 SID 교체/한 사람 재연결·재경기/정리를 수행한다. 같은 정상 구간에서 전체 API≤600회/60초·429 없음·실효 지연 p95≤500ms/p99≤1초와 Tick/수신 목표를 동시에 확인한다. 본 시험 900참가자분+준비/정리 계획 300과 GB를 실제 잔량에 대조하며 세션 감소 구간을 구분한다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+test: 10방 게임 미디어 통합 수용량 검증 추가
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 26.2단계스케줄과G2/G6동일구간복합합격판정을추가한다.
+
+**MR 리뷰 포인트**
+
+- API전체범위·정상구간태그·실측60동시·세션감소구간을확인한다.
+- 회수/잔량조정까지시험결과에포함되는지확인한다.
+
+**완료 인계**
+
+- QA-13에G2/G6각합격/실패·원자료요약·실제상한·잔량·미해결을인계한다.
+- E/B/D/C병목은각소유자에게재현시나리오로돌린다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-12.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
+
+### F-19
+
+**QA-13 · [QA] MVP 관문 보고와 운영 인계**  
+일정: D3 2026-09-10 · **오늘 5번**  
+기획 근거: v0.0.8 **26, 27장**  
+선행 완료 결과: [F-18](f-infra-qa.md#f-18) (QA-12, D3), [F-16](f-infra-qa.md#f-16) (DP-06, D3)
+
+**수정·생성 파일**
+
+- `docs/verification.md`
+- `scripts/verify-mvp-evidence.mjs`
+- `tests/contracts/mvp-evidence.test.ts`
+
+**구현 순서**
+
+1. 확정 범위의 실제 완료/미완료 commit·로컬 MR 초안·담당 인계와 G1-A–D/G2/G3-A·B·D/G4/G5/G6 증거를 수집한다. 아이템 관련 작업과 G3-C는 PRODUCT_DECISION_PENDING으로 별도 기록하며 원본 122개 ID 전체 완료를 인수 조건으로 강제하지 않는다. 계획 체크박스·원본 fixture 검사·자동 테스트 개수를 제품 구현 완료로 합산하지 않는다.
+2. 각관문에sourceSHA/환경/날짜/명령·수동절차/표본수/결과/증거위치/잔여결함을필수로둔다. 누락파일·비어있는결과·다른commit혼합은보고서를실패/미확인으로만든다.
+3. 핵심기능미완이면통합중간본,기능/G1–G5완료이나10방미검증이면기능상태와검증된상한을분리한다. 1→3→5→10중실제로통과한상한과공개창/분GB잔량을명시한다.
+4. 운영인계에는새방/토큰중지→회수→배포/롤백→RECOVERING→ready/smoke→재개,UNRESOLVED재시도·저널손상·시계오차·예산미확인대응과담당자를기록한다. 무DB무매치복원·호스트전체상실회수한계를명시한다.
+5. 보고서에비밀/실제미디어가없는지검사하고추적가능한요약만저장한다. 현재계획문서작성만으로원격배포·Jira완료·공개창오픈을수행하지않는다.
+
+**연결 계약과 경계**
+
+- GateResult={gate,status:'PASS'|'FAIL'|'BLOCKED'|'NOT_RUN'|'PRODUCT_DECISION_PENDING',sourceCommit,environmentRef,evidenceRefs,measuredLimits,defects}; BLOCKED/NOT_RUN/PRODUCT_DECISION_PENDING을 PASS와 합산하지 않는다. 확정 필수 범위의 실패와 아이템 결정 대기를 구분한다.
+- 담당별로컬커밋은실제작성자신원·scope없는제목·실제Jira키있으면footer단독줄,AI공동저자없음을인계기록과대조한다. F가다른담당자커밋을재작성하지않는다.
+
+**시험 입력 → 기대 결과**
+
+- G1mock만있고Cloud없음→G1 NOT_RUN/BLOCKED·MVP완료false.
+- G5완료/G6미실시→기능상태와검증된방수분리.
+- 참조evidence파일없음·다른SHA→관문미확인.
+- 남은UNRESOLVED/미확인공식잔량→공개재개조건불충족.
+- 확정 범위 관문 통과 + 아이템/G3-C 미정 → 확정 범위 결과와 PRODUCT_DECISION_PENDING 목록을 분리, 아이템 완료를 만들거나 122개 전체 완료를 요구하지 않음.
+
+**추가·보완할 시험 파일**
+
+- `tests/contracts/mvp-evidence.test.ts`
+
+**실행할 검사**
+
+```bash
+pnpm build:packages
+pnpm exec vitest run tests/contracts/mvp-evidence.test.ts
+node scripts/verify-mvp-evidence.mjs --input .local/qa --report docs/verification.md
+pnpm exec prettier --check docs/verification.md
+pnpm typecheck
+pnpm lint
+```
+
+**완료 조건**
+
+확정 범위 G1–G6 증거·기능 완료·실측 방 수·잔량·미해결 결함·회수/재시작 절차를 한 보고서로 연결한다. 도망자 아이템 및 G3-C의 결정 대기를 별도 표시하고 완료 수·성공률에 넣지 않는다. 확정 범위의 누락/실패를 완료로 표시하지 않으며 핵심 미완성은 통합 중간본, 10방만 미검증이면 기능 상태와 검증된 상한을 분리한다. 현재 계획 작성만으로 공개를 실행하지 않는다.
+
+위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
+
+**작업 완료 커밋 제목**
+
+```text
+docs: MVP 관문 결과와 운영 인계 정리
+```
+
+**MR 본문에 채울 변경 사항**
+
+- 관문별실행증거·실측상한·잔량·미해결·운영복구절차를통합한다.
+
+**MR 리뷰 포인트**
+
+- 계획/조사완료와제품/관문통과가분리되어있는지확인한다.
+- 일부성능통과로핵심필수기능누락을가리지않는지확인한다.
+
+**완료 인계**
+
+- 팀전원에게미완료작업ID·담당·재현·다음실행조건을전달한다.
+- 운영담당에게실제검증상한·잔량확인시각·미해결회수·공개재개조건을금요일오전인계한다.
+
+완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/QA-13.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.

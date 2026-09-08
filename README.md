@@ -4,7 +4,7 @@
 
 ## 구성
 
-최종 로컬 검증: `pnpm verify` 통과, 단위·통합 시험 66개와 브라우저 시험 2개 통과. 자세한 범위는 [검증 결과](docs/verification.md)에 기록했다.
+기존 스켈레톤의 로컬 검증 기록은 `pnpm verify` 통과, 단위·통합 시험 66개와 브라우저 시험 2개 통과다. 자세한 범위는 [검증 결과](docs/verification.md)에 기록했다. 실행 계획·계약 검사 추가는 별도 문서 검증이며 게임 기능 구현 상태를 바꾸지 않는다.
 
 | 경로                 | 패키지                  | 책임                                                   |
 | -------------------- | ----------------------- | ------------------------------------------------------ |
@@ -52,12 +52,15 @@ pnpm build
 pnpm typecheck
 pnpm lint
 pnpm format:check
+pnpm check:execution
 pnpm test
 pnpm test:e2e
 pnpm verify
 ```
 
 `pnpm test:maps`는 현재 `packages/game-core/test/world.test.ts`의 sandbox 경계·이동 검사만 실행한다. 전체 맵·배치·fallback 검증은 아직 아니다. Cloud 미디어 시험과 부하 시험 스크립트도 제공하지 않으며, 로컬 mock 결과로 실제 Cloud 관문 통과를 주장하지 않는다.
+
+`pnpm check:execution`은 [공통 계약 원본](docs/execution/common.md)·담당 문서 사본·[타입](docs/execution/contracts/types.ts)·[fixture](docs/execution/contracts/fixtures.ts)·[fixture 검사](docs/execution/contracts/fixtures.test.ts)의 정합성을 확인한다. `pnpm verify`의 format:check 다음에도 실행한다. 이 결과는 실제 제품 모듈 연결이나 Cloud·6대 장치·10방 부하 시험을 대신하지 않는다.
 
 ## 현재 범위
 
@@ -67,7 +70,13 @@ pnpm verify
 
 Docker 개발 템플릿은 루트에서 `docker compose -f infra/compose.yaml up --build`로 실행하도록 구성했다. 현재 작성 환경에서는 Docker daemon이 실행 중이지 않아 이미지 빌드와 런타임은 검증하지 않았다.
 
-기획·구현 기준서 **v0.0.8 원본 HTML·DOCX**는 [docs/spec](docs/spec/README.md)에 있다. 전체 요구사항과 구현 상태는 [requirements.md](requirements.md), 처음 참여하는 방법은 [docs/onboarding.md](docs/onboarding.md), 설계 경계는 [docs/architecture.md](docs/architecture.md)를 따른다.
+기획·구현 기준서 **v0.0.8 원본 HTML·DOCX**는 [docs/spec](docs/spec/README.md)에 보존한다. 먼저 [최신 결정 정정표](docs/spec/decisions.md)를 적용하며 충돌 부분은 최신 사용자 결정이 우선한다. 도망자 아이템의 종류·효과·수량·배치·획득·소지·사용은 아직 미정이고, 술래 장비·구속·자연 만료·포획·포즈는 확정 범위다. 현재 요구사항과 구현 상태는 [requirements.md](requirements.md), 처음 참여하는 방법은 [docs/onboarding.md](docs/onboarding.md), 설계 경계는 [docs/architecture.md](docs/architecture.md)를 따른다.
+
+전체 MVP의 에픽·작업 후보, 선행관계와 완료 조건은 [MVP 구현 작업 계획](docs/mvp-work-plan.md)에 정리했다. Jira 등록 전 팀 검토용 초안이다.
+
+6명이 실행할 작업은 [담당자별 실행 문서](docs/execution/README.md)에 있다. 추적 번호 122개 중 **116개는 현재 실행 대상, 6개는 제품 결정 대기**다. 각 실행 대상에 구현 순서·수정 파일·계약·시험·커밋·MR 작성 지시를 포함한다. 목표는 9월 8–10일 구현·통합과 9월 11일 금요일 오전 확정 범위 인수다. 확정 범위 통과를 원본 v0.0.8 전체 완료나 아이템의 영구 제외로 해석하지 않는다.
+
+작업 실행을 요청하면 AI는 검증된 중간 산출물과 완료 작업의 로컬 커밋·MR 본문까지 준비한다. 중간 커밋에는 작업 ID·검증 결과·미통합 조건을 기록하고 최종 인수와 구분한다. 공개 계약 변경은 해당 소비자도 함께 검토한다. 푸시·MR 생성·원격 병합은 담당자가 직접 수행하며 실제 Git 신원을 유지하고 AI 공동 저자를 추가하지 않는다.
 
 공통 검증은 `pnpm verify`로 실행한다. Jenkins 사용을 검토 중이며 현재 CI/CD 파이프라인과 원격 연동은 구성하지 않았다.
 
