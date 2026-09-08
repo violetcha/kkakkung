@@ -1,14 +1,14 @@
-# 까꿍 서버 프로토콜 (계약 문서)
+# 까꿍 0.1 개발 Room 호환 프로토콜
 
 > 버전: 0.1 (0단계 뼈대) · 관리: 정유림
-> 이 문서는 **프론트 ↔ 서버**, **서버 rooms/ ↔ domain/** 사이의 계약이다.
-> 이름 변경·삭제는 관련자 합의 후에만. 필드 추가는 자유.
+> 이 문서는 기존 개발 `kkakkung`의 현재 동작과 rooms/domain 호환 경계만 설명한다. 제품 0.2.0의 구현 지시는 [최신 결정 정정표](../../docs/spec/decisions.md), [공통 실행 계약](../../docs/execution/common.md), [B 실행 문서](../../docs/execution/b-game-server.md)를 따른다.
+> 공유 입력은 strict 스키마로 검사한다. 필드 추가·변경도 생산자와 소비자의 스키마·버전·회귀 시험을 함께 검토하며 임의 추가 필드는 거절한다.
 
 ---
 
 ## 1. 접속
 
-- 엔드포인트: `ws://localhost:2567` (배포 시 `wss://<domain>`)
+- 엔드포인트: `ws://localhost:2567`. 이 개발 프로필의 production 기동은 차단되어 있다.
 - 룸 이름: `"kkakkung"`
 - 방 코드: `state.roomCode` (roomId 앞 6자리). 참가는 `joinById(roomId)` — 코드 → roomId 매핑은 [E2 방·로비 관리]에서
 
@@ -16,6 +16,8 @@
 const client = new Colyseus.Client('ws://localhost:2567');
 const room = await client.joinOrCreate('kkakkung');
 ```
+
+이 빈 입장은 로컬 Playground 호환용이다. React 웹은 `/api/dev-sessions`의 일회성 토큰과 `protocolVersion: '0.1.0'`으로 입장한다. 초대 인증을 포함한 제품 접속과 혼용하지 않는다.
 
 ---
 
@@ -55,36 +57,31 @@ const room = await client.joinOrCreate('kkakkung');
 | `approachX`, `approachY` | uint8   | 도망자가 서야 하는 칸                |
 | `open`                   | boolean | 아직 열려 있는지                     |
 
-### 3단계에 추가 예정 (이름만 예약)
-
-`devices{ id → {kind, x, y, ownerId} }` · `items{ id → {kind, x, y} }` · `zones{ taggerId → {cells[]} }` · `events[ {kind, x, y, tick} ]` · `Player.inventory[3]` · `Player.knownCells[]`
+제품의 술래 장비·개인 지식·사건은 공통 실행 계약의 공개 타입과 별도 제품 상태로 구현한다. 도망자 아이템은 제품 결정 대기이며 이 개발 스키마에 인벤토리·아이템 엔티티·사용 명령을 예약하거나 추가하지 않는다.
 
 ---
 
 ## 3. 메시지 (클라이언트 → 서버)
 
-모든 메시지에 `seq`(클라이언트 증가 번호)를 넣는다. 0단계에서는 사용하지 않지만 자리를 유지한다.
+현재 처리하는 명령은 아래 세 가지다. `move`·`turn`의 `seq`는 비음수 안전 정수로 검사하지만 이 개발 Room은 아직 중복 제거에 사용하지 않는다. `ready`는 정확히 `{}`이며 `seq`를 추가해도 거절한다. 제품의 `sequence`·`requestId`·접수/종결 응답은 별도 공통 계약을 따른다.
 
-| 이름               | 페이로드                            | 보내는 쪽 | 서버 판정          |
-| ------------------ | ----------------------------------- | --------- | ------------------ |
-| `move`             | `{ seq, dir: "forward" \| "back" }` | 전원      | `domain.tryMove`   |
-| `turn`             | `{ seq, dir: "left" \| "right" }`   | 전원      | 즉시               |
-| `ready`            | `{}`                                | 전원      | 전원 ready 시 시작 |
-| `exchange.request` | `{ seq, targetId }`                 | 도망자    | 2단계              |
-| `exchange.accept`  | `{ seq, requesterId }`              | 도망자    | 2단계              |
-| `pose.result`      | `{ seq, ok: boolean }`              | 도망자    | 2단계              |
-| `device.place`     | `{ seq, kind: "sensor" \| "trap" }` | 술래      | 3단계              |
-| `item.use`         | `{ seq }`                           | 도망자    | 3단계              |
+| 이름    | 페이로드                            | 보내는 쪽 | 서버 판정                        |
+| ------- | ----------------------------------- | --------- | -------------------------------- |
+| `move`  | `{ seq, dir: "forward" \| "back" }` | 전원      | `domain.tryMove`                 |
+| `turn`  | `{ seq, dir: "left" \| "right" }`   | 전원      | 즉시                             |
+| `ready` | `{}`                                | 전원      | 현재 2명 이상 전원 ready 시 시작 |
+
+과거 개발 확장용 메시지 이름은 제품 구현 지시로 사용하지 않는다. 제품은 `CommandEnvelope`의 현재 판별 union만 구현하며 지도 교환·장비 설치·출구 진행도 해당 계약을 따른다.
 
 ## 4. 이벤트 (서버 → 클라이언트, 단발)
 
-| 이름       | 페이로드                             | 뜻                                         |
-| ---------- | ------------------------------------ | ------------------------------------------ |
-| `rejected` | `{ seq, reason }`                    | 명령 거부. 클라이언트는 예측 이동을 스냅백 |
-| `captured` | `{ taggerId, runnerId, x, y }`       | 포획 발생                                  |
-| `result`   | `{ winner: "runners" \| "taggers" }` | 라운드 종료                                |
+| 이름       | 페이로드                             | 뜻                                      |
+| ---------- | ------------------------------------ | --------------------------------------- |
+| `rejected` | `{ seq, reason }`                    | 개발 명령 거부. 서버 상태를 계속 렌더링 |
+| `captured` | `{ taggerId, runnerId, x, y }`       | 포획 발생                               |
+| `result`   | `{ winner: "runners" \| "taggers" }` | 라운드 종료                             |
 
-`reason` 값: `no-player` `not-alive` `trapped` `out-of-bounds` `wall` `occupied` `cooldown` `not-playing`
+현재 입력 스키마 거절은 `invalid-message`를 사용한다. 도메인 이동 스텁은 `no-player`·`not-alive`·`trapped`·`out-of-bounds`를 반환한다. 경기 단계 밖 입력은 현재 handler에서 무시한다. 벽·점유·cooldown 판정과 제품 명령의 정확한 종결 응답은 후속 구현이며 이 개발 이벤트를 제품 완료 증거로 사용하지 않는다.
 
 ---
 
@@ -96,16 +93,12 @@ const room = await client.joinOrCreate('kkakkung');
 tryMove(state, playerId, dir: "forward"|"back", now): { ok, reason? }
 turn(dir: Dir, to: "left"|"right"): Dir
 checkCapture(state): CaptureEvent[]
-checkWinCondition(state): "runners" | "taggers" | null
-generateMaze(seed): Uint8Array            // 2단계: 랜덤 + BFS 검증
+checkWinCondition(state): "runner" | "tagger" | null
+generateMaze(seed): Uint8Array            // 현재는 고정 개발 맵
 pickSpawn(maze, role, index): { x, y, dir }
-// 2단계 추가
-canExchangeMap(state, a, b): { ok, reason? }
-mergeMaps(a, b): MapKnowledge
-enterExit(state, playerId): { ok, reason? }
 ```
 
-`tryMove` 는 `player.trapped` 이면 거부한다 (3단계 구속 덫이 이 플래그를 세움).
+`tryMove`는 현재 플레이어 상태·구속·맵 경계만 검사하는 스텁이다. `checkCapture`는 빈 배열, `checkWinCondition`은 null을 반환한다. 후자를 기존 개발 경로에서 구현할 경우 단수 Role을 반환해야 하며 `KkakkungRoom`이 `s`를 붙여 개발 `result.winner`를 만든다. 제품의 `RoundResult.winner`는 처음부터 `runners` 또는 `taggers`이므로 이 접미사 변환을 재사용하지 않는다. 제품 `CorePort` 함수는 A/B의 실행 문서에서 별도로 구현한다.
 
 ---
 
@@ -125,7 +118,7 @@ enterExit(state, playerId): { ok, reason? }
 
 ## 7. pnpm workspace 통합 메모
 
-이 계약의 `kkakkung` Room 이름, 사용자 상태 필드, `move {seq,dir}`·`turn`·`ready`, 셀 `x/y` 규약은 마이그레이션 후에도 유지한다. 런타임 입력은 공유 protocol의 엄격한 스키마로 검증하며 알 수 없는 필드와 잘못된 union 값을 거절한다.
+이 문서의 `kkakkung` Room 이름, 사용자 상태 필드, `move {seq,dir}`·`turn`·`ready`, 셀 `x/y` 규약은 개발 회귀 경로에서 유지한다. 제품 0.2.0의 상태·명령과 섞지 않으며 production에서는 개발 빈 입장·전체 맵 공개·관리 화면 경로를 차단한다. 런타임 입력은 공유 protocol의 엄격한 스키마로 검증하며 알 수 없는 필드와 잘못된 union 값을 거절한다.
 
 `server/src/domain`은 `@kkakkung/game-core/match`, `server/src/rooms/schema/GameState.ts`는 `@kkakkung/protocol/game-schema`를 재노출한다. 기존 담당 이름과 스텁 범위는 그대로다. 별도 `sandbox` Room은 새 React 연결 검증용이며 이 문서의 wire 계약을 대체하지 않는다. 두 Room은 현재 서버 전체 용량 하나를 공유하므로 동시에 만들지 않는다.
 

@@ -1,6 +1,6 @@
 # E · 서버 미디어·운영 복구 실행 문서
 
-작성 기준: 2026-09-07 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-2**  
+작성 기준: 2026-09-08 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-3**  
 담당 범위: LiveKit 권한/세대 회수, 저널·예산·재시작 대조와 READY  
 원본 작업: **16개** · 리뷰 상대: **F** · 현재 상태: **모두 구현 계획**
 
@@ -56,13 +56,13 @@ MVP 핵심 기능을 구현하고 생산자·소비자를 통합. 새 원본 작
 
 D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 늘리지 않는다. 수정한 파일 소유자가 검증 후 `fix:` 커밋과 MR 본문을 남긴다. 도망자 아이템의 종류·효과·획득·사용은 결정 대기로 분리하며 관련 음향과 시험을 구현 완료 조건에 넣지 않는다. 발소리와 확정된 술래 장비·자연 구속·포즈 기능은 유지한다.
 
-<!-- BEGIN EXEC-CONTRACT-2 COMMON -->
+<!-- BEGIN EXEC-CONTRACT-3 COMMON -->
 
 # 공통 실행 계약 원본
 
-버전: **EXEC-CONTRACT-2** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
+버전: **EXEC-CONTRACT-3** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
 
-이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. 기존 EXEC-CONTRACT-1의 미정 아이템과 불완전한 연결 계약을 대체한다. 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다.
+이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. EXEC-CONTRACT-3은 이전 계약의 맵 영역 입력·게임 논리 인스턴스·미디어 초기화·격리 배포 순서를 보완한다. 기존 작업 번호와 제품 범위는 유지하며, 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다. 계약 타입·fixture·문서를 바꾼 것만으로 Origin 보안이나 제품 기능의 런타임 수정이 완료된 것은 아니다.
 
 ## 이 문서로 실행하는 방법
 
@@ -123,11 +123,31 @@ node scripts/check-execution-plan.mjs
 ## 좌표·시간·라운드 수명
 
 - Cell은 정수 x/y=0–31, Dir은 0북(y−1)/1동(x+1)/2남(y+1)/3서(x−1)다. 3D는 x=cell.x,z=cell.y, 셀 크기 1이며 기존 −15.5 보정을 섞지 않는다. TracePoint만 교환 중점의 0.5 좌표를 허용한다.
-- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가한다. 본 경기 로딩에서 matchId와 Tick을 다시 만들지 않는다.
+- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가하고 공개 stateVersion도 같은 match 안에서 연속 증가한다. 본 경기 로딩에서 matchId·Tick·stateVersion을 다시 만들지 않는다.
 - PLAYING startTick과 deadlineTick=startTick+3600을 고정한다. 이동 9 Tick·회전 6 Tick이다. startAt/서버 timeout은 서버 monotonic ms, JWT 만료/회수는 epoch 초다.
 - 웹 표시 시간은 `clock-probe/clock-reply`로 추정한다. 시작·재접속 뒤 5회 probe를 250ms 간격으로 보내고 RTT가 가장 작은 3회의 offset 중앙값을 사용한다. RTT=(수신클라이언트시각−clientSentAtMs)−(serverSentAtMs−serverReceivedAtMs), offset=((serverReceivedAtMs−clientSentAtMs)+(serverSentAtMs−클라이언트수신시각))/2다. 음수/RTT>1000ms 표본은 버리고 10초마다 재측정한다. serverEpoch가 바뀌면 표본을 폐기한다.
 - 클라이언트 추정 시각은 렌더링/안내용이다. serverTick·startAt·포즈 최소 시간을 브라우저 시계와 직접 비교하지 않고 환산한다. 실제 성공 판정은 서버가 한다.
 - B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
+
+## 맵 영역과 fallback 입력 — A/B
+
+- `LayoutTemplate`은 한 개의 정규화된 변형이다. `MapSource`의 templateId/templateVersion/templateHash/variantId와 topology, taggerRegions 3개, runnerSpawnRegions 3개, exitCandidates를 함께 전달한다. `SpawnRegion`은 regionId/cells/spawnCandidates를 가지며 평면 후보 목록으로 영역 정보를 없애지 않는다.
+- A MP-01/02가 영역·후보·출구 벽면/방향을 함께 검증·변형한다. 역할별 영역 ID는 유일하고 각 영역·후보는 비어 있지 않아야 한다. 술래 영역끼리, 도망자 시작 영역끼리는 겹치지 않으며 후보는 자기 영역의 유효 통로에 속해야 한다. 술래 구역과 도망자 시작 영역 사이의 중첩 금지라는 새 게임 규칙을 추가하지 않는다.
+- B loader는 파일을 읽어 원본 바이트의 SHA-256을 계산하고 승인된 templateId/version과 함께 A에 전달한다. templateHash는 이 원본 바이트 hash이며 변형마다 임의로 재정의하지 않는다. A는 이미 파싱된 자료를 검증한다. 실제 맵·영역·후보·hash·seed는 서버 내부 자료로 유지한다.
+- B는 A가 반환한 검증 변형을 variantId 오름차순으로 정렬하여 `seed % variants.length`(seed는 uint32)로 하나를 선택한다. 빈 목록은 실패다. 선택된 변형과 같은 MapSource 4개 필드의 `FallbackLayout`을 입력한다. A MP-04는 이 변형 안에서 술래 3명에게 서로 다른 구역을 배정하고, 도망자 시작 영역 3개에서 각각 한 후보를 선택한 뒤 출구를 선발한다. selector 내부에서 다른 변형으로 다시 바꾸지 않는다.
+- `LayoutSelectionInput`에는 template/players/seed/maxAttempts/fallback만 있다. 선발 전의 playerId 배정 territories를 받지 않으며, 확정 배정은 기존 `MatchLayout.territories`로 반환한다. fallback은 `{...MapSource,layout}`이며 변형별 자료를 A가 제공한다.
+- 정적 fallback의 playerId/ownerId는 역할별 안정 슬롯 `tagger-1`–`tagger-3`, `runner-1`–`runner-3`으로 저장한다. A의 `certifyFallback`이 input.players를 역할별 playerId 기본 문자열 오름차순(로케일 정렬 금지)으로 정렬하여 슬롯 번호와 일대일 대응하고 players.playerId/exits.ownerId/territories.playerId를 함께 치환한다. 입력을 변경하지 않고 새 layout을 만들며 중복·누락·역할 불일치·미치환 슬롯을 거절한다. B는 정적 슬롯을 실제 코어 참가자로 전달하지 않는다.
+- `certifyFallback`은 출처 4개 필드, topology의 버전·크기·통로 배열, 현재 영역/후보 소속과 기존 거리·연결성·출구 제약을 모두 재검사한다. hash 일치만으로 인증하지 않는다. 성공은 실제 플레이어로 바인딩된 `{status:'selected',layout,source:'fallback'}`, 실패는 `{status:'unavailable',code:'LAYOUT_UNAVAILABLE'}`로 기존 LayoutSelectionResult를 유지한다. 다른 변형/과거 템플릿 자료를 현재 fallback으로 사용하지 않는다. 정상 온라인 결과는 사용 가능하지만 fallback이 인증되지 않았다면 탐색 소진 시 LAYOUT_UNAVAILABLE로 끝낸다.
+
+## 게임 논리 인스턴스와 개인 데이터 폐기 — A/B/C/D
+
+- B는 두 팀 연습과 본 경기마다 역할·좌표를 인코딩하지 않는 새 UUID `gameInstanceId`를 발급한다. A의 CreateMatchInput/CreatePracticeInput과 CoreReadFrame이 이를 전달한다. A의 practice 입력에는 mediaInstanceId를 넣지 않는다. B가 게임 인스턴스와 E의 미디어 인스턴스 관계를 별도로 관리한다.
+- PrivateView.gameScope는 `{gameInstanceId,kind:'practice'|'game',revision}` 또는 `{gameInstanceId:null,kind:'none',revision}`이다. B는 수신자별로 같은 match 안에서 revision을 증가시킨다. 시작은 none/0이며 연습 진입→연습 폐기→본 경기 진입의 예는 practice/1→none/2→game/3이다. 새 라운드는 matchId도 바뀐다. 같은 게임 인스턴스의 미디어 재연결만으로 이 ID/revision을 바꾸지 않는다.
+- scope의 생성·전환·폐기는 내용 변경으로 취급하여 전체 PrivateView를 보낸다. none은 self=null이고 기억 지형/출구·가시 셀/벽면/엔티티가 모두 빈 배열이다. `TEAM_PRACTICE`는 practice, `GAME_LOADING/COUNTDOWN/PLAYING/RESULT`는 game, 나머지 phase는 none으로 정의한다. 폐기 시 C는 이전 지도·장면·교환/출구 문맥·보류 사건을 비운다. D의 MediaScope·트랙 회수는 별도 계약으로 수행한다.
+- C는 `(matchId,gameScope.revision,gameInstanceId)`로 개인 자료를 구분한다. 낮은 revision과 이미 적용한 개인 뷰보다 낮은 stateVersion은 폐기한다. 같은 revision에 다른 ID/kind가 오면 화면에 적용하지 않고 resync한다. 높은 revision은 현재 권위 phase에 맞는 전체 뷰로만 전환하며 새 자료를 이전 지도에 합치지 않는다.
+- 공개 phase가 바뀌면 C는 현재 개인 화면을 즉시 비우고 관측한 전환 stateVersion을 하한으로 저장한다. B는 scope/개인 내용이 같아도 phase 변경마다 해당 전환 stateVersion 이상의 전체 뷰를 한 번 발행한다. C는 하한보다 오래된 뷰를 적용하지 않는다. 공개 상태보다 앞선 뷰는 최신 1개만 최대 1초 보류하고 공개 상태가 따라오면 phase/scope/버전을 다시 검사한다. phase 변경 후 유효한 전체 뷰가 없으면 보류 뷰 유무와 무관하게 최대 1초 동기화 타이머를 시작한다. 하한 때문에 새 초기 뷰를 버렸거나 타이머가 만료되면 기존 view-resync를 요청한다. B는 수신자당 1초에 1회로 제한하고 현재 scope/권위 stateVersion으로 다시 직렬화한 전체 뷰를 보내며 옛 캐시 버전으로 응답하지 않는다.
+- PrivateEvent.gameScope는 ActiveGameScope다. B는 사건을 만든 게임 인스턴스와 수신자의 당시 revision을 붙이며 늦은 작업의 사건을 새 인스턴스로 재표기하지 않는다. C는 과거 scope를 즉시 폐기하고 미래 scope의 사건으로 scope를 전환하지 않는다. 필요한 전체 뷰/참조 버전을 기다리는 사건은 기존 한도인 총 64개/1초 안에서 보류한다. 같은 revision의 ID/kind 불일치와 만료는 폐기·resync한다.
+- B는 접수한 core 명령의 대상 gameInstanceId를 서버 큐 메타데이터에 고정하고 전환 시 옛 큐를 취소·종결한다. CommandEnvelope/receipt/outcome에 임의 필드를 추가하지 않는다. 옛 인스턴스의 accepted 요청도 원래 matchId/requestId로 canceled outcome을 받지만, 그 결과를 새 지도나 도전 생성으로 해석하지 않는다.
 
 ## 명령의 접수와 종결
 
@@ -145,7 +165,7 @@ node scripts/check-execution-plan.mjs
 
 ## 개인 상태·출구·교환·준비
 
-개인 뷰는 초기/허용 내용 변경/명시적 resync 때 전체 교체한다. stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·중복·만료 사건은 폐기한다.
+개인 뷰는 초기/허용 내용 변경/scope 전환/공개 phase 변경/명시적 resync 때 전체 교체한다. 일반적인 stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. phase 전환은 새 하한을 확인할 전체 뷰를 한 번 보내고 resync는 현재 버전으로 재직렬화한다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·구 gameScope·중복·만료 사건은 폐기한다.
 
 - visibleEntities는 종류별 필수 필드가 다르다. **가시 sensor는 wall이 필수**이며 자기 기억인 ownedEquipment와 분리한다. sensor.cell은 접근 셀, wall은 실제 부착 면이다. 다른 장비 위치를 전원에게 전송하지 않는다.
 - self.exchange의 incoming/outgoing은 수신자 기준이다. C는 incoming만 D의 incomingExchangeId로 보내고 요청자는 outgoing 대기를 표시한다. 서버는 toPlayerId만 수락할 수 있게 검사한다.
@@ -158,6 +178,14 @@ node scripts/check-execution-plan.mjs
 ## 서버 미디어와 브라우저 결합
 
 mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다. receiverGeneration은 이 메시지를 받는 플레이어 자신의 연결 세대, participants의 publisherGeneration은 원격 송신자 세대다. bindingRevision은 수신자·인스턴스·연결 세대 안에서 증가하며, 한 사람만 재연결했다고 다른 다섯 명의 receiverGeneration을 바꾸지 않는다. 새 Identity는 회수 완료 후에만 발급한다.
+
+### 초기화 완료와 서비스 준비 — B/E/F
+
+1. E의 동기 factory는 즉시 RECOVERING/readiness와 DRAINING/admission을 제공하고 발급·입장을 잠근다. B는 `await coordinator.initialize()`를 호출하며 중복 호출은 같은 진행 Promise/최초 결과를 공유한다.
+2. initialized 결과는 writer lock과 저널/체크포인트의 복원 판단, 관찰 가능한 RECOVERING 또는 LOCKED 상태를 준비했다는 뜻이다. 안전하게 잠긴 손상/미확인 상태도 reasonCodes와 함께 initialized/LOCKED로 관찰 가능하다. Cloud 회수·예산 확인 완료를 의미하지 않는다.
+3. 중복 writer 등 안전한 인스턴스를 유지할 수 없는 오류는 fatal(WRITER_CONFLICT 또는 INITIALIZATION_FAILED)이다. B는 HTTP listen을 시작하지 않고 close로 자원을 정리한다. 예상하지 못한 Promise 거절도 같은 부팅 실패로 처리한다. 초기화 중에는 listen이 0회여야 한다.
+4. initialized 이후 B가 HTTP를 열어 `/health/live`, 503인 `/health/ready`, 인증된 운영 경로와 서명 검증 Webhook으로 상태를 관찰·복구할 수 있게 한다. E는 이후 Cloud 잔존 정리·공식 예산·저널 쓰기 상태를 확인한다. 완료 전 새 입장·grant·자동 시작은 0이며 복구 실패는 LOCKED로 남겨 관찰한다.
+5. 조건이 충족되면 readiness만 READY로 바뀐다. admission은 DRAINING을 유지하고 운영 resume의 terminal 성공 후에만 OPEN이 된다. 첫 설치·재시작 모두 자동 OPEN하지 않는다. initialize를 다시 호출하여 복구 실패나 잠금을 초기화하지 않는다.
 
 - E는 내부 Gateway·Journal·예산 큐를 소유한다. B가 주입하는 deps/config와 요청·trusted frame·비동기 결과는 아래 정확한 타입을 따른다. E 콜백은 B의 큐로만 들어가며 Tick 상태를 직접 변경하지 않는다.
 - prepareGeneration은 expectedPreviousGeneration을 검사하고 E가 새 세대를 할당한다. 동일 requestId는 같은 논리 결과를 반환한다. Promise 결과는 HTTP 응답용이고 enqueueControl 결과는 게임 큐용이며 B는 requestId+scope로 중복 적용을 막는다. rejected/unknown이면 grant는 null이고, 세대 할당 전 rejected의 receiverGeneration은 null이다. ready는 grant 발급 완료이며 게시 확인 완료가 아니다. 요청 없이 생긴 MEDIA_FAILED는 eventId+scope로 중복 제거한다.
@@ -184,6 +212,14 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - pageActive=false이면 입력·버퍼를 비우고 새 의도를 막는다. 복귀 때 새 키/중립 복귀를 요구하며 서버 phase를 꾸며내지 않는다.
 - C가 장치/미디어·교환·출구 문맥을 setContext로 반영한다. D가 슬롯·입력 모드를 바꾸면 onInteractionState로 알리고 같은 값의 재적용은 callback을 반복하지 않는다.
 
+## HTTP·WebSocket 진입 보안 — B
+
+- 공통 Origin 검사는 SDK의 OPTIONS 응답과 `/matchmake/*` 실행보다 먼저 적용한다. Express의 `/api/config` 검사만으로 매칭 경로를 보호했다고 보지 않는다. 독립 request listener 하나가 403을 보낸 뒤 다른 SDK listener가 예약을 진행하지 않도록 실제 진입/dispatch 순서를 확인한다.
+- HTTP/WS는 ALLOWED_ORIGINS의 정확한 http/https origin 목록을 공유한다. 목록의 Origin은 허용하고 비허용·문자열 null·빈 값·복수 Origin은 403으로 거절한다. Origin 헤더 자체가 없는 개발 CLI/health 및 서버 간 요청은 기존 정책대로 허용하되, 제품 세션/초대·OPS_TOKEN·Webhook 서명 검사를 대신하지 않는다.
+- 거절한 POST/OPTIONS/WS는 방 생성·좌석 예약·세션 소비를 일으키지 않는다. CORS 허용 헤더만 바꾸고 매칭 실행은 진행시키지 않는다. 허용 OPTIONS는 예약 없이 끝내고 허용 웹/Playground 접속은 유지한다.
+- 매칭 JSON은 2,048바이트로 제한한다. Content-Length 사전 검사와 실제 수신 바이트 상한을 함께 적용하여 길이 누락·chunked에서도 초과를 413으로 끝내고 JSON 파싱/예약을 진행하지 않는다. WebSocket은 기존 8,192바이트 한도를 유지한다. LiveKit raw-body 서명 경로를 JSON 재직렬화하거나 매칭 전용 본문 제한으로 일괄 변경하지 않는다.
+- B의 필수 회귀 시험은 두 룸의 매칭 POST/OPTIONS, 일반 API, WS upgrade에 허용/비허용 Origin을 대입하고 응답과 처리 전후 방/예약 수를 함께 검사한다. 경계 2,048/2,049바이트·길이 없는 초과 본문·Origin 없는 개발 요청도 포함한다. 이 문서는 수정 계획이며 실제 bootstrap과 통합 시험을 구현·실행해야 보안 수정 완료다.
+
 ## 운영 HTTP 계약
 
 B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
@@ -200,6 +236,19 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
 - checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
+
+## 격리 상태의 배포 검증 — B/E/F
+
+외부 공개 여부는 F의 네트워크/프록시 접근 경계이고 admission은 E의 게임 입장 상태다. 서로 다른 두 조건을 하나의 boolean으로 합치지 않는다. 외부 접근 차단은 진행 중 게임의 정상 종료·회수를 방해하지 않도록 기존 연결과 인증된 운영/검증 경로를 유지하면서 일반 이용자의 새 접속을 차단한다.
+
+1. F가 외부 일반 참가자는 새 HTTP 세션·매칭·WS 접속을 못 하고 지정 검증 참가자 6명과 운영자만 접근 가능한 격리를 확인한다. 모든 앱 진입 경로에 적용하고 이름뿐인 smoke 플래그나 클라이언트 claim으로 우회하지 않는다. 격리 수단/검증 참가자/공식 예산·검증 시간 창이 준비되지 않으면 BLOCKED다.
+2. OPS drain의 terminal succeeded와 진행 경기/연습/입장 대기 0, 회수·저널 반영 및 미해결 0을 확인한 뒤 같은 검증 SHA/digest로 교체한다. 격리는 재시작·롤백 동안 유지한다.
+3. B/E의 initialize→HTTP 관찰→RECOVERING 정리→READY를 확인한다. 이때 admission은 여전히 DRAINING이다. READY만 보고 공개하거나 자동 입장시키지 않는다.
+4. 격리를 다시 확인한 후 승인된 검증 시간 창/실제 잔량 조건으로 resume을 요청하고 terminal succeeded 및 READY/OPEN을 확인한다. 일반 이용자는 계속 차단된 상태에서 검증 참가자만 입장하여 6인 smoke를 수행한다. DRAINING에서 입장하는 시험용 예외 API는 만들지 않는다.
+5. 시험 성공 후 검증 참가자 퇴장, 진행 활동 0, 시험 미디어 회수·저널 반영·미해결 0을 확인한다. 공개 시간 창·잔량·READY/OPEN을 다시 검사하고 F가 외부 격리를 해제한다. 격리 해제 전에 하나라도 실패하면 공개하지 않는다.
+6. smoke 실패나 resume 이후 실패에는 격리를 유지한 채 별도 requestId로 다시 drain하고 회수·활동 0을 확인한 뒤 이전 digest로 복귀한다. 회수가 불명확하면 이미지를 교체하여 미해결 상태를 숨기지 않고 ROLLBACK_BLOCKED로 남긴다. 롤백 후에도 같은 초기화·복구·격리 시험 순서를 통과해야 공개할 수 있다.
+
+F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배포 순서를 구현하며 QA-13이 인계 증거를 확인한다. Jenkins·nginx·배포 스크립트의 실제 구현과 원격 적용은 F 작업이다. 공통 문서와 fixture의 순서 검사만으로 해당 구현·원격 시험을 완료 처리하지 않는다.
 
 ## 작업 상태·커밋·MR·인계
 
@@ -239,13 +288,13 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 
 아래 타입은 [검사 가능한 원본](contracts/types.ts)에서 자동 삽입한다. [fixture](contracts/fixtures.ts)는 정상/실패·순서 교차 입력과 기대 상태를 제공하고 [검사](contracts/fixtures.test.ts)는 계약 자료의 정합성을 확인한다. 제품 타입·serializer·reducer·Room·Coordinator 구현과 실제 연결은 각 담당 작업에서 수행한다. 문서용 타입을 제품 런타임 의존성으로 import하지 않는다. 필요한 공개 타입은 해당 소유 모듈에 옮기고 원본과 소비자 호환을 검사한다.
 
-필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
+필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 영역별 맵 입력과 다른 출처 fallback 거절, 같은 match의 연습→none→본경기와 구 scope 지연 데이터 폐기, initialize 완료/READY/OPEN 분리와 fatal 기동 차단, 격리 유지 resume→6인 시험→회수→공개 및 실패 rollback, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단, 매칭 Origin 거절 뒤 예약 0. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
 
 <!-- BEGIN CONTRACT-TYPES -->
 
 ```ts
-// EXEC-CONTRACT-2. Planning contracts; product modules do not exist merely because these types do.
-export const CONTRACT_VERSION = 'EXEC-CONTRACT-2' as const;
+// EXEC-CONTRACT-3. Planning contracts; product modules do not exist merely because these types do.
+export const CONTRACT_VERSION = 'EXEC-CONTRACT-3' as const;
 export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
 export type Cell = Readonly<{ x: number; y: number }>;
 export type TracePoint = Readonly<{ x: number; y: number }>;
@@ -417,9 +466,17 @@ export type PlayerKnowledge = Readonly<{
   knownTerrain: readonly KnownTerrain[];
   knownActiveExits: readonly KnownExit[];
 }>;
+export type ActiveGameScope = Readonly<{
+  gameInstanceId: string;
+  kind: 'practice' | 'game';
+  revision: number;
+}>;
+export type GameViewScope =
+  ActiveGameScope | Readonly<{ gameInstanceId: null; kind: 'none'; revision: number }>;
 export type PrivateView = PlayerKnowledge &
   Readonly<{
     matchId: string;
+    gameScope: GameViewScope;
     stateVersion: number;
     self: ActiveSelf | EndedSelf | null;
     visibleCells: readonly Cell[];
@@ -475,6 +532,7 @@ export type EventType = keyof EventPayloads;
 export type PrivateEvent = {
   [K in EventType]: Readonly<{
     matchId: string;
+    gameScope: ActiveGameScope;
     eventId: string;
     tick: number;
     stateVersion: number;
@@ -561,13 +619,13 @@ export type MatchTuning = Readonly<{
 }>;
 export type CreateMatchInput = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   seed: number;
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly { playerId: string; role: Role }[];
 }>;
-export type CreatePracticeInput = CreateMatchInput &
-  Readonly<{ mediaInstanceId: string; role: Role }>;
+export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 export type GameSubject = Readonly<{
   playerId: string;
   role: Role;
@@ -578,6 +636,7 @@ export type GameSubject = Readonly<{
 }>;
 export type CoreReadFrame = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   tick: number;
   phase: Phase;
   counts: Counts;
@@ -605,15 +664,33 @@ export type SelectionProgress = Readonly<{ attempted: number; batchAttempts: num
 export type LayoutSelectionResult =
   | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
   | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
-export type LayoutSelectionInput = Readonly<{
-  template: Topology;
-  players: readonly { playerId: string; role: Role }[];
+export type MapSource = Readonly<{
+  templateId: string;
+  templateVersion: string;
+  templateHash: string;
+  variantId: string;
+}>;
+export type SpawnRegion = Readonly<{
+  regionId: string;
+  cells: readonly Cell[];
   spawnCandidates: readonly Cell[];
-  exitCandidates: readonly WallFace[];
-  territories: MatchLayout['territories'];
+}>;
+export type LayoutTemplate = MapSource &
+  Readonly<{
+    topology: Topology;
+    taggerRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    exitCandidates: readonly WallFace[];
+  }>;
+// Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
+// player/exit/territory references to role-sorted input.players before validation.
+export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
+export type LayoutSelectionInput = Readonly<{
+  template: LayoutTemplate;
+  players: readonly { playerId: string; role: Role }[];
   seed: number;
   maxAttempts: number;
-  fallback: MatchLayout;
+  fallback: FallbackLayout;
 }>;
 export interface LayoutSelectionPort {
   certifyFallback(input: LayoutSelectionInput): LayoutSelectionResult;
@@ -751,7 +828,15 @@ export type Readiness = Readonly<{
   historyComplete: boolean;
   unresolvedCount: number;
 }>;
+export type MediaInitializationResult =
+  | Readonly<{
+      status: 'initialized';
+      readiness: Readiness & Readonly<{ state: 'RECOVERING' | 'LOCKED' }>;
+      admission: 'DRAINING';
+    }>
+  | Readonly<{ status: 'fatal'; code: 'WRITER_CONFLICT' | 'INITIALIZATION_FAILED' }>;
 export interface MediaCoordinator {
+  initialize(): Promise<MediaInitializationResult>;
   prepareGeneration(input: PrepareGenerationRequest): Promise<PreparationResult>;
   observeFrame(frame: TrustedMediaFrame): void;
   retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult>;
@@ -943,7 +1028,7 @@ export type ServerMessages = {
 
 <!-- END CONTRACT-TYPES -->
 
-<!-- END EXEC-CONTRACT-2 COMMON -->
+<!-- END EXEC-CONTRACT-3 COMMON -->
 
 ## 작업별 구현 지시
 
@@ -1275,7 +1360,7 @@ feat: 전체 미디어 API 예산 제어 추가
 
 **구현 순서**
 
-1. createMediaCoordinator(deps)의 `prepareGeneration(input:PrepareGenerationRequest):Promise<PreparationResult>`를 구현한다. B가 검증한 requestId/matchId/playerId/mediaInstanceId/purpose/expectedPreviousGeneration을 받고 registry의 현재 상태와 OP-08 readiness/OP-02 budget을 다시 확인한다. E가 새 receiverGeneration을 할당해 결과/grant로 반환하며 클라이언트가 새 세대를 지정하지 않는다. 입력·결과 타입은 `docs/execution/contracts/types.ts`를 기준으로 한다.
+1. createMediaCoordinator(deps)의 `prepareGeneration(input:PrepareGenerationRequest):Promise<PreparationResult>`를 구현한다. B가 검증한 requestId/matchId/playerId/mediaInstanceId/purpose/expectedPreviousGeneration을 받고 registry의 현재 상태와 OP-08 readiness/OP-02 budget을 다시 확인한다. factory 생성이나 initialize 완료만으로 발급하지 않으며 readiness=READY와 admission=OPEN을 모두 만족하기 전에는 NOT_READY로 거절한다. E가 새 receiverGeneration을 할당해 결과/grant로 반환하며 클라이언트가 새 세대를 지정하지 않는다. 입력·결과 타입은 `docs/execution/contracts/types.ts`를 기준으로 한다.
 2. 논리 playerId와 무관한 crypto.randomUUID 기반 roomName/identity를 생성한다. namespace/epoch 접두사와 난수만 쓰고 role/닉네임/좌표를 넣지 않는다. 같은 목적 instance 참가자는 같은 mediaRoom에 모이고 연습 팀은 별도 instance이다.
 3. 예약 승인 후 PREPARED를 await journal.append하여 내구성 확보한다. AccessToken(key,secret,{identity,ttl:300})와 MC-01에서 검증한 최소 grant/source 프로필로 await toJwt()한다. 디스크 기록이 안 되면 서명/반환을 진행하지 않는다.
 4. JWT 반환 직전에 session/phase/generation/terminal/ready를 다시 확인한다. 생성 중 종료되면 토큰을 반환하지 않고 해당Identity를 회수 큐에 남긴다. 키는 환경 주입만 받는다.
@@ -1295,6 +1380,7 @@ feat: 전체 미디어 API 예산 제어 추가
 - journal.sync 실패 → token 반환0·gateway grant0, ready잠금.
 - 서명 도중 개인종료/구세대terminal → 반환거절, PREPARED 회수대상 유지.
 - phase LOBBY 또는 다른팀practiceInstance 주장 → Cloud 연결/토큰 없이 거절.
+- initialize 결과가 initialized/RECOVERING 또는 initialized/LOCKED → 새 세대·예약·JWT 0; 복구 후 READY여도 DRAINING이면 NOT_READY, resume 성공 후 OPEN일 때만 준비 진행.
 
 **추가·보완할 시험 파일**
 
@@ -1361,8 +1447,8 @@ feat: 세대별 미디어 토큰 발급 추가
 
 **연결 계약과 경계**
 
-- `observeFrame(frame:TrustedMediaFrame):void`는 동기 목표 계산·큐 갱신만 하고 Cloud await는 하지 않는다. 시간 소비가 크면 A의 정적 경로 인덱스를 전달받아 사용한다. 필드와 판별자는 EXEC-CONTRACT-2의 중앙 타입과 일치시킨다.
-- AudioPolicy는 EXEC-CONTRACT-2의 B 소유 스키마를 사용한다. 최상위 receiverGeneration은 메시지를 받는 사람의 연결 세대이며 voice의 trackSid는 해당 bindingRevision의 발신자 바인딩과 대조한다. policyRevision은 같은 matchId/mediaInstanceId/receiverGeneration 안에서 증가하고 전체 교체 의미다.
+- `observeFrame(frame:TrustedMediaFrame):void`는 동기 목표 계산·큐 갱신만 하고 Cloud await는 하지 않는다. 시간 소비가 크면 A의 정적 경로 인덱스를 전달받아 사용한다. 필드와 판별자는 EXEC-CONTRACT-3의 중앙 타입과 일치시킨다.
+- AudioPolicy는 EXEC-CONTRACT-3의 B 소유 스키마를 사용한다. 최상위 receiverGeneration은 메시지를 받는 사람의 연결 세대이며 voice의 trackSid는 해당 bindingRevision의 발신자 바인딩과 대조한다. policyRevision은 같은 matchId/mediaInstanceId/receiverGeneration 안에서 증가하고 전체 교체 의미다.
 - B는 `audio-policy`를 C에 전송하고 C는 D.applyAudioPolicy에 그대로 전달한다. D는 필요한 bindingRevision이 아직 없으면 제한된 보류 상태에 두고 바인딩·정책·트랙 어느 쪽의 도착에도 재대조한다. 오래된 revision은 폐기하고 퇴장·인스턴스 변경에는 모두 닫는다.
 - E는 `deps.enqueueAudioPolicy(playerId,message)`로 B의 송신 큐에 맡긴다. MediaCoordinatorDeps의 공개 config·clock·callback은 중앙 타입을 따르고 SDK gateway/저널/registry는 E의 private helper로 조립한다. 타입이 없는 deps 필드를 추가해 다른 담당자에게 구현을 떠넘기지 않는다.
 - 가청 방향·gain으로 대략 위치를 추측 가능한 것은 명세 허용정보다. 원본 좌표 은폐와 무정보 보장을 혼동하지 않는다.
@@ -1410,7 +1496,7 @@ feat: 경로 기반 가청 정책과 음향 뷰 추가
 
 **완료 인계**
 
-- B SV-07에 EXEC-CONTRACT-2의 observeFrame 입력과 `audio-policy` 전체 교체 출력 fixture를 D2 중간에 전달한다.
+- B SV-07에 EXEC-CONTRACT-3의 observeFrame 입력과 `audio-policy` 전체 교체 출력 fixture를 D2 중간에 전달한다.
 - C/D에게 수신자·발신자 세대 구분, revision과 gain/방위/필터 단위, 정책·바인딩·트랙 순서 독립 처리 fixture를 전달한다.
 - F QA-07/QA-12에 이전 허용 상태를 포함한 경로 5→6→7→6→5 fixture를 전달한다.
 
@@ -1592,9 +1678,9 @@ feat: 미디어 권한 결과 불명 처리 추가
 
 - B만 POST /api/livekit/webhook 라우팅/rawBody를 수정한다. E의 공개 타입은 `handleWebhook(rawBody:string,authorization:string):Promise<{status:'accepted'|'ignored'}>`다. 헤더 누락은 B에서 안전한 인증 오류로 거절하고 E도 서명 실패를 승인으로 바꾸지 않는다.
 - SDK/source근거: WebhookReceiver.d.ts와[공식웹훅](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/). raw body 재직렬화/skipAuth:true금지.
-- 서버 내부 TrackBinding은 mediaInstanceId/mediaRoomName/playerId/mediaIdentity/publisherGeneration/participantSid/source/trackSid/verifiedAt을 가진다. B는 이 확인 결과를 EXEC-CONTRACT-2의 `media-bindings`로 투영하고 허용 수신자에게만 전체 교체 메시지를 보낸다.
+- 서버 내부 TrackBinding은 mediaInstanceId/mediaRoomName/playerId/mediaIdentity/publisherGeneration/participantSid/source/trackSid/verifiedAt을 가진다. B는 이 확인 결과를 EXEC-CONTRACT-3의 `media-bindings`로 투영하고 허용 수신자에게만 전체 교체 메시지를 보낸다.
 - `media-bindings` 최상위에는 mediaInstanceId/receiverGeneration/bindingRevision을, 참가자 항목에는 publisherGeneration과 현재 Identity/participantSid/trackSid를 둔다. 한 사람의 세대 증가를 방 전체의 세대로 해석하지 않는다. D.applyMediaBindings는 바인딩과 먼저 수신한 트랙을 다시 대조하며 닉네임·클라이언트 self report로 매핑하지 않는다.
-- bindingRevision은 같은 수신자·인스턴스·receiverGeneration 내에서 증가한다. 같은 revision은 멱등하고 이전 revision은 폐기한다. 바인딩 삭제/교체는 기존 출력부터 닫고 최신 트랙·정책과 재대조한다. 실제 필드명·타입은 EXEC-CONTRACT-2를 따른다.
+- bindingRevision은 같은 수신자·인스턴스·receiverGeneration 내에서 증가한다. 같은 revision은 멱등하고 이전 revision은 폐기한다. 바인딩 삭제/교체는 기존 출력부터 닫고 최신 트랙·정책과 재대조한다. 실제 필드명·타입은 EXEC-CONTRACT-3를 따른다.
 - 배열명은 `participants:MediaBinding[]`이고 별도 entries 필드를 만들지 않는다. E는 `deps.enqueueBindings(playerId,message)`로 B에 전달한다. 원본 계약 fixture와 실제 E→B→D 모듈 연결 시험은 별도 증거로 남긴다.
 - participants에는 서버가 확인한 수신자 본인의 self entry도 포함한다. self entry의 publisherGeneration은 receiverGeneration과 같으며 B는 self faceTrackSid를 LOAD_READY의 현재 scope와 대조한다. D는 self entry를 원격 얼굴/음성으로 재생하지 않는다. 게시·source 확인은 가공 영상 진위 증명이 아니다.
 
@@ -1818,22 +1904,29 @@ feat: 회수 재시도와 운영 기록 정리 추가
 
 **구현 순서**
 
-1. 외부라우트가열리기전RecoveryState를RECOVERING으로만든다. OP-01의writerlock을획득하고checkpoint/저널을읽어integrity·lastSeq·pendingIdentity·reservation을복원한다.
+1. `createMediaCoordinator(deps)`는 동기 factory로 생성하며 초기 readiness=RECOVERING/admission=DRAINING과 닫힌 입장·발급 장벽을 먼저 만든다. `initialize():Promise<MediaInitializationResult>`에서 OP-01 writer lock을 획득하고 checkpoint/저널의 integrity·lastSeq·pendingIdentity·reservation을 복원한다. 동시·반복 initialize 호출은 같은 진행 중 Promise 또는 확정 결과를 재사용하여 lock·복원·복구 작업을 중복 시작하지 않는다.
 2. 새serverEpoch는crypto난수로만들지만구epoch기록을폐기하지않는다. persisted시간은epoch로읽고현재process의monotonicdeadline을새로계산한다. 재시작전monotonic값을직접비교하지않는다.
-3. 정상빈첫설치·기록유실·손상·부분레코드를구분한다. 첫설치도Cloud잔존목록검사를해야하며파일이없다는것을잔량0/잔존0으로해석하지않는다.
-4. 복원결과를B입장/자동시작/MCgrant에게잠금snapshot으로제공하고OP-06정리와OP-02공식잔량정합작업을기다린다. 복구실패는operatorActionRequired와비민감code만노출한다.
+3. 정상 빈 첫 설치·기록 유실·손상·부분 레코드를 구분한다. 안전한 잠금과 상태 관찰을 초기화할 수 있으면 미확인·손상 원인을 가진 LOCKED 또는 복구 진행 중 RECOVERING으로 유지한다. writer lock 충돌은 fatal/WRITER_CONFLICT, 안전한 초기 상태 자체를 만들 수 없는 실패는 fatal/INITIALIZATION_FAILED로 종결한다. 파일 부재를 잔량 0/잔존 0으로 해석하거나 손상 기록을 삭제해 초기화를 성공시키지 않는다.
+4. 저널 복원 결과와 잠금 상태를 노출할 준비가 되면 status='initialized', readiness.state='RECOVERING' 또는 'LOCKED', admission='DRAINING'인 중앙 결과 타입을 반환한다. 이 결과를 Cloud 정리 완료나 READY와 동일시하지 않는다. B는 이 결과를 await한 뒤 HTTP health/운영 경로를 시작하여 RECOVERING·LOCKED의 ready 503과 인증된 운영 상태를 관찰할 수 있게 한다. fatal 결과이면 B는 listen하지 않고 close한다.
+5. initialized 이후 OP-06 Cloud 잔존 확인·회수와 OP-02 공식 잔량 정합을 계속 수행하고 OP-08의 전체 준비 조건이 충족될 때만 READY로 바꾼다. initialize Promise가 전체 Cloud 복구를 기다리게 만들지 않는다. 실패·미확인은 LOCKED와 비민감 reasonCodes/운영 조치 필요 상태로 남기며 복구 완료 후에도 admission=DRAINING을 유지하고 OP-07 resume을 요구한다.
 
 **연결 계약과 경계**
 
 - RecoverySnapshot={phase:'RECOVERING'|'READY'|'LOCKED',integrity,pendingCount,budgetConfirmed,writable,singleWriter,reasonCodes};구체remoteIdentity는공개health에노출하지않음.
-- B createApplication의listen전factory호출·ready라우트교체는B소유. E는initialize/close/hooks만제공.
+- 중앙 `MediaInitializationResult`는 `{status:'initialized',readiness:Readiness & {state:'RECOVERING'|'LOCKED'},admission:'DRAINING'}` 또는 `{status:'fatal',code:'WRITER_CONFLICT'|'INITIALIZATION_FAILED'}`다. E는 initialize/close와 기존 포트를 제공하고 B가 factory 생성→await initialize→결과별 listen/close를 조립한다. initial closed, initialized, READY, OPEN을 서로 다른 장벽으로 다룬다.
+- initialized의 readiness는 초기화 시점 snapshot이다. 이후 Cloud 복구 상태는 기존 readiness/operations 포트에서 읽는다. health/운영 경로를 열기 위해 READY나 OPEN을 기다리지 않으며 fatal 실패를 initialized/LOCKED로 숨기지 않는다.
+- 예상하지 못한 initialize Promise 거절도 B가 부팅 실패로 처리하여 listen 없이 close한다. 재호출로 복구 실패나 잠금을 초기화하지 않는다. initialized 이후 서명 검증 Webhook을 포함한 B 복구 경로는 관찰 가능하게 열되 새 입장·grant·자동 시작은 준비·admission 장벽을 유지한다.
 
 **시험 입력 → 기대 결과**
 
 - 정상checkpoint+PREPARED구epoch→RECOVERING·발급차단·정리목록생성.
 - 기록파일유실+서비스Cloud방존재→자동READY불가.
 - 새epoch생성→기존reservation과미해결Identity유지.
-- writerlock충돌/부분레코드→LOCKED또는RECOVERING·원인코드,입장거절.
+- writer lock 충돌 → fatal/WRITER_CONFLICT·listen 0·close; 안전한 잠금 초기화 불가 → fatal/INITIALIZATION_FAILED·listen 0.
+- 관찰 가능한 부분 레코드/기록 유실 → initialized/LOCKED·ready 503·입장 거절, 기록 삭제나 자동 READY 없음.
+- Cloud 정리 응답 지연 → initialize는 로컬 복원·잠금 완료 후 initialized/RECOVERING 반환, B health/운영 상태 관찰 가능·grant 0.
+- initialize 동시 2회와 완료 후 재호출 → 복원·writer lock·후속 복구 시작 각 1회, 동일 진행 중 Promise/확정 결과 재사용.
+- 이후 Cloud 정리·공식 잔량 정합 완료 → readiness READY/admission DRAINING, 별도 resume 없이는 새 입장·grant 0.
 
 **추가·보완할 시험 파일**
 
@@ -1850,7 +1943,7 @@ pnpm lint
 
 **완료 조건**
 
-RECOVERING으로 부팅해 저널·체크포인트를 복원한다. 손상·부분 레코드·유실·공식 잔량 미확인을 구분하고 새 입장·토큰·자동 시작을 잠근다. 새로운 serverEpoch가 이전 사용량·미디어를 없앴다고 간주하지 않는다.
+동기 factory에서 입장·발급을 닫고 initialize로 저널·체크포인트와 잠금을 초기화한다. initialized/RECOVERING·LOCKED는 HTTP 상태 관찰을 허용하는 장벽이며 전체 Cloud 복구/READY 완료가 아니다. fatal은 listen 없이 종료하고, 후속 복구가 READY에 도달해도 resume 전에는 DRAINING을 유지한다. 손상·부분 레코드·유실·공식 잔량 미확인을 구분하며 새로운 serverEpoch가 이전 사용량·미디어를 없앴다고 간주하지 않는다.
 
 위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
 
@@ -1871,7 +1964,7 @@ feat: 운영 기록 복구와 준비 잠금 추가
 
 **완료 인계**
 
-- B와F에initialize이전listen/ready오픈금지조건을전달한다.
+- B와 F에 factory→await initialize→initialized이면 health/운영 listen(ready 503 가능), fatal이면 listen 없이 close, 후속 복구 READY→별도 resume 순서와 초기화 결과 fixture를 전달한다.
 - OP-06에구세대전체목록과integrity가확인될때만진행하는조건을전달한다.
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/E/OP-05.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
@@ -1977,6 +2070,7 @@ feat: 이전 미디어 세대 대조와 부팅 정리 추가
 - OperationSnapshot={requestId,operationId,action,status:'pending'|'succeeded'|'failed',code:null|string,updatedAtEpochMs}. GET status={admission:'OPEN'|'DRAINING'|'LOCKED',readiness:'READY'|'RECOVERING'|'LOCKED',unresolvedCount,remainingMinutes,remainingBytes,checkedAtEpochMs}. nullable 잔량·시간과 오류 코드는 중앙 타입을 그대로 따른다.
 - OPS_TOKEN은 F 환경 주입이며 예시 파일에는 값이 없다. 원본 공식 잔량 입력이 없거나 오래되면 checkpoint 실패/미확인으로 남기고 공급자 잔량을 추정하지 않는다.
 - admission과 readiness는 별도 상태다. 정상 drain은 admission=DRAINING으로 새 입장만 닫고 건강한 readiness=READY를 유지할 수 있다. 실제 권한/저널/예산 장애는 readiness=LOCKED다. resume이 자기 자신이 만든 drain 잠금 때문에 영구 거절되지 않도록 하고 grant에는 READY와 OPEN을 함께 요구한다.
+- resume은 애플리케이션 admission을 OPEN으로 전환하는 명령이다. 공개 네트워크 접근 허용은 F의 별도 책임이며 배포 검증 중에는 외부 격리를 유지한 채 정상 인증·공개창·READY·예산 조건으로 resume한 뒤 지정한 6인 smoke를 수행한다. 별도 smoke action이나 인증·예산 우회 경로를 추가하지 않는다. smoke 종료·회수 확인 뒤 실제 공개 여부는 F가 판단한다.
 
 **시험 입력 → 기대 결과**
 
@@ -2048,19 +2142,21 @@ feat: 제한 공개와 운영 제어 경계 추가
 1. live는process생존만200을반환하고ready는RECOVERING/LOCKED를503으로반환한다. 공개본문은상태와안전reasonCodes만포함한다.
 2. ready조건을conjunction으로정의한다:저널무결/쓰기정상·singlewriter·이전세대회수/historyComplete·공식잔량확인/예약정합·운영모드/초대인증/검증된Cloud프로필. 하나라도unknown이면false이다.
 3. 준비 snapshot이 바뀔 때 B 입장/자동 시작과 prepareGeneration이 같은 준비 조건을 참조하도록 factory에서 노출한다. grant/신규 입장은 readiness=READY와 admission=OPEN을 함께 요구한다. health가 실패인데 grant가 열리는 불일치를 없앤다.
-4. 런타임 디스크 실패·미해결 보안 권한·예산 불명은 readiness=LOCKED/발급 잠금으로 전파한다. 정상 운영 drain은 admission=DRAINING만 설정하여 건강한 READY와 분리하고 기존 판 종료/회수를 진행한다. 복구 후 READY 확인→resume→OPEN 순서가 교착되지 않게 한다.
+4. 런타임 디스크 실패·미해결 보안 권한·예산 불명은 readiness=LOCKED/발급 잠금으로 전파한다. 정상 운영 drain은 admission=DRAINING만 설정하여 건강한 READY와 분리하고 기존 판 종료/회수를 진행한다. OP-05 initialized는 RECOVERING 또는 LOCKED 상태를 관찰할 수 있는 시점이며 후속 복구 완료를 의미하지 않는다. 후속 복구가 READY가 되어도 자동 OPEN하지 않고 READY 확인→resume→OPEN 순서를 유지한다.
 5. Fenvproduction지원은이조건의통합이확인된뒤활성화한다. disabled/mock mode의기존production차단을지워성공시키지않는다.
 
 **연결 계약과 경계**
 
-- Readiness={state:'RECOVERING'|'READY'|'LOCKED',reasonCodes,historyComplete,unresolvedCount}는 EXEC-CONTRACT-2를 따른다. admission=DRAINING을 Readiness state에 추가하지 않는다. /health/live와 /health/ready HTTP 등록은 B가 담당하며 운영 GET status는 admission과 readiness를 각각 제공한다.
+- Readiness={state:'RECOVERING'|'READY'|'LOCKED',reasonCodes,historyComplete,unresolvedCount}는 EXEC-CONTRACT-3를 따른다. admission=DRAINING을 Readiness state에 추가하지 않는다. /health/live와 /health/ready HTTP 등록은 B가 담당하며 운영 GET status는 admission과 readiness를 각각 제공한다.
 - DP-02컨테이너healthcheck는live/ready용도를분리하고unready컨테이너를무한재시작해저널검사를우회하지않는다.
+- OP-05 initialized 이후 B가 health/운영 경로를 열어 RECOVERING·LOCKED를 관찰하게 한다. Cloud 복구를 initialize 반환이나 HTTP listen의 완료 조건으로 묶지 않으며 fatal 초기화에는 health를 열지 않는다.
 
 **시험 입력 → 기대 결과**
 
 - live프로세스·미회수Identity1→live200/ready503·grant거절.
 - 모든조건true→ready200;공식잔량미확인만false→503.
 - 정상 drain + 모든 복구 조건 충족 → readiness READY/admission DRAINING·새 grant 거절; 검증된 resume terminal 성공 → admission OPEN·새 grant 가능.
+- initialized/RECOVERING에서 Cloud 복구 대기 → live 200/ready 503·운영 상태 관찰 가능; 복구 완료로 READY 전환 후에도 admission DRAINING 유지.
 - READY후diskwrite실패→즉시잠금·새grant0.
 - MEDIA_MODE=disabled+production요청→기존차단유지·MVP준비true금지.
 
@@ -2130,6 +2226,7 @@ feat: 운영 준비 상태와 발급 장벽 연결
 - B /api/media/report의status는회수확인/권한검증을대신하지않음. D ME-07의retire완료와E의remoteconfirmed를별도조건으로받는다.
 - 연습팀별3명instance를경기6명instance로넘길때이전연습관계/트랙/저널을그대로재사용하지않는다.
 - 본인이 재연결하면 해당 수신자 메시지의 receiverGeneration이 바뀐다. 다른 사람이 재연결하면 자신의 receiverGeneration은 유지하고 참가자 항목의 publisherGeneration/Identity/SID와 bindingRevision만 갱신한다. 구 수신자 세대·구 publisherGeneration·구 revision의 응답은 현재 준비 상태를 바꾸지 않는다.
+- 미디어만 재연결할 때 B의 논리 gameInstanceId/gameScope.revision은 유지한다. E는 MediaScope와 준비/회수 결과만 갱신하고 논리 게임 인스턴스 ID나 revision을 만들지 않는다. 연습→본경기 논리 전환은 B/C의 권위 phase·전체 개인 뷰 경로로 처리한다.
 
 **시험 입력 → 기대 결과**
 

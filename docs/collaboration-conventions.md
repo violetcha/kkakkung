@@ -97,7 +97,7 @@ feat/S15P11C206-220-tutorial-contribution-effects
 
 보류 ID인 MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12가 요청 번호 범위에 있으면 제품 결정 대기로 기록하고 다음 번호를 진행한다. 아이템 전용 G3-C/G5 조건도 PRODUCT_DECISION_PENDING으로 분리한다. 현재 확정 범위의 인수 결과는 “D-2026-09-08-01 적용 확정 범위 완료”이며 원본 v0.0.8 전체 완료나 아이템의 영구 제외가 아니다.
 
-공개 계약의 원본은 [EXEC-CONTRACT-2](execution/common.md), [타입](execution/contracts/types.ts), [fixture](execution/contracts/fixtures.ts), [fixture 검사](execution/contracts/fixtures.test.ts)다. 공통 사본은 원본과 함께 갱신하고 `pnpm check:execution`으로 정합성을 검사한다. 고정 리뷰 쌍 외에도 해당 소비자를 추가한다. B의 private-view/응답 변경은 C/D, E의 바인딩/세대 변경은 B/D, D의 센서/callback 변경은 C, F의 Worker/CSP 변경은 D와 확인한다.
+공개 계약의 원본은 [EXEC-CONTRACT-3](execution/common.md), [타입](execution/contracts/types.ts), [fixture](execution/contracts/fixtures.ts), [fixture 검사](execution/contracts/fixtures.test.ts)다. 공통 사본은 원본과 함께 갱신하고 `pnpm check:execution`으로 정합성을 검사한다. 고정 리뷰 쌍 외에도 해당 소비자를 추가한다. B의 private-view/응답 변경은 C/D, E의 바인딩/세대 변경은 B/D, D의 센서/callback 변경은 C, F의 Worker/CSP 변경은 D와 확인한다.
 
 ## 커밋과 MR 제목
 
