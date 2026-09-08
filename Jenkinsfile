@@ -25,9 +25,6 @@ pipeline {
     // .node-version / package.json engines 와 같은 버전. 여기 바꾸면 Dockerfile 도 같이.
     NODE_IMAGE = 'node:24.19.0-bookworm-slim'
     PNPM_VER   = '11.19.0'
-    // 호스트 도구 없이 컨테이너 안에서 pnpm 실행. jenkins uid 로 돌려 root 소유 파일이 안 남게.
-    // pnpm store 는 호스트의 jenkins 홈에 캐시 (첫 빌드 이후 install 이 빨라짐).
-    RUN_NODE  = 'docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -e CI=true -e npm_config_prefix=/tmp/npm -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store'
   }
 
   stages {
@@ -64,8 +61,11 @@ pipeline {
       steps {
         // CONTRIBUTING.md 의 검사 순서 그대로. e2e(Playwright, Chromium 필요)만 아직 제외 → 브라우저 이미지 붙여 추가 예정.
         // check:execution 은 실행계획 문서·계약·fixture 동기 검사 (F 소유, 루트 node_modules 만 필요).
+        // 호스트 도구 없이 컨테이너 안에서 pnpm 실행. jenkins uid 로 돌려 root 소유 파일이 안 남게.
+        // pnpm store 는 호스트의 jenkins 홈에 캐시 (첫 빌드 이후 install 이 빨라짐).
+        // $(id -u) 는 환경변수에 넣으면 치환되지 않으므로 여기서 직접 평가합니다.
         sh '''
-          $RUN_NODE -v "$WORKSPACE:/workspace" -w /workspace "$NODE_IMAGE" sh -c '
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e npm_config_prefix=/tmp/npm             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$NODE_IMAGE" sh -c '
             set -e
             npm install -g pnpm@'"$PNPM_VER"' > /dev/null
             export PATH=/tmp/npm/bin:$PATH
