@@ -35,8 +35,11 @@ services:
       ALLOWED_ORIGINS: https://j15c204.p.ssafy.io
       SERVICE_NAMESPACE: kkakkung-ec2
       LOG_LEVEL: info
-      # LIVEKIT_* / OPS_TOKEN 은 스키마에 들어오면 Jenkins 크리덴셜 → 환경 파일로 주입합니다.
-      # 이 파일에 값을 쓰지 않습니다.
+    # 비밀값·운영 정책값. Jenkins 가 Secret file 크리덴셜(kkakkung-production-env)을
+    # 배포 직전 이 경로로 내려줍니다 (600, jenkins). 토대는 infra/production.env.example.
+    # 위 environment 가 이 파일보다 우선하므로 비밀 아닌 값은 여기 두지 않습니다.
+    env_file:
+      - /opt/kkakkung/production.env
     logging:
       driver: json-file
       options: { max-size: '10m', max-file: '3' }

@@ -71,4 +71,4 @@ Jenkins 는 성공한 태그를 `/opt/kkakkung/last-good-tag` 에, 이미지 dig
 
 ## 비밀값
 
-`.env`, `*.pem` 은 커밋 금지 (루트 `.gitignore`). 실제 값은 Jenkins 크리덴셜에만. 필요하면 인프라에게.
+`.env`, `*.pem` 은 커밋 금지 (루트 `.gitignore`). 운영 비밀값은 `infra/production.env.example` 을 토대로 만든 파일을 Jenkins **Secret file** 크리덴셜 `kkakkung-production-env` 에만 둔다. 배포 때 `/opt/kkakkung/production.env`(600) 로 내려가 `compose.production.yaml` 의 `env_file` 로 game-server 에 주입된다. 이미지·compose·MR·채팅에 값을 쓰지 않는다. 필요하면 인프라에게.

@@ -7,6 +7,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TAG="${1:-$(git rev-parse --short=8 HEAD)}"
+ENV_FILE=/opt/kkakkung/production.env
+if [ ! -s "$ENV_FILE" ]; then
+  echo "비밀값 파일이 없습니다: $ENV_FILE  (infra/production.env.example 참고, Jenkins 크리덴셜 kkakkung-production-env 에서 내려받음)"; exit 1
+fi
 echo "==> 태그: $TAG"
 
 if ! docker image inspect "kkakkung-game:$TAG" >/dev/null 2>&1; then

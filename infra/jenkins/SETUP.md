@@ -59,6 +59,7 @@ sudo nginx -t && sudo systemctl reload nginx
 - 플러그인: suggested + **GitLab** 만. Docker Pipeline 은 불필요 (Jenkinsfile 이 `sh 'docker ...'` 로 CLI 직접 호출)
 - Jenkins URL: `https://j15c204.p.ssafy.io/jenkins/`
 - 크리덴셜 `gitlab-token`: Username with password, **Project Access Token** (개인 계정 아님)
+- 크리덴셜 `kkakkung-production-env`: **Secret file**. `infra/production.env.example` 을 복사해 값을 채운 파일을 업로드. 배포마다 `/opt/kkakkung/production.env`(600) 로 내려가고 compose `env_file` 이 game-server 에만 읽힘. 값 바꾸면 크리덴셜 Update 후 재배포. 처음엔 LiveKit 줄이 비어 있어도 됨(빈 값 = 미설정)
 
 ## 6. 파이프라인 잡 (남음)
 

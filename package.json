@@ -27,7 +27,8 @@
     "check:environment": "node scripts/check-execution-environment.mjs",
     "cloud:check": "node scripts/run-cloud-check.mjs",
     "probe:build": "vite build --config tests/cloud/vite.config.ts",
-    "probe:dev": "vite --config tests/cloud/vite.config.ts"
+    "probe:dev": "vite --config tests/cloud/vite.config.ts",
+    "livekit:token": "node scripts/livekit-token.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -35,6 +36,7 @@
     "@types/node": "24.13.3",
     "eslint": "10.10.0",
     "livekit-client": "2.22.2",
+    "livekit-server-sdk": "2.18.0",
     "prettier": "3.9.6",
     "tsx": "4.23.13",
     "typescript": "6.0.3",

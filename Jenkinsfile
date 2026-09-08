@@ -111,6 +111,12 @@ pipeline {
           echo "직전 정상 태그: ${env.PREV_TAG ?: '없음 (첫 배포)'}"
         }
 
+        // 비밀값 env 파일. Jenkins Secret file 크리덴셜을 600 으로 내려놓고 compose env_file 이 읽습니다.
+        // 내용은 어떤 단계에서도 출력하지 않습니다 (set +x 는 Jenkins 기본).
+        withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {
+          sh 'install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"'
+        }
+
         sh 'TAG="$TAG" docker compose $COMPOSE up -d'
 
         // 컨테이너가 떴다고 앱이 산 건 아닙니다. web-proxy 를 거쳐 game-server 의 ready 를 직접 봅니다.
