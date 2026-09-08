@@ -335,15 +335,13 @@ describe('createInteractionRuntime', () => {
     expect(base.sensors).toHaveLength(seen);
   });
 
-  it('rejects the media methods that later tasks own', async () => {
+  it('rejects the media methods that later tasks own and validates the grant', async () => {
     const base = harness();
 
-    await expect(base.runtime.connectMedia({} as never)).rejects.toBeInstanceOf(
-      InteractionNotImplementedError,
-    );
-    await expect(base.runtime.retireMediaGeneration()).rejects.toBeInstanceOf(
-      InteractionNotImplementedError,
-    );
+    // D-13 이후 connectMedia는 grant 검사로 거절한다.
+    await expect(base.runtime.connectMedia({} as never)).rejects.toMatchObject({
+      code: 'GRANT_INCOMPLETE',
+    });
     expect(() => base.runtime.applyMediaBindings({} as never)).toThrow(
       InteractionNotImplementedError,
     );

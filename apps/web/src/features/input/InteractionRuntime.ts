@@ -41,6 +41,8 @@ import {
   type FaceCompositor,
 } from '../media/face-compositor';
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
+import { createMediaSession, type MediaSession } from '../media/media-session';
+import { IDLE_MEDIA_STATUS, type MediaRoomFactory } from '../media/media-types';
 import { createCalibrator, isNeutralUsable, relativeToNeutral } from './calibration';
 import { createContextStore, type ContextStore } from './interaction-context';
 import {
@@ -228,6 +230,9 @@ export type InteractionRuntimeOptions = Readonly<{
   environment?: DeviceEnvironment;
   vision?: VisionEnvironment;
   compositor?: CompositorEnvironment;
+  /** SDK Room 주입점. 생략하면 실제 livekit-client Room을 만든다. */
+  createMediaRoom?: MediaRoomFactory;
+  epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
   keyboardTarget?: KeyboardTarget;
   tuning?: InputTuning;
@@ -366,6 +371,18 @@ export const createInteractionRuntime = (
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
   const calibrator = createCalibrator(tuning);
   const context: ContextStore = createContextStore();
+  const media: MediaSession = createMediaSession({
+    createRoom: () => {
+      if (!options.createMediaRoom)
+        throw new InteractionNotImplementedError('createMediaRoom', 'F/D 실제 SDK 주입');
+      return options.createMediaRoom();
+    },
+    onStatus: (status) => {
+      if (!disposed) deps.onMediaStatus(status);
+    },
+    epochNowSeconds: options.epochNowSeconds ?? (() => Math.floor(Date.now() / 1000)),
+    getPhase: () => context.get()?.phase ?? null,
+  });
   let keyboardBound: (() => void) | null = null;
 
   const move: MoveIntentController = createMoveIntentController({
@@ -702,8 +719,9 @@ export const createInteractionRuntime = (
       bindKeyboard();
     },
 
-    connectMedia() {
-      return Promise.reject(new InteractionNotImplementedError('connectMedia', 'D-13 / ME-03'));
+    async connectMedia(grant) {
+      if (disposed) return;
+      await media.connect(grant);
     },
 
     applyAudioPolicy() {
@@ -718,10 +736,9 @@ export const createInteractionRuntime = (
       throw new InteractionNotImplementedError('setQualityPreset', 'D-14 / ME-04');
     },
 
-    retireMediaGeneration() {
-      return Promise.reject(
-        new InteractionNotImplementedError('retireMediaGeneration', 'D-17 / ME-07'),
-      );
+    /** 미디어 세대만 끝낸다. 논리 참가 종료(D-17)와 분리한다. */
+    async retireMediaGeneration() {
+      await media.retire();
     },
 
     /** 논리 참가 종료. D-17에서 미디어 세대 종료와 분리해 확장한다. */
@@ -730,6 +747,8 @@ export const createInteractionRuntime = (
       clearHolds();
       context.clear();
       fallback.reset();
+      await media.dispose();
+      deps.onMediaStatus(IDLE_MEDIA_STATUS);
       stopVision();
       calibrator.reset();
       await devices?.dispose();
@@ -739,10 +758,11 @@ export const createInteractionRuntime = (
 
     async dispose() {
       if (disposed) return;
-      disposed = true;
       unbindKeyboard();
       clearHolds();
       context.clear();
+      await media.dispose();
+      disposed = true;
       stopVision();
       calibrator.reset();
       await devices?.dispose();
