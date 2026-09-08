@@ -1,5 +1,12 @@
 import { schema, t, type SchemaType } from '@colyseus/schema';
 
+export * from './product.js';
+
+/*
+ * Everything below is the 0.1 development room contract kept for the team's regression flow.
+ * It is not the product contract and production must not register a room that sends it.
+ */
+
 export const Player = schema(
   {
     id: t.string().default(''),
