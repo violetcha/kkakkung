@@ -141,7 +141,7 @@ describe('reserved cell movement', () => {
     const self = getPlayerSelf(start, 'r-a');
     expect(self).toMatchObject({ status: 'ACTIVE', cell: { x: 2, y: 2 }, dir: 0, loading: null });
     expect(getPlayerSelf(start, 'nobody')).toBeNull();
-    expect(getVisibleSurfaces(start, 'r-a')).toEqual({ visibleCells: [], visibleWallFaces: [] });
+    expect(getVisibleSurfaces(start, 'r-a').visibleCells.length).toBeGreaterThan(0);
     expect(getFrame(start).participants).toHaveLength(6);
     expect(getFrame(start).gameInstanceId).toBe('game-1');
     expect(JSON.stringify([...start.players.values()])).toBe(before);

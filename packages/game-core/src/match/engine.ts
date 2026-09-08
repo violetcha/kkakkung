@@ -20,7 +20,10 @@ import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
+import { discoverExits, knownActiveExits } from './knowledge/exits.js';
+import { initialTerrain, knownTerrainOf, observeTerrain } from './knowledge/terrain.js';
 import { completeActions, reserveMove } from './movement.js';
+import { visibilityOf } from './vision/visibility.js';
 import { terminateRunner, type TerminationOutcome } from './participation.js';
 import { createPriorityOrder } from './priority.js';
 import { evaluateResult } from './result.js';
@@ -30,6 +33,7 @@ import {
   commandPhase,
   isTerminal,
   withPlayers,
+  type KnowledgeRecord,
   type MatchState,
   type PlayerRecord,
 } from './state.js';
@@ -102,7 +106,16 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
       ? createExitRegistry(input.layout.topology, input.layout.exits, runnerIds)
       : null;
   if (registry && !registry.ok) throw new RangeError(`exit registry: ${registry.error.code}`);
-  return {
+  const knowledge = new Map<string, KnowledgeRecord>();
+  for (const id of order) {
+    const player = players.get(id)!;
+    const territory =
+      player.role === 'tagger'
+        ? (input.layout.territories.find((t) => t.playerId === id)?.cells ?? null)
+        : null;
+    knowledge.set(id, initialTerrain(input.layout.topology, player.cell, territory));
+  }
+  const created: MatchState = {
     matchId: input.matchId,
     gameInstanceId: input.gameInstanceId,
     mode,
@@ -120,10 +133,37 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     counts: Object.freeze({ escaped: 0, captured: 0 }),
     result: null,
     abortReason: null,
-    knowledge: new Map(),
+    knowledge,
     visibility: new Map(),
     eventSeq: 0,
   };
+  // First real sight from the spawn pose is part of the initial knowledge.
+  return refreshPerception(created, 0);
+}
+
+/**
+ * Recomputes every ACTIVE player's visibility from the authoritative pose at
+ * `tick`, unions the observation into terrain memory, and records exit
+ * discoveries. Ended players keep their memory but expose no current sight.
+ */
+function refreshPerception(state: MatchState, tick: number): MatchState {
+  const visibility = new Map<string, VisibleSurfaces>();
+  let knowledge: Map<string, KnowledgeRecord> | null = null;
+  for (const id of state.order) {
+    const player = state.players.get(id)!;
+    if (player.status !== 'ACTIVE') continue;
+    const surfaces = visibilityOf(state.layout.topology, player, tick);
+    visibility.set(id, surfaces);
+    const record = state.knowledge.get(id);
+    if (!record) continue;
+    const observed = observeTerrain(state.layout.topology, record, surfaces);
+    const discovered = discoverExits(observed, player.role, surfaces, state.exits);
+    if (discovered !== record) {
+      knowledge ??= new Map(state.knowledge);
+      knowledge.set(id, discovered);
+    }
+  }
+  return { ...state, visibility, knowledge: knowledge ?? state.knowledge };
 }
 
 /** Creates the authoritative game state. Six placed players, 3 taggers + 3 runners. */
@@ -386,6 +426,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
       ctx.media.push(...aborted.mediaIntents);
     }
   }
+  ctx.state = refreshPerception(ctx.state, ctx.tick);
   return {
     state: ctx.state,
     outcomes: ctx.outcomes,
@@ -492,8 +533,13 @@ export function getVisibleEntities(state: MatchState, playerId: string): readonl
 
 export function getPlayerKnowledge(state: MatchState, playerId: string): PlayerKnowledge {
   const record = state.knowledge.get(playerId);
-  if (!record) return { mapVersion: 0, knownTerrain: [], knownActiveExits: [] };
-  return { mapVersion: record.mapVersion, knownTerrain: [], knownActiveExits: [] };
+  const player = state.players.get(playerId);
+  if (!record || !player) return { mapVersion: 0, knownTerrain: [], knownActiveExits: [] };
+  return {
+    mapVersion: record.mapVersion,
+    knownTerrain: knownTerrainOf(state.layout.topology, record),
+    knownActiveExits: knownActiveExits(record, player.role, state.exits),
+  };
 }
 
 export const matchCore: CorePort<MatchState> = Object.freeze({
