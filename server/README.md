@@ -1,6 +1,6 @@
 # 까꿍 게임 서버
 
-Node.js + Colyseus 서버 권위형 매치 서버. 규칙 문서는 [docs/protocol.md](docs/protocol.md).
+Node.js + Colyseus 서버 권위형 매치 서버. [기존 개발 프로토콜](docs/protocol.md)은 현재 0.1 개발 Room의 호환 동작만 설명한다. 제품 구현은 [최신 결정 정정표](../docs/spec/decisions.md), [공통 실행 계약](../docs/execution/common.md), [B 실행 문서](../docs/execution/b-game-server.md)를 따른다. 기존 문서의 개발 필드·빈 입장·전체 맵 공개를 제품 계약으로 확장하지 않는다.
 
 ## 실행
 
@@ -21,6 +21,8 @@ playground 탭을 두 개 열어 각각 `kkakkung` 룸에 접속 → 둘 다 `re
 서버는 기존 `kkakkung` Room 외에 새 React 연동 검증용 `sandbox` Room을 등록한다. 두 Room의 wire 계약은 서로 다르며 현재 프로세스 전체 Room 용량 하나를 공유하므로 동시에 사용하지 않는다. `/health`는 기존 호환 별칭이고 개발 profile에서 `/monitor`, `/playground`를 제공한다.
 
 로컬 Playground의 빈 `{}` 입장은 기존 개발 흐름을 위해 development에서만 허용한다. join option에 토큰을 제공하면 엄격하게 검증하고 한 번만 소비한다. React 웹은 기본 `kkakkung`과 선택형 `sandbox` 모두 일회성 토큰을 사용한다. production은 두 방식 모두 현재 차단한다.
+
+현재 Origin 감사에서 `/api/config`의 Express 검사는 작동하지만 SDK가 먼저 처리하는 `/matchmake/*`에는 같은 검사가 적용되지 않는 문제가 확인됐다. [B-02](../docs/execution/b-game-server.md#b-02)의 공통 HTTP 경계·예약 부작용 회귀 시험으로 수정할 계획이며 이 문서 변경만으로 해결된 것은 아니다. 기본 loopback 설정을 유지하고 인증 없는 개발 관리 화면을 외부에 공개하지 않는다.
 
 ## 구조
 

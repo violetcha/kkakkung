@@ -1,6 +1,6 @@
 # F · 공통 설정·Jenkins·배포·통합 검증 실행 문서
 
-작성 기준: 2026-09-07 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-2**  
+작성 기준: 2026-09-08 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-3**  
 담당 범위: 의존성/공통 설정, 실행 환경, 인프라와 G1–G6 실측 증거  
 원본 작업: **19개** · 리뷰 상대: **E** · 현재 상태: **모두 구현 계획**
 
@@ -54,13 +54,13 @@ MVP 핵심 기능을 구현하고 생산자·소비자를 통합. 새 원본 작
 
 D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 늘리지 않는다. 수정한 파일 소유자가 검증 후 `fix:` 커밋과 MR 본문을 남긴다. 도망자 아이템의 종류·효과·획득·사용과 관련 G3-C·G5 행동은 결정 대기다. 해당 항목을 구현하거나 필수 통과로 강제하지 않으며 확정된 술래 장비·자연 구속·포즈·6대 5판 검증은 유지한다.
 
-<!-- BEGIN EXEC-CONTRACT-2 COMMON -->
+<!-- BEGIN EXEC-CONTRACT-3 COMMON -->
 
 # 공통 실행 계약 원본
 
-버전: **EXEC-CONTRACT-2** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
+버전: **EXEC-CONTRACT-3** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
 
-이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. 기존 EXEC-CONTRACT-1의 미정 아이템과 불완전한 연결 계약을 대체한다. 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다.
+이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. EXEC-CONTRACT-3은 이전 계약의 맵 영역 입력·게임 논리 인스턴스·미디어 초기화·격리 배포 순서를 보완한다. 기존 작업 번호와 제품 범위는 유지하며, 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다. 계약 타입·fixture·문서를 바꾼 것만으로 Origin 보안이나 제품 기능의 런타임 수정이 완료된 것은 아니다.
 
 ## 이 문서로 실행하는 방법
 
@@ -121,11 +121,31 @@ node scripts/check-execution-plan.mjs
 ## 좌표·시간·라운드 수명
 
 - Cell은 정수 x/y=0–31, Dir은 0북(y−1)/1동(x+1)/2남(y+1)/3서(x−1)다. 3D는 x=cell.x,z=cell.y, 셀 크기 1이며 기존 −15.5 보정을 섞지 않는다. TracePoint만 교환 중점의 0.5 좌표를 허용한다.
-- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가한다. 본 경기 로딩에서 matchId와 Tick을 다시 만들지 않는다.
+- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가하고 공개 stateVersion도 같은 match 안에서 연속 증가한다. 본 경기 로딩에서 matchId·Tick·stateVersion을 다시 만들지 않는다.
 - PLAYING startTick과 deadlineTick=startTick+3600을 고정한다. 이동 9 Tick·회전 6 Tick이다. startAt/서버 timeout은 서버 monotonic ms, JWT 만료/회수는 epoch 초다.
 - 웹 표시 시간은 `clock-probe/clock-reply`로 추정한다. 시작·재접속 뒤 5회 probe를 250ms 간격으로 보내고 RTT가 가장 작은 3회의 offset 중앙값을 사용한다. RTT=(수신클라이언트시각−clientSentAtMs)−(serverSentAtMs−serverReceivedAtMs), offset=((serverReceivedAtMs−clientSentAtMs)+(serverSentAtMs−클라이언트수신시각))/2다. 음수/RTT>1000ms 표본은 버리고 10초마다 재측정한다. serverEpoch가 바뀌면 표본을 폐기한다.
 - 클라이언트 추정 시각은 렌더링/안내용이다. serverTick·startAt·포즈 최소 시간을 브라우저 시계와 직접 비교하지 않고 환산한다. 실제 성공 판정은 서버가 한다.
 - B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
+
+## 맵 영역과 fallback 입력 — A/B
+
+- `LayoutTemplate`은 한 개의 정규화된 변형이다. `MapSource`의 templateId/templateVersion/templateHash/variantId와 topology, taggerRegions 3개, runnerSpawnRegions 3개, exitCandidates를 함께 전달한다. `SpawnRegion`은 regionId/cells/spawnCandidates를 가지며 평면 후보 목록으로 영역 정보를 없애지 않는다.
+- A MP-01/02가 영역·후보·출구 벽면/방향을 함께 검증·변형한다. 역할별 영역 ID는 유일하고 각 영역·후보는 비어 있지 않아야 한다. 술래 영역끼리, 도망자 시작 영역끼리는 겹치지 않으며 후보는 자기 영역의 유효 통로에 속해야 한다. 술래 구역과 도망자 시작 영역 사이의 중첩 금지라는 새 게임 규칙을 추가하지 않는다.
+- B loader는 파일을 읽어 원본 바이트의 SHA-256을 계산하고 승인된 templateId/version과 함께 A에 전달한다. templateHash는 이 원본 바이트 hash이며 변형마다 임의로 재정의하지 않는다. A는 이미 파싱된 자료를 검증한다. 실제 맵·영역·후보·hash·seed는 서버 내부 자료로 유지한다.
+- B는 A가 반환한 검증 변형을 variantId 오름차순으로 정렬하여 `seed % variants.length`(seed는 uint32)로 하나를 선택한다. 빈 목록은 실패다. 선택된 변형과 같은 MapSource 4개 필드의 `FallbackLayout`을 입력한다. A MP-04는 이 변형 안에서 술래 3명에게 서로 다른 구역을 배정하고, 도망자 시작 영역 3개에서 각각 한 후보를 선택한 뒤 출구를 선발한다. selector 내부에서 다른 변형으로 다시 바꾸지 않는다.
+- `LayoutSelectionInput`에는 template/players/seed/maxAttempts/fallback만 있다. 선발 전의 playerId 배정 territories를 받지 않으며, 확정 배정은 기존 `MatchLayout.territories`로 반환한다. fallback은 `{...MapSource,layout}`이며 변형별 자료를 A가 제공한다.
+- 정적 fallback의 playerId/ownerId는 역할별 안정 슬롯 `tagger-1`–`tagger-3`, `runner-1`–`runner-3`으로 저장한다. A의 `certifyFallback`이 input.players를 역할별 playerId 기본 문자열 오름차순(로케일 정렬 금지)으로 정렬하여 슬롯 번호와 일대일 대응하고 players.playerId/exits.ownerId/territories.playerId를 함께 치환한다. 입력을 변경하지 않고 새 layout을 만들며 중복·누락·역할 불일치·미치환 슬롯을 거절한다. B는 정적 슬롯을 실제 코어 참가자로 전달하지 않는다.
+- `certifyFallback`은 출처 4개 필드, topology의 버전·크기·통로 배열, 현재 영역/후보 소속과 기존 거리·연결성·출구 제약을 모두 재검사한다. hash 일치만으로 인증하지 않는다. 성공은 실제 플레이어로 바인딩된 `{status:'selected',layout,source:'fallback'}`, 실패는 `{status:'unavailable',code:'LAYOUT_UNAVAILABLE'}`로 기존 LayoutSelectionResult를 유지한다. 다른 변형/과거 템플릿 자료를 현재 fallback으로 사용하지 않는다. 정상 온라인 결과는 사용 가능하지만 fallback이 인증되지 않았다면 탐색 소진 시 LAYOUT_UNAVAILABLE로 끝낸다.
+
+## 게임 논리 인스턴스와 개인 데이터 폐기 — A/B/C/D
+
+- B는 두 팀 연습과 본 경기마다 역할·좌표를 인코딩하지 않는 새 UUID `gameInstanceId`를 발급한다. A의 CreateMatchInput/CreatePracticeInput과 CoreReadFrame이 이를 전달한다. A의 practice 입력에는 mediaInstanceId를 넣지 않는다. B가 게임 인스턴스와 E의 미디어 인스턴스 관계를 별도로 관리한다.
+- PrivateView.gameScope는 `{gameInstanceId,kind:'practice'|'game',revision}` 또는 `{gameInstanceId:null,kind:'none',revision}`이다. B는 수신자별로 같은 match 안에서 revision을 증가시킨다. 시작은 none/0이며 연습 진입→연습 폐기→본 경기 진입의 예는 practice/1→none/2→game/3이다. 새 라운드는 matchId도 바뀐다. 같은 게임 인스턴스의 미디어 재연결만으로 이 ID/revision을 바꾸지 않는다.
+- scope의 생성·전환·폐기는 내용 변경으로 취급하여 전체 PrivateView를 보낸다. none은 self=null이고 기억 지형/출구·가시 셀/벽면/엔티티가 모두 빈 배열이다. `TEAM_PRACTICE`는 practice, `GAME_LOADING/COUNTDOWN/PLAYING/RESULT`는 game, 나머지 phase는 none으로 정의한다. 폐기 시 C는 이전 지도·장면·교환/출구 문맥·보류 사건을 비운다. D의 MediaScope·트랙 회수는 별도 계약으로 수행한다.
+- C는 `(matchId,gameScope.revision,gameInstanceId)`로 개인 자료를 구분한다. 낮은 revision과 이미 적용한 개인 뷰보다 낮은 stateVersion은 폐기한다. 같은 revision에 다른 ID/kind가 오면 화면에 적용하지 않고 resync한다. 높은 revision은 현재 권위 phase에 맞는 전체 뷰로만 전환하며 새 자료를 이전 지도에 합치지 않는다.
+- 공개 phase가 바뀌면 C는 현재 개인 화면을 즉시 비우고 관측한 전환 stateVersion을 하한으로 저장한다. B는 scope/개인 내용이 같아도 phase 변경마다 해당 전환 stateVersion 이상의 전체 뷰를 한 번 발행한다. C는 하한보다 오래된 뷰를 적용하지 않는다. 공개 상태보다 앞선 뷰는 최신 1개만 최대 1초 보류하고 공개 상태가 따라오면 phase/scope/버전을 다시 검사한다. phase 변경 후 유효한 전체 뷰가 없으면 보류 뷰 유무와 무관하게 최대 1초 동기화 타이머를 시작한다. 하한 때문에 새 초기 뷰를 버렸거나 타이머가 만료되면 기존 view-resync를 요청한다. B는 수신자당 1초에 1회로 제한하고 현재 scope/권위 stateVersion으로 다시 직렬화한 전체 뷰를 보내며 옛 캐시 버전으로 응답하지 않는다.
+- PrivateEvent.gameScope는 ActiveGameScope다. B는 사건을 만든 게임 인스턴스와 수신자의 당시 revision을 붙이며 늦은 작업의 사건을 새 인스턴스로 재표기하지 않는다. C는 과거 scope를 즉시 폐기하고 미래 scope의 사건으로 scope를 전환하지 않는다. 필요한 전체 뷰/참조 버전을 기다리는 사건은 기존 한도인 총 64개/1초 안에서 보류한다. 같은 revision의 ID/kind 불일치와 만료는 폐기·resync한다.
+- B는 접수한 core 명령의 대상 gameInstanceId를 서버 큐 메타데이터에 고정하고 전환 시 옛 큐를 취소·종결한다. CommandEnvelope/receipt/outcome에 임의 필드를 추가하지 않는다. 옛 인스턴스의 accepted 요청도 원래 matchId/requestId로 canceled outcome을 받지만, 그 결과를 새 지도나 도전 생성으로 해석하지 않는다.
 
 ## 명령의 접수와 종결
 
@@ -143,7 +163,7 @@ node scripts/check-execution-plan.mjs
 
 ## 개인 상태·출구·교환·준비
 
-개인 뷰는 초기/허용 내용 변경/명시적 resync 때 전체 교체한다. stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·중복·만료 사건은 폐기한다.
+개인 뷰는 초기/허용 내용 변경/scope 전환/공개 phase 변경/명시적 resync 때 전체 교체한다. 일반적인 stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. phase 전환은 새 하한을 확인할 전체 뷰를 한 번 보내고 resync는 현재 버전으로 재직렬화한다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·구 gameScope·중복·만료 사건은 폐기한다.
 
 - visibleEntities는 종류별 필수 필드가 다르다. **가시 sensor는 wall이 필수**이며 자기 기억인 ownedEquipment와 분리한다. sensor.cell은 접근 셀, wall은 실제 부착 면이다. 다른 장비 위치를 전원에게 전송하지 않는다.
 - self.exchange의 incoming/outgoing은 수신자 기준이다. C는 incoming만 D의 incomingExchangeId로 보내고 요청자는 outgoing 대기를 표시한다. 서버는 toPlayerId만 수락할 수 있게 검사한다.
@@ -156,6 +176,14 @@ node scripts/check-execution-plan.mjs
 ## 서버 미디어와 브라우저 결합
 
 mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다. receiverGeneration은 이 메시지를 받는 플레이어 자신의 연결 세대, participants의 publisherGeneration은 원격 송신자 세대다. bindingRevision은 수신자·인스턴스·연결 세대 안에서 증가하며, 한 사람만 재연결했다고 다른 다섯 명의 receiverGeneration을 바꾸지 않는다. 새 Identity는 회수 완료 후에만 발급한다.
+
+### 초기화 완료와 서비스 준비 — B/E/F
+
+1. E의 동기 factory는 즉시 RECOVERING/readiness와 DRAINING/admission을 제공하고 발급·입장을 잠근다. B는 `await coordinator.initialize()`를 호출하며 중복 호출은 같은 진행 Promise/최초 결과를 공유한다.
+2. initialized 결과는 writer lock과 저널/체크포인트의 복원 판단, 관찰 가능한 RECOVERING 또는 LOCKED 상태를 준비했다는 뜻이다. 안전하게 잠긴 손상/미확인 상태도 reasonCodes와 함께 initialized/LOCKED로 관찰 가능하다. Cloud 회수·예산 확인 완료를 의미하지 않는다.
+3. 중복 writer 등 안전한 인스턴스를 유지할 수 없는 오류는 fatal(WRITER_CONFLICT 또는 INITIALIZATION_FAILED)이다. B는 HTTP listen을 시작하지 않고 close로 자원을 정리한다. 예상하지 못한 Promise 거절도 같은 부팅 실패로 처리한다. 초기화 중에는 listen이 0회여야 한다.
+4. initialized 이후 B가 HTTP를 열어 `/health/live`, 503인 `/health/ready`, 인증된 운영 경로와 서명 검증 Webhook으로 상태를 관찰·복구할 수 있게 한다. E는 이후 Cloud 잔존 정리·공식 예산·저널 쓰기 상태를 확인한다. 완료 전 새 입장·grant·자동 시작은 0이며 복구 실패는 LOCKED로 남겨 관찰한다.
+5. 조건이 충족되면 readiness만 READY로 바뀐다. admission은 DRAINING을 유지하고 운영 resume의 terminal 성공 후에만 OPEN이 된다. 첫 설치·재시작 모두 자동 OPEN하지 않는다. initialize를 다시 호출하여 복구 실패나 잠금을 초기화하지 않는다.
 
 - E는 내부 Gateway·Journal·예산 큐를 소유한다. B가 주입하는 deps/config와 요청·trusted frame·비동기 결과는 아래 정확한 타입을 따른다. E 콜백은 B의 큐로만 들어가며 Tick 상태를 직접 변경하지 않는다.
 - prepareGeneration은 expectedPreviousGeneration을 검사하고 E가 새 세대를 할당한다. 동일 requestId는 같은 논리 결과를 반환한다. Promise 결과는 HTTP 응답용이고 enqueueControl 결과는 게임 큐용이며 B는 requestId+scope로 중복 적용을 막는다. rejected/unknown이면 grant는 null이고, 세대 할당 전 rejected의 receiverGeneration은 null이다. ready는 grant 발급 완료이며 게시 확인 완료가 아니다. 요청 없이 생긴 MEDIA_FAILED는 eventId+scope로 중복 제거한다.
@@ -182,6 +210,14 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - pageActive=false이면 입력·버퍼를 비우고 새 의도를 막는다. 복귀 때 새 키/중립 복귀를 요구하며 서버 phase를 꾸며내지 않는다.
 - C가 장치/미디어·교환·출구 문맥을 setContext로 반영한다. D가 슬롯·입력 모드를 바꾸면 onInteractionState로 알리고 같은 값의 재적용은 callback을 반복하지 않는다.
 
+## HTTP·WebSocket 진입 보안 — B
+
+- 공통 Origin 검사는 SDK의 OPTIONS 응답과 `/matchmake/*` 실행보다 먼저 적용한다. Express의 `/api/config` 검사만으로 매칭 경로를 보호했다고 보지 않는다. 독립 request listener 하나가 403을 보낸 뒤 다른 SDK listener가 예약을 진행하지 않도록 실제 진입/dispatch 순서를 확인한다.
+- HTTP/WS는 ALLOWED_ORIGINS의 정확한 http/https origin 목록을 공유한다. 목록의 Origin은 허용하고 비허용·문자열 null·빈 값·복수 Origin은 403으로 거절한다. Origin 헤더 자체가 없는 개발 CLI/health 및 서버 간 요청은 기존 정책대로 허용하되, 제품 세션/초대·OPS_TOKEN·Webhook 서명 검사를 대신하지 않는다.
+- 거절한 POST/OPTIONS/WS는 방 생성·좌석 예약·세션 소비를 일으키지 않는다. CORS 허용 헤더만 바꾸고 매칭 실행은 진행시키지 않는다. 허용 OPTIONS는 예약 없이 끝내고 허용 웹/Playground 접속은 유지한다.
+- 매칭 JSON은 2,048바이트로 제한한다. Content-Length 사전 검사와 실제 수신 바이트 상한을 함께 적용하여 길이 누락·chunked에서도 초과를 413으로 끝내고 JSON 파싱/예약을 진행하지 않는다. WebSocket은 기존 8,192바이트 한도를 유지한다. LiveKit raw-body 서명 경로를 JSON 재직렬화하거나 매칭 전용 본문 제한으로 일괄 변경하지 않는다.
+- B의 필수 회귀 시험은 두 룸의 매칭 POST/OPTIONS, 일반 API, WS upgrade에 허용/비허용 Origin을 대입하고 응답과 처리 전후 방/예약 수를 함께 검사한다. 경계 2,048/2,049바이트·길이 없는 초과 본문·Origin 없는 개발 요청도 포함한다. 이 문서는 수정 계획이며 실제 bootstrap과 통합 시험을 구현·실행해야 보안 수정 완료다.
+
 ## 운영 HTTP 계약
 
 B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
@@ -198,6 +234,19 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
 - checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
+
+## 격리 상태의 배포 검증 — B/E/F
+
+외부 공개 여부는 F의 네트워크/프록시 접근 경계이고 admission은 E의 게임 입장 상태다. 서로 다른 두 조건을 하나의 boolean으로 합치지 않는다. 외부 접근 차단은 진행 중 게임의 정상 종료·회수를 방해하지 않도록 기존 연결과 인증된 운영/검증 경로를 유지하면서 일반 이용자의 새 접속을 차단한다.
+
+1. F가 외부 일반 참가자는 새 HTTP 세션·매칭·WS 접속을 못 하고 지정 검증 참가자 6명과 운영자만 접근 가능한 격리를 확인한다. 모든 앱 진입 경로에 적용하고 이름뿐인 smoke 플래그나 클라이언트 claim으로 우회하지 않는다. 격리 수단/검증 참가자/공식 예산·검증 시간 창이 준비되지 않으면 BLOCKED다.
+2. OPS drain의 terminal succeeded와 진행 경기/연습/입장 대기 0, 회수·저널 반영 및 미해결 0을 확인한 뒤 같은 검증 SHA/digest로 교체한다. 격리는 재시작·롤백 동안 유지한다.
+3. B/E의 initialize→HTTP 관찰→RECOVERING 정리→READY를 확인한다. 이때 admission은 여전히 DRAINING이다. READY만 보고 공개하거나 자동 입장시키지 않는다.
+4. 격리를 다시 확인한 후 승인된 검증 시간 창/실제 잔량 조건으로 resume을 요청하고 terminal succeeded 및 READY/OPEN을 확인한다. 일반 이용자는 계속 차단된 상태에서 검증 참가자만 입장하여 6인 smoke를 수행한다. DRAINING에서 입장하는 시험용 예외 API는 만들지 않는다.
+5. 시험 성공 후 검증 참가자 퇴장, 진행 활동 0, 시험 미디어 회수·저널 반영·미해결 0을 확인한다. 공개 시간 창·잔량·READY/OPEN을 다시 검사하고 F가 외부 격리를 해제한다. 격리 해제 전에 하나라도 실패하면 공개하지 않는다.
+6. smoke 실패나 resume 이후 실패에는 격리를 유지한 채 별도 requestId로 다시 drain하고 회수·활동 0을 확인한 뒤 이전 digest로 복귀한다. 회수가 불명확하면 이미지를 교체하여 미해결 상태를 숨기지 않고 ROLLBACK_BLOCKED로 남긴다. 롤백 후에도 같은 초기화·복구·격리 시험 순서를 통과해야 공개할 수 있다.
+
+F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배포 순서를 구현하며 QA-13이 인계 증거를 확인한다. Jenkins·nginx·배포 스크립트의 실제 구현과 원격 적용은 F 작업이다. 공통 문서와 fixture의 순서 검사만으로 해당 구현·원격 시험을 완료 처리하지 않는다.
 
 ## 작업 상태·커밋·MR·인계
 
@@ -237,13 +286,13 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 
 아래 타입은 [검사 가능한 원본](contracts/types.ts)에서 자동 삽입한다. [fixture](contracts/fixtures.ts)는 정상/실패·순서 교차 입력과 기대 상태를 제공하고 [검사](contracts/fixtures.test.ts)는 계약 자료의 정합성을 확인한다. 제품 타입·serializer·reducer·Room·Coordinator 구현과 실제 연결은 각 담당 작업에서 수행한다. 문서용 타입을 제품 런타임 의존성으로 import하지 않는다. 필요한 공개 타입은 해당 소유 모듈에 옮기고 원본과 소비자 호환을 검사한다.
 
-필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
+필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 영역별 맵 입력과 다른 출처 fallback 거절, 같은 match의 연습→none→본경기와 구 scope 지연 데이터 폐기, initialize 완료/READY/OPEN 분리와 fatal 기동 차단, 격리 유지 resume→6인 시험→회수→공개 및 실패 rollback, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단, 매칭 Origin 거절 뒤 예약 0. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
 
 <!-- BEGIN CONTRACT-TYPES -->
 
 ```ts
-// EXEC-CONTRACT-2. Planning contracts; product modules do not exist merely because these types do.
-export const CONTRACT_VERSION = 'EXEC-CONTRACT-2' as const;
+// EXEC-CONTRACT-3. Planning contracts; product modules do not exist merely because these types do.
+export const CONTRACT_VERSION = 'EXEC-CONTRACT-3' as const;
 export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
 export type Cell = Readonly<{ x: number; y: number }>;
 export type TracePoint = Readonly<{ x: number; y: number }>;
@@ -415,9 +464,17 @@ export type PlayerKnowledge = Readonly<{
   knownTerrain: readonly KnownTerrain[];
   knownActiveExits: readonly KnownExit[];
 }>;
+export type ActiveGameScope = Readonly<{
+  gameInstanceId: string;
+  kind: 'practice' | 'game';
+  revision: number;
+}>;
+export type GameViewScope =
+  ActiveGameScope | Readonly<{ gameInstanceId: null; kind: 'none'; revision: number }>;
 export type PrivateView = PlayerKnowledge &
   Readonly<{
     matchId: string;
+    gameScope: GameViewScope;
     stateVersion: number;
     self: ActiveSelf | EndedSelf | null;
     visibleCells: readonly Cell[];
@@ -473,6 +530,7 @@ export type EventType = keyof EventPayloads;
 export type PrivateEvent = {
   [K in EventType]: Readonly<{
     matchId: string;
+    gameScope: ActiveGameScope;
     eventId: string;
     tick: number;
     stateVersion: number;
@@ -559,13 +617,13 @@ export type MatchTuning = Readonly<{
 }>;
 export type CreateMatchInput = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   seed: number;
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly { playerId: string; role: Role }[];
 }>;
-export type CreatePracticeInput = CreateMatchInput &
-  Readonly<{ mediaInstanceId: string; role: Role }>;
+export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 export type GameSubject = Readonly<{
   playerId: string;
   role: Role;
@@ -576,6 +634,7 @@ export type GameSubject = Readonly<{
 }>;
 export type CoreReadFrame = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   tick: number;
   phase: Phase;
   counts: Counts;
@@ -603,15 +662,33 @@ export type SelectionProgress = Readonly<{ attempted: number; batchAttempts: num
 export type LayoutSelectionResult =
   | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
   | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
-export type LayoutSelectionInput = Readonly<{
-  template: Topology;
-  players: readonly { playerId: string; role: Role }[];
+export type MapSource = Readonly<{
+  templateId: string;
+  templateVersion: string;
+  templateHash: string;
+  variantId: string;
+}>;
+export type SpawnRegion = Readonly<{
+  regionId: string;
+  cells: readonly Cell[];
   spawnCandidates: readonly Cell[];
-  exitCandidates: readonly WallFace[];
-  territories: MatchLayout['territories'];
+}>;
+export type LayoutTemplate = MapSource &
+  Readonly<{
+    topology: Topology;
+    taggerRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    exitCandidates: readonly WallFace[];
+  }>;
+// Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
+// player/exit/territory references to role-sorted input.players before validation.
+export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
+export type LayoutSelectionInput = Readonly<{
+  template: LayoutTemplate;
+  players: readonly { playerId: string; role: Role }[];
   seed: number;
   maxAttempts: number;
-  fallback: MatchLayout;
+  fallback: FallbackLayout;
 }>;
 export interface LayoutSelectionPort {
   certifyFallback(input: LayoutSelectionInput): LayoutSelectionResult;
@@ -749,7 +826,15 @@ export type Readiness = Readonly<{
   historyComplete: boolean;
   unresolvedCount: number;
 }>;
+export type MediaInitializationResult =
+  | Readonly<{
+      status: 'initialized';
+      readiness: Readiness & Readonly<{ state: 'RECOVERING' | 'LOCKED' }>;
+      admission: 'DRAINING';
+    }>
+  | Readonly<{ status: 'fatal'; code: 'WRITER_CONFLICT' | 'INITIALIZATION_FAILED' }>;
 export interface MediaCoordinator {
+  initialize(): Promise<MediaInitializationResult>;
   prepareGeneration(input: PrepareGenerationRequest): Promise<PreparationResult>;
   observeFrame(frame: TrustedMediaFrame): void;
   retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult>;
@@ -941,7 +1026,7 @@ export type ServerMessages = {
 
 <!-- END CONTRACT-TYPES -->
 
-<!-- END EXEC-CONTRACT-2 COMMON -->
+<!-- END EXEC-CONTRACT-3 COMMON -->
 
 ## 작업별 구현 지시
 
@@ -1317,7 +1402,7 @@ ci: Jenkins 검증과 GitLab 결과 연결 추가
 1. 기존개발Compose는local명시를유지하고운영override를분리한다. web-proxy/game-server만기본서비스로두고Node진입점은server/src/index→dist/index흐름과맞춘다. 한process/복제본1개를고정한다.
 2. 같은검증commit으로이미지2개를빌드하고label/tag에SHA를기록한다. pnpm deploy의server files목록에A가실제로추가한content/config를포함하고D모델은web정적출력에같은hash로포함한다.
 3. runtime는비root유저·내부Node포트·OPS_DATA_DIR지속볼륨·write권한·단일writerlock으로구성한다. secret은환경파일/secretmount로주입하고이미지COPY/ARG/VITE변수에넣지않는다.
-4. 로그회전용max-size/max-file,health live/ready용도,종료grace를설정한다. RECOVERING을재시작루프로우회하지않고readiness가false인동안신규입장을막는다.
+4. 로그 회전용 max-size/max-file, health live/ready 용도, 종료 grace를 설정한다. E initialize가 로컬 기록·잠금 초기화 후 initialized를 반환하면 B가 HTTP health/운영 경로를 열고 후속 Cloud 복구 중 live 200/ready 503을 관찰하게 한다. fatal 초기화이면 listen 없이 close하며 RECOVERING을 재시작 루프로 우회하지 않는다. READY 이후에도 resume 전 admission=DRAINING을 유지한다.
 5. D1에는 실제 Docker daemon의 이미지 빌드·컨테이너 실행 기반·지속 볼륨·쓰기 권한·단일 쓰기자 구성을 먼저 E에 인계한다. 이것이 OP-08 구현의 선행 결과다. 제품 production 활성화와 READY/재시작 최종 시험은 B 초대 인증과 E Cloud/OP-08 코드 통합 뒤 D2에 F/E가 함께 완료한다. 이 마지막 시험을 OP-08의 선행으로 다시 요구하지 않으며 D1 기반 인계와 DP-02 전체 완료를 별도로 기록한다.
 6. 운영프록시에서/dev-sessions/playground/monitor진단라우트를노출하지않도록B와등록/보호를확인한다. nginx차단만으로서버인증없음을덮지않는다.
 
@@ -1398,7 +1483,7 @@ ci: 단일 서버 운영 컨테이너 구성 추가
 
 1. DP-01확인실제도메인과관리주체를기준으로DNS→공인주소→TLS인증서체인/만료를확인한다. 미확인상품명·IP·credential을문서에예시값으로채워운영하지않는다.
 2. nginx정적파일/모델응답과/api/ColyseusWebSocket Upgrade를설정한다. HTTPS리다이렉트·SNI·인증서갱신방법·idle timeout을명시하고모델wasmMIME과Worker/CSP실행을실제브라우저로확인한다.
-3. 공용인바운드는80/443,Node2567은Docker내부,SSH는확인된운영자대역으로제한한다. 방화벽변경은실제접속보존경로를확인하며일괄삭제로대체하지않는다.
+3. 공용 인바운드는 80/443, Node 2567은 Docker 내부, SSH는 확인된 운영자 대역으로 제한한다. 배포 검증 중에는 F가 프록시·네트워크 계층에서 일반 이용자의 새 HTTP 세션·매칭·WSS 접속을 차단하고 지정 운영자·시험 클라이언트만 새로 접근할 수 있는 격리 방법과 해제·복구 방법을 준비한다. 진행 게임의 기존 연결과 인증된 운영 경로는 유지하여 정상 종료·drain·회수를 방해하지 않는다. 실제 접근 보존 경로를 확인하며 방화벽 일괄 삭제로 대체하지 않는다. 허용된 시험 경로의 접근 성공과 허용하지 않은 외부 새 접속의 차단을 둘 다 검증하고 증거가 없으면 BLOCKED로 남긴다.
 4. 배포smoke는health live/ready 구분·초대거절/허용·WSS연결2초heartbeat유지·모델로드·카메라securecontext·마이크거부독립성을검사한다. 원격서버의productionready미완이면미완원인을기록한다.
 5. 인증서갱신dryrun/서비스reload가현재검증대상연결에미치는영향을확인하고운영일정·담당자·실패알람경로를기록한다.
 
@@ -1406,6 +1491,7 @@ ci: 단일 서버 운영 컨테이너 구성 추가
 
 - Jenkins이전첫검증배포는이환경에서시행하며DP-06완료를선행조건으로두어순환시키지않는다.
 - 실제6인/fullMVP완주는QA-09,이작업은접속/TLS/모델/장치권한배포경계검증이다.
+- 외부 접근 격리는 F가 소유하며 E의 admission=DRAINING, 초대 인증, Origin 검사와 구분한다. Origin 검사는 네트워크 접근 인증 수단이 아니다. 정상 인증과 READY/OPEN 조건으로 시험할 수 있는 허용 경로를 준비하고 DP-06에 차단·허용·해제 확인 절차를 인계한다. 격리 확인 없이 resume하거나 공개하지 않는다.
 
 **시험 입력 → 기대 결과**
 
@@ -1413,6 +1499,7 @@ ci: 단일 서버 운영 컨테이너 구성 추가
 - 올바른OriginWSS→upgrade/heartbeat유지;잘못된Origin→거절.
 - 외부2567/monitor/playground→차단,정적wasm/task→올바른MIME/내용hash.
 - 마이크거부·카메라허용→장치체크가마이크거부만으로실패하지않음.
+- 외부 격리 활성 → 지정한 시험·운영 경로는 정상 인증 가능, 허용하지 않은 외부 HTTP/WSS 경로는 차단; 한쪽 증거 누락 → BLOCKED·공개 재개 0.
 
 **추가·보완할 시험 파일**
 
@@ -1430,7 +1517,7 @@ pnpm lint
 
 **완료 조건**
 
-DNS·인증서 자동 갱신·HTTPS/WSS Upgrade·idle timeout을 배포 환경에서 확인한다. 80/443만 공용, Node 포트는 내부, SSH는 운영자 허용 주소로 제한하고 정적 모델 로딩·웹캠 권한 경로를 점검한다.
+DNS·인증서 자동 갱신·HTTPS/WSS Upgrade·idle timeout을 배포 환경에서 확인한다. 80/443만 공용, Node 포트는 내부, SSH는 운영자 허용 주소로 제한하고 정적 모델 로딩·웹캠 권한 경로를 점검한다. 배포 시험용 외부 격리의 허용·차단 양쪽 증거와 해제·복구 절차를 준비하여 DP-06에 전달한다.
 
 위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
 
@@ -1709,7 +1796,7 @@ test: 탈락 중 회수와 늦은 허용 경쟁 검증 추가
 **연결 계약과 경계**
 
 - 공통 증거는 sourceCommit/lockfileHash/protocolVersion/tuningVersion/SDK·브라우저버전/계정별칭/시각/환경/단계/결과/회수상태로 저장한다. 원본JWT·Secret·rawSDP·사용자얼굴/음성은 로그·trace·HAR·스크린샷에 남기지 않는다. Cloud 자격이나 표본이 없으면 BLOCKED/미실시이며 가짜 skip 성공을 완료로 쓰지 않는다.
-- B의 EXEC-CONTRACT-2 `media-bindings`만 앱 매핑 근거로 사용한다. mediaInstanceId/receiverGeneration/bindingRevision과 참가자별 publisherGeneration/Identity/participantSid/trackSid를 검증하고 `audio-policy`의 bindingRevision과 맞춘다.
+- B의 EXEC-CONTRACT-3 `media-bindings`만 앱 매핑 근거로 사용한다. mediaInstanceId/receiverGeneration/bindingRevision과 참가자별 publisherGeneration/Identity/participantSid/trackSid를 검증하고 `audio-policy`의 bindingRevision과 맞춘다.
 - replaceTrack는설치livekit-client LocalTrack.d.ts에서확인된API. source속성을바꾼것만으로Cloud게시목록이바뀐다고추정하지않는다.
 
 **시험 입력 → 기대 결과**
@@ -1845,7 +1932,7 @@ test: 강제 종료와 이전 미디어 토큰 회귀 추가
 
 **QA-07 · [QA] G3 실제 Room 동시 판정 회귀**  
 일정: D2 2026-09-09 · **오늘 6번**  
-기획 근거: v0.0.8 **07, 26.1 G3-A/B/D장**, 최신 아이템 결정 대기 정정, EXEC-CONTRACT-2 경계 계약  
+기획 근거: v0.0.8 **07, 26.1 G3-A/B/D장**, 최신 아이템 결정 대기 정정, EXEC-CONTRACT-3 경계 계약  
 선행 완료 결과: [A-15](a-game-core.md#a-15) (RL-08, D1), [A-33](a-game-core.md#a-33) (EX-03, D2), [A-21](a-game-core.md#a-21) (KN-07, D2), [B-05](b-game-server.md#b-05) (SV-05, D1), [B-18](b-game-server.md#b-18) (FL-08, D2). 경계별 시험은 해당 실제 A/B/C/D/E 모듈을 인계받은 뒤 추가하며 미인계 항목을 mock으로 완료 처리하지 않는다.
 
 **수정·생성 파일**
@@ -1868,6 +1955,7 @@ test: 강제 종료와 이전 미디어 토큰 회귀 추가
 6. `docs/execution/contracts/{types.ts,fixtures.ts,fixtures.test.ts}`의 기준 계약·순서 사례를 참고하여 실제 A stepMatch→B command 응답/serializer→C reducer/D runtime, E 바인딩→B 송신→D 소비자를 `producer-consumer.test.ts`에 조합한다. 서로 다른 생산자/소비자 구현을 실제로 import하고 시간·transport·SDK의 외부 경계만 통제한다. fixture 자체의 validator 통과를 모듈 통합 통과로 표시하지 않는다.
 7. accepted 접수 뒤 core 규칙 거절→terminal 실행 결과→UI pending 해제, command 결과 중복/역순/조회 복구, 바인딩·트랙·audio-policy 도착 순열, 6명 중 한 명 재연결을 검증한다. 바인딩 삭제·옛 publisherGeneration/receiverGeneration/revision은 새 출력에 적용되지 않아야 한다.
 8. 얼굴만 갱신되는 동안 오래된 자세의 유효 시간이 연장되지 않는지, 교환 요청자/수락자 UI와 D 입력이 다른지, READY true가 로컬 장치 점검 완료 신고이고 취소/카메라 장애가 READY false로 이어지는지 검사한다. 서버가 웹캠 영상을 독립 검증했다고 주장하거나 별도 DEVICE_REPORT 명령을 만들지 않는다. 다른 사람의 가시 감지기 wall과 출구 포털 발견→폐쇄 표현도 실제 serializer/소비자에 연결한다.
+9. B의 연습→none→본경기 gameScope fullview를 C에 실제 연결하여 이전 지도·출구·이벤트 격리와 공개 phase version 하한을 검증한다. D의 미디어 재연결만으로 gameScope가 바뀌지 않아야 한다. E initialize의 initialized/RECOVERING·LOCKED와 fatal을 B 부팅에 연결하여 후속 Cloud 복구 중 HTTP 상태 관찰, fatal 시 listen 0, READY 이후 DRAINING 유지도 검증한다.
 
 **연결 계약과 경계**
 
@@ -1889,6 +1977,10 @@ test: 강제 종료와 이전 미디어 토큰 회귀 추가
 - 장치 점검 통과→READY true, 점검 취소/카메라 장애→READY false → B roster의 ready 해제·준비 장벽 잠금, 영상 독립 검증 성공 표시 없음.
 - PreparationResult ready만 수신·self faceTrackSid 없음 → B LOAD_READY 장벽 닫힘; E가 검증한 self entry와 현재 scope 신고 일치 → 장벽 준비 조건 충족, D의 원격 self 출력 0.
 - 가시 감지기 wall/출구 폐쇄를 B가 serialize → C가 같은 벽면 렌더/폐쇄 복원, 숨은 벽면 추가 노출 0.
+- 같은 match의 practice revision 1→none 2→game 3 fullview → C의 연습 지도·출구·이벤트 제거; 늦은 revision 1 view/event는 적용 0, 같은 revision의 다른 ID는 거절/resync.
+- 공개 phase 전환보다 먼저 온 private-view는 최신 1개/1초, 미래 scope 이벤트는 최대 64개/1초만 보류; 적합한 fullview 없이 이벤트로 scope 전환 0, 만료 후 view 재동기화.
+- 동일 gameScope에서 receiverGeneration만 증가 → D 연결만 교체하고 C 지도·지식 유지; E initialized/RECOVERING → B health/운영 경로 관찰 가능·ready 503, fatal → listen 0·close.
+- Cloud 정리·공식 잔량 정합 완료 → READY이지만 DRAINING·신규 입장/grant 0; resume terminal succeeded와 OPEN 확인 후에만 6인 시험 입장 가능.
 
 **추가·보완할 시험 파일**
 
@@ -2195,29 +2287,37 @@ test: 대표 장치 6인 MVP 완주 검증 추가
 **구현 순서**
 
 1. 검증된commitSHA·두이미지digest·이전정상release를입력으로받고Jenkinsverify결과와일치하는지검사한다. 최신태그latest를원본으로추측하지않는다.
-2. OPS_TOKEN Bearer로 `POST /api/operations/commands`에 `{requestId,action:'drain'}`을 전송한다. 202 pending은 접수일 뿐이다. 같은 requestId의 `GET /api/operations/commands/:requestId`를 한정된 backoff/기한으로 조회해 succeeded를 확인하고 GET `/api/operations/status`의 DRAINING·미해결 0을 확인한 뒤 진행한다. pending/failed/기한 초과에는 새 배포·공개 재개를 중단하고 기존 입장 잠금을 유지한다. requestId를 바꿔 중복 drain을 만들지 않는다.
-3. 같은SHA이미지로교체하고지속운영volume/Secret/namespace를유지한다. 기존진행Match를메모리스냅샷으로복원하거나blue-green두권위서버를동시에열지않는다.
-4. 재시작RECOVERING→이전세대정리→ready200을기다린뒤6인배포smoke를수행한다. 연결만되는health를완주/G1/G6증거로대체하지않는다.
-5. 실패하면 새 입장 잠금을 유지한 채 이전 이미지 digest로 복귀하고 같은 RECOVERING/ready/smoke 장벽을 다시 통과한다. 성공 후 별도 requestId의 `{action:'resume'}` 명령을 전송하고 terminal succeeded 및 GET status의 admission=OPEN/readiness=READY를 확인한다. 공개창·검증된 방수·잔량이 미확정이면 재개하지 않는다.
-6. Jenkinsjob외부설정/원격배포는실제실행요청과연결환경이있을때수행한다. 현재문서작성에서는외부호출을하지않고명령·완료조건만기록한다.
+2. DP-03의 외부 접근 격리를 활성화하고 일반 이용자의 새 HTTP 세션·매칭·WSS 접속이 차단되는지, 지정한 운영자·6인 시험 경로가 정상 인증 가능한지 확인한다. 기존 게임 연결과 인증된 운영 경로는 유지하여 정상 종료·drain·회수를 방해하지 않는다. 확인 증거가 없으면 BLOCKED로 중단한다. 이 격리는 애플리케이션 admission과 독립이며 이후 resume과 smoke 중에도 유지한다.
+3. OPS_TOKEN Bearer로 `POST /api/operations/commands`에 `{requestId,action:'drain'}`을 전송한다. 202 pending은 접수일 뿐이다. 같은 requestId의 `GET /api/operations/commands/:requestId`를 한정된 backoff/기한으로 조회해 succeeded를 확인하고 GET `/api/operations/status`의 DRAINING·미해결 0과 진행 경기·연습·입장 종료/회수 확인을 검사한 뒤 진행한다. pending/failed/기한 초과에는 새 배포·공개 재개를 중단하고 외부 격리와 입장 잠금을 유지한다. requestId를 바꿔 중복 drain을 만들지 않는다.
+4. 같은 SHA 이미지로 교체하고 지속 운영 volume/Secret/namespace를 유지한다. 기존 진행 Match를 메모리 스냅샷으로 복원하거나 blue-green 두 권위 서버를 동시에 열지 않는다. E initialize의 initialized 결과 후 HTTP health/운영 경로가 열리며 RECOVERING·LOCKED의 ready 503은 복구 대기 상태로 관찰한다. fatal이면 listen 없이 close한 실패로 처리한다.
+5. 이전 세대 Cloud 정리·공식 잔량 정합을 포함한 전체 복구가 끝나 readiness=READY가 되는지 확인한다. admission은 DRAINING을 유지해야 한다. 외부 격리 확인을 유지하고 실제 공개창·검증된 방수·잔량 조건을 검사한 뒤 별도 requestId의 `{action:'resume'}`를 전송한다. GET terminal succeeded와 status의 admission=OPEN/readiness=READY를 모두 확인한다. 미확정 조건을 시험용 값으로 우회하지 않는다.
+6. 외부 격리 상태에서 정상 초대·세션·미디어 경로로 지정한 6인 배포 smoke를 수행한다. DRAINING 상태에서 6인 입장을 시도하거나 health 연결만으로 완주/G1/G6 증거를 대체하지 않는다. 별도 smoke 운영 action이나 인증·예산 우회 경로를 추가하지 않는다.
+7. smoke가 끝나면 시험 세션·방·로컬 트랙을 종료하고 E의 서버 미디어 회수·저널 반영·미해결 0을 확인한다. READY/OPEN·실제 공개창·검증된 방수·잔량을 다시 검사하며 필요하면 실제 공식 잔량 checkpoint를 갱신한다. 남은 시험 활동/회수나 확인 누락·기한 만료가 있으면 외부 격리를 유지한다. 모든 조건이 충족된 뒤에만 F가 외부 격리를 해제하여 공개하고 접근 상태를 확인한다.
+8. 실패 시 외부 격리를 유지하거나 즉시 다시 적용한다. resume 이후 실패라면 새 requestId로 다시 drain하고 terminal succeeded·활동 종료·원격 회수 확인을 마친 뒤 이전 이미지 digest로 롤백한다. 초기화/health 장애로 제어·회수를 확인할 수 없으면 ROLLBACK_BLOCKED로 잠금·경보를 유지하며 강제 교체로 기록이나 미해결을 숨기지 않는다. 롤백 이미지도 같은 initialize→복구 READY→격리 중 resume→smoke→정리→공개 장벽을 다시 통과한다.
+9. Jenkins job 외부 설정/원격 배포는 실제 실행 요청과 연결 환경이 있을 때 수행한다. 현재 문서 작성에서는 Jenkins·NGINX 코드를 구현하거나 외부 호출을 하지 않고 F 담당자가 구현할 명령·완료 조건만 기록한다.
 
 **연결 계약과 경계**
 
-- 배포상태={releaseSha,previousDigest,phase:'DRAINING'|'DEPLOYING'|'RECOVERING'|'SMOKE'|'READY'|'ROLLBACK_BLOCKED',reason};원격상태실패를로컬script0종료로숨기지않는다.
+- 배포상태={releaseSha,previousDigest,phase:'BLOCKED'|'DRAINING'|'DEPLOYING'|'RECOVERING'|'SMOKE'|'READY'|'ROLLBACK_BLOCKED',reason};원격상태실패를로컬script0종료로숨기지않는다.
 - 진행게임복원·DB·다중서버확장추가금지. 최초시험환경은DP-03에서준비하며이작업과순환하지않는다.
-- 운영 경로·body·OperationSnapshot/OperationsStatus는 EXEC-CONTRACT-2와 E OP-07을 사용한다. retry-retirement에만 retirementId를 보내며 checkpoint는 추가 payload 없이 구성된 공식잔량 입력의 검증/저장 작업을 요청한다. script는 secret 원문·Authorization 헤더를 출력하지 않고 모든 HTTP/terminal 실패를 nonzero로 전달한다.
+- 운영 경로·body·OperationSnapshot/OperationsStatus는 EXEC-CONTRACT-3와 E OP-07을 사용한다. retry-retirement에만 retirementId를 보내며 checkpoint는 추가 payload 없이 구성된 공식잔량 입력의 검증/저장 작업을 요청한다. script는 secret 원문·Authorization 헤더를 출력하지 않고 모든 HTTP/terminal 실패를 nonzero로 전달한다.
 - 공식 잔량은 운영자가 실제 Cloud dashboard를 확인한 후 `OPS_DATA_DIR/official-usage-input.json`으로 제공한다. JSON 필드는 `{projectAlias,remainingMinutes,remainingBytes,checkedAtEpochMs,source:'cloud-dashboard',checkedBy}`이며 숫자·계정·확인 시각·확인자를 실제 값으로 채운다. F는 schema/파일 권한/전달 위치만 준비하고 dummy 값을 만들지 않는다. POST checkpoint의 terminal succeeded 뒤 GET status에 같은 확인 시각·잔량이 반영됐는지 검사한다. 미확인/누락/기한 만료면 재개를 막는다.
 - 정상 배수는 readiness=READY/admission=DRAINING일 수 있다. 건강 확인과 입장 허용을 같은 boolean으로 만들지 않으며 재개는 READY 확인 후 resume 성공과 OPEN을 별도로 확인한다.
+- 외부 격리의 구현·허용 대상·검증·해제는 F 책임이다. 배포 기록에 격리 증거와 OPS admission/readiness를 각각 남기며 Origin 검사를 외부 격리 증거로 사용하지 않는다. 배포상태의 최종 READY는 smoke 정리와 공개 조건 재검사까지 통과한 완료 상태이며 HTTP ready 200만으로 도달하지 않는다. 초기 격리 검증 실패는 BLOCKED로 기록한다.
 
 **시험 입력 → 기대 결과**
 
 - 새SHA와verifySHA불일치→배포0.
 - 회수UNRESOLVED→공개재개0·잠금/경보유지.
-- 새이미지ready실패→이전digest복귀·복구장벽다시실행.
+- 새 이미지 ready 실패 → 외부 격리·입장 잠금 유지, 제어/활동 종료/회수 확인 뒤에만 이전 digest 복귀·복구 장벽 재실행; 확인 불가 → ROLLBACK_BLOCKED.
 - 롤백이미지도ready실패→ROLLBACK_BLOCKED·입장잠금유지.
 - drain POST 202 + GET pending→이미지 교체 0; GET failed/timeout→nonzero와 입장 잠금 유지.
 - resume POST 202 + GET succeeded + admission LOCKED→완료 불일치로 실패, 공개 성공 표시 0.
 - 같은 drain requestId 재전송→같은 operationId 추적·B 제어 큐 중복 배수 0.
+- 외부 격리의 허용/차단 증거 누락 → BLOCKED·교체/resume/공개 0; READY/DRAINING → 6인 입장 0.
+- 외부 격리 유지 + resume terminal succeeded + READY/OPEN → 지정한 6인 시험 가능, 일반 외부 접근은 계속 차단.
+- smoke 성공이나 시험 세션/미디어가 남음 또는 UNRESOLVED 1 → 격리 해제 0; 정리 완료 후 공개창·공식 잔량 확인 기한 만료 → 공개 0.
+- OPEN 이후 smoke 실패 → 격리 유지·새 drain 완료/회수 확인 후에만 롤백; drain failed/timeout → ROLLBACK_BLOCKED·강제 교체 0.
 
 **추가·보완할 시험 파일**
 
@@ -2235,7 +2335,7 @@ pnpm lint
 
 **완료 조건**
 
-고정 운영 API의 drain 접수→GET terminal succeeded→진행 경기 종료/회수 확인→같은 검증 commit 배포→RECOVERING 장벽→ready/6인 smoke→resume terminal succeeded/OPEN 확인 순서를 검증한다. checkpoint는 운영자가 제공한 official-usage-input.json을 실제 확인값으로 검증하고 HTTP 202만으로 배포/공개 성공을 표시하지 않는다. 실패 시 이전 이미지도 복구 장벽을 다시 통과하며 진행 매치는 복원하지 않는다. 최초 검증 배포는 DP-03에서 수행한다.
+외부 접근 격리 확인→drain terminal succeeded와 활동 종료/회수 확인→같은 검증 commit 배포→initialize 결과/후속 복구 READY→격리 유지 상태에서 resume terminal succeeded·OPEN→6인 smoke→시험 세션·미디어 정리→공개창·예산 재검사→외부 격리 해제 순서를 검증한다. checkpoint는 운영자가 제공한 official-usage-input.json을 실제 확인값으로 검증하고 HTTP 202나 ready 200만으로 배포/공개 성공을 표시하지 않는다. 실패는 격리와 재배수·회수 확인 후 롤백하며 이전 이미지도 같은 장벽을 통과한다. 격리·회수 확인이 없으면 BLOCKED/ROLLBACK_BLOCKED로 남기고 진행 매치는 복원하지 않는다. 최초 검증 배포는 DP-03에서 수행한다.
 
 위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 해당 작업의 검사 실패나 필수 연결 대기는 진행 기록과 MR 본문에 그대로 남긴다.
 
@@ -2247,7 +2347,7 @@ ci: Jenkins 배포 배수와 실패 복귀 추가
 
 **MR 본문에 채울 변경 사항**
 
-- 검증commit배포·미디어배수·복구장벽·smoke·실패복귀순서를추가한다.
+- 외부 격리·검증 commit 배포·미디어 배수·복구 장벽·격리 중 resume/smoke·시험 정리·공개 조건 재검사·실패 복귀 순서를 추가한다.
 
 **MR 리뷰 포인트**
 
@@ -2255,7 +2355,7 @@ ci: Jenkins 배포 배수와 실패 복귀 추가
 
 **완료 인계**
 
-- 운영담당에게실제release/digest·잠금해제조건·미해결복귀경로를전달한다.
+- 운영 담당에게 실제 release/digest·외부 격리 확인/해제 절차·resume과 공개의 별도 조건·시험 정리 증거·미해결 복귀 경로를 전달한다.
 - QA-13에배포/롤백실행증거와남은BLOCKED를인계한다.
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-06.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
@@ -2442,7 +2542,7 @@ test: 10방 게임 미디어 통합 수용량 검증 추가
 1. 확정 범위의 실제 완료/미완료 commit·로컬 MR 초안·담당 인계와 G1-A–D/G2/G3-A·B·D/G4/G5/G6 증거를 수집한다. 아이템 관련 작업과 G3-C는 PRODUCT_DECISION_PENDING으로 별도 기록하며 원본 122개 ID 전체 완료를 인수 조건으로 강제하지 않는다. 계획 체크박스·원본 fixture 검사·자동 테스트 개수를 제품 구현 완료로 합산하지 않는다.
 2. 각관문에sourceSHA/환경/날짜/명령·수동절차/표본수/결과/증거위치/잔여결함을필수로둔다. 누락파일·비어있는결과·다른commit혼합은보고서를실패/미확인으로만든다.
 3. 핵심기능미완이면통합중간본,기능/G1–G5완료이나10방미검증이면기능상태와검증된상한을분리한다. 1→3→5→10중실제로통과한상한과공개창/분GB잔량을명시한다.
-4. 운영인계에는새방/토큰중지→회수→배포/롤백→RECOVERING→ready/smoke→재개,UNRESOLVED재시도·저널손상·시계오차·예산미확인대응과담당자를기록한다. 무DB무매치복원·호스트전체상실회수한계를명시한다.
+4. 운영 인계에는 외부 격리 확인→drain 완료/회수→배포→initialize/RECOVERING 관찰→READY→격리 중 resume/OPEN→6인 smoke→시험 세션·미디어 정리→공개창·예산 재검사→격리 해제 순서를 기록한다. 외부 격리 증거와 OPS 상태·시험 정리 증거를 구분한다. 실패 시 격리 유지·재drain/회수 확인 뒤 롤백하고 확인 불가 시 ROLLBACK_BLOCKED로 남기는 절차, UNRESOLVED 재시도·저널 손상·시계 오차·예산 미확인 대응과 담당자를 기록한다. 무DB·무매치 복원·호스트 전체 상실 회수 한계를 명시한다.
 5. 보고서에비밀/실제미디어가없는지검사하고추적가능한요약만저장한다. 현재계획문서작성만으로원격배포·Jira완료·공개창오픈을수행하지않는다.
 
 **연결 계약과 경계**
@@ -2456,6 +2556,7 @@ test: 10방 게임 미디어 통합 수용량 검증 추가
 - G5완료/G6미실시→기능상태와검증된방수분리.
 - 참조evidence파일없음·다른SHA→관문미확인.
 - 남은UNRESOLVED/미확인공식잔량→공개재개조건불충족.
+- smoke 성공 + 시험 세션/미디어 정리 증거 누락 또는 외부 격리 미검증 → 공개 완료 판정 0; resume/OPEN만 확인한 기록을 공개 성공으로 합산하지 않음.
 - 확정 범위 관문 통과 + 아이템/G3-C 미정 → 확정 범위 결과와 PRODUCT_DECISION_PENDING 목록을 분리, 아이템 완료를 만들거나 122개 전체 완료를 요구하지 않음.
 
 **추가·보완할 시험 파일**

@@ -9,7 +9,7 @@
 3. 관련 Jira가 있으면 제목·작업 내용·완료 조건을 읽는다. 이슈 키와 번호는 실제 값을 사용한다. 저장소 이름에서 Jira 키를 추측하거나 관련 없는 번호를 붙이지 않는다.
 4. 확정된 기술 스택과 현재 구현을 유지한다. 이전 프로젝트의 Java/Spring 규칙과 버전을 현재 TypeScript/Colyseus 서버에 적용하지 않는다.
 5. 현재 실행 대상은 원본 122개 번호 중 116개이며, MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12는 제품 결정 대기다. 보류 ID를 지정 범위에서 만나면 구현·성공 stub·완료 커밋을 만들지 않고 상태를 기록한 뒤 다음 번호로 진행한다. 술래 장비·구속·자연 만료·포획·포즈는 확정 범위에 남는다.
-6. 실행 계약은 [EXEC-CONTRACT-2 공통 원본](docs/execution/common.md), [타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)를 읽는다. 문서 사본만 다르게 수정하지 않으며 제품 런타임이 문서용 타입을 import하지 않도록 한다.
+6. 실행 계약은 [EXEC-CONTRACT-3 공통 원본](docs/execution/common.md), [타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)를 읽는다. 문서 사본만 다르게 수정하지 않으며 제품 런타임이 문서용 타입을 import하지 않도록 한다.
 
 ## Jira와 브랜치
 

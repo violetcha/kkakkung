@@ -12,7 +12,7 @@ const execution = resolve(root, 'docs/execution');
 const sync = process.argv.includes('--sync');
 if (process.argv.slice(2).some((arg) => arg !== '--sync'))
   throw new Error('Usage: node scripts/check-execution-plan.mjs [--sync]');
-const version = 'EXEC-CONTRACT-2';
+const version = 'EXEC-CONTRACT-3';
 const scope = 'D-2026-09-08-01';
 const deferred = new Set(['MP-06', 'EQ-06', 'EQ-07', 'EQ-08', 'EQ-09', 'EQ-12']);
 const expectedRoles = { A: 33, B: 18, C: 19, D: 17, E: 16, F: 19 };
@@ -52,23 +52,23 @@ for (const file of files) {
   const path = resolve(execution, file);
   let text = (await readFile(path, 'utf8')).replace(/\r\n/g, '\n');
   const marker =
-    /<!-- BEGIN EXEC-CONTRACT-[12] COMMON -->[\s\S]*?<!-- END EXEC-CONTRACT-[12] COMMON -->/;
+    /<!-- BEGIN EXEC-CONTRACT-[123] COMMON -->[\s\S]*?<!-- END EXEC-CONTRACT-[123] COMMON -->/;
   const block =
-    '<!-- BEGIN EXEC-CONTRACT-2 COMMON -->\n\n' +
+    `<!-- BEGIN ${version} COMMON -->\n\n` +
     desiredCommon.trim() +
-    '\n\n<!-- END EXEC-CONTRACT-2 COMMON -->';
+    `\n\n<!-- END ${version} COMMON -->`;
   if (!marker.test(text)) {
     fail(file + ': missing common markers');
     continue;
   }
   if (sync) {
-    text = text.replaceAll('EXEC-CONTRACT-1', version).replace(marker, () => block);
+    text = text.replace(/EXEC-CONTRACT-[12]\b/g, version).replace(marker, () => block);
     text = await prettier.format(text, { ...prettierOptions, parser: 'markdown' });
     await writeFile(path, text, 'utf8');
   }
   contents.set(file, text);
   const common = text.match(
-    /<!-- BEGIN EXEC-CONTRACT-2 COMMON -->\s*([\s\S]*?)\s*<!-- END EXEC-CONTRACT-2 COMMON -->/,
+    /<!-- BEGIN EXEC-CONTRACT-3 COMMON -->\s*([\s\S]*?)\s*<!-- END EXEC-CONTRACT-3 COMMON -->/,
   );
   if (!common || normalize(common[1]) !== expectedCommon) fail(file + ': common block differs');
   const owner = file[0].toUpperCase();
