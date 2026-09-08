@@ -1,0 +1,40 @@
+{
+  "name": "@kkakkung/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./messages": {
+      "types": "./dist/messages/index.d.ts",
+      "import": "./dist/messages/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./version": {
+      "types": "./dist/version.d.ts",
+      "import": "./dist/version.js"
+    },
+    "./game-schema": {
+      "types": "./dist/game-schema/index.d.ts",
+      "import": "./dist/game-schema/index.js"
+    },
+    "./game-messages": {
+      "types": "./dist/game-messages/index.d.ts",
+      "import": "./dist/game-messages/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/schema": "5.0.27",
+    "zod": "4.5.4"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "kkakkung",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.19.0 <25",
+    "pnpm": "11.19.0"
+  },
+  "scripts": {
+    "setup:env": "node scripts/setup-env.mjs",
+    "build:packages": "tsc -b tsconfig.packages.json",
+    "build": "pnpm build:packages && pnpm --filter @kkakkung/game-server build && pnpm --filter @kkakkung/web build",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "node scripts/dev.mjs web",
+    "dev:server": "node scripts/dev.mjs server",
+    "typecheck": "pnpm build:packages && pnpm -r typecheck",
+    "lint": "eslint . && node scripts/check-boundaries.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm build:packages && vitest run",
+    "test:maps": "pnpm build:packages && vitest run packages/game-core/test/world.test.ts",
+    "test:e2e": "pnpm build:packages && playwright test",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.3",
+    "eslint": "10.10.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.69.0",
+    "vitest": "5.0.0"
+  }
+}

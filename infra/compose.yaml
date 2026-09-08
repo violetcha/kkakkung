@@ -1,0 +1,39 @@
+# Local development template only. Production mode is intentionally rejected by the app.
+services:
+  web-proxy:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.web
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      game-server:
+        condition: service_healthy
+  game-server:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.game-server
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 2567
+      ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      MEDIA_MODE: disabled
+      OPS_DATA_DIR: /var/lib/kkakkung
+      MAX_ROOMS: 1
+      MAX_SLOTS: 6
+    volumes:
+      - operations:/var/lib/kkakkung
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:2567/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+volumes:
+  operations:
