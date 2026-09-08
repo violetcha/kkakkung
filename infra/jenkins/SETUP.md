@@ -61,19 +61,23 @@ sudo nginx -t && sudo systemctl reload nginx
 - 크리덴셜 `gitlab-token`: Username with password, **Project Access Token** (개인 계정 아님)
 - 크리덴셜 `kkakkung-production-env`: **Secret file**. `infra/production.env.example` 을 복사해 값을 채운 파일을 업로드. 배포마다 `/opt/kkakkung/production.env`(600) 로 내려가고 compose `env_file` 이 game-server 에만 읽힘. 값 바꾸면 크리덴셜 Update 후 재배포. 처음엔 LiveKit 줄이 비어 있어도 됨(빈 값 = 미설정)
 
-## 6. 파이프라인 잡 (남음)
+## 6. 파이프라인 잡 (예행연습 잡 생성 완료 2026-09-08, 정식 전환 남음)
 
-Jenkinsfile 이 아직 레포에 없을 땐 Definition 을 `Pipeline script` 로 두고 Jenkinsfile 내용을 붙인 뒤 맨 앞에 `git branch: ..., credentialsId: 'gitlab-token', url: ...` 체크아웃 스테이지만 넣으면 같은 흐름을 시험할 수 있습니다.
+현재 서버에는 `kkakkung-rehearsal` 잡이 있다. **Pipeline script from SCM** 으로 브랜치
+`ci/S15P21C204-41-jenkins-pipeline` 의 `Jenkinsfile` 을 읽고, `H/3 * * * *` 로 폴링해 새 커밋이 있으면 자동 실행한다.
+develop 이 아니라 Deploy 는 건너뛴다. 2026-09-08 빌드 #4 가 Secret scan → Verify → Build → Scan 까지 SUCCESS (2분 25초).
 
-`New Item → Pipeline`
+잡과 Secret file 크리덴셜은 UI 로그인 없이 `init.groovy.d` 부트스트랩 스크립트(실행 후 자기 삭제)와
+`jobs/<잡>/config.xml` 배치 + Jenkins 재시작으로 만들었다. 같은 방법으로 재현 가능하다.
 
-- **Build Triggers**: `Build when a change is pushed to GitLab` → 웹훅 URL 을 GitLab `Settings → Webhooks` 에 등록
-  - Trigger: Push events, Merge request events
-- **Pipeline**: `Pipeline script from SCM` → Git → 레포 주소 + `gitlab-token`
-  - Branches to build: `*/develop` 과 `*/chore/*`, `*/feat/*` 등 필요 브랜치. 또는 Multibranch Pipeline
-- **Script Path**: `Jenkinsfile`
+**정식 전환 (MR !15 가 develop 에 머지된 뒤)**
 
-Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 읽어 `develop` 일 때만 배포합니다.
+1. 잡 이름을 `kkakkung` 으로 바꾸거나 새 잡 생성. Branches to build: `*/develop`
+2. Build Triggers: 폴링 대신 `Build when a change is pushed to GitLab` → 웹훅 URL 을 GitLab `Settings → Webhooks` 에 등록 (Push events, Merge request events)
+3. 첫 배포 직전에 서버 nginx 를 `host.conf` 로 교체 (4번). 그 전엔 루트가 502 라서 순서를 지킬 것
+4. 첫 develop 푸시로 Deploy 단계까지 확인. `/opt/kkakkung/last-good-tag`·`last-good-digest` 가 생기는지 확인
+
+Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 읽어 `develop` 일 때만 배포한다.
 
 ## 7. 첫 빌드 전 확인 (완료, 2026-09-08)
 
