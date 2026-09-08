@@ -133,6 +133,13 @@ export {
   type ExitRegistryResult,
 } from './exits/registry.js';
 
+export {
+  createPriorityOrder,
+  priorityForTick,
+  selectPriorityCandidate,
+  type PriorityOrder,
+} from './priority.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
