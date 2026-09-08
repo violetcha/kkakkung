@@ -170,11 +170,7 @@ describe('createModelSelector', () => {
 
     const faceDue = MODEL_TARGET_INTERVAL_MS.face;
     expect(selector.select(faceDue)).toEqual(['face', 'pose']);
-    expect(selector.select(MODEL_TARGET_INTERVAL_MS.gesture)).toEqual([
-      'face',
-      'pose',
-      'gesture',
-    ]);
+    expect(selector.select(MODEL_TARGET_INTERVAL_MS.gesture)).toEqual(['face', 'pose', 'gesture']);
   });
 
   it('stops selecting a model that the context disabled', () => {

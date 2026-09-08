@@ -77,7 +77,9 @@ describe('createInputFallback', () => {
     const base = harness();
     base.fallback.observe(snapshot(1, 1000), 1000, GENERATION);
 
-    expect(base.fallback.observe(snapshot(1, 1000), 1000 + INFERENCE_STALL_MS, GENERATION)).toBeNull();
+    expect(
+      base.fallback.observe(snapshot(1, 1000), 1000 + INFERENCE_STALL_MS, GENERATION),
+    ).toBeNull();
     expect(
       base.fallback.observe(snapshot(1, 1000), 1000 + INFERENCE_STALL_MS + 1, GENERATION),
     ).toBe('INFERENCE_STALLED');
@@ -151,7 +153,9 @@ describe('createInputFallback', () => {
     const base = harness();
     base.fallback.report('CAMERA_ENDED');
 
-    expect(base.fallback.restoreMotion({ calibrated: true, requestedMode: 'keyboard' })).toBe(false);
+    expect(base.fallback.restoreMotion({ calibrated: true, requestedMode: 'keyboard' })).toBe(
+      false,
+    );
     expect(base.fallback.mode).toBe('keyboard');
   });
 

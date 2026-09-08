@@ -127,7 +127,12 @@ describe('createWorkerScheduler', () => {
 
   it('keeps the untouched sensors at their own frameId and sampledAtMs', () => {
     const base = harness();
-    base.scheduler.submit({ frameId: 1, sampledAtMs: 1000, bitmap: bitmap(), models: ['face', 'pose'] });
+    base.scheduler.submit({
+      frameId: 1,
+      sampledAtMs: 1000,
+      bitmap: bitmap(),
+      models: ['face', 'pose'],
+    });
     base.scheduler.handleMessage(
       result(1, 1000, {
         ...face(),
@@ -190,9 +195,9 @@ describe('createWorkerScheduler', () => {
     base.scheduler.dispose();
     const late = bitmap();
 
-    expect(base.scheduler.submit({ frameId: 9, sampledAtMs: 2000, bitmap: late, models: ['face'] })).toBe(
-      false,
-    );
+    expect(
+      base.scheduler.submit({ frameId: 9, sampledAtMs: 2000, bitmap: late, models: ['face'] }),
+    ).toBe(false);
     base.scheduler.handleMessage(result(9, 2000, face()));
 
     expect(base.posted.at(-1)).toEqual({ type: 'close' });

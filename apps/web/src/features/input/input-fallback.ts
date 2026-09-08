@@ -4,10 +4,7 @@ import { isSampleFresh, isUsableQuality, type SensorSnapshot } from '../vision/s
 import type { InputMode } from './interaction-context';
 
 export type InputFailureCode =
-  | 'CAMERA_ENDED'
-  | 'WORKER_ERROR'
-  | 'INFERENCE_STALLED'
-  | 'FACE_INVALID';
+  'CAMERA_ENDED' | 'WORKER_ERROR' | 'INFERENCE_STALLED' | 'FACE_INVALID';
 
 /** 이 시간 동안 새 추론 결과가 없으면 미응답으로 본다. 명시적 초깃값이다. */
 export const INFERENCE_STALL_MS = 1500;
@@ -27,7 +24,11 @@ export type InputFallbackDeps = Readonly<{
 
 export interface InputFallback {
   /** 센서 발행마다 호출한다. 장애를 감지하면 code를 돌려준다. */
-  observe(snapshot: SensorSnapshot | null, nowMs: number, runtimeGeneration: number): InputFailureCode | null;
+  observe(
+    snapshot: SensorSnapshot | null,
+    nowMs: number,
+    runtimeGeneration: number,
+  ): InputFailureCode | null;
   /** 카메라 종료·Worker 오류처럼 즉시 아는 장애. */
   report(code: InputFailureCode): void;
   /** 마이크만 실패한 경우. 모션을 유지하고 송신만 멈춘다. */
