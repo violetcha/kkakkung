@@ -2,7 +2,7 @@
 
 수정자: **F만** · [담당 계획](../f-infra-qa.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 F의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 현재는 인계 양식이며 **검증된 구현 인계 0건**이다. 문서·소스 파일이 존재한다는 이유로 아래 상태를 완료로 바꾸지 않는다. 인계가 생길 때 항목을 복사하여 실제 값으로 작성한다.
+이 파일은 팀원 AI가 F의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 2026-09-08 기준 **부분 검증 인계 3건(F-04·F-06·F-05)**, ACCEPTED 0건이다. 문서·소스 파일이 존재한다는 이유로 아래 상태를 완료로 바꾸지 않는다. 인계가 생길 때 항목을 복사하여 실제 값으로 작성한다.
 
 ## 인계 항목 양식
 
@@ -20,7 +20,33 @@
 
 공유 가능한 증거는 MR에 첨부하거나 팀이 접근 가능한 위치를 기록한다. `.local/` 경로만 적고 상대 checkout에도 파일이 있다고 가정하지 않는다. 비밀 env·JWT·OPS_TOKEN·실제 얼굴·음성을 기록하지 않는다. Cloud 시험 미실행을 mock 통과로 대체하지 않는다. 제품 결정 대기 작업은 그대로 PRODUCT_DECISION_PENDING이다.
 
+## 인계 항목 (2026-09-08)
+
+| 항목               | F-04 / DP-04                                                                                 | F-05 / DP-02                                                                                                                           | F-06 / DP-03                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Jira               | S15P21C204-154                                                                               | S15P21C204-155                                                                                                                         | S15P21C204-156                                                                                                 |
+| localStage         | LOCAL_VERIFIED(부분)                                                                         | LOCAL_VERIFIED(부분)                                                                                                                   | LOCAL_VERIFIED(부분)                                                                                           |
+| 구현 commit        | 0dd76be(푸시), 188bf6b(미푸시)                                                               | 7371490·0dd76be(푸시), 4b38bc0·188bf6b(미푸시)                                                                                         | 0dd76be(푸시), 4b38bc0(미푸시)                                                                                 |
+| 계약 기준          | EXEC-CONTRACT-3, D-2026-09-08-01                                                             | 같음                                                                                                                                   | 같음                                                                                                           |
+| 공개 진입점        | `Jenkinsfile` (Prepare→Secret scan→Verify→Build→Scan→Deploy)                                 | `infra/compose.yaml` + `infra/compose.production.yaml` override, `infra/docker/Dockerfile.*`, `infra/nginx/default.conf`               | `infra/nginx/host.conf` (EC2 호스트 nginx)                                                                     |
+| 소비자와 조립 담당 | 전원: develop 푸시 → 자동 검증·배포                                                          | B(env 매핑), E(OPS_DATA_DIR 볼륨 /var/lib/kkakkung)                                                                                    | C/D: 실제 HTTPS 주소 https://j15c204.p.ssafy.io, WSS 동일 origin                                               |
+| 검증               | Verify 명령 = format:check·check:execution·lint·typecheck·test. **Jenkins 실제 실행 미실시** | EC2 2026-09-08: 이미지 빌드 OK, game healthy 6s, /health/ready 200, Origin 403/200 (단독 compose 시점). override 는 config 병합만 확인 | 2026-09-07 서버: certbot 자동갱신 타이머, UFW 22/80/443, Jenkins 127.0.0.1:18080. host.conf 는 **서버 미적용** |
+| blockedOn          | Chromium+e2e, ci-verify.mjs, GitLab commit status, Jenkins 잡                                | override 로 EC2 재기동, container-smoke.mjs, production 프로파일(B 인증·E readiness 이후)                                              | host.conf 적용 시점(첫 배포 직전), SSH 대역 제한, CSP(D Worker/WASM 이후)                                      |
+| 다음 단계          | Jenkins 예행연습 → 결과를 여기와 .local/qa 에 기록                                           | E 가 OP-01 lock 요구를 주면 compose 볼륨·user 재확인                                                                                   | D 가 모델 경로·CSP 디렉티브를 주면 host.conf 에 CSP 추가                                                       |
+
+배포 계약 요약(변경 시 F 에 먼저 알릴 것): Node 24.19.0·pnpm 11.19.0, 이미지 컨텍스트 = 루트, 서버 엔트리 `server/dist/main.js`, 헬스 `GET /health/live`·`/health/ready`, `NODE_ENV` 는 현재 development(production 거절), `ALLOWED_ORIGINS` 정확 origin, 웹은 same-origin(`VITE_*` 비움), Colyseus 경로 루트 기준. 자세한 표는 [infra/README.md](../../../infra/README.md).
+
 ## 다른 소유자에게 요청할 변경
+
+| 요청 ID  | 대상 | 대상 파일                                   | 필요한 것                                                                                       | 이유                                                                                  | 연결 작업          | 완료 확인                                  |
+| -------- | ---- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------ |
+| F-REQ-01 | B    | `server/src/bootstrap.ts`                   | `KkakkungRoom.onAuth` 의 빈 옵션(undefined/{}) 무조건 허용 제거                                 | 공개 HTTPS 에 development 로 뜨는 동안 토큰 없이 방 입장 가능 → G4 위험               | B-08/09 (AC-01/02) | 빈 옵션 join → 4xx 거절 시험               |
+| F-REQ-02 | B    | `server/src/bootstrap.ts`                   | `allowedOrigin` 의 `!origin` 우선 통과를 명시 profile 로만                                      | Origin 헤더 없는 요청(curl/봇)이 전부 통과                                            | B-08/09            | Origin 없는 /api 요청 → 403                |
+| F-REQ-03 | B    | `server/src/bootstrap.ts`                   | `/monitor`·`/playground` 마운트를 개발 profile 에서만                                           | 배포도 development 라 무조건 마운트됨. nginx 404 는 한 겹일 뿐                        | B-08/09            | 배포 profile 에서 두 경로 404              |
+| F-REQ-04 | D    | `apps/web/public/models/**`, D 인계 문서    | 모델 경로·manifest hash, Worker/WASM 이 필요한 CSP 디렉티브 목록                                | F 가 host nginx 에 CSP 를 넣으려면 실제 필요 목록이 있어야 함(COOP/COEP 는 넣지 않음) | D-02, F-06         | 실제 브라우저에서 Worker 기동 + CSP 위반 0 |
+| F-REQ-05 | E    | (F 소유 `server/.env.example` 은 F 가 수정) | LiveKit 변수명 확정: 문서 `LIVEKIT_HTTP_URL/WS_URL/API_KEY/API_SECRET` vs 현 예시 `LIVEKIT_URL` | F-01 env 스키마와 compose 주입 이름을 한 번에 고정                                    | E-05 (MC-02), F-01 | E 인계 문서에 이름 기록                    |
+
+## 다른 소유자에게 요청할 변경 (양식)
 
 요청할 때 **요청 ID / 대상 역할 / 대상 파일 / 필요한 export 또는 패키지·정확 버전 / 이유 / 연결 작업 / 완료 확인 명령**을 적는다. 여기 적힌 요청은 팀원에게 메시지를 보낸 것이 아니며, 외부 알림·Jira 변경을 자동 수행하지 않는다. 대상 담당자는 자기 인계 파일에 결과와 구현 SHA를 남긴다.
 
