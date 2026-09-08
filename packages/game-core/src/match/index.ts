@@ -108,6 +108,17 @@ export {
   type LayoutValidation,
 } from './map/validate-layout.js';
 
+export {
+  RUNNER_SLOTS,
+  TAGGER_SLOTS,
+  UNAVAILABLE,
+  bindFallbackPlayers,
+  certifyFallback,
+  createLayoutSelector,
+  selectWithFallback,
+  type LayoutSelectionPort,
+} from './map/select-with-fallback.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
