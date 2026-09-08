@@ -4,7 +4,7 @@
 
 이 파일은 팀원 AI가 D의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다.
 갱신일 **2026-09-08** · 계약 기준 **EXEC-CONTRACT-3** · 적용 제품 결정 **D-2026-09-08-01**
-Jira: D-01~~D-17 = [S15P21C204-118](https://ssafy.atlassian.net/browse/S15P21C204-118)~~[S15P21C204-134](https://ssafy.atlassian.net/browse/S15P21C204-134) (담당 오명헌)
+Jira: 담당 D 범위는 `D-01~D-17 = S15P21C204-118~S15P21C204-134` (담당자 오명헌)
 시작 SHA `b12cb9c` · 브랜치 `feat/mvp-d-d1` (**로컬 전용, 아직 push하지 않음**)
 
 **아래 인계는 모두 합성 port 단위 검증(LOCAL_VERIFIED)이다. 실제 브라우저·대표 장치·
@@ -34,32 +34,36 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 
 ## 구현 상태
 
-| 고정 번호                                                                     | 원본 ID | Jira                                                                | localStage     | 최종 commit | 실제로 되는 것                                                         |
-| ----------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------- | -------------- | ----------- | ---------------------------------------------------------------------- |
-| D-01                                                                          | IN-01   | [S15P21C204-118](https://ssafy.atlassian.net/browse/S15P21C204-118) | LOCAL_VERIFIED | `92c8707`   | 카메라·마이크 분리 취득, 단일 취득, 늦은 결과 정리, local preview 수명 |
-| D-02                                                                          | IN-02   | [S15P21C204-119](https://ssafy.atlassian.net/browse/S15P21C204-119) | LOCAL_VERIFIED | `ee3ef64`   | Worker 전송 계약, inFlight 1개, 고정 모델·WASM 자산과 manifest         |
-| D-03                                                                          | IN-03   | [S15P21C204-120](https://ssafy.atlassian.net/browse/S15P21C204-120) | LOCAL_VERIFIED | `e8da50e`   | 얼굴 landmarks·yaw·validity 정규화와 미러 helper                       |
-| D-04                                                                          | IN-04   | [S15P21C204-121](https://ssafy.atlassian.net/browse/S15P21C204-121) | LOCAL_VERIFIED | `5373c2b`   | 상체 landmarks·visibility·몸통 기울임과 품질 판정                      |
-| D-05                                                                          | IN-05   | [S15P21C204-122](https://ssafy.atlassian.net/browse/S15P21C204-122) | LOCAL_VERIFIED | `2eeb553`   | 손바닥·브이 판정, 양손 충돌 none, 최고 score 1개                       |
-| D-06                                                                          | IN-06   | [S15P21C204-123](https://ssafy.atlassian.net/browse/S15P21C204-123) | LOCAL_VERIFIED | `743782d`   | 중립 보정, One Euro Filter, 발동/해제 임계값, 비전 파이프라인 기동     |
-| D-07                                                                          | ME-01   | [S15P21C204-124](https://ssafy.atlassian.net/browse/S15P21C204-124) | LOCAL_VERIFIED | `abdb25b`   | 흑백 얼굴 마스크·가공 Canvas 트랙과 원본 게시 차단 handle              |
-| D-08                                                                          | ME-02   | [S15P21C204-125](https://ssafy.atlassian.net/browse/S15P21C204-125) | LOCAL_VERIFIED | `36df3e6`   | 추적 실패의 안전 프레임 유지와 기본 얼굴 전환                          |
-| D-09                                                                          | IN-07   | [S15P21C204-126](https://ssafy.atlassian.net/browse/S15P21C204-126) | LOCAL_VERIFIED | `3bfd4fd`   | 전후진 모션·키 의도 통합과 100ms 갱신                                  |
-| D-10                                                                          | IN-08   | [S15P21C204-127](https://ssafy.atlassian.net/browse/S15P21C204-127) | LOCAL_VERIFIED | `5d4e9a5`   | 회전 latch·중립 해제와 키 1회 발동                                     |
-| D-11                                                                          | IN-09   | [S15P21C204-128](https://ssafy.atlassian.net/browse/S15P21C204-128) | LOCAL_VERIFIED | `4899508`   | InteractionContext 보관·무효화, 손동작/단축키 중재                     |
-| D-12                                                                          | IN-10   | [S15P21C204-129](https://ssafy.atlassian.net/browse/S15P21C204-129) | LOCAL_VERIFIED | `07ab8a1`   | 장치·추론 장애 감지와 keyboard 폴백                                    |
-| D-13                                                                          | ME-03   | [S15P21C204-130](https://ssafy.atlassian.net/browse/S15P21C204-130) | LOCAL_VERIFIED | `34421fc`   | 승인 grant의 단일 SDK 연결 수명 (**주입 port로만 검증**)               |
-| D-14                                                                          | ME-04   | [S15P21C204-131](https://ssafy.atlassian.net/browse/S15P21C204-131) | PLANNED        | 없음        | 가공 얼굴·선택 마이크 게시                                             |
-| D-15                                                                          | ME-05   | [S15P21C204-132](https://ssafy.atlassian.net/browse/S15P21C204-132) | PLANNED        | 없음        | 허용 얼굴 트랙 수신·교체                                               |
-| D-16                                                                          | ME-06   | [S15P21C204-133](https://ssafy.atlassian.net/browse/S15P21C204-133) | PLANNED        | 없음        | 근거리 오디오 그래프·효과음                                            |
-| D-17                                                                          | ME-07   | [S15P21C204-134](https://ssafy.atlassian.net/browse/S15P21C204-134) | PLANNED        | 없음        | 미디어 세대 종료와 참가 종료 분리                                      |
-| 보조 커밋: `944f52c`(chore, Prettier 정리 — 동작 변경 없음, D-02·D-12 파일) · |
-| `84c87e6`(docs, 이 인계 기록 — D-01~D-13).                                    |
+| 고정 번호 | 원본 ID | Jira                                                                | localStage     | 최종 commit | 실제로 되는 것                                                 |
+| --------- | ------- | ------------------------------------------------------------------- | -------------- | ----------- | -------------------------------------------------------------- |
+| D-01      | IN-01   | [S15P21C204-118](https://ssafy.atlassian.net/browse/S15P21C204-118) | LOCAL_VERIFIED | `92c8707`   | 카메라·마이크 분리 취득, 늦은 결과 정리, local preview 수명    |
+| D-02      | IN-02   | [S15P21C204-119](https://ssafy.atlassian.net/browse/S15P21C204-119) | LOCAL_VERIFIED | `ee3ef64`   | Worker 전송 계약, inFlight 1개, 고정 모델·WASM 자산과 manifest |
+| D-03      | IN-03   | [S15P21C204-120](https://ssafy.atlassian.net/browse/S15P21C204-120) | LOCAL_VERIFIED | `e8da50e`   | 얼굴 landmarks·yaw·validity 정규화와 미러 helper               |
+| D-04      | IN-04   | [S15P21C204-121](https://ssafy.atlassian.net/browse/S15P21C204-121) | LOCAL_VERIFIED | `5373c2b`   | 상체 landmarks·visibility·몸통 기울임과 품질 판정              |
+| D-05      | IN-05   | [S15P21C204-122](https://ssafy.atlassian.net/browse/S15P21C204-122) | LOCAL_VERIFIED | `2eeb553`   | 손바닥·브이 판정, 양손 충돌 none, 최고 score 1개               |
+| D-06      | IN-06   | [S15P21C204-123](https://ssafy.atlassian.net/browse/S15P21C204-123) | LOCAL_VERIFIED | `743782d`   | 중립 보정, One Euro Filter, 임계값, 비전 파이프라인 기동       |
+| D-07      | ME-01   | [S15P21C204-124](https://ssafy.atlassian.net/browse/S15P21C204-124) | LOCAL_VERIFIED | `abdb25b`   | 흑백 얼굴 마스크·가공 Canvas 트랙, 원본 게시 차단 handle       |
+| D-08      | ME-02   | [S15P21C204-125](https://ssafy.atlassian.net/browse/S15P21C204-125) | LOCAL_VERIFIED | `36df3e6`   | 추적 실패의 안전 프레임 유지와 기본 얼굴 전환                  |
+| D-09      | IN-07   | [S15P21C204-126](https://ssafy.atlassian.net/browse/S15P21C204-126) | LOCAL_VERIFIED | `3bfd4fd`   | 전후진 모션·키 의도 통합과 100ms 갱신                          |
+| D-10      | IN-08   | [S15P21C204-127](https://ssafy.atlassian.net/browse/S15P21C204-127) | LOCAL_VERIFIED | `5d4e9a5`   | 회전 latch·중립 해제와 키 1회 발동                             |
+| D-11      | IN-09   | [S15P21C204-128](https://ssafy.atlassian.net/browse/S15P21C204-128) | LOCAL_VERIFIED | `4899508`   | InteractionContext 보관·무효화, 손동작/단축키 중재             |
+| D-12      | IN-10   | [S15P21C204-129](https://ssafy.atlassian.net/browse/S15P21C204-129) | LOCAL_VERIFIED | `07ab8a1`   | 장치·추론 장애 감지와 keyboard 폴백                            |
+| D-13      | ME-03   | [S15P21C204-130](https://ssafy.atlassian.net/browse/S15P21C204-130) | LOCAL_VERIFIED | `34421fc`   | 승인 grant의 단일 SDK 연결 수명 (주입 port 검증)               |
+| D-14      | ME-04   | [S15P21C204-131](https://ssafy.atlassian.net/browse/S15P21C204-131) | LOCAL_VERIFIED | `f238608`   | 가공 얼굴 1개·선택 마이크 1개 게시, 원본/화면공유 거절         |
+| D-15      | ME-05   | [S15P21C204-132](https://ssafy.atlassian.net/browse/S15P21C204-132) | LOCAL_VERIFIED | `93e12e4`   | 검증 바인딩과 트랙 일치 시에만 얼굴 수신, 세대/SID 교체        |
+| D-16      | ME-06   | [S15P21C204-133](https://ssafy.atlassian.net/browse/S15P21C204-133) | LOCAL_VERIFIED | `8770e1a`   | SID당 단일 WebAudio 그래프, 서버 eventId 효과음                |
+| D-17      | ME-07   | [S15P21C204-134](https://ssafy.atlassian.net/browse/S15P21C204-134) | LOCAL_VERIFIED | `e8a7c36`   | terminal 세대 차단과 멱등 정리, 참가 종료 분리                 |
+
+**17개 전부 LOCAL_VERIFIED이며 ACCEPTED는 0건이다.** 실제 브라우저·대표 장치·Cloud 검증은
+하나도 실행하지 않았다.
+
+보조 커밋: `944f52c`(chore, Prettier 정리 — 동작 변경 없음) ·
+`84c87e6`·`33ee8e8`·`45bcbac`(docs, 이 인계 기록).
 
 **2026-09-08 Jira 키 연결로 커밋 메시지를 다시 썼다.** 이 브랜치는 원격에 없고 upstream도
-없어 push 전이 확실했으므로 15개 커밋 전부 메시지만 수정했다. 코드 트리는 백업 브랜치
-`backup/mvp-d-d1-preJira`와 동일하며 author/committer는 오명헌 그대로다. **위 표의 SHA는
-메시지 수정 후 값이다.**
+없어 push 전이 확실했으므로 메시지만 수정했다. 코드 트리는 백업 브랜치
+`backup/mvp-d-d1-preJira`와 동일하며 author/committer는 오명헌 그대로다. 위 표의 SHA는
+메시지 수정 후 값이다.
 
 ## C가 연결할 위치와 호출 순서
 
@@ -79,17 +83,29 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 6. `connectMedia(grant)`는 TEAM_PRACTICE/MAP_FINALIZING/GAME_LOADING/COUNTDOWN/PLAYING에서만
    성공한다. LOBBY/DEVICE_CHECK에서는 SDK를 부르지 않고 `PHASE_NOT_ALLOWED`로 거절한다.
 
-## 아직 오류로 끝나는 메서드
+## D-17 즉시 인계 — E-16과 B 경기 전환을 막지 않기 위한 요약
 
-성공 stub을 만들지 않았다. 제품 경로에서 아직 부르지 말 것.
+**세 종료 메서드는 서로 다른 일을 한다. 하나로 합치지 말 것.**
 
-| 메서드               | 오류                                 | 담당 번호 |
-| -------------------- | ------------------------------------ | --------- |
-| `applyMediaBindings` | `InteractionNotImplementedError`     | D-15      |
-| `applyAudioPolicy`   | `InteractionNotImplementedError`     | D-16      |
-| `connectMedia`       | `createMediaRoom` 주입이 없으면 실패 | D-13 후속 |
+| 메서드                           | 닫는 것                                                 | 유지하는 것                                  |
+| -------------------------------- | ------------------------------------------------------- | -------------------------------------------- |
+| `retireMediaGeneration(reason?)` | 출력·listener·게시·수신·오디오 그래프·SDK 연결          | **playerId·게임 Room·원본 카메라·센서·입력** |
+| `endParticipation()`             | 위 전부 + 입력 timer/listener + Worker/모델 + 원본 장치 | 게임 Room 수명(=C가 결정)                    |
+| `dispose()`                      | 위 전부 + 객체 재사용 금지                              | 없음                                         |
 
-`retireMediaGeneration()`은 D-13 범위에서 동작하지만 게시·수신 정리는 D-14–D-17에서 채운다.
+- `retireMediaGeneration`은 **게임 지식 삭제 신호가 아니다.** 미디어만 재연결해도
+  `gameInstanceId`/revision은 바뀌지 않는다. 논리 `gameScope` 전환은 B/C가 한다.
+- 세대는 정리 **전에** terminal로 바뀐다. 그 뒤 도착한 Reconnected·publish·
+  media-bindings·audio-policy는 현재 세대를 다시 열지 못한다.
+- 새 세대는 **`beginMediaGeneration()`으로만** 열린다. B/E 회수 확인 뒤에 부른다.
+  `getGenerationState()`가 `live|terminal|closed`를 돌려준다.
+- 로컬 `closed`는 **서버 회수 성공이 아니다.** 원격 회수 확인은 E MC-07/08이 한다.
+- `MEDIA_POLICY_UNCERTAIN`(reason `policy-unknown`)·개인 종료·shutdown은 10초 복구
+  창을 기다리지 않는다. 게임 생존 중 순간 복구만 서버 10초 창을 따른다.
+- 동시 socket close·개인 종료·unmount는 공유 Promise로 한 번만 정리한다. 반복 호출은
+  같은 Promise를 돌려준다.
+- **카메라 장애는 참가 종료가 아니다.** 세대와 게임을 유지하고 IN-10 보조 입력과
+  ME-02 안전 얼굴로 전환한다.
 
 ## 소비자가 알아야 할 계약 세부
 
@@ -177,9 +193,8 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 
 1. F가 REQ-D-01을 반영하면 `pnpm verify` 전체를 다시 실행하고 결과를 이 문서에 갱신한다.
 2. C가 REQ-D-06으로 조립하면 장치 점검·입력·연결 상실·반복 입장/종료를 실제 연결로 시험한다.
-3. E-05/E-09/E-10 인계가 도착하면 D-14–D-17을 가공 트랙 게시 → 허용 얼굴 수신 → 오디오 →
-   세대/참가 종료 순서로 진행한다. D-17은 E-16과 B의 경기 전환을 막지 않도록 검증 즉시
-   이 문서에 인계한다.
+3. D-14–D-17은 게시 → 수신 → 오디오 → 세대/참가 종료 순서로 모두 단위 검증을 마쳤다.
+   E-05/E-09/E-10 인계가 도착하면 실제 연결 회귀만 수행한다.
 4. 대표 장치가 준비되면 튜닝 두 버전(`D-input-1`, `D-safe-face-1`)의 수치를 실측으로 조정하고
    변경한 버전을 여기에 기록한다.
 
