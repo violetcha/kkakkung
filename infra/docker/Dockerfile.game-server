@@ -1,3 +1,15 @@
+# game-server 이미지. 컨텍스트는 저장소 루트.
+#
+# 40번 원본은 마지막에 `pnpm deploy --legacy --prod /app` 로 런타임 폴더를 만들었는데,
+# pnpm 11.19.0~11.21.0 의 deploy 는 워크스페이스 패키지(@kkakkung/protocol, game-core)를
+# 복사하지 않고 원본 경로(/workspace/packages/*)로 심볼릭 링크를 만듭니다 (pnpm/pnpm#13754).
+# 런타임 스테이지로 옮기면 링크가 끊겨 부팅 시 ERR_MODULE_NOT_FOUND 로 죽습니다.
+# EC2 실측: 2026-09-08, kkakkung-game:test 컨테이너 exit=1 반복.
+#
+# 그래서 deploy 를 쓰지 않고, 빌드 스테이지의 워크스페이스에서 devDependencies 와
+# 서버가 안 쓰는 프로젝트(apps/web)를 걷어낸 뒤 통째로 옮깁니다.
+# 워크스페이스 링크는 상대 경로(../../packages/...)라 통째로 옮기면 그대로 살아 있습니다.
+
 FROM node:24.19.0-bookworm-slim AS build
 RUN npm install --global pnpm@11.19.0
 WORKDIR /workspace
@@ -10,13 +22,16 @@ RUN pnpm install --frozen-lockfile
 COPY packages packages
 COPY server server
 RUN pnpm build:packages && pnpm --filter @kkakkung/game-server build
-# deploy uses the root lockfile and includes the two workspace dependencies.
-RUN pnpm --filter @kkakkung/game-server deploy --legacy --prod /app
+# node_modules 를 비우고 game-server 와 그 워크스페이스 의존성(`...`)만 prod 로 다시 설치.
+# 스토어가 이미 받아둔 상태라 네트워크 없이도 수 초면 끝납니다.
+RUN find . -name node_modules -type d -prune -exec rm -rf {} + \
+ && pnpm install --prod --frozen-lockfile --filter @kkakkung/game-server...
 
 FROM node:24.19.0-bookworm-slim
-WORKDIR /app
-COPY --from=build --chown=node:node /app /app
+WORKDIR /app/server
+COPY --from=build --chown=node:node /workspace /app
 RUN mkdir -p /var/lib/kkakkung && chown node:node /var/lib/kkakkung
 USER node
 EXPOSE 2567
+# WORKDIR 이 /app/server 라 원본과 같은 dist/main.js 경로. main.ts 의 ../.env 는 /app/server/.env (없음).
 CMD ["node", "dist/main.js"]
