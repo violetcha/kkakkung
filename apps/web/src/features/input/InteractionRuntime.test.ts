@@ -335,7 +335,7 @@ describe('createInteractionRuntime', () => {
     expect(base.sensors).toHaveLength(seen);
   });
 
-  it('rejects the media and context methods that later tasks own', async () => {
+  it('rejects the media methods that later tasks own', async () => {
     const base = harness();
 
     await expect(base.runtime.connectMedia({} as never)).rejects.toBeInstanceOf(
@@ -344,7 +344,6 @@ describe('createInteractionRuntime', () => {
     await expect(base.runtime.retireMediaGeneration()).rejects.toBeInstanceOf(
       InteractionNotImplementedError,
     );
-    expect(() => base.runtime.setContext({} as never)).toThrow(InteractionNotImplementedError);
     expect(() => base.runtime.applyMediaBindings({} as never)).toThrow(
       InteractionNotImplementedError,
     );

@@ -27,7 +27,13 @@ import {
   type WorkerPort,
   type WorkerScheduler,
 } from '../vision/worker-scheduler';
-import { isSampleFresh, isUsableQuality } from '../vision/sensor-types';
+import {
+  isSampleFresh,
+  isUsableQuality,
+  type Sample,
+  type PoseSensor,
+} from '../vision/sensor-types';
+import { torsoLeanRad } from '../vision/pose-sensor';
 import {
   createFaceCompositor,
   type CompositorContext,
@@ -35,7 +41,15 @@ import {
   type FaceCompositor,
 } from '../media/face-compositor';
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
-import { createCalibrator } from './calibration';
+import { createCalibrator, isNeutralUsable, relativeToNeutral } from './calibration';
+import { createContextStore, type ContextStore } from './interaction-context';
+import {
+  createGestureIntentController,
+  type GameKey,
+  type GestureIntentController,
+} from './gesture-intent';
+import { createMoveIntentController, type MoveIntentController } from './move-intent';
+import { createTurnIntentController, type TurnIntentController } from './turn-intent';
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
 import type { SensorSnapshot } from '../vision/sensor-types';
 
@@ -49,20 +63,18 @@ export type {
   SensorSnapshot,
 } from '../vision/sensor-types';
 
-export type Role = 'runner' | 'tagger';
-export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
-export type EquipmentKind = 'sensor' | 'trap';
-export type PoseKind = 'left' | 'right' | 'y';
-export type Phase =
-  | 'LOBBY'
-  | 'DEVICE_CHECK'
-  | 'TEAM_PRACTICE'
-  | 'MAP_FINALIZING'
-  | 'GAME_LOADING'
-  | 'COUNTDOWN'
-  | 'PLAYING'
-  | 'RESULT'
-  | 'ABORTED';
+export type {
+  EquipmentKind,
+  InputMode,
+  InteractionContext,
+  InteractionState,
+  Phase,
+  PlayerStatus,
+  PoseKind,
+  Role,
+} from './interaction-context';
+
+import type { EquipmentKind, InteractionContext, InteractionState } from './interaction-context';
 
 export type MediaScope = Readonly<{
   matchId: string;
@@ -140,29 +152,6 @@ export type FaceTrackEvent = MediaScope &
     element: HTMLVideoElement | null;
   }>;
 
-export type InteractionContext = Readonly<{
-  matchId: string;
-  selfPlayerId: string;
-  role: Role | null;
-  phase: Phase;
-  status: PlayerStatus;
-  targetPlayerId?: string;
-  incomingExchangeId?: string;
-  outgoingExchangeId?: string;
-  challengeId?: string;
-  exitId?: string;
-  poseKind?: PoseKind;
-  selectedEquipment?: EquipmentKind;
-  installationId?: string;
-  mode: 'motion' | 'keyboard';
-  pageActive: boolean;
-}>;
-
-export type InteractionState = Readonly<{
-  selectedEquipment: EquipmentKind;
-  mode: 'motion' | 'keyboard';
-}>;
-
 export type CommandPayloads = {
   MOVE_INTENT: { direction: 'forward' | 'back' | null };
   TURN: { direction: 'left' | 'right' };
@@ -238,6 +227,8 @@ export type InteractionRuntimeOptions = Readonly<{
   environment?: DeviceEnvironment;
   vision?: VisionEnvironment;
   compositor?: CompositorEnvironment;
+  /** 키 listener를 붙일 대상. 생략하면 window다. */
+  keyboardTarget?: KeyboardTarget;
   tuning?: InputTuning;
 }>;
 
@@ -317,6 +308,44 @@ function browserCompositor(): CompositorEnvironment {
   };
 }
 
+/** D-11. D만 등록하는 게임 키. 방향키 시퀀스와 화면 취소 버튼은 C가 소유한다. */
+const MOVE_KEYS: Readonly<Record<string, 'forward' | 'back'>> = Object.freeze({
+  KeyW: 'forward',
+  ArrowUp: 'forward',
+  KeyS: 'back',
+  ArrowDown: 'back',
+});
+const TURN_KEYS: Readonly<Record<string, 'left' | 'right'>> = Object.freeze({
+  KeyA: 'left',
+  ArrowLeft: 'left',
+  KeyD: 'right',
+  ArrowRight: 'right',
+});
+const ACTION_KEYS: Readonly<Record<string, GameKey>> = Object.freeze({
+  KeyE: 'E',
+  KeyF: 'F',
+  Digit1: '1',
+  Digit2: '2',
+  Escape: 'Escape',
+});
+
+/** 입력 요소나 IME 조합 중에는 게임 단축키를 만들지 않는다. */
+export function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const element = target as {
+    tagName?: unknown;
+    isContentEditable?: unknown;
+  };
+  const tag = typeof element.tagName === 'string' ? element.tagName.toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return element.isContentEditable === true;
+}
+
+export type KeyboardTarget = Readonly<{
+  addEventListener(type: 'keydown' | 'keyup', listener: (event: KeyboardEvent) => void): void;
+  removeEventListener(type: 'keydown' | 'keyup', listener: (event: KeyboardEvent) => void): void;
+}>;
+
 export const createInteractionRuntime = (
   deps: InteractionDeps,
   options: InteractionRuntimeOptions = {},
@@ -335,6 +364,36 @@ export const createInteractionRuntime = (
   let compositor: FaceCompositor | null = null;
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
   const calibrator = createCalibrator(tuning);
+  const context: ContextStore = createContextStore();
+  let keyboardBound: (() => void) | null = null;
+
+  const move: MoveIntentController = createMoveIntentController({
+    send: (direction) => {
+      deps.sendCommand({ type: 'MOVE_INTENT', payload: { direction } });
+    },
+    now: () => vision.now(),
+    setTimer: (handler, delayMs) => vision.setTimer(handler, delayMs),
+    clearTimer: (handle) => vision.clearTimer(handle),
+    tuning,
+  });
+  const turn: TurnIntentController = createTurnIntentController({
+    send: (direction) => {
+      deps.sendCommand({ type: 'TURN', payload: { direction } });
+    },
+    tuning,
+  });
+  const gestures: GestureIntentController = createGestureIntentController({
+    context,
+    send: (command) => deps.sendCommand(command as CommandInput),
+    onInteractionState: (state) => deps.onInteractionState(state),
+  });
+
+  /** 문맥 변화·장애에서 이동 timer, 회전 latch, gesture hold를 함께 비운다. */
+  const clearHolds = () => {
+    move.release();
+    turn.reset();
+    gestures.reset();
+  };
   let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
 
   const vision = options.vision ?? browserVision();
@@ -378,6 +437,44 @@ export const createInteractionRuntime = (
     patch({ vision: ready ? 'ready' : 'loading' });
   };
 
+  /**
+   * 보정된 상대 각도로만 이동/회전 의도를 만든다.
+   * 보정 전이나 표본이 신선하지 않으면 null을 넣어 어떤 의도도 만들지 않는다.
+   */
+  const applyMotionIntents = (snapshot: SensorSnapshot) => {
+    const nowMs = vision.now();
+    if (!context.acceptsInput || context.inChallenge) {
+      move.updateMotion(null, nowMs);
+      turn.updateMotion(null, nowMs);
+      return;
+    }
+    const neutral = calibrator.getNeutral();
+    if (!isNeutralUsable(neutral, runtimeGeneration, tuning)) {
+      move.updateMotion(null, nowMs);
+      turn.updateMotion(null, nowMs);
+      return;
+    }
+    const pose = snapshot.pose;
+    const usablePose =
+      isSampleFresh(pose, 'pose', nowMs) &&
+      pose!.status === 'valid' &&
+      isUsableQuality(pose!.data.quality);
+    const lean = usablePose
+      ? torsoLeanRad((pose as Sample<PoseSensor> & { status: 'valid' }).data.landmarks)
+      : null;
+    move.updateMotion(lean === null ? null : relativeToNeutral(lean, neutral.leanRad), nowMs);
+
+    const face = snapshot.face;
+    const usableFace =
+      isSampleFresh(face, 'face', nowMs) &&
+      face!.status === 'valid' &&
+      isUsableQuality(face!.data.quality);
+    turn.updateMotion(
+      usableFace ? relativeToNeutral(face!.data.yawRad, neutral.yawRad) : null,
+      nowMs,
+    );
+  };
+
   const publishSnapshot = (snapshot: SensorSnapshot) => {
     if (disposed) return;
     // 구 세대 결과는 발행하지 않는다.
@@ -391,6 +488,8 @@ export const createInteractionRuntime = (
     }
     refreshVisionStatus();
     calibrationObserver?.(snapshot);
+    applyMotionIntents(snapshot);
+    gestures.observe(snapshot, vision.now(), runtimeGeneration);
     deps.onSensors(snapshot);
   };
 
@@ -448,6 +547,54 @@ export const createInteractionRuntime = (
     pump = frames;
     patch({ vision: 'loading', errorCode: null });
     frames.start();
+  };
+
+  const bindKeyboard = () => {
+    if (keyboardBound) return;
+    const target = options.keyboardTarget ?? (typeof window === 'undefined' ? null : window);
+    if (!target) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      // 입력 요소·IME 조합 중에는 게임 단축키를 만들지 않는다.
+      if (event.isComposing || isTextEntryTarget(event.target)) return;
+      const action = ACTION_KEYS[event.code];
+      if (action) {
+        // Esc는 challenge 취소만 담당한다.
+        if (gestures.pressKey(action) !== null) event.preventDefault();
+        return;
+      }
+      if (!context.acceptsInput || context.inChallenge) return;
+      const moveKey = MOVE_KEYS[event.code];
+      if (moveKey) {
+        if (!event.repeat) move.setKey(moveKey, true);
+        event.preventDefault();
+        return;
+      }
+      const turnKey = TURN_KEYS[event.code];
+      if (turnKey) {
+        turn.keyDown(turnKey, event.repeat);
+        event.preventDefault();
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      const moveKey = MOVE_KEYS[event.code];
+      if (moveKey) {
+        move.setKey(moveKey, false);
+        return;
+      }
+      const turnKey = TURN_KEYS[event.code];
+      if (turnKey) turn.keyUp(turnKey);
+    };
+    target.addEventListener('keydown', onKeyDown);
+    target.addEventListener('keyup', onKeyUp);
+    keyboardBound = () => {
+      target.removeEventListener('keydown', onKeyDown);
+      target.removeEventListener('keyup', onKeyUp);
+    };
+  };
+
+  const unbindKeyboard = () => {
+    keyboardBound?.();
+    keyboardBound = null;
   };
 
   const ensureDevices = (): DeviceManager => {
@@ -523,8 +670,15 @@ export const createInteractionRuntime = (
       return lastStatus;
     },
 
-    setContext() {
-      throw new InteractionNotImplementedError('setContext', 'D-11 / IN-09');
+    setContext(next: InteractionContext) {
+      if (disposed) return;
+      const change = context.set(next);
+      if (change.shouldClearHolds) clearHolds();
+      // pageActive=false이면 입력과 버퍼를 비우고 새 의도를 막는다.
+      if (!context.acceptsInput) clearHolds();
+      turn.setMode(next.mode);
+      gestures.setMode(next.mode);
+      bindKeyboard();
     },
 
     connectMedia() {
@@ -551,6 +705,9 @@ export const createInteractionRuntime = (
 
     /** 논리 참가 종료. D-17에서 미디어 세대 종료와 분리해 확장한다. */
     async endParticipation() {
+      unbindKeyboard();
+      clearHolds();
+      context.clear();
       stopVision();
       calibrator.reset();
       await devices?.dispose();
@@ -561,6 +718,9 @@ export const createInteractionRuntime = (
     async dispose() {
       if (disposed) return;
       disposed = true;
+      unbindKeyboard();
+      clearHolds();
+      context.clear();
       stopVision();
       calibrator.reset();
       await devices?.dispose();
