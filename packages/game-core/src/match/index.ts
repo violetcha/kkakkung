@@ -119,6 +119,20 @@ export {
   type LayoutSelectionPort,
 } from './map/select-with-fallback.js';
 
+export {
+  activeExitAtFace,
+  activeExits,
+  closeExit,
+  createExitRegistry,
+  exitOfOwner,
+  toKnownExit,
+  type CloseExitResult,
+  type ExitRecord,
+  type ExitRegistry,
+  type ExitRegistryError,
+  type ExitRegistryResult,
+} from './exits/registry.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
