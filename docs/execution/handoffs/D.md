@@ -87,7 +87,6 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 | -------------------- | ------------------------------------ | --------- |
 | `applyMediaBindings` | `InteractionNotImplementedError`     | D-15      |
 | `applyAudioPolicy`   | `InteractionNotImplementedError`     | D-16      |
-| `setQualityPreset`   | `InteractionNotImplementedError`     | D-14      |
 | `connectMedia`       | `createMediaRoom` 주입이 없으면 실패 | D-13 후속 |
 
 `retireMediaGeneration()`은 D-13 범위에서 동작하지만 게시·수신 정리는 D-14–D-17에서 채운다.
