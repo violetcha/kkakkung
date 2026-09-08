@@ -4,7 +4,7 @@
 담당 범위: LiveKit 권한/세대 회수, 저널·예산·재시작 대조와 READY  
 원본 작업: **16개** · 리뷰 상대: **F** · 현재 상태: **모두 구현 계획**
 
-이 문서와 [기획서 v0.0.8](../spec/README.md)을 실행 입력으로 사용한다. AI는 기존 코드와 저장소 지침을 직접 읽는다. 팀원에게 다른 담당 문서의 내용을 찾아 오도록 요구하지 않는다. [6인 전체 일정](README.md)은 인계 시점을 확인하는 안내다.
+이 문서와 [최신 결정](../spec/decisions.md), 아래 공통 계약을 실행 입력으로 사용한다. AI는 `AGENTS.md`·`CONTRIBUTING.md`·`server/README.md`와 수정할 실제 코드를 읽는다. [기획서 v0.0.8](../spec/README.md)은 근거 확인용이며 정정 전 아이템 요구를 실행하지 않는다. 다른 담당의 전체 실행 문서를 읽지 않아도 아래 선행 산출물과 [E 인계 기록](handoffs/E.md)으로 작업할 수 있어야 한다.
 
 목표는 **9월 8일(화)·9일(수) 핵심 구현, 10일(목) 통합·검증·수정, 11일(금) 오전 MVP 인수**다. 작업 개수는 소요시간이나 완료 보증이 아니다. 선행 작업·실제 Cloud·장치가 준비되지 않은 조건은 완료로 계산하지 않는다.
 
@@ -70,7 +70,7 @@ D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 �
 
 ```text
 내 담당 실행 문서와 docs/spec/decisions.md, v0.0.8 기획서를 기준으로
-오늘 작업표 1번부터 5번까지 진행해줘.
+내 담당의 고정 번호 01번부터 05번까지 진행해줘.
 결정 대기 작업은 구현하지 말고 해당 번호를 보류한 뒤 다음 번호를 진행해줘.
 검증된 중간 산출물과 완료 작업은 내 Git 신원으로 각각 로컬 커밋해줘.
 작업별 MR 본문과 이번 실행분 합본을 작성하고 전체 본문을 보여줘.
@@ -85,6 +85,25 @@ D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 �
 - 목표는 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 금요일 오전 인수다. 확정 범위의 G1–G6 증거와 미정 아이템의 상태를 함께 보고한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
 
 ## 설치와 공통 검사
+
+### 담당 문서만으로 시작하는 읽기 경로
+
+공통 필수 자료는 `AGENTS.md`, `CONTRIBUTING.md`, `requirements.md`, `docs/architecture.md`, `docs/spec/decisions.md`다. 이후 자기 담당 문서의 시작 절차와 지정 작업만 읽고, 각 작업의 기획 근거 장을 원본 HTML에서 확인한다. 이 공통 블록과 타입은 자기 담당 문서에도 들어 있으므로 다른 다섯 역할의 전체 문서를 읽을 필요는 없다. 다른 역할의 **공개 타입·실제 export·시험 fixture·인계 기록**은 연결 근거로 직접 확인한다. SDK 사실은 설치된 버전의 타입·구현을 확인한다.
+
+```bash
+node scripts/prepare-execution.mjs --role A --tasks 1-5
+node scripts/prepare-execution.mjs --role A --day D2 --tasks 1-5
+```
+
+첫 명령은 고정 번호 A-01–A-05, 둘째는 D2 오늘 번호 1–5(A-19–A-23)다. 도구는 읽을 자료·기획 장·범위 밖 선행·파일 존재 여부를 출력하는 읽기 전용 도구다. 파일 존재를 구현 완료로 계산하지 않는다. `--day`가 없으면 현재 날짜를 추측하지 않는다. 유효하지 않은 범위를 일부만 실행하지 않고 오류로 알려 준다. D3에 신규 고정 번호가 없는 역할의 후속 작업은 담당 D3 표를 따른다.
+
+### 선행 작업과 범위 제한
+
+작업 본문의 `선행 완료 결과`는 **최종 연결 전에 필요한 산출물 목록**이다. 모든 선행의 ACCEPTED를 기다려야 코딩할 수 있다는 뜻이 아니다. 공개 계약이 고정되면 자신의 단위 구현과 합성 fixture 시험을 진행할 수 있다. 실제 생산자 구현·통합 commit이 없으면 LOCAL_VERIFIED까지만 기록하고 실제 연결은 차단 조건으로 남긴다.
+
+다음 일차의 실제 생산자까지 필요한 경우 `통합 인수 선행`을 별도 적는다. prepare 출력도 이 목록을 단독 구현 선행과 분리한다. 예를 들어 C-03의 합성 action 보간은 먼저 구현하지만 실제 인수에는 B-14 개인 뷰가 필요하다. 미래 생산자가 있다는 이유로 해당 날짜의 단위 구현이 불가능하다고 처리하지 않는다.
+
+요청 범위 밖의 자기 선행 구현도 자동으로 추가하지 않는다. 현재 checkout에서 선행 산출물을 확인하고, 없으면 지정 범위의 독립 가능한 작업을 먼저 끝낸 뒤 필요한 고정 번호·export·시험을 인계 기록에 요청한다. 다른 담당의 파일·manifest를 대신 수정하거나 범위를 채우기 위한 성공 stub을 만들지 않는다. 계약 변경이 필요하면 소비자는 자신의 인계 문서에 구체 요청을 남기고 계약 담당 B가 원본을 수정한다.
 
 Node.js 24.19.0 / pnpm 11.19.0 / TypeScript 6.0.3과 루트 lockfile을 유지한다.
 
@@ -111,6 +130,16 @@ node scripts/check-execution-plan.mjs
 
 B만 서버 최종 조립을, C만 웹 최종 조립을, F만 공통 설정과 의존성을 수정한다. A는 protocol을 import하지 않고 B가 변환한다. 웹은 서버 실제 맵·game-core·운영 내부값을 import하지 않는다. 제품은 0.2.0의 kkakkung, sandbox 0.1.0은 개발 진단용으로 격리한다. 기존 공개 maze·빈 입장·Playground와 개발 adapter는 production 라우트에서 차단한다. 개발 회귀용 경로만 유지하며 제품 기능을 위해 진단 API를 확장하지 않는다.
 
+구체 파일의 단일 수정자는 [소유권 원본](ownership.json)으로 판별한다. 경로가 가장 구체적인 규칙이 우선하며, 예를 들어 웹 public 자산은 C지만 `public/models/`는 D다. 선언되지 않은 새 경로는 임의 소유로 간주하지 않고 F에게 등록을 요청한다. 작업의 수정·생성 파일에는 glob이나 디렉터리 전체 대신 실제 파일명을 적는다. `check:execution`은 각 선언 경로가 담당의 소유권에 맞는지도 검사한다.
+
+구현 checkout의 시작 SHA를 기록한 뒤 `node scripts/check-role-scope.mjs --role A --base <시작-SHA>`로 commit·stage·미커밋·미추적 변경을 검사한다. rename은 원래 경로와 새 경로 모두 검사한다. 다른 역할의 변경이 섞인 공동 checkout에서는 먼저 담당별 checkout/브랜치로 분리한다. 이 명령은 삭제·수정 권한을 부여하지 않는다. 공통 문서 정비처럼 여러 소유자가 참여하는 변경은 단일 역할 구현 검사와 구분한다.
+
+B의 계약 변경이나 F의 사본 동기화에서만 scope 명령 끝에 `--contract-sync`를 붙인다. 다른 역할 문서는 원본과 일치하는 공통 블록만 바뀌고 역할 본문은 시작 SHA와 같아야 한다. 도구는 commit·stage·working 각각의 수정 버전을 검사하며, 일반 코드·역할 지시 변경이나 F의 B 소유 common 원본 변경까지 면제하지 않는다. 사본 예외 검사 뒤에도 `check:execution`을 실행한다.
+
+- manifest·lockfile·공통 config 요청은 각자 `handoffs/<역할>.md`에 패키지명/정확 버전/실행 또는 개발 의존성/소비 import/필요 script와 이유를 기록한다. F만 한 번에 install·lock 갱신·검증하여 commit을 돌려준다. A–E의 AI가 직접 `pnpm add`를 하지 않으며 어느 역할도 전체 자동 포맷으로 타인 파일을 바꾸지 않는다.
+- 새 asset 출처·라이선스·버전·hash는 소유 자산 옆 README 또는 자기 인계에 기록하고 F가 `docs/third-party-assets.md`를 집계한다. 모든 역할이 같은 집계 문서를 동시에 편집하지 않는다.
+- 개인 산출물/인계 문서는 각 역할만 수정한다. 공통 블록 변경과 `--sync`는 B 계약 변경 또는 F 문서 정비 MR에서만 수행하고 역할 구현 MR에는 다른 다섯 문서의 자동 갱신을 섞지 않는다.
+
 공통 의미 변경은 B가 총괄하여 `docs/execution/common.md`와 `contracts/types.ts`·fixture를 수정한다. D 센서·E 미디어처럼 실제 생산자/소비자가 검토한다. F는 동기화 검사기를 소유한다. A–F 문서의 공통 블록은 직접 편집하지 않고 아래 명령으로 갱신한다.
 
 ```bash
@@ -130,6 +159,12 @@ node scripts/check-execution-plan.mjs
 - B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
 
 ## 맵 영역과 fallback 입력 — A/B
+
+A의 `MapPreparationPort`는 원본 검증과 변형 생성을 담당한다. B loader는 `validateTemplate(raw, source)`의 valid 결과만 `createTemplateVariants(template)`로 전달하고 invalid 결과에서 선택기를 실행하지 않는다. 두 결과 union의 error code/path는 내부 진단이며 실제 topology/hash를 공개 오류에 싣지 않는다. 함수명을 각자 다시 정하지 않고 검사 가능한 원본 타입을 사용한다.
+
+A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(raw, players, role)`도 제공한다. B-15가 팀별 1–3명의 현재 playerId를 넘기면 A가 정적 역할 슬롯을 바인딩한 ready/layout 또는 invalid 결과를 반환한다. 연습의 소형 맵·동일 팀 인원·유효 시작점을 검사하되 본경기의 32×32·6인·3출구·거리 제약을 연습에 강제하지 않는다. 연습 layout의 exits는 비우고 포획·승패도 비활성화한다.
+
+`LayoutSelectionInput.fallback`은 구조적으로 유효한 객체가 필수다. 파일 부재·JSON/shape 오류면 B loader가 준비 단계로 복귀하고 dummy fallback을 만들지 않는다. 객체 구조는 맞지만 출처·배치 규칙 인증에 실패한 경우에만 fallback을 불가 상태로 두고 온라인 선발을 시도할 수 있다. 둘 다 사용할 수 없으면 LAYOUT_UNAVAILABLE이며 맵 선택 완료로 처리하지 않는다.
 
 - `LayoutTemplate`은 한 개의 정규화된 변형이다. `MapSource`의 templateId/templateVersion/templateHash/variantId와 topology, taggerRegions 3개, runnerSpawnRegions 3개, exitCandidates를 함께 전달한다. `SpawnRegion`은 regionId/cells/spawnCandidates를 가지며 평면 후보 목록으로 영역 정보를 없애지 않는다.
 - A MP-01/02가 영역·후보·출구 벽면/방향을 함께 검증·변형한다. 역할별 영역 ID는 유일하고 각 영역·후보는 비어 있지 않아야 한다. 술래 영역끼리, 도망자 시작 영역끼리는 겹치지 않으며 후보는 자기 영역의 유효 통로에 속해야 한다. 술래 구역과 도망자 시작 영역 사이의 중첩 금지라는 새 게임 규칙을 추가하지 않는다.
@@ -202,6 +237,8 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 
 ## 센서·입력 callback 수명
 
+C만 `App.tsx`·`SessionRuntime.ts`·room store·`main.tsx`·화면과 CSS를 조립한다. D만 `InteractionRuntime`·제품 입력 listener·장치·video element·track 수명을 소유한다. C는 `onLocalPreview(element)`를 화면 host에 부착하고 null·교체·unmount 때 host 연결만 해제한다. srcObject·track.stop·D element의 미디어 정리는 D가 처리한다. C의 3D texture/geometry는 C가 정리한다. 하나의 제품 세션에는 D runtime 하나만 기동하며 기존 `bindTeamInput`/개발 input을 동시에 연결하지 않는다. React 반복 mount·원격 leave·페이지 비활성·연습→본경기에서 이 소유권을 시험한다.
+
 한 SensorSnapshot의 emittedAtMs를 새 센서 관측으로 해석하지 않는다. 각 Sample은 실제 프레임의 sampledAtMs/frameId를 보존한다. 해당 모델을 실행하지 않은 발행에서는 Sample을 갱신하지 않는다. 미검출은 새 frameId의 missing/null이며, 세대 시작부터 아직 실행하지 않은 센서는 null이다.
 
 - sampledAtMs/receivedAtMs/emittedAtMs는 브라우저 main performance 시간축이다. Worker는 main이 전달한 frameId·sampledAtMs를 그대로 돌려주고 main이 receivedAtMs를 붙인다. 서버 시계와 섞지 않는다.
@@ -221,6 +258,12 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - B의 필수 회귀 시험은 두 룸의 매칭 POST/OPTIONS, 일반 API, WS upgrade에 허용/비허용 Origin을 대입하고 응답과 처리 전후 방/예약 수를 함께 검사한다. 경계 2,048/2,049바이트·길이 없는 초과 본문·Origin 없는 개발 요청도 포함한다. 이 문서는 수정 계획이며 실제 bootstrap과 통합 시험을 구현·실행해야 보안 수정 완료다.
 
 ## 운영 HTTP 계약
+
+B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
+
+F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 실제 운영 입력에서 검증하고 B가 factory에 전달한다. publicWindow=null은 공개 창 미정으로 잠금이며 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·예산·창 조건을 함께 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 F의 시작 절차를 따르며 다른 담당은 F의 config export를 읽는다.
+
+관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
 
 B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
 
@@ -253,6 +296,10 @@ F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배
 ## 작업 상태·커밋·MR·인계
 
 실행 상태는 PLANNED → CONTRACT_READY → LOCAL_VERIFIED → INTEGRATED → ACCEPTED로 기록한다. 외부 전제 부재는 BLOCKED, 미정 콘텐츠는 PRODUCT_DECISION_PENDING이다. 이 상태는 문서/로컬 진행 기록이며 Jira 상태를 자동 변경하지 않는다.
+
+진행 기록에는 `localStage`와 `blockedOn`을 분리한다. 예를 들어 단위 시험이 통과했지만 Cloud가 없는 작업은 `localStage: LOCAL_VERIFIED`, `blockedOn: [실제 Cloud 권한·예산]`, 최종 상태 `BLOCKED`로 기록한다. 차단되었다고 검증한 단계까지 없애거나, 단위 통과를 ACCEPTED로 올리지 않는다. 결정 대기 6개는 localStage 없이 PRODUCT_DECISION_PENDING을 유지한다.
+
+공유 인계는 추적되는 `docs/execution/handoffs/A.md`부터 `F.md`까지 **자기 파일 하나**에 작성한다. 작업 ID·단계·실제 export 경로와 signature·적용 commit·실행한 명령과 결과·필요한 소비자 확인·blockedOn·다음 요청을 기록한다. 자신의 구현 commit을 만든 뒤 그 SHA를 인계 문서에 적어 별도 인계 commit으로 남길 수 있다. 아직 존재하지 않는 미래 SHA나 실행하지 않은 성공 기록을 넣지 않는다. 소비자는 다른 역할의 전체 계획 대신 이 공개 인계와 실제 코드를 확인한다. `.local/` 기록은 개인 재개용이며 다른 팀원이 자동으로 읽을 수 있다고 가정하지 않는다. 원격 인계는 담당자의 push/MR 병합 후에야 도착한 것으로 처리한다.
 
 1. 계약/fixture 또는 단위 구현이 검증되면 **중간 커밋을 허용한다.** 작업 ID·이번 단계·실제 검증·미통합 조건을 커밋/MR에 적는다. 깨진 빌드·빈 성공 stub을 인계하지 않는다.
 2. 담당의 완료 조건과 실제 생산자·소비자 연결, 필요한 Cloud/장치 증거가 있어야 ACCEPTED다. 중간 커밋/합병을 기능 완료로 세지 않는다. 완료마다 최종 변경 커밋을 남기되 같은 결과를 중복 커밋하지 않는다.
@@ -310,6 +357,30 @@ export type SessionResponse = Readonly<{
   expiresAt: number;
   protocolVersion: '0.2.0';
 }>;
+// Server/operator-only. These endpoints do not accept a player's session Bearer token.
+export const INVITATION_ROUTES = {
+  issue: '/api/operations/invitations',
+  revoke: '/api/operations/invitations/:inviteId/revoke',
+} as const;
+export type InvitationScope = Readonly<{
+  allowCreate: boolean;
+  roomCodes: readonly string[];
+}>;
+export type IssueInvitation = Readonly<{ scope: InvitationScope; expiresAt: number }>;
+export type IssuedInvitation = IssueInvitation &
+  Readonly<{ inviteId: string; inviteToken: string }>;
+export type InvitationDenialCode = 'INVALID_INVITATION' | 'NOT_READY' | 'OUTSIDE_PUBLIC_WINDOW';
+export type InvitationIssueResult =
+  | Readonly<{ status: 'issued'; invitation: IssuedInvitation }>
+  | Readonly<{ status: 'rejected'; code: InvitationDenialCode }>;
+export type InvitationCheck = Readonly<{ inviteToken: string }> &
+  ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export interface InvitationPort {
+  issue(input: IssueInvitation): InvitationIssueResult;
+  revoke(inviteId: string): void;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  bindCreatedRoom(inviteId: string, roomCode: string): void;
+}
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
 export type Phase =
   | 'LOBBY'
@@ -682,6 +753,38 @@ export type LayoutTemplate = MapSource &
     runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
     exitCandidates: readonly WallFace[];
   }>;
+export type MapPreparationFailure = Readonly<{
+  status: 'invalid';
+  code: 'INVALID_MAP_SOURCE' | 'INVALID_TEMPLATE';
+  path: readonly (string | number)[];
+}>;
+export type MapTemplateResult =
+  Readonly<{ status: 'valid'; template: LayoutTemplate }> | MapPreparationFailure;
+export type MapVariantsResult =
+  Readonly<{ status: 'valid'; variants: readonly LayoutTemplate[] }> | MapPreparationFailure;
+export interface MapPreparationPort {
+  validateTemplate(raw: unknown, source: MapSource): MapTemplateResult;
+  createTemplateVariants(template: LayoutTemplate): MapVariantsResult;
+}
+// Fixed, isolated practice layouts use role slots, never real session IDs in JSON.
+export type PracticeLayoutTemplate = Readonly<{
+  practiceVersion: string;
+  layouts: Readonly<Record<Role, MatchLayout>>;
+}>;
+export type PracticeLayoutResult =
+  | Readonly<{ status: 'ready'; layout: MatchLayout }>
+  | Readonly<{
+      status: 'invalid';
+      code: 'INVALID_PRACTICE_LAYOUT';
+      path: readonly (string | number)[];
+    }>;
+export interface PracticeLayoutPort {
+  preparePracticeLayout(
+    raw: unknown,
+    players: readonly { playerId: string; role: Role }[],
+    role: Role,
+  ): PracticeLayoutResult;
+}
 // Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
 // player/exit/territory references to role-sorted input.players before validation.
 export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
@@ -850,6 +953,7 @@ export interface MediaCoordinator {
 }
 export type MediaCoordinatorDeps = Readonly<{
   config: MediaConfiguration;
+  emitMetric: (sample: MetricSample) => void;
   enqueueControl: (control: MediaControl) => void;
   enqueueBindings: (playerId: string, message: MediaBindings) => void;
   enqueueAudioPolicy: (playerId: string, message: AudioPolicy) => void;
@@ -868,6 +972,11 @@ export type MediaConfiguration = Readonly<{
   apiSecret: string;
   namespace: string;
   opsDataDir: string;
+  projectAlias: string;
+  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  officialBudgetMaxAgeMs: number;
+  operationTimeoutMs: number;
+  productSecurityReady: boolean;
   initialBudget: {
     remainingMinutes: number;
     remainingBytes: number;
@@ -878,6 +987,18 @@ export type MediaConfiguration = Readonly<{
   maxTotalApiCallsPer60s: number;
 }>;
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
+export type MetricSample = Readonly<{
+  name: string;
+  value: number;
+  unit: 'count' | 'ms' | 'bytes' | 'ratio';
+  atMs: number;
+  matchRef?: string;
+  generation?: number;
+  requestId?: string;
+}>;
+// E implements the authentication factory; B mounts it before every operator route.
+// This is server-internal configuration, never a client-authorized claim.
+export type CreateOperatorAuth = (token: string) => (authorization: string | undefined) => boolean;
 export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
 export type FaceSensor = Readonly<{
   landmarks: readonly NormalizedLandmark[];
@@ -1034,6 +1155,51 @@ export type ServerMessages = {
 
 각 항목의 파일은 **수정 또는 생성할 예정 경로**다. 현재 존재 여부는 AI가 확인한다. 아래 순서를 그대로 수행하되 선행 결과가 없는 항목은 계약에 따른 단위 구현까지만 진행하고 실제 연결 완료를 별도 기록한다. 모든 완료 항목은 작업별 커밋과 MR 본문으로 끝낸다.
 
+### E 실행 시작과 조립 경계
+
+2026-09-08 감사 기준 `develop`에는 `server/src/media`, `server/src/operations`, `server/src/health`의 제품 구현이 없다. 기존 서버의 `MEDIA_MODE=disabled`·production 차단과 단순 health를 E 완료로 해석하지 않는다. 실행 시 현재 소스와 인계 commit을 다시 확인한다.
+
+| 연결 지점                                                                       | 단독 수정자 | E가 제공하거나 확인할 결과                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `server/src/bootstrap.ts`, `main.ts`, `index.ts`, HTTP/WS 라우트                | B           | E는 `MediaCoordinator.ts`의 `createMediaCoordinator`와 인증기·health handler의 export, 인수/반환, 시험 명령을 [E 인계 기록](handoffs/E.md)에 적는다. B가 factory·initialize·listen·close·제어 큐를 연결한다. |
+| `server/src/config/env.ts`, 모든 manifest/lockfile, `.env.example`, Docker/볼륨 | F           | 필요한 환경변수·타입·실패 조건을 E가 요청하고 F가 파서·주입을 수정한다. E는 `process.env`를 직접 읽는 두 번째 설정기를 만들지 않는다.                                                                        |
+| `packages/protocol`·공통 타입                                                   | B           | E는 내부 결과를 고정 계약으로 반환한다. 필드 추가는 B 및 실제 소비자 D와 합의하고 공통 원본을 변경한다.                                                                                                      |
+| `tests/cloud` probe·runner·계측                                                 | F           | E는 `server/test/media/capability.cloud.test.ts`만 작성하고 F probe를 import한다. 같은 브라우저 harness를 E 폴더에 복제하지 않는다.                                                                          |
+| `server/src/observability`                                                      | F           | E 내부의 API·예약·회수 측정값은 비민감 수치/enum과 단위를 인계한다. F가 exporter를 만들며 E나 F가 B 조립 파일을 대신 수정하지 않는다.                                                                        |
+
+파일이나 export가 아직 없으면 소유자·필요한 commit·정확한 연결 시험을 `blockedOn`에 남긴다. 자기 소유의 순수 구현과 유한 실패 fixture는 계속 진행하고 요청 범위의 다음 번호로 넘어간다. B/F 파일을 직접 바꾸거나 빈 성공 모듈로 import를 해결하지 않는다. 역할 간 인계는 각 소유자가 자기 `docs/execution/handoffs/<담당>.md`에 기록하며 다른 역할 파일은 수정하지 않는다.
+
+### E-01~E-05를 한 번에 요청받았을 때
+
+| 작업         | 지금 독립적으로 만들 수 있는 결과                       | 통합·인수 전 실제 필요한 결과                                                                                                                     |
+| ------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E-01 / MC-01 | SDK 어댑터, failover 차단, 호출 기록의 비밀 제거 시험   | F-01의 runner/probe commit과 유효한 Cloud preflight, 실제 권한·회수 증거. AWS/Jenkins/6대 전체 목록은 이 3인 합성 probe의 선행이 아니다.          |
+| E-02 / OP-01 | 임시 디렉터리·주입 IO로 저널 순번/내구성/복구 실패 시험 | B 제어 큐 연결, F 지속 볼륨/OS에서 fsync·rename·writer lock 확인. B-01 전체 인수 전에도 저널 단위 구현을 진행한다.                                |
+| E-03 / OP-02 | E-02와 연동한 예약/중복/복구/분·bytes 부족 시험         | 운영자가 확인한 공식 잔량과 실제 project alias. 합성 수치를 제품 초기 잔량으로 쓰지 않는다.                                                       |
+| E-04 / OP-03 | 가짜 시계로 60초 창·600/900 상한·큐 deadline 시험       | 모든 실제 Gateway 메서드가 같은 scheduler를 거치는 연결 및 계정 공유 headroom. Cloud 부재가 큐 구현을 막지 않는다.                                |
+| E-05 / MC-02 | E-02/03과 주입된 승인·거절 조건을 연결한 발급 단위 시험 | E-01의 SUPPORTED 증거, B 인증/phase/제어 큐, E-12~15의 실제 초기화·복구·공개창·READY/OPEN. D1의 단위 구현을 완성된 운영 발급으로 표시하지 않는다. |
+
+Cloud가 막혀도 E-01의 `localStage`와 Cloud `blockedOn`을 따로 남기고 E-02–E-04를 수행한다. E-05의 정상 발급 fixture에서만 통제된 준비 조건을 주입하며 제품 factory의 초기 기본값은 RECOVERING/DRAINING이다. 이후 번호의 미구현 메서드를 성공 stub으로 채워 `MediaCoordinator` 전체가 완성됐다고 보고하지 않는다. 구현한 내부 모듈을 먼저 인계하고 전체 facade를 조립하는 E-12–E-16에서 B와 실제 연결을 검증한다.
+
+고정번호 실행 준비는 `node scripts/prepare-execution.mjs --role E --tasks 1-5`, 날짜별 번호는 `node scripts/prepare-execution.mjs --role E --day D2 --tasks 1-5`로 확인한다. 이 명령은 작업 선택과 선행 조건을 보여 주며 제품 구현이나 Cloud 실행을 대신하지 않는다.
+
+### F 설정 입력과 B 인증 조립에서 받는 값
+
+F가 `env.ts`에서 검증하고 B가 `MediaConfiguration`으로 전달한다. E의 factory는 아래 중앙 타입 값만 읽으며 비밀값을 진행 문서에 복사하지 않는다.
+
+| 입력                                                                                   | `MediaConfiguration` 또는 조립 대상                                              | 누락·불일치 처리                                                                                                     |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `LIVEKIT_HTTP_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`          | `httpUrl`, `wsUrl`, `apiKey`, `apiSecret`                                        | 제품 모드 구성 오류. 키 원문 로그 금지                                                                               |
+| `LIVEKIT_PROJECT_ALIAS`, `SERVICE_NAMESPACE`, `OPS_DATA_DIR`                           | `projectAlias`, `namespace`, `opsDataDir`                                        | alias/namespace가 확인된 Cloud preflight 및 capability 증거와 다르면 발급·회수 대상 추정 금지                        |
+| `OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS`, `OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS`          | `publicWindow` 또는 `null`                                                       | 둘 다 없으면 null로 신규 입장·resume 차단, 한쪽만 존재하거나 순서 오류는 구성 오류                                   |
+| `OPS_OFFICIAL_BUDGET_MAX_AGE_MS`, `OPS_OPERATION_TIMEOUT_MS`                           | `officialBudgetMaxAgeMs`, `operationTimeoutMs`                                   | 양의 유한 정수 필수. 운영자가 정한 값 없이 임의 무제한/성공 기본값 사용 금지                                         |
+| `MAX_SLOTS`, `MEDIA_MAX_NORMAL_API_CALLS_PER_60S`, `MEDIA_MAX_TOTAL_API_CALLS_PER_60S` | `maxConcurrentParticipants`, `maxNormalApiCallsPer60s`, `maxTotalApiCallsPer60s` | 검증된 운영 상한과 일치, 정상 ≤600·전체 ≤900 및 정상 ≤전체. 계획상 60세션을 검증 전 자동 개방하지 않음               |
+| `OPS_DATA_DIR/official-usage-input.json`                                               | 공식 확인 뒤 `initialBudget`, 미확인이면 null                                    | E가 `OfficialBudgetCheckpoint`로 프로젝트·신선도·수치를 재검사하고 저장된 예약과 대조                                |
+| B의 제품 인증·HTTP/WS 보호 초기화 결과                                                 | `productSecurityReady`                                                           | 환경변수로 true 지정하지 않음. B 초기화가 false면 E READY/grant 차단, B의 실제 거절 회귀 통과 증거를 함께 인계       |
+| `OPS_TOKEN`                                                                            | E `createOperatorAuth(token)`에 B가 주입                                         | 빈 토큰은 구성 거절. 반환 인증 함수는 `(authorization: string\|undefined) => boolean`, 인증 누락/게임 Bearer는 false |
+
+운영 명령 timeout은 `operationTimeoutMs`, 공식 입력 신선도는 `officialBudgetMaxAgeMs`로 비교한다. 두 단위는 ms이고 JWT/cutoff는 epoch 초다. 공개창·공식 입력·제품 인증 중 하나라도 미확인이면 success 기본값으로 메우지 않는다. `productSecurityReady`는 B 초기화의 증거일 뿐 원격 Cloud 권한·저널·잔량 조건을 대신하지 않는다.
+
 ### E-01
 
 **MC-01 · [BE] 실제 Cloud 권한 제어 가능성 확인**  
@@ -1061,7 +1227,8 @@ export type ServerMessages = {
 
 - SDK 근거: server/node_modules/livekit-server-sdk/dist/{RoomServiceClient,AccessToken,grants,ClientOptions,WebhookReceiver}.d.ts 및 src/TwirpRPC.ts, 2.18.0. 공식 [RoomService](https://docs.livekit.io/reference/other/roomservice-api/), [토큰](https://docs.livekit.io/frontends/reference/tokens-grants/).
 - 계획 포트 LiveKitGateway={createRoom,listRooms,listParticipants,getParticipant,updateSubscriptions,updateParticipant,removeParticipant,deleteRoom}; 각 메서드는 SDK의 실제 인수/반환을 얇게 감싸고 모든 호출이 이후 OP-03 scheduler를 통과한다.
-- CapabilityReport={status:'SUPPORTED'|'BLOCKED',sdkVersion,cloudProjectAlias,testedAt,grantProfile,allowReceived,forbiddenRejected,revocationVerified,evidenceRefs}; 사용자 데이터나 JWT를 담지 않는다.
+- E는 `CloudCapabilityProbe.ts`에서 `CapabilityReport`와 strict parser를 함께 export한다. 필드는 `status:'SUPPORTED'|'BLOCKED'`, `sdkVersion:string`, `cloudProjectAlias:string`, `namespace:string`, `testedAtEpochMs:number`, `grantProfile`, `revocationProfile`, `allowReceived:boolean`, `forbiddenRejected:boolean`, `revocationVerified:boolean`, `evidenceRefs:readonly string[]`다. `grantProfile`은 최소 권한을 명시한 실제 채택 grant이며 BLOCKED에서는 null을 허용한다. `revocationProfile`은 `{mode:'sdk-default'|'explicit-cutoff',bufferSeconds:number,maxObservedClockOffsetMs:number}` 또는 BLOCKED의 null이다. SUPPORTED는 두 프로필·세 boolean 참·실제 증거 참조가 모두 있어야 하며 사용자 데이터나 JWT를 담지 않는다.
+- 검증 보고서는 비밀 없는 증거와 함께 인계하고 E 초기화는 `OPS_DATA_DIR/capability-report.json`을 읽어 위 parser로 검증한다. F가 검증한 보고서를 지속 볼륨에 배치하고 현재 `config.projectAlias`·namespace·SDK 버전과 대조한다. 보고서 부재/불일치/검증 프로필 변경은 LOCKED이며 빈 파일·수동 SUPPORTED 플래그로 통과시키지 않는다. 보고서 parser 단위 통과와 실제 MC-01 증거를 구분한다.
 - 실증에서 canSubscribe=false+관리 선택 구독이 지원되지 않으면 canSubscribe=true만 열어 둔 제품을 출시하지 않는다. 다른 조합은 새 실제 증거 후에만 프로필로 채택한다.
 - capability.cloud.test.ts도 F runner의 RUN_CLOUD_TESTS=1과 case별 preflight를 검사한다. 환경 미확보는 test.skip 통과가 아니라 BLOCKED/비정상 종료다.
 
@@ -1420,7 +1587,7 @@ feat: 세대별 미디어 토큰 발급 추가
 
 - B에 PrepareGenerationRequest/PreparationResult·MediaControl의 실제 구현과 정상/거절/불명 fixture를 D1 종료 전에 인계한다. 원본 fixture 검사 통과와 제품 모듈 연결 통과는 따로 보고한다.
 - D에 MediaGrant와 미디어 보고는 권한승인이 아니라는 조건을 전달한다.
-- F env의 LIVEKIT_HTTP_URL/WS_URL/KEY/SECRET은 F 소유로 추가 요청한다.
+- F env의 `LIVEKIT_HTTP_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`과 위 설정 입력 표를 F 소유로 추가 요청한다.
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/E/MC-02.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
 
@@ -1520,21 +1687,21 @@ feat: 경로 기반 가청 정책과 음향 뷰 추가
 1. key=(mediaInstanceId,mediaRoomName,receiverIdentity,receiverGeneration)마다 desiredTracks Set, acknowledgedTracks Set, policyVersion, requestSerial, inFlight를 보관한다. 대상 트랙은 확인된 publisherGeneration/participantSid/trackSid와 함께 관리한다. 목표변경은 pending 최신값 하나로 덮어쓴다.
 2. drain 직전 현재 registry의 active/세대/SID 소유를 다시 확인한다. acknowledged-desired의 차단 batch를 먼저 OP-03 dispatch하고 확정응답 후 최신 목표와 비교한다. 그 다음 desired-acknowledged 허용 batch를 발송한다.
 3. 한 SDK 요청은 subscribe boolean이 하나이므로 추가와 제거를 한 요청으로 합치지 않는다. 같은 대상 정상요청은 하나만 inFlight이며 다른 수신자는 전역 예산 아래 병렬화한다.
-4. 응답의 requestId/세대가 현재와 맞을 때만 acknowledged를 바꾸고 다시drain한다. responseReceived는 실제 청취 차단 증거와 별도 callback으로 기록한다.
-5. target이terminal이면 pending허용을 버리고 MC-07로 위임한다. 이미 발송된 요청은 remote취소로 간주하지 않고 MC-05 경쟁 규칙을 유지한다.
+4. 응답의 requestId/세대가 현재와 맞을 때만 acknowledged를 바꾸고 다시 drain한다. responseReceived는 실제 청취 차단 증거와 구분하여 기록한다. E의 내부 Gateway·scheduler 측정값은 `deps.emitMetric(sample)`에 보내며 F가 정의한 이름·단위를 사용한다.
+5. target이 terminal이면 pending 허용을 버리고 MC-07로 위임한다. 이미 발송된 요청은 원격 취소로 간주하지 않고 MC-05 경쟁 규칙을 유지한다.
 
 **연결 계약과 경계**
 
-- SubscriptionController.setDesired({key,policyVersion,trackSids,generatedAtMs}):void; dispose/retire는새허용을닫는멱등조작.
+- SubscriptionController.setDesired({key,policyVersion,trackSids,generatedAtMs}):void; dispose/retire는 새 허용을 닫는 멱등 조작이다.
 - SDK updateSubscriptions(room,identity,trackSids,subscribe):Promise<void> 사용; 앱 policyVersion을 Cloud가 비교한다고 가정하지 않는다.
-- OP-03 gateway외에직접SDK경로없음,metrics events는Fcallback으로전달.
+- OP-03 Gateway 밖의 직접 SDK 호출은 금지한다. `MediaCoordinatorDeps.emitMetric`은 중앙 `MetricSample`을 받는 동기 `void` callback이다. `atMs`는 서버 monotonic ms이며 이름·단위 allowlist는 F의 `server/src/observability/MetricRegistry.ts`가 유일한 원본이다. F는 `media.api.total60s`, `media.api.normal60s`, `media.api.429`, `media.policy.queueWait`, `media.policy.responseLatency`, `media.retirement.unresolved` 등 등록명·단위와 factory commit을 인계한다. callback에서 IO 완료를 기다리거나 throw하여 권한 처리/Tick을 실패시키지 않으며 유계 큐의 누락 수는 F가 별도 계측한다. raw Identity·토큰·좌표를 sample에 넣지 않는다.
 
 **시험 입력 → 기대 결과**
 
-- v10허용진행중v11차단→동시요청1,응답후차단이먼저발송.
-- 동시에addA/removeB→removeB성공후addA;같은request의혼합flag없음.
-- 발송직전SID세대변경→pending구SID삭제,새SID는재검증이전허용0.
-- API응답성공·브라우저수신효과미확인→ack만갱신,실효통과상태는미확인.
+- v10 허용 진행 중 v11 차단 → 동시 요청 1개, 응답 후 차단을 먼저 발송.
+- 동시에 addA/removeB → removeB 성공 후 addA, 같은 요청의 혼합 flag 없음.
+- 발송 직전 SID 세대 변경 → pending의 구 SID 삭제, 새 SID는 재검증 전 허용 0.
+- API 응답 성공·브라우저 수신 효과 미확인 → ack만 갱신, 실효 통과 상태는 미확인.
 
 **추가·보완할 시험 파일**
 
@@ -2057,9 +2224,9 @@ feat: 이전 미디어 세대 대조와 부팅 정리 추가
 
 **구현 순서**
 
-1. F가 주입한 `OPS_TOKEN`을 Authorization: Bearer로 받아 constant-time 비교하고 게임 세션과 분리한다. B HTTP 어댑터가 E의 인증기를 단일 경로로 조립한다. POST/GET 모두 인증을 요구하고 unknown 필드·action·잘못된 requestId를 strict schema로 거절한다.
+1. `OperatorAuth.ts`에서 중앙 `CreateOperatorAuth` 계약의 `createOperatorAuth(token)`을 export한다. F가 검증한 비어 있지 않은 `OPS_TOKEN`을 B가 주입하고 반환 함수가 Authorization: Bearer를 검증한다. 길이 차이·누락·잘못된 형식은 false로 처리하며 동일 길이 token 비교는 constant-time으로 한다. B HTTP 어댑터가 E의 인증기를 단일 경로로 조립한다. POST/GET 모두 인증을 요구하고 unknown 필드·action·잘못된 requestId를 strict schema로 거절한다.
 2. `POST /api/operations/commands`의 action은 drain/resume/retry-retirement/checkpoint만 허용한다. body는 `{requestId,action,retirementId?}`이며 retirementId는 retry-retirement에서만 필수다. drain은 즉시 신규 초대/방/grant를 닫고 기존 경기 종료·회수 완료를 기다린다. resume은 공개창·READY·예산·미해결 0 조건을 모두 검사한다. retry-retirement는 지정 미해결 회수만 OP-04로 보낸다. checkpoint는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 검증·저널 반영하며 클라이언트 본문으로 잔량 숫자를 새로 받지 않는다.
-3. coordinator.getOperations()의 OperationsPort.submit(command)는 `OperationSubmission`의 accepted+snapshot 또는 conflict+REQUEST_ID_CONFLICT를 즉시 반환한다. B는 이를 각각 202/409로 변환하고 실제 작업은 E 내부 큐에서 진행한다. 같은 requestId+같은 body는 기존 operationId를 반환한다. getSnapshot(requestId)는 현재 OperationSnapshot 또는 null을 반환해 B가 GET에 연결한다. 실패/기한 초과는 failed+code로 닫고 admission 잠금을 유지한다. HTTP 202나 pending 조회를 성공으로 기록하지 않는다.
+3. coordinator.getOperations()의 OperationsPort.submit(command)는 `OperationSubmission`의 accepted+snapshot 또는 conflict+REQUEST_ID_CONFLICT를 즉시 반환한다. B는 이를 각각 202/409로 변환하고 실제 작업은 E 내부 큐에서 진행한다. 같은 requestId+같은 body는 기존 operationId를 반환한다. getSnapshot(requestId)는 현재 OperationSnapshot 또는 null을 반환해 B가 GET에 연결한다. 접수 시점부터 `config.operationTimeoutMs`가 지나거나 실패하면 failed+code로 닫고 admission 잠금을 유지한다. HTTP 202나 pending 조회를 성공으로 기록하지 않는다.
 4. drain은 submit 시 admission=DRAINING을 먼저 적용한다. B는 입장 승인과 grant/입장 관련 await 전후에 getOperations().getStatus().admission을 재검사한다. E는 deps.getGameActivity()의 activeMatches/activePractices/pendingAdmissions가 모두 0이고 회수·저널 반영이 확인된 뒤에만 drain을 succeeded로 바꾼다. E가 B의 Room registry를 직접 변경하거나 정의되지 않은 callback을 추가하지 않는다. getStatus()는 중앙 OperationsStatus만 반환한다.
 5. 각 성공/거절/잠금 사건은 actor의 비밀 없는 별칭·requestId·operationId·action·resultCode·시각만 audit 기록한다. OPS_TOKEN/JWT·숨은 좌표·맵·전체 Identity 목록을 응답/로그에 넣지 않는다. 모든 운영 응답은 Cache-Control:no-store다.
 6. Cloud 제어 불가·호스트 상실 후 복구 중에는 공개 중지/경보를 유지한다. 이 모듈을 독립 호스트 감시자로 표현하거나 즉시 원격 강제 종료를 보장하지 않는다. 재시작 중 남은 pending 작업은 저널과 재대조하고 근거 없이 succeeded로 복원하지 않는다.

@@ -35,4 +35,4 @@ server ─────────────────> packages/game-core
 | `server/content/placements`     | 제약을 검증한 fallback 배치와 후보                                           |
 | `server/config/tuning`          | 경기 시작 시 고정해 game-core에 주입할 수치와 tuningVersion                  |
 
-서버 자료는 web/public이나 protocol로 복사하지 않는다. 실제 content·config 파일을 추가할 때는 `server/package.json`의 배포 포함 목록에도 등록한다. 현재 sandbox의 `halfExtent=8`, `speed=4`는 연결 시험용 값이다. 미디어와 게임 참가 수명의 분리는 [미디어 수명](media-lifecycle.md)을 따른다.
+서버 자료는 web/public이나 protocol로 복사하지 않는다. 실제 content·config 파일을 추가하면 A가 공개 인계에 경로를 기록하고 F가 `server/package.json`의 배포 포함 목록에도 등록한다. A가 F 소유 manifest를 직접 수정하지 않는다. 현재 sandbox의 `halfExtent=8`, `speed=4`는 연결 시험용 값이다. 미디어와 게임 참가 수명의 분리는 [미디어 수명](media-lifecycle.md)을 따른다.

@@ -1,5 +1,41 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { INVITATION_ROUTES } from './types.ts';
+import {
+  operatorInvitationFixture,
+  rejectedInvitationFixture,
+  unavailableMapFixture,
+  invalidPracticeFixture,
+  unconfiguredMediaFixture,
+  planningMetricFixture,
+} from './fixtures.ts';
+
+test('operator handoff fixes the invite endpoint, scoped request and failure union', () => {
+  assert.deepEqual(INVITATION_ROUTES, {
+    issue: '/api/operations/invitations',
+    revoke: '/api/operations/invitations/:inviteId/revoke',
+  });
+  assert.equal(operatorInvitationFixture.scope.allowCreate, false);
+  assert.equal(operatorInvitationFixture.scope.roomCodes.length, 1);
+  assert.equal(rejectedInvitationFixture.status, 'rejected');
+  assert.equal('invitation' in rejectedInvitationFixture, false);
+});
+
+test('map and practice handoffs expose failures without a fabricated successful layout', () => {
+  assert.equal(unavailableMapFixture.status, 'invalid');
+  assert.deepEqual(unavailableMapFixture.path, ['runnerSpawnRegions', 0]);
+  assert.equal('template' in unavailableMapFixture, false);
+  assert.equal(invalidPracticeFixture.code, 'INVALID_PRACTICE_LAYOUT');
+  assert.equal('layout' in invalidPracticeFixture, false);
+});
+
+test('unconfigured operations fixture cannot stand in for a real public window or budget', () => {
+  assert.equal(unconfiguredMediaFixture.publicWindow, null);
+  assert.equal(unconfiguredMediaFixture.initialBudget, null);
+  assert.equal(unconfiguredMediaFixture.productSecurityReady, false);
+  assert.deepEqual(Object.keys(planningMetricFixture).sort(), ['atMs', 'name', 'unit', 'value']);
+  assert.equal(planningMetricFixture.unit, 'ms');
+});
 import {
   acceptedThenRejected,
   rejectedBeforeQueue,

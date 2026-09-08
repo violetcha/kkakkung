@@ -13,6 +13,17 @@ import type {
   CreateMatchInput,
   MediaInitializationResult,
   MediaCoordinator,
+  MapTemplateResult,
+  MapVariantsResult,
+  PracticeLayoutResult,
+  MapPreparationPort,
+  PracticeLayoutPort,
+  MediaConfiguration,
+  MediaCoordinatorDeps,
+  MetricSample,
+  InvitationIssueResult,
+  IssueInvitation,
+  CreateOperatorAuth,
 } from './types.ts';
 import {
   layoutSelectionFixture,
@@ -20,6 +31,7 @@ import {
   scopeTransitionViews,
   practiceMarkerEvent,
   initializedRecovering,
+  unconfiguredMediaFixture,
 } from './fixtures.ts';
 
 // Negative type fixtures must fail. If a contract weakens, tsc reports an unused expect-error.
@@ -129,3 +141,49 @@ void initializedAlreadyReady;
 void initializedAlreadyOpen;
 void coordinatorWithoutInitialize;
 void synchronousInitialize;
+
+// @ts-expect-error Valid map preparation must carry the validated template.
+const absentPreparedMap: MapTemplateResult = { status: 'valid' };
+// @ts-expect-error Variants use an explicit validated result, not a bare optional array.
+const bareVariants: MapVariantsResult = [];
+// @ts-expect-error Practice failure is not a successful empty layout.
+const emptyPractice: PracticeLayoutResult = { status: 'ready' };
+// @ts-expect-error Public map preparation must expose both validation and transformation.
+const incompleteMapPort: MapPreparationPort = {};
+// @ts-expect-error Practice normalization has its own required public function.
+const missingPracticePort: PracticeLayoutPort = {};
+const rejectedWithSecret: InvitationIssueResult = {
+  status: 'rejected',
+  code: 'NOT_READY',
+  // @ts-expect-error The token is returned only in a successful issued invitation result.
+  invitation: { inviteToken: 'fixture' },
+};
+// @ts-expect-error Expiry and room/create scope are required even for operator requests.
+const incompleteInvitation: IssueInvitation = { expiresAt: 1 };
+const { productSecurityReady: removedSecurity, ...withoutSecurity } = unconfiguredMediaFixture;
+// @ts-expect-error Security initialization must be passed explicitly by B.
+const implicitSecurity: MediaConfiguration = withoutSecurity;
+// @ts-expect-error Media metrics must have an actual configured callback.
+const omittedMetrics: Pick<MediaCoordinatorDeps, 'emitMetric'> = {};
+const unsafeMetric: MetricSample = {
+  name: 'x',
+  value: 1,
+  unit: 'count',
+  atMs: 0,
+  // @ts-expect-error Arbitrary raw identity labels are not a metrics contract.
+  mediaIdentity: 'private',
+};
+// @ts-expect-error The factory returns an authorization checker, not an authenticated constant.
+const constantOperatorAuth: CreateOperatorAuth = () => true;
+void absentPreparedMap;
+void bareVariants;
+void emptyPractice;
+void incompleteMapPort;
+void missingPracticePort;
+void rejectedWithSecret;
+void incompleteInvitation;
+void removedSecurity;
+void implicitSecurity;
+void omittedMetrics;
+void unsafeMetric;
+void constantOperatorAuth;

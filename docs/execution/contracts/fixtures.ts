@@ -19,10 +19,60 @@ import type {
   GameViewScope,
   MediaInitializationResult,
   OperationsStatus,
+  MapTemplateResult,
+  MapVariantsResult,
+  PracticeLayoutResult,
+  IssueInvitation,
+  InvitationIssueResult,
+  MediaConfiguration,
+  MetricSample,
 } from './types.ts';
 
 // Shared planning examples. These fixtures do not run product modules or certify a real map,
 // Cloud connection, journal recovery, deployment, or device test.
+
+// API handoff examples only. No account, public window or Cloud capability is authorized.
+export const operatorInvitationFixture = {
+  scope: { allowCreate: false, roomCodes: ['ABC123'] },
+  expiresAt: 1_900_000_000_000,
+} as const satisfies IssueInvitation;
+export const rejectedInvitationFixture = {
+  status: 'rejected',
+  code: 'OUTSIDE_PUBLIC_WINDOW',
+} as const satisfies InvitationIssueResult;
+export const unavailableMapFixture = {
+  status: 'invalid',
+  code: 'INVALID_TEMPLATE',
+  path: ['runnerSpawnRegions', 0],
+} as const satisfies MapTemplateResult & MapVariantsResult;
+export const invalidPracticeFixture = {
+  status: 'invalid',
+  code: 'INVALID_PRACTICE_LAYOUT',
+  path: ['layouts', 'runner'],
+} as const satisfies PracticeLayoutResult;
+export const unconfiguredMediaFixture = {
+  httpUrl: 'https://fixture.invalid',
+  wsUrl: 'wss://fixture.invalid',
+  apiKey: '',
+  apiSecret: '',
+  namespace: 'test-only',
+  opsDataDir: '.local/test-only',
+  projectAlias: 'fixture-project',
+  publicWindow: null,
+  initialBudget: null,
+  officialBudgetMaxAgeMs: 1,
+  operationTimeoutMs: 1,
+  productSecurityReady: false,
+  maxConcurrentParticipants: 0,
+  maxNormalApiCallsPer60s: 0,
+  maxTotalApiCallsPer60s: 0,
+} as const satisfies MediaConfiguration;
+export const planningMetricFixture = {
+  name: 'fixture.duration',
+  value: 12,
+  unit: 'ms',
+  atMs: 123,
+} as const satisfies MetricSample;
 
 export const exitStart = {
   matchId: 'fixture-match-1',

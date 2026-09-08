@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import * as prettier from 'prettier';
 import { parsers } from 'prettier/plugins/markdown';
+import { readExecutionPlan, checkDeclaredOwnership } from './lib/execution-plan.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const execution = resolve(root, 'docs/execution');
@@ -185,6 +186,15 @@ function visit(id) {
   visited.add(id);
 }
 for (const task of tasks) visit(task.fixed);
+const ownershipPlan = await readExecutionPlan(root);
+for (const error of checkDeclaredOwnership(ownershipPlan)) fail(error);
+for (const task of ownershipPlan.tasks)
+  for (const dependency of task.integrationDependencies) {
+    const predecessor = byFixed.get(dependency);
+    if (!predecessor) fail(task.fixed + ': missing integration prerequisite ' + dependency);
+    else if (!task.pending && predecessor.pending)
+      fail(task.fixed + ': integration waits for undecided item ' + dependency);
+  }
 for (const owner of Object.keys(expectedRoles))
   for (const day of ['D1', 'D2', 'D3']) {
     const sameDay = tasks.filter((t) => t.owner === owner && t.day === day);
@@ -198,6 +208,9 @@ for (const extra of [
   '../mvp-work-plan.md',
   '../spec/README.md',
   '../spec/decisions.md',
+  'prompts.md',
+  'audit.md',
+  ...Object.keys(expectedRoles).map((role) => `handoffs/${role}.md`),
 ]) {
   const p = resolve(execution, extra);
   contents.set(extra, await readFile(p, 'utf8'));
@@ -290,6 +303,20 @@ if (fixtureRun.error || fixtureRun.status !== 0)
   );
 const fixtureChecks = Number(fixtureRun.stdout?.match(/^# tests (\d+)\s*$/m)?.[1] ?? 0);
 if (fixtureChecks === 0) fail('Contract fixture run did not report any tests');
+const toolingRun = spawnSync(
+  process.execPath,
+  ['--test', '--test-reporter=tap', resolve(root, 'scripts/tests/execution-tooling.test.mjs')],
+  { cwd: root, encoding: 'utf8', windowsHide: true },
+);
+if (toolingRun.error || toolingRun.status !== 0)
+  fail(
+    'Execution tooling verification failed:\n' +
+      (toolingRun.error?.message ?? '') +
+      toolingRun.stdout +
+      toolingRun.stderr,
+  );
+const toolingChecks = Number(toolingRun.stdout?.match(/^# tests (\d+)\s*$/m)?.[1] ?? 0);
+if (!toolingChecks) fail('Execution tooling tests did not run');
 
 if (errors.length) {
   console.error(errors.join('\n'));
@@ -306,6 +333,8 @@ if (errors.length) {
         ownedPaths: owners.size,
         commonHash: hash,
         fixtureChecks,
+        toolingChecks,
+        ownershipRegistryChecked: true,
         productIntegrationTested: false,
       },
       null,

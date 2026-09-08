@@ -4,7 +4,7 @@
 담당 범위: 의존성/공통 설정, 실행 환경, 인프라와 G1–G6 실측 증거  
 원본 작업: **19개** · 리뷰 상대: **E** · 현재 상태: **모두 구현 계획**
 
-이 문서와 [기획서 v0.0.8](../spec/README.md)을 실행 입력으로 사용한다. AI는 기존 코드와 저장소 지침을 직접 읽는다. 팀원에게 다른 담당 문서의 내용을 찾아 오도록 요구하지 않는다. [6인 전체 일정](README.md)은 인계 시점을 확인하는 안내다.
+이 문서와 [최신 결정](../spec/decisions.md), 아래 공통 계약을 실행 입력으로 사용한다. AI는 `AGENTS.md`·`CONTRIBUTING.md`·`server/README.md` 및 현재 존재하는 infra 안내와 수정할 실제 코드를 읽는다. [기획서 v0.0.8](../spec/README.md)은 근거 확인용이며 정정 전 아이템 요구를 실행하지 않는다. 다른 담당의 전체 실행 문서를 읽지 않아도 아래 선행 산출물과 [F 인계 기록](handoffs/F.md)으로 작업할 수 있어야 한다.
 
 목표는 **9월 8일(화)·9일(수) 핵심 구현, 10일(목) 통합·검증·수정, 11일(금) 오전 MVP 인수**다. 작업 개수는 소요시간이나 완료 보증이 아니다. 선행 작업·실제 Cloud·장치가 준비되지 않은 조건은 완료로 계산하지 않는다.
 
@@ -68,7 +68,7 @@ D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 �
 
 ```text
 내 담당 실행 문서와 docs/spec/decisions.md, v0.0.8 기획서를 기준으로
-오늘 작업표 1번부터 5번까지 진행해줘.
+내 담당의 고정 번호 01번부터 05번까지 진행해줘.
 결정 대기 작업은 구현하지 말고 해당 번호를 보류한 뒤 다음 번호를 진행해줘.
 검증된 중간 산출물과 완료 작업은 내 Git 신원으로 각각 로컬 커밋해줘.
 작업별 MR 본문과 이번 실행분 합본을 작성하고 전체 본문을 보여줘.
@@ -83,6 +83,25 @@ D3 결함 수정은 기존 작업의 후속 처리다. 별도 스토리 수를 �
 - 목표는 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 금요일 오전 인수다. 확정 범위의 G1–G6 증거와 미정 아이템의 상태를 함께 보고한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
 
 ## 설치와 공통 검사
+
+### 담당 문서만으로 시작하는 읽기 경로
+
+공통 필수 자료는 `AGENTS.md`, `CONTRIBUTING.md`, `requirements.md`, `docs/architecture.md`, `docs/spec/decisions.md`다. 이후 자기 담당 문서의 시작 절차와 지정 작업만 읽고, 각 작업의 기획 근거 장을 원본 HTML에서 확인한다. 이 공통 블록과 타입은 자기 담당 문서에도 들어 있으므로 다른 다섯 역할의 전체 문서를 읽을 필요는 없다. 다른 역할의 **공개 타입·실제 export·시험 fixture·인계 기록**은 연결 근거로 직접 확인한다. SDK 사실은 설치된 버전의 타입·구현을 확인한다.
+
+```bash
+node scripts/prepare-execution.mjs --role A --tasks 1-5
+node scripts/prepare-execution.mjs --role A --day D2 --tasks 1-5
+```
+
+첫 명령은 고정 번호 A-01–A-05, 둘째는 D2 오늘 번호 1–5(A-19–A-23)다. 도구는 읽을 자료·기획 장·범위 밖 선행·파일 존재 여부를 출력하는 읽기 전용 도구다. 파일 존재를 구현 완료로 계산하지 않는다. `--day`가 없으면 현재 날짜를 추측하지 않는다. 유효하지 않은 범위를 일부만 실행하지 않고 오류로 알려 준다. D3에 신규 고정 번호가 없는 역할의 후속 작업은 담당 D3 표를 따른다.
+
+### 선행 작업과 범위 제한
+
+작업 본문의 `선행 완료 결과`는 **최종 연결 전에 필요한 산출물 목록**이다. 모든 선행의 ACCEPTED를 기다려야 코딩할 수 있다는 뜻이 아니다. 공개 계약이 고정되면 자신의 단위 구현과 합성 fixture 시험을 진행할 수 있다. 실제 생산자 구현·통합 commit이 없으면 LOCAL_VERIFIED까지만 기록하고 실제 연결은 차단 조건으로 남긴다.
+
+다음 일차의 실제 생산자까지 필요한 경우 `통합 인수 선행`을 별도 적는다. prepare 출력도 이 목록을 단독 구현 선행과 분리한다. 예를 들어 C-03의 합성 action 보간은 먼저 구현하지만 실제 인수에는 B-14 개인 뷰가 필요하다. 미래 생산자가 있다는 이유로 해당 날짜의 단위 구현이 불가능하다고 처리하지 않는다.
+
+요청 범위 밖의 자기 선행 구현도 자동으로 추가하지 않는다. 현재 checkout에서 선행 산출물을 확인하고, 없으면 지정 범위의 독립 가능한 작업을 먼저 끝낸 뒤 필요한 고정 번호·export·시험을 인계 기록에 요청한다. 다른 담당의 파일·manifest를 대신 수정하거나 범위를 채우기 위한 성공 stub을 만들지 않는다. 계약 변경이 필요하면 소비자는 자신의 인계 문서에 구체 요청을 남기고 계약 담당 B가 원본을 수정한다.
 
 Node.js 24.19.0 / pnpm 11.19.0 / TypeScript 6.0.3과 루트 lockfile을 유지한다.
 
@@ -109,6 +128,16 @@ node scripts/check-execution-plan.mjs
 
 B만 서버 최종 조립을, C만 웹 최종 조립을, F만 공통 설정과 의존성을 수정한다. A는 protocol을 import하지 않고 B가 변환한다. 웹은 서버 실제 맵·game-core·운영 내부값을 import하지 않는다. 제품은 0.2.0의 kkakkung, sandbox 0.1.0은 개발 진단용으로 격리한다. 기존 공개 maze·빈 입장·Playground와 개발 adapter는 production 라우트에서 차단한다. 개발 회귀용 경로만 유지하며 제품 기능을 위해 진단 API를 확장하지 않는다.
 
+구체 파일의 단일 수정자는 [소유권 원본](ownership.json)으로 판별한다. 경로가 가장 구체적인 규칙이 우선하며, 예를 들어 웹 public 자산은 C지만 `public/models/`는 D다. 선언되지 않은 새 경로는 임의 소유로 간주하지 않고 F에게 등록을 요청한다. 작업의 수정·생성 파일에는 glob이나 디렉터리 전체 대신 실제 파일명을 적는다. `check:execution`은 각 선언 경로가 담당의 소유권에 맞는지도 검사한다.
+
+구현 checkout의 시작 SHA를 기록한 뒤 `node scripts/check-role-scope.mjs --role A --base <시작-SHA>`로 commit·stage·미커밋·미추적 변경을 검사한다. rename은 원래 경로와 새 경로 모두 검사한다. 다른 역할의 변경이 섞인 공동 checkout에서는 먼저 담당별 checkout/브랜치로 분리한다. 이 명령은 삭제·수정 권한을 부여하지 않는다. 공통 문서 정비처럼 여러 소유자가 참여하는 변경은 단일 역할 구현 검사와 구분한다.
+
+B의 계약 변경이나 F의 사본 동기화에서만 scope 명령 끝에 `--contract-sync`를 붙인다. 다른 역할 문서는 원본과 일치하는 공통 블록만 바뀌고 역할 본문은 시작 SHA와 같아야 한다. 도구는 commit·stage·working 각각의 수정 버전을 검사하며, 일반 코드·역할 지시 변경이나 F의 B 소유 common 원본 변경까지 면제하지 않는다. 사본 예외 검사 뒤에도 `check:execution`을 실행한다.
+
+- manifest·lockfile·공통 config 요청은 각자 `handoffs/<역할>.md`에 패키지명/정확 버전/실행 또는 개발 의존성/소비 import/필요 script와 이유를 기록한다. F만 한 번에 install·lock 갱신·검증하여 commit을 돌려준다. A–E의 AI가 직접 `pnpm add`를 하지 않으며 어느 역할도 전체 자동 포맷으로 타인 파일을 바꾸지 않는다.
+- 새 asset 출처·라이선스·버전·hash는 소유 자산 옆 README 또는 자기 인계에 기록하고 F가 `docs/third-party-assets.md`를 집계한다. 모든 역할이 같은 집계 문서를 동시에 편집하지 않는다.
+- 개인 산출물/인계 문서는 각 역할만 수정한다. 공통 블록 변경과 `--sync`는 B 계약 변경 또는 F 문서 정비 MR에서만 수행하고 역할 구현 MR에는 다른 다섯 문서의 자동 갱신을 섞지 않는다.
+
 공통 의미 변경은 B가 총괄하여 `docs/execution/common.md`와 `contracts/types.ts`·fixture를 수정한다. D 센서·E 미디어처럼 실제 생산자/소비자가 검토한다. F는 동기화 검사기를 소유한다. A–F 문서의 공통 블록은 직접 편집하지 않고 아래 명령으로 갱신한다.
 
 ```bash
@@ -128,6 +157,12 @@ node scripts/check-execution-plan.mjs
 - B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
 
 ## 맵 영역과 fallback 입력 — A/B
+
+A의 `MapPreparationPort`는 원본 검증과 변형 생성을 담당한다. B loader는 `validateTemplate(raw, source)`의 valid 결과만 `createTemplateVariants(template)`로 전달하고 invalid 결과에서 선택기를 실행하지 않는다. 두 결과 union의 error code/path는 내부 진단이며 실제 topology/hash를 공개 오류에 싣지 않는다. 함수명을 각자 다시 정하지 않고 검사 가능한 원본 타입을 사용한다.
+
+A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(raw, players, role)`도 제공한다. B-15가 팀별 1–3명의 현재 playerId를 넘기면 A가 정적 역할 슬롯을 바인딩한 ready/layout 또는 invalid 결과를 반환한다. 연습의 소형 맵·동일 팀 인원·유효 시작점을 검사하되 본경기의 32×32·6인·3출구·거리 제약을 연습에 강제하지 않는다. 연습 layout의 exits는 비우고 포획·승패도 비활성화한다.
+
+`LayoutSelectionInput.fallback`은 구조적으로 유효한 객체가 필수다. 파일 부재·JSON/shape 오류면 B loader가 준비 단계로 복귀하고 dummy fallback을 만들지 않는다. 객체 구조는 맞지만 출처·배치 규칙 인증에 실패한 경우에만 fallback을 불가 상태로 두고 온라인 선발을 시도할 수 있다. 둘 다 사용할 수 없으면 LAYOUT_UNAVAILABLE이며 맵 선택 완료로 처리하지 않는다.
 
 - `LayoutTemplate`은 한 개의 정규화된 변형이다. `MapSource`의 templateId/templateVersion/templateHash/variantId와 topology, taggerRegions 3개, runnerSpawnRegions 3개, exitCandidates를 함께 전달한다. `SpawnRegion`은 regionId/cells/spawnCandidates를 가지며 평면 후보 목록으로 영역 정보를 없애지 않는다.
 - A MP-01/02가 영역·후보·출구 벽면/방향을 함께 검증·변형한다. 역할별 영역 ID는 유일하고 각 영역·후보는 비어 있지 않아야 한다. 술래 영역끼리, 도망자 시작 영역끼리는 겹치지 않으며 후보는 자기 영역의 유효 통로에 속해야 한다. 술래 구역과 도망자 시작 영역 사이의 중첩 금지라는 새 게임 규칙을 추가하지 않는다.
@@ -200,6 +235,8 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 
 ## 센서·입력 callback 수명
 
+C만 `App.tsx`·`SessionRuntime.ts`·room store·`main.tsx`·화면과 CSS를 조립한다. D만 `InteractionRuntime`·제품 입력 listener·장치·video element·track 수명을 소유한다. C는 `onLocalPreview(element)`를 화면 host에 부착하고 null·교체·unmount 때 host 연결만 해제한다. srcObject·track.stop·D element의 미디어 정리는 D가 처리한다. C의 3D texture/geometry는 C가 정리한다. 하나의 제품 세션에는 D runtime 하나만 기동하며 기존 `bindTeamInput`/개발 input을 동시에 연결하지 않는다. React 반복 mount·원격 leave·페이지 비활성·연습→본경기에서 이 소유권을 시험한다.
+
 한 SensorSnapshot의 emittedAtMs를 새 센서 관측으로 해석하지 않는다. 각 Sample은 실제 프레임의 sampledAtMs/frameId를 보존한다. 해당 모델을 실행하지 않은 발행에서는 Sample을 갱신하지 않는다. 미검출은 새 frameId의 missing/null이며, 세대 시작부터 아직 실행하지 않은 센서는 null이다.
 
 - sampledAtMs/receivedAtMs/emittedAtMs는 브라우저 main performance 시간축이다. Worker는 main이 전달한 frameId·sampledAtMs를 그대로 돌려주고 main이 receivedAtMs를 붙인다. 서버 시계와 섞지 않는다.
@@ -219,6 +256,12 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - B의 필수 회귀 시험은 두 룸의 매칭 POST/OPTIONS, 일반 API, WS upgrade에 허용/비허용 Origin을 대입하고 응답과 처리 전후 방/예약 수를 함께 검사한다. 경계 2,048/2,049바이트·길이 없는 초과 본문·Origin 없는 개발 요청도 포함한다. 이 문서는 수정 계획이며 실제 bootstrap과 통합 시험을 구현·실행해야 보안 수정 완료다.
 
 ## 운영 HTTP 계약
+
+B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
+
+F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 실제 운영 입력에서 검증하고 B가 factory에 전달한다. publicWindow=null은 공개 창 미정으로 잠금이며 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·예산·창 조건을 함께 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 F의 시작 절차를 따르며 다른 담당은 F의 config export를 읽는다.
+
+관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
 
 B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
 
@@ -251,6 +294,10 @@ F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배
 ## 작업 상태·커밋·MR·인계
 
 실행 상태는 PLANNED → CONTRACT_READY → LOCAL_VERIFIED → INTEGRATED → ACCEPTED로 기록한다. 외부 전제 부재는 BLOCKED, 미정 콘텐츠는 PRODUCT_DECISION_PENDING이다. 이 상태는 문서/로컬 진행 기록이며 Jira 상태를 자동 변경하지 않는다.
+
+진행 기록에는 `localStage`와 `blockedOn`을 분리한다. 예를 들어 단위 시험이 통과했지만 Cloud가 없는 작업은 `localStage: LOCAL_VERIFIED`, `blockedOn: [실제 Cloud 권한·예산]`, 최종 상태 `BLOCKED`로 기록한다. 차단되었다고 검증한 단계까지 없애거나, 단위 통과를 ACCEPTED로 올리지 않는다. 결정 대기 6개는 localStage 없이 PRODUCT_DECISION_PENDING을 유지한다.
+
+공유 인계는 추적되는 `docs/execution/handoffs/A.md`부터 `F.md`까지 **자기 파일 하나**에 작성한다. 작업 ID·단계·실제 export 경로와 signature·적용 commit·실행한 명령과 결과·필요한 소비자 확인·blockedOn·다음 요청을 기록한다. 자신의 구현 commit을 만든 뒤 그 SHA를 인계 문서에 적어 별도 인계 commit으로 남길 수 있다. 아직 존재하지 않는 미래 SHA나 실행하지 않은 성공 기록을 넣지 않는다. 소비자는 다른 역할의 전체 계획 대신 이 공개 인계와 실제 코드를 확인한다. `.local/` 기록은 개인 재개용이며 다른 팀원이 자동으로 읽을 수 있다고 가정하지 않는다. 원격 인계는 담당자의 push/MR 병합 후에야 도착한 것으로 처리한다.
 
 1. 계약/fixture 또는 단위 구현이 검증되면 **중간 커밋을 허용한다.** 작업 ID·이번 단계·실제 검증·미통합 조건을 커밋/MR에 적는다. 깨진 빌드·빈 성공 stub을 인계하지 않는다.
 2. 담당의 완료 조건과 실제 생산자·소비자 연결, 필요한 Cloud/장치 증거가 있어야 ACCEPTED다. 중간 커밋/합병을 기능 완료로 세지 않는다. 완료마다 최종 변경 커밋을 남기되 같은 결과를 중복 커밋하지 않는다.
@@ -308,6 +355,30 @@ export type SessionResponse = Readonly<{
   expiresAt: number;
   protocolVersion: '0.2.0';
 }>;
+// Server/operator-only. These endpoints do not accept a player's session Bearer token.
+export const INVITATION_ROUTES = {
+  issue: '/api/operations/invitations',
+  revoke: '/api/operations/invitations/:inviteId/revoke',
+} as const;
+export type InvitationScope = Readonly<{
+  allowCreate: boolean;
+  roomCodes: readonly string[];
+}>;
+export type IssueInvitation = Readonly<{ scope: InvitationScope; expiresAt: number }>;
+export type IssuedInvitation = IssueInvitation &
+  Readonly<{ inviteId: string; inviteToken: string }>;
+export type InvitationDenialCode = 'INVALID_INVITATION' | 'NOT_READY' | 'OUTSIDE_PUBLIC_WINDOW';
+export type InvitationIssueResult =
+  | Readonly<{ status: 'issued'; invitation: IssuedInvitation }>
+  | Readonly<{ status: 'rejected'; code: InvitationDenialCode }>;
+export type InvitationCheck = Readonly<{ inviteToken: string }> &
+  ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export interface InvitationPort {
+  issue(input: IssueInvitation): InvitationIssueResult;
+  revoke(inviteId: string): void;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  bindCreatedRoom(inviteId: string, roomCode: string): void;
+}
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
 export type Phase =
   | 'LOBBY'
@@ -680,6 +751,38 @@ export type LayoutTemplate = MapSource &
     runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
     exitCandidates: readonly WallFace[];
   }>;
+export type MapPreparationFailure = Readonly<{
+  status: 'invalid';
+  code: 'INVALID_MAP_SOURCE' | 'INVALID_TEMPLATE';
+  path: readonly (string | number)[];
+}>;
+export type MapTemplateResult =
+  Readonly<{ status: 'valid'; template: LayoutTemplate }> | MapPreparationFailure;
+export type MapVariantsResult =
+  Readonly<{ status: 'valid'; variants: readonly LayoutTemplate[] }> | MapPreparationFailure;
+export interface MapPreparationPort {
+  validateTemplate(raw: unknown, source: MapSource): MapTemplateResult;
+  createTemplateVariants(template: LayoutTemplate): MapVariantsResult;
+}
+// Fixed, isolated practice layouts use role slots, never real session IDs in JSON.
+export type PracticeLayoutTemplate = Readonly<{
+  practiceVersion: string;
+  layouts: Readonly<Record<Role, MatchLayout>>;
+}>;
+export type PracticeLayoutResult =
+  | Readonly<{ status: 'ready'; layout: MatchLayout }>
+  | Readonly<{
+      status: 'invalid';
+      code: 'INVALID_PRACTICE_LAYOUT';
+      path: readonly (string | number)[];
+    }>;
+export interface PracticeLayoutPort {
+  preparePracticeLayout(
+    raw: unknown,
+    players: readonly { playerId: string; role: Role }[],
+    role: Role,
+  ): PracticeLayoutResult;
+}
 // Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
 // player/exit/territory references to role-sorted input.players before validation.
 export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
@@ -848,6 +951,7 @@ export interface MediaCoordinator {
 }
 export type MediaCoordinatorDeps = Readonly<{
   config: MediaConfiguration;
+  emitMetric: (sample: MetricSample) => void;
   enqueueControl: (control: MediaControl) => void;
   enqueueBindings: (playerId: string, message: MediaBindings) => void;
   enqueueAudioPolicy: (playerId: string, message: AudioPolicy) => void;
@@ -866,6 +970,11 @@ export type MediaConfiguration = Readonly<{
   apiSecret: string;
   namespace: string;
   opsDataDir: string;
+  projectAlias: string;
+  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  officialBudgetMaxAgeMs: number;
+  operationTimeoutMs: number;
+  productSecurityReady: boolean;
   initialBudget: {
     remainingMinutes: number;
     remainingBytes: number;
@@ -876,6 +985,18 @@ export type MediaConfiguration = Readonly<{
   maxTotalApiCallsPer60s: number;
 }>;
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
+export type MetricSample = Readonly<{
+  name: string;
+  value: number;
+  unit: 'count' | 'ms' | 'bytes' | 'ratio';
+  atMs: number;
+  matchRef?: string;
+  generation?: number;
+  requestId?: string;
+}>;
+// E implements the authentication factory; B mounts it before every operator route.
+// This is server-internal configuration, never a client-authorized claim.
+export type CreateOperatorAuth = (token: string) => (authorization: string | undefined) => boolean;
 export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
 export type FaceSensor = Readonly<{
   landmarks: readonly NormalizedLandmark[];
@@ -1032,6 +1153,73 @@ export type ServerMessages = {
 
 각 항목의 파일은 **수정 또는 생성할 예정 경로**다. 현재 존재 여부는 AI가 확인한다. 아래 순서를 그대로 수행하되 선행 결과가 없는 항목은 계약에 따른 단위 구현까지만 진행하고 실제 연결 완료를 별도 기록한다. 모든 완료 항목은 작업별 커밋과 MR 본문으로 끝낸다.
 
+### F 실행 시작과 기존 CI 작업 반영
+
+2026-09-08 감사에서 `origin/ci/S15P21C204-41-jenkins-pipeline`의 `0dd76be19cc1102997abb97632a2e89157a85ee7`을 읽기 전용으로 확인했다. `develop`에 없는 `Jenkinsfile`, `infra/README.md`, `infra/compose.prod.yaml`, `infra/deploy.sh`, `infra/jenkins/SETUP.md`, `infra/nginx/host.conf`와 기존 서버 Dockerfile 수정이 있다. 이 기록은 원격 Jenkins/EC2 적용 증거가 아니다. 실제 실행에서는 최신 ref와 diff를 다시 확인하고 기존 F 브랜치를 우선한다. 새 브랜치에서 같은 파일을 처음부터 작성하거나 CI 파일을 두 벌로 운영하지 않는다. 원격 병합은 담당자가 수행한다.
+
+F-04/05/06/16 구현에 앞서 해당 선행 변경을 작업 기준에 반영하고 현재 계약과 어긋나는 부분을 아래 작업에서 고친다. 다른 A–E 작업은 CI 브랜치 병합을 기다릴 필요가 없으며 F-01의 manifest/테스트 탐색 설정은 작은 인계 단위로 먼저 제공한다.
+
+| 확인된 차이                                                                                   | 보완할 기존 작업                             | 인수에 필요한 확인                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI Verify가 format/lint/typecheck/test만 실행하여 check:execution·build·E2E를 빠뜨림          | F-04 / DP-04                                 | Linux Chromium 준비 후 현재 루트 `pnpm verify`를 한 번 실행하고 실제 source SHA와 결과 대상 일치 확인                                                                                                                                     |
+| 서버 Dockerfile의 `pnpm deploy --legacy` 링크 문제를 고친 선행안이 있음                       | F-05 / DP-02                                 | 기존 수정안을 보존·검토하고 최종 runtime 이미지 안에서 두 workspace 패키지 import와 서버 기동 확인. 선행 코드 주석의 실측 주장은 이번 검증 증거와 구분                                                                                    |
+| 선행 `infra/compose.prod.yaml`은 독립 Compose, 아래 계획 `compose.production.yaml`은 override | F-05 / DP-02                                 | 최종 운영 파일을 `compose.production.yaml` override로 통일한다. 선행 설정을 옮기고 F-04/06/16의 모든 참조·문서를 같이 갱신한다. 이전 prod 파일은 담당 검토 뒤 제거하거나 명시적으로 비활성화한다. 중간에 두 활성 배포 경로를 두지 않는다. |
+| 개발 모드·미디어 disabled, 기본 nginx가 진단 경로를 전달함                                    | F-05/06 + B 인증·Origin/라우트 + E readiness | 격리된 개발 검증과 제품 배포를 구분한다. production 문자열만 바꿔 운영 완료로 처리하지 않으며 각 소유자가 자기 코드를 수정한다.                                                                                                           |
+| web-proxy가 game-server의 ready 기반 healthy를 기다림                                         | F-05 / DP-02                                 | 복구 중 ready 503이어도 proxy를 통해 live/인증된 OPS를 관찰할 수 있게 시작 의존성은 live에 둔다. 배포 승인은 별도로 READY·drain/resume·회수 증거를 검사한다.                                                                              |
+| Jenkins와 수동 deploy.sh가 drain·격리 없이 `compose up`, ready만 보고 성공·즉시 롤백          | F-16 / DP-06                                 | 자동·수동 양쪽을 같은 배포 runner로 연결하고 회수 미확인 때 교체·롤백 모두 차단                                                                                                                                                           |
+| 수동 배포가 인수 TAG 이미지가 없으면 현재 checkout을 그 TAG로 빌드함                          | F-16 / DP-06                                 | 요청 SHA와 실제 checkout/digest 불일치를 거절한다. 다른 소스에 이전 SHA 태그를 붙이지 않고 웹·서버 이미지 쌍을 함께 검증                                                                                                                  |
+
+### F 소유권과 1~5번 병렬 진행
+
+F만 manifest·lockfile·공통 설정·`server/src/config/env.ts`·infra/Jenkins/scripts/루트 tests·observability를 수정한다. B의 `bootstrap.ts`/`main.ts`/라우트 등록, E의 media/operations/health, D의 worker/모델, A의 맵/튜닝, C의 웹 조립을 대신 수정하지 않는다. 의존성·설정 요청은 [F 인계 기록](handoffs/F.md)에 요청자·정확한 버전/필드·수정 파일·소비자 시험·인계 commit으로 모으고 한 명이 순서대로 반영한다. 소유자에게 돌려줄 결함은 재현 입력과 기대 결과를 기록한다.
+
+| 작업         | 외부 전제 없이 진행할 결과                                                    | 인수에 필요한 전제                                                                         |
+| ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| F-01 / DP-01 | 테스트 탐색·Cloud 제외·preflight validator·최소 probe·환경 검사기의 로컬 시험 | Cloud 자격/잔량, AWS/TLS/Jenkins 접근, 대표 장치의 실제 확인은 각각 별도 `blockedOn`       |
+| F-02 / QA-01 | 합성 표식·통계·시계오차 계산·fault adapter·민감값 저장 거절 시험              | E Gateway export/commit과 실제 Cloud 결과. MC-01 Cloud 대기로 로컬 계측 구현을 멈추지 않음 |
+| F-03 / QA-02 | 시나리오와 성능 집계기·잘못된 표본 거절 시험                                  | C/D 실제 facade·모델·대표 GPU 장치·Cloud 수신. 막히면 다음 F-04/05를 진행                  |
+| F-04 / DP-04 | 기존 CI 검토·명령/exit/SHA 계약 시험·Jenkinsfile 보완                         | 실제 Jenkins job/plugin/credential 및 GitLab 결과 연결 시험                                |
+| F-05 / DP-02 | 기존 Docker 수정 반영·Compose 정적 검사·packaging 확인 코드                   | Docker daemon의 실제 이미지/볼륨 시험, 이후 B/E 실제 제품 인증·복구와 통합                 |
+
+각 전제는 필요한 사례만 막는다. MC-01용 3인 합성 probe에 6대 장치·AWS·Jenkins 전체 완료를 요구하지 않는다. 로컬 구현이 검증되면 `localStage`와 `blockedOn`을 함께 인계하고, 원격 권한이 없다는 이유로 요청된 모든 번호를 중단하거나 Cloud 시험을 skip 성공으로 바꾸지 않는다. 외부 접근·실장치 확인이 필요한 단계는 정확히 미실시로 남긴다.
+
+고정번호 실행 준비는 `node scripts/prepare-execution.mjs --role F --tasks 1-5`, 날짜별 번호는 `node scripts/prepare-execution.mjs --role F --day D2 --tasks 1-5`로 확인한다. 출력은 계획 선택이며 실제 환경 검사·구현·배포를 실행하지 않는다.
+
+### F-01의 설정·Cloud preflight 인계 계약
+
+F가 `env.ts`에서 검증하고 B가 `MediaConfiguration`에 매핑한다. E는 `process.env`를 직접 다시 읽지 않는다. 아래 설정은 기존 작업의 필수 입력이며 실제 시간 창·정책 수치는 운영자가 제공한다.
+
+| 입력                                                                                                                           | 정규화 결과                                                                                                                 | 실패 조건                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LIVEKIT_HTTP_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`                                                  | `httpUrl`, `wsUrl`, `apiKey`, `apiSecret`                                                                                   | 제품 모드 누락/잘못된 URL. 비밀 값은 보고서·VITE 변수·이미지 인수에 넣지 않음                                                              |
+| `LIVEKIT_PROJECT_ALIAS`, `SERVICE_NAMESPACE`, `OPS_DATA_DIR`                                                                   | `projectAlias`, `namespace`, `opsDataDir`                                                                                   | 운영 확인 alias/namespace와 불일치, 비지속 경로·쓰기 불가                                                                                  |
+| `OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS`, `OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS`                                                  | `publicWindow:{opensAtEpochMs,closesAtEpochMs}` 또는 null                                                                   | 둘 다 없음은 null/공개 잠금, 한쪽만 존재·순서 오류는 구성 거절                                                                             |
+| `OPS_OFFICIAL_BUDGET_MAX_AGE_MS`, `OPS_OPERATION_TIMEOUT_MS`                                                                   | `officialBudgetMaxAgeMs`, `operationTimeoutMs`                                                                              | 양의 유한 정수 필수, 임의 무제한/성공 기본값 금지                                                                                          |
+| `MAX_SLOTS`, `MEDIA_MAX_NORMAL_API_CALLS_PER_60S`, `MEDIA_MAX_TOTAL_API_CALLS_PER_60S`                                         | `maxConcurrentParticipants`, `maxNormalApiCallsPer60s`, `maxTotalApiCallsPer60s`                                            | 실제 검증된 방 수·슬롯과 불일치, 정상 >600·전체 >900·정상 >전체                                                                            |
+| `OPS_DATA_DIR/official-usage-input.json`                                                                                       | `OfficialBudgetCheckpoint` 확인 뒤 `initialBudget`, 미확인은 null                                                           | 프로젝트·확인 시각·비음수 분/bytes를 E가 다시 검사하고 저널 예약과 대조                                                                    |
+| B 제품 인증·HTTP/WS 보호 초기화                                                                                                | `productSecurityReady`                                                                                                      | 환경변수로 true를 받지 않음. B가 실제 초기화 결과를 계산하고 거절 회귀를 인계해야 함                                                       |
+| `OPS_TOKEN`                                                                                                                    | B가 E `createOperatorAuth(token)`에 주입                                                                                    | 빈 값 구성 거절, HTTP 경로는 반환 인증 함수로 검사. 세션용 Bearer와 분리                                                                   |
+| `INVITE_MAX_TTL_MS`, `SESSION_ATTEMPT_WINDOW_MS`, `SESSION_ATTEMPTS_PER_INVITE`, `SESSION_ATTEMPTS_PER_IP`, `ROOM_IDLE_TTL_MS` | AppConfig의 `inviteMaxTtlMs`, `sessionAttemptWindowMs`, `sessionAttemptsPerInvite`, `sessionAttemptsPerIp`, `roomIdleTtlMs` | 양의 safe integer 필수. 앞 두 값/마지막은 ms, attempts는 개수. 임의 기본값 없이 B 초대·입장 정책에 주입하고 미설정 제품 admission은 LOCKED |
+| `OPS_DATA_DIR/capability-report.json`                                                                                          | E의 `CapabilityReport` parser 입력                                                                                          | E가 인계한 실제 MC-01 증거 및 project alias/namespace/SDK 불일치면 제품 잠금. F가 임의 SUPPORTED 파일을 만들지 않음                        |
+
+`tests/cloud/CloudPreflight.ts`는 F 소유의 단일 strict schema/parser이며 runner와 E의 MC-01 Cloud test가 함께 사용한다. 비밀 값 대신 아래 값과 환경변수 이름만 저장하고 unknown 필드·유효하지 않은 경로·0개 시험을 거절한다. 이 QA 자료는 제품 wire 계약이 아니며 제품 코드가 tests나 문서 타입을 import하지 않는다.
+
+| CloudPreflight 필드                                         | 타입·검증                                                                                                                   |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `projectAlias`, `namespace`, `sourceCommit`, `lockfileHash` | 비어 있지 않은 문자열. 현재 대상 및 실제 checkout/lock hash와 일치                                                          |
+| `checkedAtEpochMs`, `expiresAtEpochMs`                      | epoch ms 유한 정수, 확인 ≤현재 <만료. 만료 이후 새 시험·단계 시작 금지, 기존 회수는 계속                                    |
+| `remainingMinutes`, `remainingBytes`                        | 비음수 유한 수/정수. 공급자 확인 근거 필요, 자동 무료 총량 초기화 금지                                                      |
+| `allowedCases`                                              | 아래 allowlist ID 배열. 현재 case가 포함되어야 함                                                                           |
+| `budgetReservation`                                         | `{reservationId:string,participantMinutes:number,bytes:number}`. 양수 예약, 기존 활성 예약·여유를 뺀 잔량과 대조            |
+| `credentialEnvNames`                                        | `readonly string[]`. case별 필요한 환경변수 이름을 allowlist로 고정하고 실제 값은 process 환경에서만 읽음                   |
+| `deviceManifest`                                            | `{path:string,mode:'synthetic'\|'representative'}`. 파일 존재 확인. MC-01은 3개 합성 참가자, QA-02/09는 실제 대표 장치 필요 |
+| `evidenceDir`                                               | 이번 case 결과를 저장할 `.local/qa` 아래 경로. CLI `--evidence`와 일치, 다른 case 증거 덮어쓰기 금지                        |
+| `maxRooms`, `maxParticipants`                               | 양의 정수. 요청 stage/실제 연결 수를 포함하고 확인된 사용량 예약 범위 안에 있어야 함                                        |
+| `maxDurationSeconds`, `cleanupAllowanceSeconds`             | 양의 유한 정수. 준비/본시험 시간과 별도 회수 시간, 둘의 합산 비용이 예약 범위 내                                            |
+| `stageDurationSeconds`                                      | QA-11에서만 `{ '1':number, '3':number, '5':number }` 양수 필수. 그 외 case에서는 생략                                       |
+
+runner는 위 schema 검증 후 자식 프로세스에 `RUN_CLOUD_TESTS=1`, `CLOUD_TEST_CASE`, `CLOUD_PREFLIGHT_PATH`, `CLOUD_EVIDENCE_DIR`만 추가 전달한다. `CloudPreflight.ts`의 `requireCloudPreflight(expectedCase)`는 test beforeAll에서 동일 파일·case·시각·경로·자격 존재를 재검사한다. 준비되지 않은 장치/Cloud 항목은 그 case의 `blockedOn`이며 로컬 fixture 검사를 멈추지 않는다. 회수 실패/timeout은 오류 종료하고 namespace·예약을 유지한 채 E에게 인계한다.
+
 ### F-01
 
 **DP-01 · [DevOps] 실제 배포·Cloud·검증 환경 확인**  
@@ -1053,6 +1241,7 @@ export type ServerMessages = {
 - `apps/web/vite.config.ts`
 - `tsconfig.base.json`
 - `tsconfig.packages.json`
+- `tsconfig.qa.json`
 - `server/src/config/env.ts`
 - `scripts/check-execution-environment.mjs`
 - `scripts/check-execution-plan.mjs`
@@ -1061,28 +1250,30 @@ export type ServerMessages = {
 - `tests/cloud/probe.html`
 - `tests/cloud/probe.ts`
 - `tests/cloud/vite.config.ts`
+- `tests/cloud/CloudPreflight.ts`
 - `docs/verification.md`
 
 **구현 순서**
 
 1. D0에 실제 도구 버전 node/pnpm/docker/브라우저와 manifests/lockfile을 읽고 Node24.19.0·pnpm11.19.0·SDK정확버전을 기록한다. 설치는 frozen-lockfile 기준이며 모든manifest/lock/rootconfig 수정은 F가 단독 담당한다. 다른 담당자의 요청은 목록으로 모아 동일 버전 의존성만 추가하고 업데이트를 섞지 않는다.
 2. 현재 Vitest include는 packages/apps/server뿐이다. `tests/contracts/**/*.test.ts`와 `tests/load/**/*.test.ts`를 기본 include에 추가하고 `**/*.cloud.test.ts`는 기본 exclude한다. vitest.cloud.config.ts는 `server/test/media/**/*.cloud.test.ts`와 `tests/cloud/**/*.cloud.test.ts`만 포함하고 workers 1·긴 시험 timeout을 둔다. 기본 pnpm verify가 실제 Cloud/장시간 부하를 자동 시작하지 않게 유지한다.
+   루트 QA 코드는 기존 server/web tsconfig에 포함되지 않는다. `tsconfig.qa.json`을 `tsconfig.base.json` 기반 noEmit으로 만들고 `tests/**/*.ts`, `server/test/media/**/*.cloud.test.ts`의 import/타입을 검사한다. 합성 probe의 브라우저 API에는 이 QA 전용 설정에서 DOM/DOM.Iterable과 node 타입을 제공하고 D의 WebWorker를 끌어오지 않는다. 루트 typecheck에 `tsc -p tsconfig.qa.json --noEmit`을 연결한다. 이 타입 검사는 Cloud 연결이나 테스트 본문을 실행하지 않는다.
 3. D가 만드는 features/vision/vision.worker.ts를 apps/web/tsconfig.json의 **/*.worker.ts exclude로 DOM컴파일에서 제외한다. D의 apps/web/tsconfig.worker.json(WebWorker lib) 파일이 실제 인계된 뒤 web typecheck에 tsc -p tsconfig.worker.json --noEmit을 추가한다. 준비중에 없는파일을 skip하여 완료표시하지 않는다.
-4. check-execution-environment는 값 자체를 출력하지 않고 LIVEKIT_HTTP_URL/WS_URL/API_KEY/API_SECRET, OPS_TOKEN·OPS_DATA_DIR·namespace·AWS 접속/도메인·Jenkins 연결의 존재와 확인 상태만 점검한다. 배포 제품 모드와 admission/예산 설정 확장은 E/B의 실제 readiness·인증 통합 후에만 허용하고 기존 disabled production 차단은 유지한다.
+4. check-execution-environment는 위 설정 입력 표의 정확한 변수 이름을 사용하고 값 자체를 출력하지 않는다. Cloud·OPS·AWS/도메인·Jenkins·장치의 존재와 확인 상태를 각각 보고한다. 제품 설정 schema는 먼저 작성·검증해 인계할 수 있으나 실제 production 활성화는 E/B의 readiness·인증 통합 후에만 허용하고 기존 disabled production 차단은 유지한다.
 5. 운영자에게 필요한 입력을 정확히 기록한다: 실제 AWS 상품/세대·리전·OS·공인주소·포함전송량·DNS/TLS관리경로, Cloud프로젝트별칭·잔여분/GB/API공유상황·확인시각·시험namespace, 자격주입위치, 실제6대장치 OS/브라우저/CPU/GPU/카메라와 부하발생기 목록. 접근/자료가 없으면 해당 전제 BLOCKED로 두며 사양/잔량을 추정하지 않는다.
 6. MC-01용 최소 합성 probe를 F소유 tests/cloud에 만든다. Vite로 현재고정 livekit-client를 bundle하고 연결/합성track게시/직접setSubscribed/메모리상 토큰재연결만 제공한다. 자동촬영/녹화기능은 넣지 않는다. QA-01 고급계측 없이도 E가 초기Cloud지원여부를 확인할 수 있게 한다.
 7. run-cloud-check는 case allowlist→preflight문서 확인→대상namespace/시각/예산/장치체크→별도 Vitest 실행 순서다. 전제 누락은 nonzero와 BLOCKED, 실패/정리미확인도 nonzero로 종료한다. schema에는 secrets 대신 주입환경변수명만 둔다.
 8. 모델 다운로드·manifest는 D가 담당한다. F는 /models/mediapipe/1.0.1/wasm과각task파일이manifest hash와맞고HTTPS/MIME/CSP/Worker기동이정상인지준비지원한다. 실제모델/장치/Cloud부재를 dummy파일·mock결과로 채우지 않는다.
-9. 이번 문서 보완에서 추가되는 `scripts/check-execution-plan.mjs`를 읽고 루트 pnpm verify의 format:check 바로 뒤에 `node scripts/check-execution-plan.mjs`를 연결한다. 공통 계약 원본·A–F 사본·fixture·버전·문서 링크 불일치는 nonzero로 전파한다. 이 검사는 실행 계획의 일관성만 확인하며 제품 구현·Cloud 관문 통과를 뜻하지 않는다.
+9. 이미 존재하는 `scripts/check-execution-plan.mjs`와 루트 `check:execution`을 확인한다. 현재 `pnpm verify`의 format:check 바로 뒤 연결을 유지하고 기존 CI 브랜치를 반영해도 누락·중복 실행하지 않는다. 공통 계약 원본·A–F 사본·fixture·버전·문서 링크 불일치는 nonzero로 전파한다. 이 검사는 실행 계획의 일관성만 확인하며 제품 구현·Cloud 관문 통과를 뜻하지 않는다.
 
 **연결 계약과 경계**
 
 - D0준비/D1화요일착수/D2수요일구현/D3목요일통합/금요일오전확인 일정은 목표다. 준비불가 전제는 담당 실행계획의BLOCKED로공유한다.
-- CloudPreflight={projectAlias,checkedAt,namespace,remainingMinutes,remainingBytes,allowedCases,budgetReservation,credentialEnvNames,deviceManifest,evidenceDir};민감값없음.
+- CloudPreflight는 위 필드 표와 `tests/cloud/CloudPreflight.ts`의 단일 parser를 따른다. 시간·상한·단계 duration을 뒤 작업에서 서로 다른 임의 shape로 추가하지 않는다. 변경은 E 및 해당 QA 소비자와 인계한다.
 - 새 runner/config/probe는 향후이작업에서생성할대상이다. 현재존재한다고가정하지말고파일과명령실행을확인한뒤인계한다.
 - 루트 직접 실행하는 QA harness에 추가 의존성이 필요하면 현재 lock에있는 @colyseus/sdk0.18.2/livekit-client2.22.2 등 정확버전만 F가root devDependency로 선언한다. E/D소유소스파일은변경하지않는다.
 - 각 Cloud test의 beforeAll도 RUN_CLOUD_TESTS=1과 현재 case에 맞는 유효한 preflight를 검사한다. runner만 검증 뒤 child 환경에 이 플래그를 주입한다. 직접 Vitest 호출로 preflight를 우회하면 test.skip이 아니라 실패/BLOCKED로 종료한다. 별도 cloud config는 기본 cloud exclude를 그대로 상속하지 않고 대상 include를 명시한다.
-- Cloud case allowlist를 정확히 고정한다: MC-01 → server/test/media/capability.cloud.test.ts; QA-02 → tests/cloud/performance.cloud.test.ts; QA-03 → tests/cloud/g1-a.cloud.test.ts; QA-04 → tests/cloud/g1-d.cloud.test.ts; QA-05 → tests/cloud/g1-b.cloud.test.ts; QA-06 → tests/cloud/g1-c.cloud.test.ts; QA-08 → tests/cloud/g4-metadata.cloud.test.ts; QA-09 → tests/cloud/mvp-flow.cloud.test.ts; QA-11 → tests/cloud/staged-load.cloud.test.ts; QA-12 → tests/cloud/ten-room-integrated.cloud.test.ts. case는 정확히 한 파일만 선택한다. 등록되지 않은 ID, 아직 인계되지 않은 파일, 발견된 테스트 0개는 nonzero/BLOCKED다. QA-01·QA-07·QA-10·QA-13은 Cloud allowlist가 아니다.
+- Cloud case allowlist를 정확히 고정한다: MC-01 → server/test/media/capability.cloud.test.ts; QA-02 → tests/cloud/performance.cloud.test.ts; QA-03 → tests/cloud/g1-a.cloud.test.ts; QA-04 → tests/cloud/g1-d.cloud.test.ts; QA-05 → tests/cloud/g1-b.cloud.test.ts; QA-06 → tests/cloud/g1-c.cloud.test.ts; QA-08 → tests/cloud/g4-metadata.cloud.test.ts; QA-09 → tests/cloud/mvp-flow.cloud.test.ts; QA-11 → tests/cloud/staged-load.cloud.test.ts; QA-12 → tests/cloud/ten-room-integrated.cloud.test.ts; DP-06 → tests/cloud/deployment-smoke.cloud.test.ts. case는 정확히 한 파일만 선택한다. 등록되지 않은 ID, 아직 인계되지 않은 파일, 발견된 테스트 0개는 nonzero/BLOCKED다. QA-01·QA-07·QA-10·QA-13은 Cloud allowlist가 아니다. DP-06 case는 F-16에서 구현될 때까지 파일 미인계로 실행을 막는다.
 - scripts/run-cloud-check.mjs는 인자를 배열로 전달하여 pnpm exec vitest run --config vitest.cloud.config.ts <allowlist의 정확한 파일>을 실행한다. SDK/브라우저를 여는 동작은 검증된 beforeAll 또는 명시적 run() 안에만 둔다. tests/load/**/*.test.ts는 짧은 fixture·통계·스케줄러 단위시험이며 모듈 import 시 서버 기동, 실시간 대기, 네트워크, 실제 부하 실행을 하지 않는다.
 - 별도 Cloud config는 Node 환경·동시 worker 1개·기본 testTimeout 120000ms·hookTimeout 30000ms로 시작한다. 긴 사례는 preflight에서 검증한 maxDurationSeconds와 cleanupAllowanceSeconds의 합으로 해당 test/hook 제한을 늘린다. QA-12의 실제 900초 구간과 준비·회수 시간을 기본 120초 안에서 강제 종료하지 않으며, 실행 상한과 예산을 명시하지 않은 무제한 timeout은 허용하지 않는다.
 
@@ -1312,11 +1503,13 @@ test: 얼굴 비전 3D 동시 성능 측정 추가
 - `Jenkinsfile`
 - `scripts/ci-verify.mjs`
 - `tests/contracts/ci-contract.test.ts`
+- `infra/jenkins/SETUP.md`
+- `infra/README.md`
 - `docs/verification.md`
 
 **구현 순서**
 
-1. 실제Jenkins의Pipeline/Git/GitLab플러그인존재·버전·credentialId·webhook권한을DP-01에서확인한다. plugin이나권한이없으면로컬Jenkinsfile작성과원격연동검증BLOCKED를구분한다.
+1. 위 기존 CI 브랜치의 Jenkinsfile·SETUP을 먼저 반영하고 현재 diff에서 유지/수정할 구간을 기록한다. 실제 Jenkins의 Pipeline/Git/GitLab 플러그인·버전·credentialId·webhook 권한을 DP-01에서 확인한다. 권한이 없으면 로컬 파이프라인 보완과 원격 연동 `blockedOn`을 구분한다. 이미지 빌드 성공만으로 누락된 E2E·계획 검사 통과를 추정하지 않는다.
 2. GitLab의검증대상source commitSHA를파라미터/SCM환경에서받고체크아웃뒤git rev-parse HEAD와동일함을검사한다. 임의의develop최신값으로바꾸거나untrusted MR내용을쉘문자열로연결하지않는다.
 3. 검증 단계는 Node24.19.0/pnpm11.19.0 확인→frozen install→Linux Chromium --with-deps 설치→pnpm verify 순서다. verify 내부의 format:check 직후 check-execution-plan이 공통 계약·fixture·문서 동기를 검사하도록 DP-01과 같은 진입점을 사용한다. 단계 실패는 즉시 실패로 남기고 기본 job에 Cloud/유료 시험 secret을 주입하지 않는다.
 4. 빌드결과·커밋SHA·실패단계·테스트산출물URL을GitLab결과에연결한다. 실제설치된GitLab플러그인의gitlabCommitStatus/updateGitlabCommitStatus기능을공식문서와Jenkins스니펫생성기로확인한뒤사용하고지원플러그인을가정하지않는다.
@@ -1333,6 +1526,7 @@ test: 얼굴 비전 3D 동시 성능 측정 추가
 - SHA불일치→install이전실패·다른commit성공보고없음.
 - lint실패→build/deploy중지·GitLab에실패단계연결.
 - Cloudcredential없음→로컬verify수행가능·Cloudcase실행0.
+- check:execution 또는 E2E 실패 → CI 실패·배포 0. 현재 CI 브랜치의 개별 검사 목록으로 되돌아가는 회귀를 거절.
 - GitLab플러그인미설치→연동BLOCKED·가짜성공상태게시없음.
 
 **추가·보완할 시험 파일**
@@ -1392,6 +1586,8 @@ ci: Jenkins 검증과 GitLab 결과 연결 추가
 - `infra/docker/Dockerfile.web`
 - `infra/nginx/default.conf`
 - `infra/.env.example`
+- `infra/compose.prod.yaml` (선행 독립 파일을 운영 override로 이관하는 범위)
+- `infra/README.md`
 - `server/package.json`
 - `server/src/config/env.ts`
 - `tests/contracts/container-layout.test.ts`
@@ -1400,9 +1596,9 @@ ci: Jenkins 검증과 GitLab 결과 연결 추가
 **구현 순서**
 
 1. 기존개발Compose는local명시를유지하고운영override를분리한다. web-proxy/game-server만기본서비스로두고Node진입점은server/src/index→dist/index흐름과맞춘다. 한process/복제본1개를고정한다.
-2. 같은검증commit으로이미지2개를빌드하고label/tag에SHA를기록한다. pnpm deploy의server files목록에A가실제로추가한content/config를포함하고D모델은web정적출력에같은hash로포함한다.
+2. 같은 검증 commit으로 이미지 2개를 빌드하고 label/tag에 전체 SHA를 기록한다. 기존 CI 브랜치의 workspace 보존 packaging 수정안을 읽고 최종 이미지 안에서 `@kkakkung/protocol`, `@kkakkung/game-core` import와 `dist/index.js` 기동을 직접 확인한다. 예전 `pnpm deploy --legacy` 경로를 검증 없이 복원하지 않는다. 배포 방식과 무관하게 A의 실제 content/config를 서버 이미지에 넣고 server/package.json files 목록도 일치시킨다. D 모델은 웹 정적 출력에 같은 hash로 포함한다.
 3. runtime는비root유저·내부Node포트·OPS_DATA_DIR지속볼륨·write권한·단일writerlock으로구성한다. secret은환경파일/secretmount로주입하고이미지COPY/ARG/VITE변수에넣지않는다.
-4. 로그 회전용 max-size/max-file, health live/ready 용도, 종료 grace를 설정한다. E initialize가 로컬 기록·잠금 초기화 후 initialized를 반환하면 B가 HTTP health/운영 경로를 열고 후속 Cloud 복구 중 live 200/ready 503을 관찰하게 한다. fatal 초기화이면 listen 없이 close하며 RECOVERING을 재시작 루프로 우회하지 않는다. READY 이후에도 resume 전 admission=DRAINING을 유지한다.
+4. 로그 회전용 max-size/max-file, health live/ready 용도, 종료 grace를 설정한다. 컨테이너 시작 healthcheck와 web-proxy depends_on은 live 기준으로 연결하여 복구 중에도 인증된 OPS와 ready 503을 프록시로 관찰할 수 있게 한다. 배포 승인은 별도 ready·운영 장벽을 검사하며 live 200으로 대체하지 않는다. E initialize가 로컬 기록·잠금 초기화 후 initialized를 반환하면 B가 HTTP health/운영 경로를 열고 후속 Cloud 복구를 계속한다. fatal 초기화이면 listen 없이 close하며 RECOVERING을 재시작 루프로 우회하지 않는다. READY 이후에도 resume 전 admission=DRAINING을 유지한다.
 5. D1에는 실제 Docker daemon의 이미지 빌드·컨테이너 실행 기반·지속 볼륨·쓰기 권한·단일 쓰기자 구성을 먼저 E에 인계한다. 이것이 OP-08 구현의 선행 결과다. 제품 production 활성화와 READY/재시작 최종 시험은 B 초대 인증과 E Cloud/OP-08 코드 통합 뒤 D2에 F/E가 함께 완료한다. 이 마지막 시험을 OP-08의 선행으로 다시 요구하지 않으며 D1 기반 인계와 DP-02 전체 완료를 별도로 기록한다.
 6. 운영프록시에서/dev-sessions/playground/monitor진단라우트를노출하지않도록B와등록/보호를확인한다. nginx차단만으로서버인증없음을덮지않는다.
 
@@ -1418,6 +1614,8 @@ ci: Jenkins 검증과 GitLab 결과 연결 추가
 - 두번째serverinstance기동→writerlock거절·새발급불가.
 - 외부진단라우트/Node2567접근→차단,정상HTTPSproxy만허용.
 - model/content누락이미지→smoke실패·배포준비완료금지.
+- runtime 이미지 내부 workspace import 실패/깨진 symlink → 컨테이너 인수 실패. 빌드 단계의 import 성공만으로 대체하지 않음.
+- game-server live 200/ready 503 복구 중 → web-proxy 기동·인증된 OPS/ready 관찰 가능, 제품 새 입장·배포 승인 0.
 
 **추가·보완할 시험 파일**
 
@@ -1474,6 +1672,7 @@ ci: 단일 서버 운영 컨테이너 구성 추가
 **수정·생성 파일**
 
 - `infra/nginx/default.conf`
+- `infra/nginx/host.conf`
 - `infra/compose.production.yaml`
 - `scripts/deployment-smoke.mjs`
 - `tests/contracts/proxy-contract.test.ts`
@@ -1491,6 +1690,7 @@ ci: 단일 서버 운영 컨테이너 구성 추가
 
 - Jenkins이전첫검증배포는이환경에서시행하며DP-06완료를선행조건으로두어순환시키지않는다.
 - 실제6인/fullMVP완주는QA-09,이작업은접속/TLS/모델/장치권한배포경계검증이다.
+- B가 구현한 OPS_TOKEN 보호 `POST /api/operations/invitations`와 `POST /api/operations/invitations/:inviteId/revoke`의 허용·거절 및 실제 초대 세션 교환을 검증한다. F는 초대 서비스나 E OperationsCommand에 새 action을 구현하지 않는다. 발급 요청의 만료는 B가 운영 공개창·최대 TTL과 대조하며 원문 초대 토큰을 증거에 저장하지 않는다.
 - 외부 접근 격리는 F가 소유하며 E의 admission=DRAINING, 초대 인증, Origin 검사와 구분한다. Origin 검사는 네트워크 접근 인증 수단이 아니다. 정상 인증과 READY/OPEN 조건으로 시험할 수 있는 허용 경로를 준비하고 DP-06에 차단·허용·해제 확인 절차를 인계한다. 격리 확인 없이 resume하거나 공개하지 않는다.
 
 **시험 입력 → 기대 결과**
@@ -1561,24 +1761,25 @@ ci: HTTPS WSS와 운영 접근 제한 추가
 
 **구현 순서**
 
-1. B/E가내보내는숫자/enumcallback을한곳에서수집한다. Tickduration/due/catchup/overload,queue,inputreject,processmemory/CPU,eventlooplag,API60초/429,policyqueue/response/effect,unresolved/reservation/writable를고정단위로정의한다.
-2. Node perf_hooks의monitorEventLoopDelay는ns값을ms로변환하고process.memoryUsage는bytes를보존한다. 여러Room의같은Tick시간을합산한분포와개별Room분포를별도보고한다.
-3. F소유Pino출력formatter/정적allowlist에서sensitive키와과도한nestedpayload를거절한다. Bbootstrap에는logger/callback factory연결만요청하고B소유코드를직접편집하지않는다.
-4. 예산900접근·429·1초권한불명·10초미회수·디스크쓰기실패·ready잠금을경보상태로만든다. 통지대상외부채널이없으면로컬경보/운영화면기록으로남기고외부알림전송을완료했다고하지않는다.
-5. 격리테스트에서slowtick/diskerror/response timeout을주입해경보발생→운영잠금→해소조건을확인한다. 로그max-size/max-file과메트릭retention을제한하고일반게임화면에운영세부정보를노출하지않는다.
+1. B/E가 내보내는 `MetricSample`을 한곳에서 수집한다. `MetricRegistry.ts`에서 이름·단위 allowlist와 유계 수집 큐를 export하고 B가 `emitMetric` callback을 E에 주입한다. 수집은 동기 void이며 IO를 기다리거나 호출자에게 throw하지 않는다. 큐 상한과 누락 수를 측정해 관측 누락을 정상 0회로 숨기지 않는다.
+2. Node perf_hooks의 monitorEventLoopDelay는 ns를 ms로 변환하고 process.memoryUsage는 bytes를 보존한다. 여러 Room의 같은 Tick 회차 시간을 합산한 분포와 개별 Room 분포를 따로 보고한다. 서버 atMs는 monotonic ms로 통일하고 브라우저 실효 시각은 QA-01의 시계 오차 보정 후 지연으로 변환한다.
+3. F 소유 Pino formatter와 정적 allowlist에서 비밀 키·과도한 중첩 payload를 거절한다. B bootstrap에는 logger/callback factory 연결만 요청하고 B 소유 코드를 직접 편집하지 않는다.
+4. 예산 900 접근·429·1초 권한 불명·10초 미회수·디스크 쓰기 실패·ready 잠금을 경보 상태로 만든다. 외부 통지 채널이 없으면 로컬 경보와 운영 기록을 남기고 외부 알림을 전송했다고 하지 않는다.
+5. 격리 시험에서 slow tick·디스크 오류·응답 timeout을 주입해 경보 발생→운영 잠금→해소 조건을 확인한다. 로그 max-size/max-file과 metric 보관량을 제한하고 게임 화면에 운영 세부 정보를 노출하지 않는다.
 
 **연결 계약과 경계**
 
-- MetricSample={name,value,unit,atMs,matchRef?,generation?,requestId?};원본identity/playernickname/좌표/맵/token을labels로쓰지않음.
-- B/E가계산하는원래정책은수정하지않고F는callback소비·관측만소유한다.
+- 중앙 `MetricSample`은 `{name:string,value:number,unit:'count'|'ms'|'bytes'|'ratio',atMs:number,matchRef?:string,generation?:number,requestId?:string}`다. value/atMs는 유한 수여야 하며 원본 Identity·닉네임·좌표·맵·token을 label로 쓰지 않는다. B/E가 계산하는 정책은 해당 소유자가 수정하고 F는 callback 수집·관측만 맡는다.
+- F가 `MetricRegistry.ts`에 등록하는 최소 이름/단위는 `tick.duration/ms`, `tick.due/count`, `tick.catchup/count`, `tick.overload/count`, `input.queueDepth/count`, `input.rejected/count`, `process.memory/bytes`, `process.cpu/ratio`, `eventLoop.lag/ms`, `media.api.total60s/count`, `media.api.normal60s/count`, `media.api.429/count`, `media.policy.queueWait/ms`, `media.policy.responseLatency/ms`, `media.policy.effectLatency/ms`, `media.retirement.unresolved/count`, `media.reservation.participantMs/ms`, `media.reservation.bytes/bytes`, `operations.journal.writable/count`, `observability.dropped/count`다. CPU ratio는 0–1, writable은 0/1이다. 참가자분은 측정 시 참가자 ms로 변환한다. effectLatency는 QA 실효 수신 표본이 있을 때만 생성하며 API 응답으로 대신 만들지 않는다. 새 등록명·단위는 F 인계 기록과 B/E 소비자를 함께 갱신한다.
 - 관측 TypeScript 구현의 최종 경로는 server/src/observability/MetricRegistry.ts, StructuredEvents.ts, AlertPolicy.ts이며 F가 소유한다. server/tsconfig.json의 src include와 서버 build에 포함한다. B는 bootstrap에서 이 factory/callback을 조립하고 E는 metric emit 계약만 연결한다. 루트 observability/*.ts에 런타임 코드를 두지 않는다.
 
 **시험 입력 → 기대 결과**
 
-- eventLoopDelay20000000ns→20ms,단위1000000배오차없음.
-- 10개Roomtick2ms씩→동일회차합산20ms표본,각분포평균으로대체금지.
-- token/rawSDP/map필드주입→저장제외또는writer거절.
-- UNRESOLVED발생→경보활성·해소확인없이시간만지나자동green금지.
+- eventLoopDelay 20000000ns → 20ms, 단위 변환 오류 없음.
+- 10개 Room Tick이 각각 2ms → 같은 회차 합산 20ms 표본, 개별 분포 평균으로 대체 금지.
+- token/rawSDP/map 필드 또는 미등록 metric/잘못된 단위 주입 → 저장 거절, 호출자에게 비밀·예외 전파 없음.
+- 유계 수집 큐 포화 → dropped 증가·관측 불완전 표시, Tick/권한 처리를 IO 대기로 멈추지 않음.
+- UNRESOLVED 발생 → 경보 활성, 해소 확인 없이 시간만 지나 자동 정상 처리 금지.
 
 **추가·보완할 시험 파일**
 
@@ -1616,8 +1817,8 @@ feat: 게임 미디어 운영 지표와 경보 추가
 
 **완료 인계**
 
-- A–E에metriccallback동일schema를전달하고내부파일편집은각담당자에게요청한다.
-- QA-10/12/DP-06에계측수집명령과임계값을전달한다.
+- A–E에 동일 metric schema와 등록명/단위를 전달하고 내부 파일 변경은 각 소유자가 수행한다.
+- QA-10/12/DP-06에 수집 명령·임계값·누락 표본 판정 방법을 전달한다.
 - B에게 server/src/observability/StructuredEvents.ts 및 MetricRegistry.ts의 factory import 경로를 전달하고 bootstrap 연결은 B가 수정하도록 한다. E의 관측 callback도 같은 이벤트 타입을 참조한다.
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/F/DP-05.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
@@ -2281,20 +2482,24 @@ test: 대표 장치 6인 MVP 완주 검증 추가
 - `scripts/deploy-release.mjs`
 - `scripts/verify-release.mjs`
 - `tests/contracts/deployment-sequence.test.ts`
+- `tests/cloud/deployment-smoke.cloud.test.ts`
 - `infra/compose.production.yaml`
+- `infra/deploy.sh`
+- `infra/README.md`
+- `infra/jenkins/SETUP.md`
 - `docs/verification.md`
 
 **구현 순서**
 
-1. 검증된commitSHA·두이미지digest·이전정상release를입력으로받고Jenkinsverify결과와일치하는지검사한다. 최신태그latest를원본으로추측하지않는다.
+1. 검증된 전체 commit SHA·웹/서버 두 이미지 digest·이전 정상 release를 입력으로 받고 Jenkins verify 결과와 일치하는지 검사한다. 기존 `infra/deploy.sh`의 임의 TAG에 현재 checkout을 빌드하는 경로를 제거하고 Jenkins·수동 배포 모두 같은 `deploy-release.mjs`를 호출하게 한다. 대상 이미지가 없으면 해당 SHA를 검증·빌드하는 절차로 돌아가며 현재 소스를 이전 SHA 태그로 포장하지 않는다. latest나 8자리 태그만으로 검증 commit을 추정하지 않는다.
 2. DP-03의 외부 접근 격리를 활성화하고 일반 이용자의 새 HTTP 세션·매칭·WSS 접속이 차단되는지, 지정한 운영자·6인 시험 경로가 정상 인증 가능한지 확인한다. 기존 게임 연결과 인증된 운영 경로는 유지하여 정상 종료·drain·회수를 방해하지 않는다. 확인 증거가 없으면 BLOCKED로 중단한다. 이 격리는 애플리케이션 admission과 독립이며 이후 resume과 smoke 중에도 유지한다.
 3. OPS_TOKEN Bearer로 `POST /api/operations/commands`에 `{requestId,action:'drain'}`을 전송한다. 202 pending은 접수일 뿐이다. 같은 requestId의 `GET /api/operations/commands/:requestId`를 한정된 backoff/기한으로 조회해 succeeded를 확인하고 GET `/api/operations/status`의 DRAINING·미해결 0과 진행 경기·연습·입장 종료/회수 확인을 검사한 뒤 진행한다. pending/failed/기한 초과에는 새 배포·공개 재개를 중단하고 외부 격리와 입장 잠금을 유지한다. requestId를 바꿔 중복 drain을 만들지 않는다.
 4. 같은 SHA 이미지로 교체하고 지속 운영 volume/Secret/namespace를 유지한다. 기존 진행 Match를 메모리 스냅샷으로 복원하거나 blue-green 두 권위 서버를 동시에 열지 않는다. E initialize의 initialized 결과 후 HTTP health/운영 경로가 열리며 RECOVERING·LOCKED의 ready 503은 복구 대기 상태로 관찰한다. fatal이면 listen 없이 close한 실패로 처리한다.
 5. 이전 세대 Cloud 정리·공식 잔량 정합을 포함한 전체 복구가 끝나 readiness=READY가 되는지 확인한다. admission은 DRAINING을 유지해야 한다. 외부 격리 확인을 유지하고 실제 공개창·검증된 방수·잔량 조건을 검사한 뒤 별도 requestId의 `{action:'resume'}`를 전송한다. GET terminal succeeded와 status의 admission=OPEN/readiness=READY를 모두 확인한다. 미확정 조건을 시험용 값으로 우회하지 않는다.
-6. 외부 격리 상태에서 정상 초대·세션·미디어 경로로 지정한 6인 배포 smoke를 수행한다. DRAINING 상태에서 6인 입장을 시도하거나 health 연결만으로 완주/G1/G6 증거를 대체하지 않는다. 별도 smoke 운영 action이나 인증·예산 우회 경로를 추가하지 않는다.
+6. 외부 격리 상태에서 정상 초대·세션·미디어 경로로 지정한 6인 배포 smoke를 수행한다. `deploy-release.mjs`가 격리·resume 성공을 확인한 다음 공통 runner의 DP-06 case로 `tests/cloud/deployment-smoke.cloud.test.ts` 한 파일을 호출한다. 이 case는 F의 기존 ProbeHarness로 실제 1방 6인의 입장·얼굴/음성 연결·게임 입력·종료를 검증하고 외부 일반 참가자는 계속 차단한다. preflight에 DP-06 허용과 1방/6명·준비/시험/회수 시간 및 비용이 있어야 한다. QA-09의 대표 6대 5판 전체 인수와 구분한다. DRAINING 상태에서 6인 입장을 시도하거나 health 연결만으로 완주/G1/G6 증거를 대체하지 않는다. 별도 smoke 운영 action이나 인증·예산 우회 경로를 추가하지 않는다.
 7. smoke가 끝나면 시험 세션·방·로컬 트랙을 종료하고 E의 서버 미디어 회수·저널 반영·미해결 0을 확인한다. READY/OPEN·실제 공개창·검증된 방수·잔량을 다시 검사하며 필요하면 실제 공식 잔량 checkpoint를 갱신한다. 남은 시험 활동/회수나 확인 누락·기한 만료가 있으면 외부 격리를 유지한다. 모든 조건이 충족된 뒤에만 F가 외부 격리를 해제하여 공개하고 접근 상태를 확인한다.
 8. 실패 시 외부 격리를 유지하거나 즉시 다시 적용한다. resume 이후 실패라면 새 requestId로 다시 drain하고 terminal succeeded·활동 종료·원격 회수 확인을 마친 뒤 이전 이미지 digest로 롤백한다. 초기화/health 장애로 제어·회수를 확인할 수 없으면 ROLLBACK_BLOCKED로 잠금·경보를 유지하며 강제 교체로 기록이나 미해결을 숨기지 않는다. 롤백 이미지도 같은 initialize→복구 READY→격리 중 resume→smoke→정리→공개 장벽을 다시 통과한다.
-9. Jenkins job 외부 설정/원격 배포는 실제 실행 요청과 연결 환경이 있을 때 수행한다. 현재 문서 작성에서는 Jenkins·NGINX 코드를 구현하거나 외부 호출을 하지 않고 F 담당자가 구현할 명령·완료 조건만 기록한다.
+9. 이 작업 번호를 실행하라는 요청에서는 로컬 Jenkins·NGINX·배포 코드와 실패 시나리오 검증·MR 초안을 완성한다. 실제 Jenkins job 설정/원격 배포는 사용자가 그 외부 실행을 승인했고 연결 환경이 있을 때 수행한다. 계획 검토만으로 배포를 실행하지 않으며, 원격 환경 대기와 로컬 구현 완료를 별도로 기록한다.
 
 **연결 계약과 경계**
 
@@ -2303,6 +2508,8 @@ test: 대표 장치 6인 MVP 완주 검증 추가
 - 운영 경로·body·OperationSnapshot/OperationsStatus는 EXEC-CONTRACT-3와 E OP-07을 사용한다. retry-retirement에만 retirementId를 보내며 checkpoint는 추가 payload 없이 구성된 공식잔량 입력의 검증/저장 작업을 요청한다. script는 secret 원문·Authorization 헤더를 출력하지 않고 모든 HTTP/terminal 실패를 nonzero로 전달한다.
 - 공식 잔량은 운영자가 실제 Cloud dashboard를 확인한 후 `OPS_DATA_DIR/official-usage-input.json`으로 제공한다. JSON 필드는 `{projectAlias,remainingMinutes,remainingBytes,checkedAtEpochMs,source:'cloud-dashboard',checkedBy}`이며 숫자·계정·확인 시각·확인자를 실제 값으로 채운다. F는 schema/파일 권한/전달 위치만 준비하고 dummy 값을 만들지 않는다. POST checkpoint의 terminal succeeded 뒤 GET status에 같은 확인 시각·잔량이 반영됐는지 검사한다. 미확인/누락/기한 만료면 재개를 막는다.
 - 정상 배수는 readiness=READY/admission=DRAINING일 수 있다. 건강 확인과 입장 허용을 같은 boolean으로 만들지 않으며 재개는 READY 확인 후 resume 성공과 OPEN을 별도로 확인한다.
+- `OperationsStatus`에는 활동 수 필드가 없다. 배포 runner는 E의 drain terminal succeeded가 `getGameActivity()` 3개 수 0과 회수/저널 확인을 보장한다는 실제 연결 시험을 전제로 사용한다. 상세 활동 수 증거는 E/B의 비민감 관측 기록으로 연결하고 존재하지 않는 HTTP 필드를 읽거나 새 임의 운영 API를 만들지 않는다.
+- `infra/deploy.sh`와 Jenkins에 남은 직접 `compose up`·즉시 롤백 우회가 없어야 한다. 두 경로 모두 manifest의 동일 웹/서버 digest 쌍·현재 검증 SHA를 확인하고 같은 외부 격리/배수/회수 장벽을 통과한다. 요청 SHA와 image label 불일치, 웹/서버 이미지 하나 누락, 미해결 회수는 두 경로 모두 배포·태그 재사용·롤백 0의 실패 시험으로 추가한다.
 - 외부 격리의 구현·허용 대상·검증·해제는 F 책임이다. 배포 기록에 격리 증거와 OPS admission/readiness를 각각 남기며 Origin 검사를 외부 격리 증거로 사용하지 않는다. 배포상태의 최종 READY는 smoke 정리와 공개 조건 재검사까지 통과한 완료 상태이며 HTTP ready 200만으로 도달하지 않는다. 초기 격리 검증 실패는 BLOCKED로 기록한다.
 
 **시험 입력 → 기대 결과**
