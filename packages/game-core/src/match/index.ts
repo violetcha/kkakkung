@@ -47,6 +47,32 @@ export {
   type TransformId,
 } from './map/transform.js';
 
+export {
+  UNREACHABLE,
+  bfsDistances,
+  biconnectedComponents,
+  buildGraph,
+  cellOfNode,
+  distance,
+  distanceMatrix,
+  facesPassage,
+  hasMinPassageNeighbors,
+  isConnected,
+  isInCore,
+  nodeIndex,
+  type BiconnectedAnalysis,
+  type PassageGraph,
+} from './map/graph.js';
+
+export {
+  analyzeTemplate,
+  validateConnectivity,
+  type ConnectivityIssue,
+  type ConnectivityIssueCode,
+  type ConnectivityReport,
+  type TemplateAnalysis,
+} from './map/validate-connectivity.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
