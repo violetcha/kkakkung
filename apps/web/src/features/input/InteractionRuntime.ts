@@ -28,6 +28,12 @@ import {
   type WorkerScheduler,
 } from '../vision/worker-scheduler';
 import { isSampleFresh, isUsableQuality } from '../vision/sensor-types';
+import {
+  createFaceCompositor,
+  type CompositorContext,
+  type CompositorEnvironment,
+  type FaceCompositor,
+} from '../media/face-compositor';
 import { createCalibrator } from './calibration';
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
 import type { SensorSnapshot } from '../vision/sensor-types';
@@ -230,6 +236,7 @@ export type InteractionRuntimeOptions = Readonly<{
   /** 브라우저 자원 주입점. 생략하면 실제 DOM/navigator를 사용한다. */
   environment?: DeviceEnvironment;
   vision?: VisionEnvironment;
+  compositor?: CompositorEnvironment;
   tuning?: InputTuning;
 }>;
 
@@ -291,6 +298,24 @@ function browserVision(): VisionEnvironment {
   };
 }
 
+function browserCompositor(): CompositorEnvironment {
+  return {
+    createCanvas: (width, height) => {
+      // 일반 HTMLCanvasElement만 쓴다. OffscreenCanvas에서 captureStream을 부르지 않는다.
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      return {
+        width,
+        height,
+        getContext: (id) => canvas.getContext(id) as unknown as CompositorContext | null,
+        captureStream: (frameRate) => canvas.captureStream(frameRate),
+      };
+    },
+    now: () => performance.now(),
+  };
+}
+
 export const createInteractionRuntime = (
   deps: InteractionDeps,
   options: InteractionRuntimeOptions = {},
@@ -306,6 +331,7 @@ export const createInteractionRuntime = (
   let pump: FramePump | null = null;
   let modelsLoaded = false;
   let lastSnapshot: SensorSnapshot | null = null;
+  let compositor: FaceCompositor | null = null;
   const calibrator = createCalibrator(tuning);
   let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
 
@@ -321,6 +347,8 @@ export const createInteractionRuntime = (
     pump = null;
     scheduler?.dispose();
     scheduler = null;
+    compositor?.dispose();
+    compositor = null;
     modelsLoaded = false;
     lastSnapshot = null;
     calibrationObserver = null;
@@ -341,8 +369,8 @@ export const createInteractionRuntime = (
     const ready = isVisionReady({
       modelsLoaded,
       hasFreshValidFace: hasFreshValidFace(),
-      hasFirstSafeFrame: false,
-      hasLiveProcessedTrack: false,
+      hasFirstSafeFrame: compositor?.hasFirstSafeFrame === true,
+      hasLiveProcessedTrack: compositor?.isTrackLive === true,
     });
     patch({ vision: ready ? 'ready' : 'loading' });
   };
@@ -352,6 +380,11 @@ export const createInteractionRuntime = (
     // 구 세대 결과는 발행하지 않는다.
     if (snapshot.runtimeGeneration !== runtimeGeneration) return;
     lastSnapshot = snapshot;
+    // 가공 얼굴은 새 face 관측마다 다시 그린다. 유효하지 않으면 안전 프레임이다.
+    if (compositor && snapshot.face) {
+      const face = snapshot.face;
+      compositor.draw(face.status === 'valid' ? face.data : null);
+    }
     refreshVisionStatus();
     calibrationObserver?.(snapshot);
     deps.onSensors(snapshot);
@@ -360,6 +393,16 @@ export const createInteractionRuntime = (
   const startVision = (video: HTMLVideoElement) => {
     if (scheduler) return;
     const generation = runtimeGeneration;
+    {
+      compositor = createFaceCompositor({
+        environment: options.compositor ?? browserCompositor(),
+        // 원본 video는 읽기만 한다. 게시 가능한 source는 compositor Canvas뿐이다.
+        getSource: () =>
+          video.videoWidth > 0
+            ? { source: video, width: video.videoWidth, height: video.videoHeight }
+            : null,
+      });
+    }
     const worker = vision.createWorker();
     const created = createWorkerScheduler(
       {

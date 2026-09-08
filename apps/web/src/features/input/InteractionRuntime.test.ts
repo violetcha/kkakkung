@@ -4,6 +4,7 @@ import type { DeviceEnvironment } from '../devices/device-manager';
 import type { SensorSnapshot } from '../vision/sensor-types';
 import type { WorkerPort } from '../vision/worker-scheduler';
 import type { FrameSource } from '../vision/frame-pump';
+import type { CompositorContext, CompositorEnvironment } from '../media/face-compositor';
 import {
   createInteractionRuntime,
   InteractionNotImplementedError,
@@ -122,6 +123,33 @@ function harness() {
     },
     clearTimer: (handle) => timers.delete(handle),
   };
+  const processedTrack = { kind: 'video', readyState: 'live', stop: vi.fn() };
+  const context2d: CompositorContext = {
+    fillStyle: '',
+    filter: '',
+    fillRect: () => undefined,
+    save: () => undefined,
+    restore: () => undefined,
+    beginPath: () => undefined,
+    moveTo: () => undefined,
+    lineTo: () => undefined,
+    closePath: () => undefined,
+    clip: () => undefined,
+    drawImage: () => undefined,
+  };
+  const compositor: CompositorEnvironment = {
+    createCanvas: (width, height) => ({
+      width,
+      height,
+      getContext: () => context2d,
+      captureStream: () =>
+        ({
+          getVideoTracks: () => [processedTrack],
+          getTracks: () => [processedTrack],
+        }) as unknown as MediaStream,
+    }),
+    now: () => clock,
+  };
   const deps: InteractionDeps = {
     sendCommand: vi.fn(() => 'request-1'),
     requestMediaGrant: vi.fn(),
@@ -141,10 +169,11 @@ function harness() {
     onLocalPreview: (element) => previews.push(element),
   } as unknown as InteractionDeps;
 
-  const runtime = createInteractionRuntime(deps, { environment, vision });
+  const runtime = createInteractionRuntime(deps, { environment, vision, compositor });
   return {
     runtime,
     track,
+    processedTrack,
     sensors,
     statuses,
     previews,
@@ -194,11 +223,34 @@ describe('createInteractionRuntime', () => {
     await base.runtime.startDevices({ microphone: false });
 
     base.ready();
+
+    // 아직 유효 얼굴 표본도 가공 프레임도 없으므로 loading에 머문다.
+    expect(base.statuses.map((status) => status.vision)).not.toContain('ready');
+  });
+
+  it('reports vision ready once the face, the safe frame and the track all exist', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+
     base.emit(1);
 
-    // 모델이 로드되고 유효 얼굴이 있어도 가공 프레임/트랙이 없으면 loading이다.
-    expect(base.statuses.map((status) => status.vision)).not.toContain('ready');
+    expect(base.statuses.at(-1)!.vision).toBe('ready');
     expect(base.sensors).toHaveLength(1);
+  });
+
+  it('drops back from ready when the processed track is no longer live', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+    base.emit(1);
+    expect(base.statuses.at(-1)!.vision).toBe('ready');
+
+    base.processedTrack.readyState = 'ended';
+    base.advance(40);
+    base.emit(2);
+
+    expect(base.statuses.at(-1)!.vision).toBe('loading');
   });
 
   it('requires all four inputs for vision ready', () => {
