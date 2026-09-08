@@ -23,7 +23,8 @@ pipeline {
     READY_URL = 'http://127.0.0.1:8080/health/ready'   // web-proxy 경유 → game-server
     DEPLOY_BRANCH = 'develop'
     // .node-version / package.json engines 와 같은 버전. 여기 바꾸면 Dockerfile 도 같이.
-    NODE_IMAGE = 'node:24.19.0-bookworm-slim'
+    // slim 이 아닌 이유: check:execution 의 scripts/tests 가 git 을 호출합니다. 런타임 이미지는 slim 그대로.
+    NODE_IMAGE = 'node:24.19.0-bookworm'
     PNPM_VER   = '11.19.0'
   }
 
