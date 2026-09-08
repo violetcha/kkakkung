@@ -9,7 +9,27 @@ import {
   type DeviceEnvironment,
   type DeviceManager,
 } from '../devices/device-manager';
-import { INITIAL_DEVICE_STATUS, type DeviceStatus } from '../devices/device-status';
+import {
+  INITIAL_DEVICE_STATUS,
+  type DeviceStatus,
+  type DeviceStatusPatch,
+} from '../devices/device-status';
+import {
+  createFramePump,
+  createModelSelector,
+  type FramePump,
+  type FrameSource,
+} from '../vision/frame-pump';
+import { PINNED_MODEL_PATHS } from '../vision/worker-protocol';
+import {
+  createVisionWorker,
+  createWorkerScheduler,
+  type WorkerPort,
+  type WorkerScheduler,
+} from '../vision/worker-scheduler';
+import { isSampleFresh, isUsableQuality } from '../vision/sensor-types';
+import { createCalibrator } from './calibration';
+import { INPUT_TUNING, type InputTuning } from './input-tuning';
 import type { SensorSnapshot } from '../vision/sensor-types';
 
 export type { DeviceStatus } from '../devices/device-status';
@@ -197,10 +217,24 @@ export class InteractionNotImplementedError extends Error {
 /** 현재 facade가 실제로 구현한 단계. C가 호출 가능한 범위를 확인한다. */
 export const IMPLEMENTED_STAGES = Object.freeze(['D-01'] as const);
 
+/** D-06. 비전 파이프라인 주입점. 생략하면 실제 Worker와 video 프레임을 쓴다. */
+export type VisionEnvironment = Readonly<{
+  createWorker(): WorkerPort;
+  createFrameSource(video: HTMLVideoElement): FrameSource;
+  now(): number;
+  setTimer(handler: () => void, delayMs: number): number;
+  clearTimer(handle: number): void;
+}>;
+
 export type InteractionRuntimeOptions = Readonly<{
   /** 브라우저 자원 주입점. 생략하면 실제 DOM/navigator를 사용한다. */
   environment?: DeviceEnvironment;
+  vision?: VisionEnvironment;
+  tuning?: InputTuning;
 }>;
+
+/** 보정 수집 상한. 이 시간 안에 충분한 표본이 없으면 미보정으로 끝낸다. */
+export const CALIBRATION_WINDOW_MS = 2000;
 
 function browserEnvironment(): DeviceEnvironment {
   return {
@@ -228,13 +262,146 @@ function browserEnvironment(): DeviceEnvironment {
   };
 }
 
+function browserVision(): VisionEnvironment {
+  return {
+    createWorker: () => createVisionWorker() as unknown as WorkerPort,
+    createFrameSource: (video) => ({
+      schedule: (callback) => {
+        // requestVideoFrameCallback이 있으면 표시 프레임에 맞춘다.
+        const withCallback = video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (handler: () => void) => number;
+          cancelVideoFrameCallback?: (handle: number) => void;
+        };
+        if (typeof withCallback.requestVideoFrameCallback === 'function') {
+          const handle = withCallback.requestVideoFrameCallback(callback);
+          return () => withCallback.cancelVideoFrameCallback?.(handle);
+        }
+        const handle = requestAnimationFrame(() => callback());
+        return () => cancelAnimationFrame(handle);
+      },
+      grab: async () => {
+        if (video.readyState < 2 || video.videoWidth === 0) return null;
+        return createImageBitmap(video);
+      },
+      now: () => performance.now(),
+    }),
+    now: () => performance.now(),
+    setTimer: (handler, delayMs) => window.setTimeout(handler, delayMs),
+    clearTimer: (handle) => window.clearTimeout(handle),
+  };
+}
+
 export const createInteractionRuntime = (
   deps: InteractionDeps,
   options: InteractionRuntimeOptions = {},
 ): InteractionRuntime => {
+  const tuning = options.tuning ?? INPUT_TUNING;
   let disposed = false;
   let devices: DeviceManager | null = null;
   let lastStatus: DeviceStatus = INITIAL_DEVICE_STATUS;
+
+  // runtimeGeneration은 장치/비전을 새로 기동할 때마다 증가한다.
+  let runtimeGeneration = 0;
+  let scheduler: WorkerScheduler | null = null;
+  let pump: FramePump | null = null;
+  let modelsLoaded = false;
+  let lastSnapshot: SensorSnapshot | null = null;
+  const calibrator = createCalibrator(tuning);
+  let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
+
+  const vision = options.vision ?? browserVision();
+
+  const patch = (value: DeviceStatusPatch) => {
+    if (!devices) return;
+    lastStatus = devices.patchStatus(value);
+  };
+
+  const stopVision = () => {
+    pump?.stop();
+    pump = null;
+    scheduler?.dispose();
+    scheduler = null;
+    modelsLoaded = false;
+    lastSnapshot = null;
+    calibrationObserver = null;
+  };
+
+  const hasFreshValidFace = (): boolean => {
+    const face = lastSnapshot?.face ?? null;
+    if (!isSampleFresh(face, 'face', vision.now())) return false;
+    return face!.status === 'valid' && isUsableQuality(face!.data.quality);
+  };
+
+  /**
+   * vision 상태를 다시 계산한다.
+   * D-07 가공 프레임과 D-08 안전 프레임이 붙기 전에는 ready가 될 수 없다.
+   */
+  const refreshVisionStatus = () => {
+    if (!scheduler) return;
+    const ready = isVisionReady({
+      modelsLoaded,
+      hasFreshValidFace: hasFreshValidFace(),
+      hasFirstSafeFrame: false,
+      hasLiveProcessedTrack: false,
+    });
+    patch({ vision: ready ? 'ready' : 'loading' });
+  };
+
+  const publishSnapshot = (snapshot: SensorSnapshot) => {
+    if (disposed) return;
+    // 구 세대 결과는 발행하지 않는다.
+    if (snapshot.runtimeGeneration !== runtimeGeneration) return;
+    lastSnapshot = snapshot;
+    refreshVisionStatus();
+    calibrationObserver?.(snapshot);
+    deps.onSensors(snapshot);
+  };
+
+  const startVision = (video: HTMLVideoElement) => {
+    if (scheduler) return;
+    const generation = runtimeGeneration;
+    const worker = vision.createWorker();
+    const created = createWorkerScheduler(
+      {
+        worker,
+        now: vision.now,
+        onSnapshot: publishSnapshot,
+        onError: (code) => {
+          if (generation !== runtimeGeneration) return;
+          patch({ vision: 'failed', errorCode: code });
+        },
+        onReady: () => {
+          if (generation !== runtimeGeneration) return;
+          modelsLoaded = true;
+          // 모델 로드만으로 vision ready로 올리지 않는다. 나머지 조건은 D-07/D-08이 채운다.
+          refreshVisionStatus();
+        },
+      },
+      generation,
+    );
+    worker.onmessage = (event) => created.handleMessage(event.data);
+    worker.onerror = () => created.handleWorkerError();
+    worker.postMessage({ type: 'init', runtimeGeneration: generation, paths: PINNED_MODEL_PATHS });
+
+    const models = createModelSelector();
+    const frames = createFramePump({
+      source: vision.createFrameSource(video),
+      submit: (frame) => {
+        const sent = created.submit(frame);
+        if (sent) models.markSent(frame.sampledAtMs, frame.models);
+        return sent;
+      },
+      selectModels: (nowMs) => models.select(nowMs),
+      onError: (code) => {
+        if (generation !== runtimeGeneration) return;
+        patch({ vision: 'failed', errorCode: code });
+      },
+    });
+    scheduler = created;
+    pump = frames;
+    patch({ vision: 'loading', errorCode: null });
+    frames.start();
+  };
 
   const ensureDevices = (): DeviceManager => {
     if (devices) return devices;
@@ -245,6 +412,13 @@ export const createInteractionRuntime = (
         if (!disposed) deps.onDeviceStatus(status);
       },
       onLocalPreview: (element) => deps.onLocalPreview(element),
+      onCameraTrack: (track) => {
+        if (track !== null) return;
+        // 원본이 사라지면 비전도 멈추고 보정을 버린다.
+        stopVision();
+        calibrator.reset();
+        patch({ vision: 'idle', calibration: 'idle' });
+      },
     });
     return devices;
   };
@@ -252,12 +426,54 @@ export const createInteractionRuntime = (
   return {
     async startDevices(input) {
       if (disposed) return lastStatus;
-      return ensureDevices().start(input);
+      const manager = ensureDevices();
+      const status = await manager.start(input);
+      if (disposed) return status;
+      const preview = manager.getPreviewElement();
+      if (status.camera === 'ready' && preview && !scheduler) {
+        runtimeGeneration += 1;
+        startVision(preview);
+      }
+      return lastStatus;
     },
 
-    calibrate() {
-      // D-06에서 중립 보정을 구현한다. 그 전에는 calibration ready를 만들지 않는다.
-      return Promise.reject(new InteractionNotImplementedError('calibrate', 'D-06 / IN-06'));
+    async calibrate() {
+      if (disposed || !devices) return lastStatus;
+      if (lastStatus.camera !== 'ready') {
+        patch({ calibration: 'failed', errorCode: 'CALIBRATION_NO_CAMERA' });
+        return lastStatus;
+      }
+      const generation = runtimeGeneration;
+      calibrator.begin(generation);
+      patch({ calibration: 'running', errorCode: null });
+
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        let timer = 0;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          calibrationObserver = null;
+          vision.clearTimer(timer);
+          resolve();
+        };
+        calibrationObserver = (snapshot) => {
+          calibrator.observe(snapshot, vision.now());
+          if (calibrator.sampleCount >= tuning.calibrationMinSamples) finish();
+        };
+        // 이미 받은 최신 표본도 한 번 확인한다.
+        if (lastSnapshot) calibrationObserver(lastSnapshot);
+        if (!settled) timer = vision.setTimer(finish, CALIBRATION_WINDOW_MS);
+      });
+
+      if (disposed || generation !== runtimeGeneration) return lastStatus;
+      const result = calibrator.finish();
+      patch(
+        result.state === 'ready'
+          ? { calibration: 'ready', errorCode: null }
+          : { calibration: 'failed', errorCode: result.errorCode },
+      );
+      return lastStatus;
     },
 
     setContext() {
@@ -288,15 +504,41 @@ export const createInteractionRuntime = (
 
     /** 논리 참가 종료. D-17에서 미디어 세대 종료와 분리해 확장한다. */
     async endParticipation() {
+      stopVision();
+      calibrator.reset();
       await devices?.dispose();
       devices = null;
+      runtimeGeneration += 1;
     },
 
     async dispose() {
       if (disposed) return;
       disposed = true;
+      stopVision();
+      calibrator.reset();
       await devices?.dispose();
       devices = null;
     },
   };
 };
+
+/** vision ready 판정에 필요한 입력. 아직 없는 조건을 참으로 가정하지 않는다. */
+export type VisionReadinessInputs = Readonly<{
+  modelsLoaded: boolean;
+  hasFreshValidFace: boolean;
+  hasFirstSafeFrame: boolean;
+  hasLiveProcessedTrack: boolean;
+}>;
+
+/**
+ * vision ready는 모델 로드만으로 성립하지 않는다.
+ * 유효 얼굴·첫 안전 가공 프레임·살아있는 가공 트랙까지 모두 있어야 한다.
+ */
+export function isVisionReady(inputs: VisionReadinessInputs): boolean {
+  return (
+    inputs.modelsLoaded &&
+    inputs.hasFreshValidFace &&
+    inputs.hasFirstSafeFrame &&
+    inputs.hasLiveProcessedTrack
+  );
+}
