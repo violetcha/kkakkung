@@ -335,7 +335,7 @@ describe('createInteractionRuntime', () => {
     expect(base.sensors).toHaveLength(seen);
   });
 
-  it('rejects the media methods that later tasks own and validates the grant', async () => {
+  it('validates the grant and ignores a malformed bindings or policy message', async () => {
     const base = harness();
 
     // D-13 이후 connectMedia는 grant 검사로 거절한다.
@@ -344,8 +344,7 @@ describe('createInteractionRuntime', () => {
     });
     // D-15 이후 applyMediaBindings는 모양 검사로 조용히 무시한다.
     expect(() => base.runtime.applyMediaBindings({} as never)).not.toThrow();
-    expect(() => base.runtime.applyAudioPolicy({} as never)).toThrow(
-      InteractionNotImplementedError,
-    );
+    // D-16 이후 applyAudioPolicy도 모양 검사로 조용히 무시한다.
+    expect(() => base.runtime.applyAudioPolicy({} as never)).not.toThrow();
   });
 });

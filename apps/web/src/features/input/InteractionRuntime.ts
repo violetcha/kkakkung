@@ -43,6 +43,16 @@ import {
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
 import { createMediaSession, type MediaSession } from '../media/media-session';
 import { createBindingStore, type BindingStore } from '../media/media-bindings';
+import {
+  createAudioGraph,
+  type AudioGraph,
+  type AudioGraphEnvironment,
+  type OutputLock,
+} from '../media/audio-graph';
+import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
+
+export type { AudioEffect, AudioPolicy, AudioVoice } from '../media/audio-policy';
+export type { OutputLock } from '../media/audio-graph';
 import { createPendingTrackStore, type PendingTrackStore } from '../media/pending-tracks';
 import {
   createRemoteFaces,
@@ -132,28 +142,6 @@ export type MediaBinding = Readonly<{
 export type MediaBindings = MediaScope &
   Readonly<{ bindingRevision: number; participants: readonly MediaBinding[] }>;
 
-export type AudioPolicy = MediaScope &
-  Readonly<{
-    policyRevision: number;
-    bindingRevision: number;
-    stateVersion: number;
-    voices: readonly Readonly<{
-      playerId: string;
-      trackSid: string;
-      gain: number;
-      azimuthRad: number;
-      lowpassHz: number;
-    }>[];
-    effects: readonly Readonly<{
-      eventId: string;
-      kind: 'footstep' | 'sensor' | 'trap';
-      gain: number;
-      azimuthRad: number;
-      lowpassHz: number;
-      tick: number;
-    }>[];
-  }>;
-
 export type MediaStatus = Readonly<{
   matchId: string | null;
   mediaInstanceId: string | null;
@@ -219,6 +207,8 @@ export interface InteractionRuntime {
   /** D-15. SDK 구독 사건을 넘긴다. */
   addRemoteTrack(track: RemoteTrack): void;
   removeRemoteTrack(trackSid: string): void;
+  /** D-16. COUNTDOWN 등에서 출력을 잠근다. */
+  setAudioOutputLock(lock: OutputLock): void;
   endParticipation(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -259,6 +249,10 @@ export type InteractionRuntimeOptions = Readonly<{
   createRemoteElement?: () => HTMLVideoElement;
   /** SDK 구독 해제. 생략하면 아무 것도 하지 않는다. */
   unsubscribeTrack?: (track: RemoteTrack) => void;
+  /** 사용자 제스처로 연 AudioContext 기반 그래프. 생략하면 오디오를 구성하지 않는다. */
+  audio?: AudioGraphEnvironment;
+  /** 검증된 오디오 트랙 조회. */
+  getAudioTrack?: (trackSid: string) => MediaStreamTrack | null;
   epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
   keyboardTarget?: KeyboardTarget;
@@ -402,6 +396,26 @@ export const createInteractionRuntime = (
   let qualityPreset: QualityPreset = 'medium';
   let mediaPurpose: InstancePurpose = 'game';
   const bindingStore: BindingStore = createBindingStore();
+  const policyStore: PolicyStore = createPolicyStore(bindingStore);
+  let audioGraph: AudioGraph | null = null;
+
+  const ensureAudio = (): AudioGraph | null => {
+    if (audioGraph) return audioGraph;
+    if (!options.audio) return null;
+    audioGraph = createAudioGraph({
+      environment: options.audio,
+      getAudioTrack: (trackSid) => options.getAudioTrack?.(trackSid) ?? null,
+    });
+    return audioGraph;
+  };
+
+  /** 정책·바인딩·트랙 중 어느 입력이 바뀌어도 다시 맞춘다. */
+  const reconcileAudio = () => {
+    const graph = ensureAudio();
+    if (!graph) return;
+    policyStore.revisit(vision.now());
+    graph.reconcileVoices(policyStore.resolveVoices());
+  };
   const pendingTracks: PendingTrackStore = createPendingTrackStore();
   const remoteFaces: RemoteFaces = createRemoteFaces({
     bindings: bindingStore,
@@ -780,8 +794,20 @@ export const createInteractionRuntime = (
       await media.connect(grant);
     },
 
-    applyAudioPolicy() {
-      throw new InteractionNotImplementedError('applyAudioPolicy', 'D-16 / ME-06');
+    /** 별도 채널의 정책. 참조 bindingRevision과 검증 SID가 맞아야 소리가 난다. */
+    applyAudioPolicy(policy: AudioPolicy) {
+      if (disposed) return;
+      const result = policyStore.apply(policy);
+      if (result.status === 'ignored') return;
+      reconcileAudio();
+      const graph = ensureAudio();
+      // 승인된 서버 효과음만 eventId 중복 없이 재생한다.
+      if (graph && result.status === 'applied') graph.playEffects(policyStore.getEffects());
+    },
+
+    /** COUNTDOWN·개인 종료·권위 상실에서 출력을 잠근다. */
+    setAudioOutputLock(lock: OutputLock) {
+      ensureAudio()?.setOutputLock(lock);
     },
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */
@@ -797,17 +823,20 @@ export const createInteractionRuntime = (
         publisher.confirmFromBindings(scope, self?.faceTrackSid ? [self.faceTrackSid] : []);
       // 바인딩이 뒤늦게 와도 이미 받은 publication을 다시 대조한다.
       remoteFaces.reconcile();
+      reconcileAudio();
     },
 
     /** SDK TrackSubscribed. 검증 전에는 attach하지 않는다. */
     addRemoteTrack(track) {
       if (disposed) return;
       remoteFaces.addTrack(track);
+      if (track.kind === 'audio') reconcileAudio();
     },
 
     removeRemoteTrack(trackSid) {
       if (disposed) return;
       remoteFaces.removeTrack(trackSid);
+      reconcileAudio();
     },
 
     /** C VI-05의 저사양 전환. 이후 게시부터 낮은 인코딩을 쓴다. */
@@ -836,6 +865,9 @@ export const createInteractionRuntime = (
     async retireMediaGeneration() {
       remoteFaces.clear();
       bindingStore.reset();
+      policyStore.reset();
+      audioGraph?.dispose();
+      audioGraph = null;
       await publisher?.unpublishAll();
       publisher = null;
       await media.retire();
@@ -849,6 +881,9 @@ export const createInteractionRuntime = (
       fallback.reset();
       remoteFaces.clear();
       bindingStore.reset();
+      policyStore.reset();
+      audioGraph?.dispose();
+      audioGraph = null;
       await publisher?.unpublishAll();
       publisher = null;
       await media.dispose();
@@ -867,6 +902,9 @@ export const createInteractionRuntime = (
       context.clear();
       remoteFaces.clear();
       bindingStore.reset();
+      policyStore.reset();
+      audioGraph?.dispose();
+      audioGraph = null;
       await publisher?.unpublishAll();
       publisher = null;
       await media.dispose();
