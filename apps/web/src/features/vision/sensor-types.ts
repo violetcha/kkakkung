@@ -73,3 +73,10 @@ export function isUsableQuality(quality: SensorQuality): boolean {
 export function isFiniteLandmark(value: NormalizedLandmark): boolean {
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z);
 }
+
+/**
+ * 한 모델이 한 프레임에서 만든 결과.
+ * 관측 시각은 Sample이 붙이므로 여기에는 판정 결과만 담는다.
+ */
+export type ModelOutcome<T> =
+  Readonly<{ status: 'valid'; data: T }> | Readonly<{ status: 'missing'; data: null }>;
