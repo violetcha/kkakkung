@@ -342,9 +342,8 @@ describe('createInteractionRuntime', () => {
     await expect(base.runtime.connectMedia({} as never)).rejects.toMatchObject({
       code: 'GRANT_INCOMPLETE',
     });
-    expect(() => base.runtime.applyMediaBindings({} as never)).toThrow(
-      InteractionNotImplementedError,
-    );
+    // D-15 이후 applyMediaBindings는 모양 검사로 조용히 무시한다.
+    expect(() => base.runtime.applyMediaBindings({} as never)).not.toThrow();
     expect(() => base.runtime.applyAudioPolicy({} as never)).toThrow(
       InteractionNotImplementedError,
     );

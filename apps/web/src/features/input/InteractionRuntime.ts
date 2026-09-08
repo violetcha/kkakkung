@@ -42,6 +42,14 @@ import {
 } from '../media/face-compositor';
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
 import { createMediaSession, type MediaSession } from '../media/media-session';
+import { createBindingStore, type BindingStore } from '../media/media-bindings';
+import { createPendingTrackStore, type PendingTrackStore } from '../media/pending-tracks';
+import {
+  createRemoteFaces,
+  type InstancePurpose,
+  type RemoteFaces,
+  type RemoteTrack,
+} from '../media/remote-faces';
 import { IDLE_MEDIA_STATUS, type MediaRoomFactory } from '../media/media-types';
 import {
   createTrackPublisher,
@@ -208,6 +216,9 @@ export interface InteractionRuntime {
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
+  /** D-15. SDK 구독 사건을 넘긴다. */
+  addRemoteTrack(track: RemoteTrack): void;
+  removeRemoteTrack(trackSid: string): void;
   endParticipation(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -244,6 +255,10 @@ export type InteractionRuntimeOptions = Readonly<{
   createMediaRoom?: MediaRoomFactory;
   /** SDK LocalParticipant 주입점. 생략하면 게시를 시도하지 않는다. */
   getPublisher?: () => PublisherPort | null;
+  /** 원격 video element 생성. 생략하면 document를 쓴다. */
+  createRemoteElement?: () => HTMLVideoElement;
+  /** SDK 구독 해제. 생략하면 아무 것도 하지 않는다. */
+  unsubscribeTrack?: (track: RemoteTrack) => void;
   epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
   keyboardTarget?: KeyboardTarget;
@@ -385,6 +400,25 @@ export const createInteractionRuntime = (
   const context: ContextStore = createContextStore();
   let publisher: TrackPublisher | null = null;
   let qualityPreset: QualityPreset = 'medium';
+  let mediaPurpose: InstancePurpose = 'game';
+  const bindingStore: BindingStore = createBindingStore();
+  const pendingTracks: PendingTrackStore = createPendingTrackStore();
+  const remoteFaces: RemoteFaces = createRemoteFaces({
+    bindings: bindingStore,
+    createElement: () =>
+      options.createRemoteElement?.() ??
+      (typeof document === 'undefined'
+        ? ({ srcObject: null } as unknown as HTMLVideoElement)
+        : document.createElement('video')),
+    now: () => vision.now(),
+    onFaceTrack: (event) => {
+      if (!disposed) deps.onFaceTrack(event);
+    },
+    unsubscribe: (track) => options.unsubscribeTrack?.(track),
+    requestBindingsRefresh: (request) => deps.requestBindingsRefresh(request),
+    getPurpose: () => mediaPurpose,
+    pending: pendingTracks,
+  });
 
   const ensurePublisher = (): TrackPublisher | null => {
     if (publisher) return publisher;
@@ -750,8 +784,30 @@ export const createInteractionRuntime = (
       throw new InteractionNotImplementedError('applyAudioPolicy', 'D-16 / ME-06');
     },
 
-    applyMediaBindings() {
-      throw new InteractionNotImplementedError('applyMediaBindings', 'D-15 / ME-05');
+    /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */
+    applyMediaBindings(bindings) {
+      if (disposed) return;
+      const selfPlayerId = context.get()?.selfPlayerId ?? '';
+      const result = bindingStore.apply(bindings, selfPlayerId);
+      if (result.status !== 'applied') return;
+      // 자기 항목은 게시 검증용으로만 읽는다.
+      const self = bindingStore.getSelf();
+      const scope = bindingStore.getScope();
+      if (publisher && scope)
+        publisher.confirmFromBindings(scope, self?.faceTrackSid ? [self.faceTrackSid] : []);
+      // 바인딩이 뒤늦게 와도 이미 받은 publication을 다시 대조한다.
+      remoteFaces.reconcile();
+    },
+
+    /** SDK TrackSubscribed. 검증 전에는 attach하지 않는다. */
+    addRemoteTrack(track) {
+      if (disposed) return;
+      remoteFaces.addTrack(track);
+    },
+
+    removeRemoteTrack(trackSid) {
+      if (disposed) return;
+      remoteFaces.removeTrack(trackSid);
     },
 
     /** C VI-05의 저사양 전환. 이후 게시부터 낮은 인코딩을 쓴다. */
@@ -778,6 +834,8 @@ export const createInteractionRuntime = (
 
     /** 미디어 세대만 끝낸다. 논리 참가 종료(D-17)와 분리한다. */
     async retireMediaGeneration() {
+      remoteFaces.clear();
+      bindingStore.reset();
       await publisher?.unpublishAll();
       publisher = null;
       await media.retire();
@@ -789,6 +847,8 @@ export const createInteractionRuntime = (
       clearHolds();
       context.clear();
       fallback.reset();
+      remoteFaces.clear();
+      bindingStore.reset();
       await publisher?.unpublishAll();
       publisher = null;
       await media.dispose();
@@ -805,6 +865,8 @@ export const createInteractionRuntime = (
       unbindKeyboard();
       clearHolds();
       context.clear();
+      remoteFaces.clear();
+      bindingStore.reset();
       await publisher?.unpublishAll();
       publisher = null;
       await media.dispose();
