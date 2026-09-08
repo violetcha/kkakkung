@@ -35,6 +35,18 @@ export { MATCH_TUNING_CONSTANTS, validateTuning } from './tuning.js';
 
 export { preparePracticeLayout } from './map/prepare-practice-layout.js';
 
+export {
+  TRANSFORM_IDS,
+  canonicalSignature,
+  createTemplateVariants,
+  rowsFromTopology,
+  transformCell,
+  transformDir,
+  transformFace,
+  transformTemplate,
+  type TransformId,
+} from './map/transform.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
