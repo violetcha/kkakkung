@@ -16,10 +16,14 @@ import type {
   VisibleEntity,
   VisibleSurfaces,
 } from './core-types.js';
+import { detectCaptures } from './capture.js';
+import { abortMatch, applyConnectionLost } from './disconnection.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { completeActions, reserveMove } from './movement.js';
+import { terminateRunner, type TerminationOutcome } from './participation.js';
 import { createPriorityOrder } from './priority.js';
+import { evaluateResult } from './result.js';
 import { reserveTurn } from './rotation.js';
 import {
   EMPTY_SURFACES,
@@ -151,6 +155,8 @@ type StepContext = {
   outcomes: CoreOutcome[];
   events: DomainEvent[];
   media: MediaIntent[];
+  /** Players whose personal result was fixed during this step. */
+  endedThisStep: Set<string>;
 };
 
 function outcome(
@@ -272,6 +278,10 @@ function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
 }
 
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
+  if (ctx.endedThisStep.has(command.actorId)) {
+    // The actor's personal result was fixed earlier in this step: cancel, do not reject.
+    return outcome(ctx, command, 'canceled', 'NOT_ACTIVE');
+  }
   switch (command.type) {
     case 'MOVE_INTENT':
       return handleMoveIntent(ctx, command);
@@ -336,6 +346,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     outcomes: [],
     events: [],
     media: [],
+    endedThisStep: new Set(),
   };
   if (isTerminal(ctx.state)) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
@@ -346,15 +357,62 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     // TTL expiry is decided on the server's monotonic clock before the tick; core only applies it.
     if (control.type === 'EXPIRE_MOVE') applyExpireMove(ctx, control.playerId, control.sequence);
   }
+  const before = ctx.state.players;
   completeDueActions(ctx);
-  for (const command of input.commands) handleCommand(ctx, command);
-  startQueuedActions(ctx);
+  if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
+    // Capture is committed before equipment or pose stages; ended runners leave later stages.
+    for (const runnerId of detectCaptures(before, ctx.state.players)) {
+      endRunner(ctx, runnerId, 'CAPTURED');
+    }
+  }
+  let terminal = settleResult(ctx, { includeTimeout: false });
+  if (terminal) {
+    for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
+  } else {
+    for (const command of input.commands) handleCommand(ctx, command);
+    startQueuedActions(ctx);
+    terminal = settleResult(ctx, { includeTimeout: true });
+  }
+  for (const control of input.controls) {
+    if (control.type === 'CONNECTION_LOST') {
+      const lost = applyConnectionLost(ctx.state, control.playerId);
+      ctx.state = lost.state;
+      ctx.media.push(...lost.mediaIntents);
+    } else if (control.type === 'ABORT_MATCH') {
+      const aborted = abortMatch(ctx.state, control.reason);
+      ctx.state = aborted.state;
+      ctx.media.push(...aborted.mediaIntents);
+    }
+  }
   return {
     state: ctx.state,
     outcomes: ctx.outcomes,
     events: ctx.events,
     mediaIntents: ctx.media,
   };
+}
+
+/** Fixes a runner's personal result once; repeated calls change nothing. */
+function endRunner(ctx: StepContext, runnerId: string, result: TerminationOutcome): void {
+  const termination = terminateRunner(ctx.state, runnerId, result, ctx.tick, () =>
+    nextEventId(ctx),
+  );
+  if (!termination.changed) return;
+  ctx.state = termination.state;
+  ctx.events.push(...termination.events);
+  ctx.media.push(...termination.mediaIntents);
+  ctx.endedThisStep.add(runnerId);
+}
+
+/** Applies the team result when decided; returns whether the match is now terminal. */
+function settleResult(ctx: StepContext, options: { includeTimeout: boolean }): boolean {
+  if (isTerminal(ctx.state)) return true;
+  if (ctx.state.mode !== 'game' || ctx.state.phase !== 'PLAYING') return false;
+  const result = evaluateResult(ctx.state, ctx.tick, options);
+  if (!result) return false;
+  ctx.state = { ...ctx.state, phase: 'RESULT', result };
+  ctx.media.push({ type: 'RETIRE_INSTANCE', reason: 'round-ended' });
+  return true;
 }
 
 export function getFrame(state: MatchState): CoreReadFrame {

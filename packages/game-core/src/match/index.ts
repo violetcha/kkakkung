@@ -175,6 +175,15 @@ export {
   releaseMove,
 } from './input-buffer.js';
 
+export { detectCaptures } from './capture.js';
+export { countRunners, evaluateResult } from './result.js';
+export {
+  terminateRunner,
+  type TerminationOutcome,
+  type TerminationResult,
+} from './participation.js';
+export { abortMatch, applyConnectionLost, type DisconnectionResult } from './disconnection.js';
+
 export {
   createMatch,
   createPractice,
