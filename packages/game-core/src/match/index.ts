@@ -11,6 +11,36 @@ import {
 
 export * from './types.js';
 
+// ---------------------------------------------------------------------------
+// Product map pipeline (MP-01..05). Server-only data, pure functions.
+// ---------------------------------------------------------------------------
+
+export type {
+  TemplateFailure,
+  TemplateIssue,
+  TemplateIssueCode,
+  TemplateValidation,
+} from './map/types.js';
+export {
+  BASE_VARIANT_ID,
+  approachOf,
+  compareCells,
+  compareWallFaces,
+  isWalkable,
+  passageNeighbors,
+  topologyVersionOf,
+  validateTemplate,
+} from './map/validate-template.js';
+export { MATCH_TUNING_CONSTANTS, validateTuning } from './tuning.js';
+
+export { preparePracticeLayout } from './map/prepare-practice-layout.js';
+
+// ---------------------------------------------------------------------------
+// Development exports. KkakkungRoom (0-stage) still calls these through
+// server/src/domain. They are not the product rules and will be retired when
+// B switches the room to the product facade.
+// ---------------------------------------------------------------------------
+
 /** Direction vectors for north (0), east (1), south (2), and west (3). */
 export const DIR_VECTORS: Record<Dir, { dx: number; dy: number }> = {
   0: { dx: 0, dy: -1 },
@@ -25,7 +55,7 @@ export function turn(dir: Dir, to: TurnDir): Dir {
 
 /**
  * Development stub for cell movement. It currently enforces player state and
- * map bounds only; collision, occupancy, and cooldown rules remain TODO.
+ * map bounds only; collision, occupancy, and cooldown rules live in the product engine.
  */
 export function tryMove(
   state: GameSnapshot,
@@ -48,17 +78,17 @@ export function tryMove(
   return { ok: true };
 }
 
-/** TODO: implement contact capture rules. */
+/** Development stub; the product capture rule is implemented in the match engine. */
 export function checkCapture(_state: GameSnapshot): CaptureEvent[] {
   return [];
 }
 
-/** TODO: implement match win conditions. */
+/** Development stub; the product result rule is implemented in the match engine. */
 export function checkWinCondition(_state: GameSnapshot): Role | null {
   return null;
 }
 
-/** Development-only fixed map; randomized, validated generation remains TODO. */
+/** Development-only fixed map. Product maps come from validated server templates. */
 export function generateMaze(_seed: number): Uint8Array {
   const maze = new Uint8Array(MAZE_SIZE * MAZE_SIZE);
   for (let y = 0; y < MAZE_SIZE; y += 1) {
@@ -71,7 +101,7 @@ export function generateMaze(_seed: number): Uint8Array {
   return maze;
 }
 
-/** Development spawn placement; distributed encounter-safe placement remains TODO. */
+/** Development spawn placement. Product placement comes from the layout selector. */
 export function pickSpawn(
   _maze: Uint8Array,
   role: Role,
