@@ -1,0 +1,24 @@
+{
+  "name": "@kkakkung/game-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./match": {
+      "types": "./dist/match/index.d.ts",
+      "import": "./dist/match/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "typecheck": "tsc --noEmit"
+  }
+}

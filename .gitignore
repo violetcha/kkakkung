@@ -1,0 +1,13 @@
+node_modules/
+dist/
+/server/build/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.local/
+playwright-report/
+test-results/
+*.log
+*.pem
+*.key

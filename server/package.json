@@ -1,31 +1,39 @@
 {
-  "name": "kkakkung-server",
-  "version": "0.0.1",
+  "name": "@kkakkung/game-server",
+  "version": "0.1.0",
   "private": true,
-  "description": "까꿍 게임 서버 — Colyseus 서버 권위형 매치 서버",
-  "main": "build/index.js",
+  "type": "module",
+  "files": [
+    "dist",
+    ".env.example"
+  ],
   "scripts": {
-    "start": "tsx watch src/index.ts",
-    "build": "tsc",
-    "serve": "node build/index.js",
+    "dev": "tsx watch --include ../packages/**/dist/** src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "serve": "node dist/index.js",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "@colyseus/monitor": "^0.16.0",
-    "@colyseus/playground": "^0.16.0",
-    "@colyseus/schema": "^3.0.0",
-    "@colyseus/ws-transport": "^0.16.0",
-    "colyseus": "^0.16.0",
-    "express": "^4.21.0"
+    "@kkakkung/protocol": "workspace:*",
+    "@kkakkung/game-core": "workspace:*",
+    "@colyseus/core": "0.18.11",
+    "@colyseus/ws-transport": "0.18.2",
+    "express": "5.2.1",
+    "cors": "2.8.6",
+    "livekit-server-sdk": "2.18.0",
+    "pino": "10.3.1",
+    "zod": "4.5.4",
+    "@colyseus/monitor": "0.18.3",
+    "@colyseus/playground": "0.18.4",
+    "@colyseus/schema": "5.0.27"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.0.0",
-    "colyseus.js": "^0.16.22",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "@colyseus/testing": "0.18.5",
+    "@colyseus/tools": "0.18.3",
+    "@colyseus/sdk": "0.18.2",
+    "@types/express": "5.0.6",
+    "@types/cors": "2.8.19"
   }
 }

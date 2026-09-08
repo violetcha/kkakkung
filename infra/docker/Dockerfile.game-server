@@ -1,0 +1,22 @@
+FROM node:24.19.0-bookworm-slim AS build
+RUN npm install --global pnpm@11.19.0
+WORKDIR /workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.packages.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY server/package.json server/package.json
+COPY packages/protocol/package.json packages/protocol/package.json
+COPY packages/game-core/package.json packages/game-core/package.json
+RUN pnpm install --frozen-lockfile
+COPY packages packages
+COPY server server
+RUN pnpm build:packages && pnpm --filter @kkakkung/game-server build
+# deploy uses the root lockfile and includes the two workspace dependencies.
+RUN pnpm --filter @kkakkung/game-server deploy --legacy --prod /app
+
+FROM node:24.19.0-bookworm-slim
+WORKDIR /app
+COPY --from=build --chown=node:node /app /app
+RUN mkdir -p /var/lib/kkakkung && chown node:node /var/lib/kkakkung
+USER node
+EXPOSE 2567
+CMD ["node", "dist/main.js"]

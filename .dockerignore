@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+**/.env
+**/.env.local
+**/.env.production
+**/.local
+**/*.pem
+**/*.key
+playwright-report
+test-results

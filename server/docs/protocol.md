@@ -13,8 +13,8 @@
 - 방 코드: `state.roomCode` (roomId 앞 6자리). 참가는 `joinById(roomId)` — 코드 → roomId 매핑은 [E2 방·로비 관리]에서
 
 ```ts
-const client = new Colyseus.Client("ws://localhost:2567");
-const room = await client.joinOrCreate("kkakkung");
+const client = new Colyseus.Client('ws://localhost:2567');
+const room = await client.joinOrCreate('kkakkung');
 ```
 
 ---
@@ -22,37 +22,41 @@ const room = await client.joinOrCreate("kkakkung");
 ## 2. 상태 (서버 → 클라이언트, 자동 동기화)
 
 ### GameState
-| 필드 | 타입 | 뜻 | 공개 범위 |
-|---|---|---|---|
-| `phase` | string | `waiting` `prep` `countdown` `playing` `result` | 전원 |
-| `tick` | number | 서버 틱 번호 (20/s) | 전원 |
-| `timeLeft` | number | 남은 시간 ms | 전원 |
-| `roomCode` | string | 6자리 방 코드 | 전원 |
-| `maze` | uint8[1024] | `index = y*32 + x`, 0 통로 1 벽 | 0단계 전원 → 1단계 시야 필터 |
-| `players` | map\<Player\> | sessionId → Player | 0단계 전원 → 1단계 시야 필터 |
-| `exits` | map\<Exit\> | ownerId → Exit | **도망자만.** 술래 패킷에 필드 없음 |
+
+| 필드       | 타입          | 뜻                                              | 공개 범위                           |
+| ---------- | ------------- | ----------------------------------------------- | ----------------------------------- |
+| `phase`    | string        | `waiting` `prep` `countdown` `playing` `result` | 전원                                |
+| `tick`     | number        | 서버 틱 번호 (20/s)                             | 전원                                |
+| `timeLeft` | number        | 남은 시간 ms                                    | 전원                                |
+| `roomCode` | string        | 6자리 방 코드                                   | 전원                                |
+| `maze`     | uint8[1024]   | `index = y*32 + x`, 0 통로 1 벽                 | 0단계 전원 → 1단계 시야 필터        |
+| `players`  | map\<Player\> | sessionId → Player                              | 0단계 전원 → 1단계 시야 필터        |
+| `exits`    | map\<Exit\>   | ownerId → Exit                                  | **도망자만.** 술래 패킷에 필드 없음 |
 
 ### Player
-| 필드 | 타입 | 뜻 |
-|---|---|---|
-| `id` | string | sessionId |
-| `role` | string | `runner` \| `tagger` |
-| `x`, `y` | uint8 | 칸 좌표. 원점 좌상단, x 오른쪽+, **y 아래쪽+** |
-| `dir` | uint8 | 0 북(y-) · 1 동(x+) · 2 남(y+) · 3 서(x-) |
-| `status` | string | `alive` \| `escaped` \| `captured` |
-| `trapped` | boolean | 덫 구속 중 |
-| `ready` | boolean | 준비 완료 |
+
+| 필드      | 타입    | 뜻                                             |
+| --------- | ------- | ---------------------------------------------- |
+| `id`      | string  | sessionId                                      |
+| `role`    | string  | `runner` \| `tagger`                           |
+| `x`, `y`  | uint8   | 칸 좌표. 원점 좌상단, x 오른쪽+, **y 아래쪽+** |
+| `dir`     | uint8   | 0 북(y-) · 1 동(x+) · 2 남(y+) · 3 서(x-)      |
+| `status`  | string  | `alive` \| `escaped` \| `captured`             |
+| `trapped` | boolean | 덫 구속 중                                     |
+| `ready`   | boolean | 준비 완료                                      |
 
 ### Exit (개인 출구)
-| 필드 | 타입 | 뜻 |
-|---|---|---|
-| `ownerId` | string | 소유 도망자 |
-| `wallX`, `wallY` | uint8 | 출구가 붙은 벽 칸 |
-| `side` | uint8 | 벽의 어느 면 (0~3, dir 과 같은 규약) |
-| `approachX`, `approachY` | uint8 | 도망자가 서야 하는 칸 |
-| `open` | boolean | 아직 열려 있는지 |
+
+| 필드                     | 타입    | 뜻                                   |
+| ------------------------ | ------- | ------------------------------------ |
+| `ownerId`                | string  | 소유 도망자                          |
+| `wallX`, `wallY`         | uint8   | 출구가 붙은 벽 칸                    |
+| `side`                   | uint8   | 벽의 어느 면 (0~3, dir 과 같은 규약) |
+| `approachX`, `approachY` | uint8   | 도망자가 서야 하는 칸                |
+| `open`                   | boolean | 아직 열려 있는지                     |
 
 ### 3단계에 추가 예정 (이름만 예약)
+
 `devices{ id → {kind, x, y, ownerId} }` · `items{ id → {kind, x, y} }` · `zones{ taggerId → {cells[]} }` · `events[ {kind, x, y, tick} ]` · `Player.inventory[3]` · `Player.knownCells[]`
 
 ---
@@ -61,24 +65,24 @@ const room = await client.joinOrCreate("kkakkung");
 
 모든 메시지에 `seq`(클라이언트 증가 번호)를 넣는다. 0단계에서는 사용하지 않지만 자리를 유지한다.
 
-| 이름 | 페이로드 | 보내는 쪽 | 서버 판정 |
-|---|---|---|---|
-| `move` | `{ seq, dir: "forward" \| "back" }` | 전원 | `domain.tryMove` |
-| `turn` | `{ seq, dir: "left" \| "right" }` | 전원 | 즉시 |
-| `ready` | `{}` | 전원 | 전원 ready 시 시작 |
-| `exchange.request` | `{ seq, targetId }` | 도망자 | 2단계 |
-| `exchange.accept` | `{ seq, requesterId }` | 도망자 | 2단계 |
-| `pose.result` | `{ seq, ok: boolean }` | 도망자 | 2단계 |
-| `device.place` | `{ seq, kind: "sensor" \| "trap" }` | 술래 | 3단계 |
-| `item.use` | `{ seq }` | 도망자 | 3단계 |
+| 이름               | 페이로드                            | 보내는 쪽 | 서버 판정          |
+| ------------------ | ----------------------------------- | --------- | ------------------ |
+| `move`             | `{ seq, dir: "forward" \| "back" }` | 전원      | `domain.tryMove`   |
+| `turn`             | `{ seq, dir: "left" \| "right" }`   | 전원      | 즉시               |
+| `ready`            | `{}`                                | 전원      | 전원 ready 시 시작 |
+| `exchange.request` | `{ seq, targetId }`                 | 도망자    | 2단계              |
+| `exchange.accept`  | `{ seq, requesterId }`              | 도망자    | 2단계              |
+| `pose.result`      | `{ seq, ok: boolean }`              | 도망자    | 2단계              |
+| `device.place`     | `{ seq, kind: "sensor" \| "trap" }` | 술래      | 3단계              |
+| `item.use`         | `{ seq }`                           | 도망자    | 3단계              |
 
 ## 4. 이벤트 (서버 → 클라이언트, 단발)
 
-| 이름 | 페이로드 | 뜻 |
-|---|---|---|
-| `rejected` | `{ seq, reason }` | 명령 거부. 클라이언트는 예측 이동을 스냅백 |
-| `captured` | `{ taggerId, runnerId, x, y }` | 포획 발생 |
-| `result` | `{ winner: "runners" \| "taggers" }` | 라운드 종료 |
+| 이름       | 페이로드                             | 뜻                                         |
+| ---------- | ------------------------------------ | ------------------------------------------ |
+| `rejected` | `{ seq, reason }`                    | 명령 거부. 클라이언트는 예측 이동을 스냅백 |
+| `captured` | `{ taggerId, runnerId, x, y }`       | 포획 발생                                  |
+| `result`   | `{ winner: "runners" \| "taggers" }` | 라운드 종료                                |
 
 `reason` 값: `no-player` `not-alive` `trapped` `out-of-bounds` `wall` `occupied` `cooldown` `not-playing`
 
@@ -116,3 +120,13 @@ enterExit(state, playerId): { ok, reason? }
 남 = dir 2 = y+1     서 = dir 3 = x-1
 우회전 = (dir+1)%4   좌회전 = (dir+3)%4
 ```
+
+---
+
+## 7. pnpm workspace 통합 메모
+
+이 계약의 `kkakkung` Room 이름, 사용자 상태 필드, `move {seq,dir}`·`turn`·`ready`, 셀 `x/y` 규약은 마이그레이션 후에도 유지한다. 런타임 입력은 공유 protocol의 엄격한 스키마로 검증하며 알 수 없는 필드와 잘못된 union 값을 거절한다.
+
+`server/src/domain`은 `@kkakkung/game-core/match`, `server/src/rooms/schema/GameState.ts`는 `@kkakkung/protocol/game-schema`를 재노출한다. 기존 담당 이름과 스텁 범위는 그대로다. 별도 `sandbox` Room은 새 React 연결 검증용이며 이 문서의 wire 계약을 대체하지 않는다. 두 Room은 현재 서버 전체 용량 하나를 공유하므로 동시에 만들지 않는다.
+
+Colyseus 0.18과 Schema 5로 옮긴 것은 SDK 호환 마이그레이션이다. 전체 규칙·시야 projection·맵 은폐·G1~G6 완료를 뜻하지 않는다.

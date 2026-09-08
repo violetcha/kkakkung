@@ -1,0 +1,29 @@
+{
+  "name": "@kkakkung/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kkakkung/protocol": "workspace:*",
+    "@colyseus/sdk": "0.18.2",
+    "@mediapipe/tasks-vision": "1.0.1",
+    "@react-three/fiber": "9.7.0",
+    "livekit-client": "2.22.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "0.185.1",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@types/three": "0.185.4",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.2"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+**/dist
+pnpm-lock.yaml
+**/*.tsbuildinfo
+playwright-report
+test-results
+.local
+# Preserve the supplied planning document without reformatting.
+docs/spec/*.html

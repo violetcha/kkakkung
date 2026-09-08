@@ -1,0 +1,11 @@
+packages:
+  - server
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: false
+
+minimumReleaseAgeExclude:
+  - '@colyseus/core@0.18.11'
