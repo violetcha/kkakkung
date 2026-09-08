@@ -90,8 +90,7 @@ export function isInsidePolygon(polygon: readonly Point[], x: number, y: number)
     const last = polygon[previous]!;
     const crosses = current.y > y !== last.y > y;
     if (!crosses) continue;
-    const intersectX =
-      ((last.x - current.x) * (y - current.y)) / (last.y - current.y) + current.x;
+    const intersectX = ((last.x - current.x) * (y - current.y)) / (last.y - current.y) + current.x;
     if (x < intersectX) inside = !inside;
   }
   return inside;

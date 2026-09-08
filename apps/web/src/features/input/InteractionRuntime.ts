@@ -34,6 +34,7 @@ import {
   type CompositorEnvironment,
   type FaceCompositor,
 } from '../media/face-compositor';
+import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
 import { createCalibrator } from './calibration';
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
 import type { SensorSnapshot } from '../vision/sensor-types';
@@ -332,6 +333,7 @@ export const createInteractionRuntime = (
   let modelsLoaded = false;
   let lastSnapshot: SensorSnapshot | null = null;
   let compositor: FaceCompositor | null = null;
+  const safeFace: SafeFacePolicy = createSafeFacePolicy();
   const calibrator = createCalibrator(tuning);
   let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
 
@@ -349,6 +351,7 @@ export const createInteractionRuntime = (
     scheduler = null;
     compositor?.dispose();
     compositor = null;
+    safeFace.reset();
     modelsLoaded = false;
     lastSnapshot = null;
     calibrationObserver = null;
@@ -380,10 +383,11 @@ export const createInteractionRuntime = (
     // 구 세대 결과는 발행하지 않는다.
     if (snapshot.runtimeGeneration !== runtimeGeneration) return;
     lastSnapshot = snapshot;
-    // 가공 얼굴은 새 face 관측마다 다시 그린다. 유효하지 않으면 안전 프레임이다.
-    if (compositor && snapshot.face) {
+    // 가공 얼굴은 안전 프레임 정책이 정한 모드로만 그린다. raw 영상 fallback은 없다.
+    if (compositor) {
+      const decision = safeFace.decide(snapshot, vision.now(), runtimeGeneration);
       const face = snapshot.face;
-      compositor.draw(face.status === 'valid' ? face.data : null);
+      compositor.drawMode(decision.mode, face?.status === 'valid' ? face.data : null);
     }
     refreshVisionStatus();
     calibrationObserver?.(snapshot);

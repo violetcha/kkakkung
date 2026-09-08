@@ -2,12 +2,8 @@
 // 원본 camera video는 읽기만 하고 게시 가능한 유일한 source는 이 Canvas의 captureStream이다.
 // OffscreenCanvas에서 captureStream을 호출하지 않는다.
 import type { FaceSensor } from '../vision/sensor-types';
-import {
-  buildFaceMask,
-  PROCESSED_FACE_FPS,
-  PROCESSED_FACE_SIZE,
-  type FaceMask,
-} from './face-mask';
+import { buildFaceMask, PROCESSED_FACE_FPS, PROCESSED_FACE_SIZE, type FaceMask } from './face-mask';
+import { defaultFaceShape } from './safe-face';
 
 /**
  * 가공 얼굴 트랙만 게시할 수 있게 하는 표식.
@@ -62,6 +58,8 @@ export interface CompositorContext {
   lineTo(x: number, y: number): void;
   closePath(): void;
   clip(): void;
+  arc(x: number, y: number, radius: number, startAngle: number, endAngle: number): void;
+  fill(): void;
   drawImage(
     source: CanvasImageSource,
     sx: number,
@@ -87,9 +85,13 @@ export type FaceCompositorDeps = Readonly<{
   onFirstSafeFrame?(): void;
 }>;
 
+export type DrawResult = 'masked' | 'safe' | 'default' | 'hold';
+
 export interface FaceCompositor {
   /** 얼굴이 유효하면 마스크를 그리고, 아니면 전체 검정 안전 프레임을 그린다. */
   draw(face: FaceSensor | null): 'masked' | 'safe';
+  /** D-08. hold는 마지막 안전 프레임을 그대로 두고 default는 기본 얼굴을 그린다. */
+  drawMode(mode: 'live' | 'hold' | 'default', face: FaceSensor | null): DrawResult;
   getHandle(): ProcessedFaceHandle | null;
   readonly hasFirstSafeFrame: boolean;
   readonly isTrackLive: boolean;
@@ -150,6 +152,27 @@ export function createFaceCompositor(deps: FaceCompositorDeps): FaceCompositor {
     return true;
   };
 
+  const drawDefaultFace = (target: CompositorContext) => {
+    // 코드로만 만든 기본 얼굴이다. 원본 픽셀을 쓰지 않는다.
+    const shape = defaultFaceShape(PROCESSED_FACE_SIZE);
+    target.fillStyle = '#3a3a3a';
+    target.beginPath();
+    target.arc(shape.head.x, shape.head.y, shape.head.radius, 0, Math.PI * 2);
+    target.fill();
+    target.fillStyle = '#d0d0d0';
+    for (const eye of shape.eyes) {
+      target.beginPath();
+      target.arc(eye.x, eye.y, eye.radius, 0, Math.PI * 2);
+      target.fill();
+    }
+    target.fillRect(
+      shape.mouth.x - shape.mouth.width / 2,
+      shape.mouth.y,
+      shape.mouth.width,
+      shape.mouth.height,
+    );
+  };
+
   return {
     draw(face) {
       if (disposed || !context) return 'safe';
@@ -157,6 +180,23 @@ export function createFaceCompositor(deps: FaceCompositorDeps): FaceCompositor {
       fillBlack(context);
       firstSafeFrame = true;
       deps.onFirstSafeFrame?.();
+      if (!face || face.quality !== 'valid') return 'safe';
+      const mask = buildFaceMask(face.landmarks);
+      if (!mask) return 'safe';
+      return drawMasked(context, mask) ? 'masked' : 'safe';
+    },
+
+    drawMode(mode, face) {
+      if (disposed || !context) return 'safe';
+      // hold는 마지막 안전 프레임을 그대로 둔다. 새 원본 프레임을 그리지 않는다.
+      if (mode === 'hold') return 'hold';
+      fillBlack(context);
+      firstSafeFrame = true;
+      deps.onFirstSafeFrame?.();
+      if (mode === 'default') {
+        drawDefaultFace(context);
+        return 'default';
+      }
       if (!face || face.quality !== 'valid') return 'safe';
       const mask = buildFaceMask(face.landmarks);
       if (!mask) return 'safe';
