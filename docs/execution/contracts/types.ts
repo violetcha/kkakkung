@@ -1,5 +1,5 @@
-// EXEC-CONTRACT-2. Planning contracts; product modules do not exist merely because these types do.
-export const CONTRACT_VERSION = 'EXEC-CONTRACT-2' as const;
+// EXEC-CONTRACT-3. Planning contracts; product modules do not exist merely because these types do.
+export const CONTRACT_VERSION = 'EXEC-CONTRACT-3' as const;
 export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
 export type Cell = Readonly<{ x: number; y: number }>;
 export type TracePoint = Readonly<{ x: number; y: number }>;
@@ -15,6 +15,30 @@ export type SessionResponse = Readonly<{
   expiresAt: number;
   protocolVersion: '0.2.0';
 }>;
+// Server/operator-only. These endpoints do not accept a player's session Bearer token.
+export const INVITATION_ROUTES = {
+  issue: '/api/operations/invitations',
+  revoke: '/api/operations/invitations/:inviteId/revoke',
+} as const;
+export type InvitationScope = Readonly<{
+  allowCreate: boolean;
+  roomCodes: readonly string[];
+}>;
+export type IssueInvitation = Readonly<{ scope: InvitationScope; expiresAt: number }>;
+export type IssuedInvitation = IssueInvitation &
+  Readonly<{ inviteId: string; inviteToken: string }>;
+export type InvitationDenialCode = 'INVALID_INVITATION' | 'NOT_READY' | 'OUTSIDE_PUBLIC_WINDOW';
+export type InvitationIssueResult =
+  | Readonly<{ status: 'issued'; invitation: IssuedInvitation }>
+  | Readonly<{ status: 'rejected'; code: InvitationDenialCode }>;
+export type InvitationCheck = Readonly<{ inviteToken: string }> &
+  ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export interface InvitationPort {
+  issue(input: IssueInvitation): InvitationIssueResult;
+  revoke(inviteId: string): void;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  bindCreatedRoom(inviteId: string, roomCode: string): void;
+}
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
 export type Phase =
   | 'LOBBY'
@@ -171,9 +195,17 @@ export type PlayerKnowledge = Readonly<{
   knownTerrain: readonly KnownTerrain[];
   knownActiveExits: readonly KnownExit[];
 }>;
+export type ActiveGameScope = Readonly<{
+  gameInstanceId: string;
+  kind: 'practice' | 'game';
+  revision: number;
+}>;
+export type GameViewScope =
+  ActiveGameScope | Readonly<{ gameInstanceId: null; kind: 'none'; revision: number }>;
 export type PrivateView = PlayerKnowledge &
   Readonly<{
     matchId: string;
+    gameScope: GameViewScope;
     stateVersion: number;
     self: ActiveSelf | EndedSelf | null;
     visibleCells: readonly Cell[];
@@ -229,6 +261,7 @@ export type EventType = keyof EventPayloads;
 export type PrivateEvent = {
   [K in EventType]: Readonly<{
     matchId: string;
+    gameScope: ActiveGameScope;
     eventId: string;
     tick: number;
     stateVersion: number;
@@ -315,13 +348,13 @@ export type MatchTuning = Readonly<{
 }>;
 export type CreateMatchInput = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   seed: number;
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly { playerId: string; role: Role }[];
 }>;
-export type CreatePracticeInput = CreateMatchInput &
-  Readonly<{ mediaInstanceId: string; role: Role }>;
+export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 export type GameSubject = Readonly<{
   playerId: string;
   role: Role;
@@ -332,6 +365,7 @@ export type GameSubject = Readonly<{
 }>;
 export type CoreReadFrame = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   tick: number;
   phase: Phase;
   counts: Counts;
@@ -359,15 +393,65 @@ export type SelectionProgress = Readonly<{ attempted: number; batchAttempts: num
 export type LayoutSelectionResult =
   | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
   | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
-export type LayoutSelectionInput = Readonly<{
-  template: Topology;
-  players: readonly { playerId: string; role: Role }[];
+export type MapSource = Readonly<{
+  templateId: string;
+  templateVersion: string;
+  templateHash: string;
+  variantId: string;
+}>;
+export type SpawnRegion = Readonly<{
+  regionId: string;
+  cells: readonly Cell[];
   spawnCandidates: readonly Cell[];
-  exitCandidates: readonly WallFace[];
-  territories: MatchLayout['territories'];
+}>;
+export type LayoutTemplate = MapSource &
+  Readonly<{
+    topology: Topology;
+    taggerRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    exitCandidates: readonly WallFace[];
+  }>;
+export type MapPreparationFailure = Readonly<{
+  status: 'invalid';
+  code: 'INVALID_MAP_SOURCE' | 'INVALID_TEMPLATE';
+  path: readonly (string | number)[];
+}>;
+export type MapTemplateResult =
+  Readonly<{ status: 'valid'; template: LayoutTemplate }> | MapPreparationFailure;
+export type MapVariantsResult =
+  Readonly<{ status: 'valid'; variants: readonly LayoutTemplate[] }> | MapPreparationFailure;
+export interface MapPreparationPort {
+  validateTemplate(raw: unknown, source: MapSource): MapTemplateResult;
+  createTemplateVariants(template: LayoutTemplate): MapVariantsResult;
+}
+// Fixed, isolated practice layouts use role slots, never real session IDs in JSON.
+export type PracticeLayoutTemplate = Readonly<{
+  practiceVersion: string;
+  layouts: Readonly<Record<Role, MatchLayout>>;
+}>;
+export type PracticeLayoutResult =
+  | Readonly<{ status: 'ready'; layout: MatchLayout }>
+  | Readonly<{
+      status: 'invalid';
+      code: 'INVALID_PRACTICE_LAYOUT';
+      path: readonly (string | number)[];
+    }>;
+export interface PracticeLayoutPort {
+  preparePracticeLayout(
+    raw: unknown,
+    players: readonly { playerId: string; role: Role }[],
+    role: Role,
+  ): PracticeLayoutResult;
+}
+// Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
+// player/exit/territory references to role-sorted input.players before validation.
+export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
+export type LayoutSelectionInput = Readonly<{
+  template: LayoutTemplate;
+  players: readonly { playerId: string; role: Role }[];
   seed: number;
   maxAttempts: number;
-  fallback: MatchLayout;
+  fallback: FallbackLayout;
 }>;
 export interface LayoutSelectionPort {
   certifyFallback(input: LayoutSelectionInput): LayoutSelectionResult;
@@ -505,7 +589,15 @@ export type Readiness = Readonly<{
   historyComplete: boolean;
   unresolvedCount: number;
 }>;
+export type MediaInitializationResult =
+  | Readonly<{
+      status: 'initialized';
+      readiness: Readiness & Readonly<{ state: 'RECOVERING' | 'LOCKED' }>;
+      admission: 'DRAINING';
+    }>
+  | Readonly<{ status: 'fatal'; code: 'WRITER_CONFLICT' | 'INITIALIZATION_FAILED' }>;
 export interface MediaCoordinator {
+  initialize(): Promise<MediaInitializationResult>;
   prepareGeneration(input: PrepareGenerationRequest): Promise<PreparationResult>;
   observeFrame(frame: TrustedMediaFrame): void;
   retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult>;
@@ -519,6 +611,7 @@ export interface MediaCoordinator {
 }
 export type MediaCoordinatorDeps = Readonly<{
   config: MediaConfiguration;
+  emitMetric: (sample: MetricSample) => void;
   enqueueControl: (control: MediaControl) => void;
   enqueueBindings: (playerId: string, message: MediaBindings) => void;
   enqueueAudioPolicy: (playerId: string, message: AudioPolicy) => void;
@@ -537,6 +630,11 @@ export type MediaConfiguration = Readonly<{
   apiSecret: string;
   namespace: string;
   opsDataDir: string;
+  projectAlias: string;
+  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  officialBudgetMaxAgeMs: number;
+  operationTimeoutMs: number;
+  productSecurityReady: boolean;
   initialBudget: {
     remainingMinutes: number;
     remainingBytes: number;
@@ -547,6 +645,18 @@ export type MediaConfiguration = Readonly<{
   maxTotalApiCallsPer60s: number;
 }>;
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
+export type MetricSample = Readonly<{
+  name: string;
+  value: number;
+  unit: 'count' | 'ms' | 'bytes' | 'ratio';
+  atMs: number;
+  matchRef?: string;
+  generation?: number;
+  requestId?: string;
+}>;
+// E implements the authentication factory; B mounts it before every operator route.
+// This is server-internal configuration, never a client-authorized claim.
+export type CreateOperatorAuth = (token: string) => (authorization: string | undefined) => boolean;
 export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
 export type FaceSensor = Readonly<{
   landmarks: readonly NormalizedLandmark[];

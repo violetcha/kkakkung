@@ -82,4 +82,4 @@ React UI의 기본 `roomName`은 `kkakkung`이며 준비 버튼, phase·role·ti
 
 루트는 `install --frozen-lockfile`, `setup:env`, `dev`, `build`, `typecheck`, `lint`, `format:check`, `check:execution`, `test`, `test:e2e`, `verify`, `test:maps`를 제공한다. `test:e2e`와 이를 포함한 `verify` 전에는 Playwright Chromium을 설치한다. `test:maps`는 현재 sandbox world의 경계·이동 시험 하나이며 전체 맵 검증으로 집계하지 않는다. 각 명령은 실제 검사 없이 성공 종료해서는 안 된다. Cloud와 통합 부하 명령은 구현·비용·환경이 준비될 때 별도 추가한다.
 
-`check:execution`은 [EXEC-CONTRACT-2 공통 원본](docs/execution/common.md), 담당 문서 사본, [타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)를 대조하며 `verify`의 format:check 다음에 실행한다. 이는 실행 계획의 정합성 검사다. 실제 제품 모듈의 생산자/소비자 연결과 Cloud·장치·부하 검증은 별도다.
+`check:execution`은 [EXEC-CONTRACT-3 공통 원본](docs/execution/common.md), 담당 문서 사본, [타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)를 대조하며 `verify`의 format:check 다음에 실행한다. 이는 실행 계획의 정합성 검사다. 실제 제품 모듈의 생산자/소비자 연결과 Cloud·장치·부하 검증은 별도다.

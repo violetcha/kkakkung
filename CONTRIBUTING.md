@@ -18,7 +18,7 @@ Node.js `24.19.0`과 pnpm `11.19.0`을 사용하고 루트에서 `pnpm install -
 - `packages/game-core`는 서버 전용 순수 규칙이다.
 - 실제 맵·fallback·튜닝·Secret·운영 기록을 웹이나 protocol로 옮기지 않는다.
 
-프로토콜 변경에는 버전 호환성, 생산자·소비자, 거절 동작을 함께 기록한다. 패키지를 추가하면 해당 workspace manifest와 루트 lockfile을 같은 변경에 포함한다.
+프로토콜 변경에는 버전 호환성, 생산자·소비자, 거절 동작을 함께 기록한다. 패키지 추가는 각 담당이 공개 인계 파일에 이름·정확 버전·용도를 요청하고 F가 해당 workspace manifest와 루트 lockfile을 같은 변경으로 반영한다. 각자 독립적으로 lockfile을 갱신하지 않는다. 구체 수정 경계는 [소유권 원본](docs/execution/ownership.json)을 따른다.
 
 공개 계약은 [공통 원본](docs/execution/common.md)과 [검사 가능한 타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)에 맞춘다. 고정 리뷰 상대 외에 해당 생산자·소비자의 검토를 받으며 한 문서 사본에만 다른 필드를 추가하지 않는다. 문서용 타입을 제품 런타임 의존성으로 import하지 않고 각 소유 모듈에서 구현한다.
 

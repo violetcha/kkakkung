@@ -1,12 +1,49 @@
 # A · 게임 규칙·맵·지식·도구·출구 실행 문서
 
-작성 기준: 2026-09-07 · 스켈레톤 `d6f8e62` · **EXEC-CONTRACT-2**  
+작성 기준: 2026-09-08 · 현재 스켈레톤에서 실행 전 확인 · **EXEC-CONTRACT-3**
 담당 범위: 서버 전용 순수 규칙과 맵/배치 데이터  
 원본 작업: **33개** · 리뷰 상대: **B** · 현재 상태: **활성 구현 계획 28개 · 제품 결정 대기 5개**
 
-이 문서와 [기획서 v0.0.8](../spec/README.md)을 실행 입력으로 사용한다. AI는 기존 코드와 저장소 지침을 직접 읽는다. 팀원에게 다른 담당 문서의 내용을 찾아 오도록 요구하지 않는다. [6인 전체 일정](README.md)은 인계 시점을 확인하는 안내다.
+이 문서와 [최신 결정 정정표](../spec/decisions.md), 아래의 담당 읽기 경로를 실행 입력으로 사용한다. 보관된 v0.0.8보다 최신 결정과 공통 계약을 먼저 적용한다. 팀원에게 다른 담당 실행 문서 전체를 찾아 오도록 요구하지 않는다. [6인 전체 일정](README.md)은 인계 시점을 확인하는 안내다.
 
 목표는 **9월 8일(화)·9일(수) 핵심 구현, 10일(목) 통합·검증·수정, 11일(금) 오전 MVP 인수**다. 작업 개수는 소요시간이나 완료 보증이 아니다. 선행 작업·실제 Cloud·장치가 준비되지 않은 조건은 완료로 계산하지 않는다.
+
+## A가 작업을 시작할 때 읽을 자료
+
+1. 루트 [AGENTS.md](../../AGENTS.md), [CONTRIBUTING.md](../../CONTRIBUTING.md), [요구사항](../../requirements.md), [아키텍처](../architecture.md), [최신 결정](../spec/decisions.md)을 읽고 현재 브랜치·미커밋 변경을 확인한다.
+2. 이 문서의 공통 블록과 요청 번호 본문, [타입 원본](contracts/types.ts), [fixture](contracts/fixtures.ts), [fixture 검사](contracts/fixtures.test.ts)를 읽는다. 공통 블록은 [common.md](common.md)의 자동 사본이므로 별도로 수정하지 않는다.
+3. [game-core README](../../packages/game-core/README.md), [서버 README](../../server/README.md), `packages/game-core/src/match/index.ts`·`types.ts`와 `server/src/domain/index.ts`·`types.ts`를 읽는다. 현재 match는 개발용 `tryMove/checkCapture/checkWinCondition/generateMaze` 스텁이며 제품 엔진이 이미 있다고 가정하지 않는다. `packages/game-core/src/world.ts`와 루트 export는 sandbox 소유 흐름이므로 제품 작업을 이유로 바꾸지 않는다.
+4. 기획 근거를 재확인할 때만 [HTML 원본](../spec/까꿍_3대3_MVP_기획_구현_기준서_v0.0.8.html)의 해당 장을 읽는다. A-01–05는 05·10장, A-07·32–33은 11장, A-08–15는 04·07·13.1·24장, A-16–22는 08·09장, A-23–27은 12장이다. 13.1에서는 확정된 덫의 순환 우선순위만 사용한다.
+5. [A 인계 기록](handoffs/A.md)에서 기존 진행을, 필요한 생산자의 인계 기록에서 export·검증·commit을 확인한다. B/C/D/E/F 실행 문서 전체를 구현 전제로 읽을 필요는 없다. 타 담당의 소스는 공개 포트의 실제 연결을 확인할 때 읽되 수정하지 않는다.
+
+```bash
+# 고정 번호 A-01~A-05
+node scripts/prepare-execution.mjs --role A --tasks 1-5
+# 9월 9일 오늘 번호 1~5 = A-19~A-23
+node scripts/prepare-execution.mjs --role A --day D2 --tasks 1-5
+```
+
+위 명령은 읽기 전용 범위 확인이다. 번호 요청 밖의 선행 기능을 자동 구현하지 않는다. 같은 담당의 선행 구현도 없으면 필요한 함수·입력·시험을 `blockedOn`에 기록하고 독립 구현 가능한 요청 번호를 계속 진행한다. 보류 번호는 원래 번호 그대로 기록한다.
+
+## A의 선행 결과와 충돌 없는 인계
+
+아래의 **착수 입력**과 **최종 연결**을 구분한다. 본문의 “선행 완료 결과”는 참조할 기능의 식별자이며 상대 작업 전체의 ACCEPTED를 기다리라는 뜻이 아니다. A-01은 확정된 공통 타입으로 시작하고 B-01의 실제 core 소비를 기다리지 않는다. A-05도 B-16의 소비를 기다리며 알고리즘 구현을 멈추지 않는다.
+
+| 요청 범위     | 착수에 필요한 입력                                                        | 자기 영역에서 검증할 결과                                                          | 최종 연결과 인수의 추가 조건                                                 |
+| ------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| A-01–05       | 공통 MapPreparationPort·LayoutSelectionPort·MatchTuning, 기존 패키지 빌드 | 실제 master/practice/tuning 자료, 구조·변형·BFS·배치·fallback 인증과 public export | B LayoutLoader의 실제 바이트 hash·시간 상한/양보, F test:maps/배포 포함 반영 |
+| A-07–15       | A 맵/배치 결과, 공통 CorePort·명령/control 타입                           | 순수 엔진·9/6 Tick 예약·명령별 outcome·종료/이탈 경계                              | B-04/05의 실제 Tick·과부하·원장 연결, 후속 A-33의 실제 탈출과 연결           |
+| A-16–18       | A 맵·행동·출구 레지스트리                                                 | 실제 시야 마스크, 개인 지식·출구 폐쇄 selector                                     | B-14의 실제 직렬화와 C 시야 소비, G4 패킷 검사                               |
+| A-19–23       | A-11·17·18의 실제 결과, 공통 교환/장비 명령·사건 타입                     | 교환 요청/취소/병합/지연 흔적과 설치·취소·무장                                     | B-11/14 전달·C/D 상호작용; 장비 발동은 A-24–27 별도                          |
+| A-24–27·32–33 | 해당 A 선행 함수와 공통 명령/사건 타입                                    | 감지/구속/자연 만료·유예·도전 최소시간/포획 우선                                   | B/E의 실제 사건·미디어 회수, C/D 포즈 연결, F G3/G5 증거                     |
+
+`createPractice`의 이동 기반은 A-09에서 만들고 회전·지식·교환·장비는 각 원본 작업에서 같은 엔진에 연결한다. A-09 단계에 존재하지 않는 후속 기능을 성공 stub으로 채우지 않는다. B-15의 연습 전체 인수에는 A-10·16–27 중 연습에서 쓰는 확정 기능이 실제 연결되어야 한다. 순수 시험용 작은 맵이나 테스트 port는 `test` 아래에서만 사용하고 제품 런타임에 등록하지 않는다.
+
+A는 `packages/game-core/src/match/**`, `packages/game-core/test/match/**`, `server/content/**`, `server/config/tuning/**`, 두 `server/src/domain` 재노출 파일과 [A 인계 기록](handoffs/A.md)을 수정한다. package manifest·루트 명령·lockfile·Docker 포함 목록은 F, `LayoutLoader`·`MatchDriver`·protocol은 B에게 요청한다. B/E가 필요한 graph·시야 정보는 A public export 또는 공통 Topology로 인계하고 소비자가 A 내부 State를 추측해 복제하지 않게 한다.
+
+한 요청 범위 안에서도 `engine.ts`, `types.ts`, `index.ts`는 A의 단일 조립점이다. A의 AI가 내부 작업을 병렬 분담하면 leaf 규칙 파일/시험만 나누고 해당 세 파일과 `server/src/domain` 재노출은 한 작업자가 순차 조립한다. 다른 담당 브랜치에서 이 파일을 대신 고쳐 충돌을 해결하지 않는다.
+
+인계에는 원본 ID, 실제 export 경로·입력/출력, 정상/거절 재현 명령, 검증한 commit, 남은 소비자 연결을 적는다. 예를 들어 A-05의 실제 자료 인증은 LOCAL_VERIFIED로 남기고 B/F 결합이 도착하면 같은 ID를 재검증한다. `.local` 진행 기록만으로 다른 팀원에게 전달됐다고 보지 않는다.
 
 ## 날짜별 오늘 작업표
 
@@ -73,13 +110,13 @@ MVP 핵심 기능을 구현하고 생산자·소비자를 통합. 고정 원본 
 
 D3 결함 수정은 원본 122개 작업의 후속 처리다. 별도 스토리 수를 늘리지 않는다. 수정한 파일 소유자가 검증 후 `fix:` 커밋과 MR 본문을 남긴다. C/F의 신규 D3 항목이 있더라도 같은 날 발견한 자기 소유 결함은 함께 마무리한다.
 
-<!-- BEGIN EXEC-CONTRACT-2 COMMON -->
+<!-- BEGIN EXEC-CONTRACT-3 COMMON -->
 
 # 공통 실행 계약 원본
 
-버전: **EXEC-CONTRACT-2** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
+버전: **EXEC-CONTRACT-3** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
 
-이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. 기존 EXEC-CONTRACT-1의 미정 아이템과 불완전한 연결 계약을 대체한다. 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다.
+이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. EXEC-CONTRACT-3은 이전 계약의 맵 영역 입력·게임 논리 인스턴스·미디어 초기화·격리 배포 순서를 보완한다. 기존 작업 번호와 제품 범위는 유지하며, 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다. 계약 타입·fixture·문서를 바꾼 것만으로 Origin 보안이나 제품 기능의 런타임 수정이 완료된 것은 아니다.
 
 ## 이 문서로 실행하는 방법
 
@@ -87,7 +124,7 @@ D3 결함 수정은 원본 122개 작업의 후속 처리다. 별도 스토리 �
 
 ```text
 내 담당 실행 문서와 docs/spec/decisions.md, v0.0.8 기획서를 기준으로
-오늘 작업표 1번부터 5번까지 진행해줘.
+내 담당의 고정 번호 01번부터 05번까지 진행해줘.
 결정 대기 작업은 구현하지 말고 해당 번호를 보류한 뒤 다음 번호를 진행해줘.
 검증된 중간 산출물과 완료 작업은 내 Git 신원으로 각각 로컬 커밋해줘.
 작업별 MR 본문과 이번 실행분 합본을 작성하고 전체 본문을 보여줘.
@@ -102,6 +139,25 @@ D3 결함 수정은 원본 122개 작업의 후속 처리다. 별도 스토리 �
 - 목표는 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 금요일 오전 인수다. 확정 범위의 G1–G6 증거와 미정 아이템의 상태를 함께 보고한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
 
 ## 설치와 공통 검사
+
+### 담당 문서만으로 시작하는 읽기 경로
+
+공통 필수 자료는 `AGENTS.md`, `CONTRIBUTING.md`, `requirements.md`, `docs/architecture.md`, `docs/spec/decisions.md`다. 이후 자기 담당 문서의 시작 절차와 지정 작업만 읽고, 각 작업의 기획 근거 장을 원본 HTML에서 확인한다. 이 공통 블록과 타입은 자기 담당 문서에도 들어 있으므로 다른 다섯 역할의 전체 문서를 읽을 필요는 없다. 다른 역할의 **공개 타입·실제 export·시험 fixture·인계 기록**은 연결 근거로 직접 확인한다. SDK 사실은 설치된 버전의 타입·구현을 확인한다.
+
+```bash
+node scripts/prepare-execution.mjs --role A --tasks 1-5
+node scripts/prepare-execution.mjs --role A --day D2 --tasks 1-5
+```
+
+첫 명령은 고정 번호 A-01–A-05, 둘째는 D2 오늘 번호 1–5(A-19–A-23)다. 도구는 읽을 자료·기획 장·범위 밖 선행·파일 존재 여부를 출력하는 읽기 전용 도구다. 파일 존재를 구현 완료로 계산하지 않는다. `--day`가 없으면 현재 날짜를 추측하지 않는다. 유효하지 않은 범위를 일부만 실행하지 않고 오류로 알려 준다. D3에 신규 고정 번호가 없는 역할의 후속 작업은 담당 D3 표를 따른다.
+
+### 선행 작업과 범위 제한
+
+작업 본문의 `선행 완료 결과`는 **최종 연결 전에 필요한 산출물 목록**이다. 모든 선행의 ACCEPTED를 기다려야 코딩할 수 있다는 뜻이 아니다. 공개 계약이 고정되면 자신의 단위 구현과 합성 fixture 시험을 진행할 수 있다. 실제 생산자 구현·통합 commit이 없으면 LOCAL_VERIFIED까지만 기록하고 실제 연결은 차단 조건으로 남긴다.
+
+다음 일차의 실제 생산자까지 필요한 경우 `통합 인수 선행`을 별도 적는다. prepare 출력도 이 목록을 단독 구현 선행과 분리한다. 예를 들어 C-03의 합성 action 보간은 먼저 구현하지만 실제 인수에는 B-14 개인 뷰가 필요하다. 미래 생산자가 있다는 이유로 해당 날짜의 단위 구현이 불가능하다고 처리하지 않는다.
+
+요청 범위 밖의 자기 선행 구현도 자동으로 추가하지 않는다. 현재 checkout에서 선행 산출물을 확인하고, 없으면 지정 범위의 독립 가능한 작업을 먼저 끝낸 뒤 필요한 고정 번호·export·시험을 인계 기록에 요청한다. 다른 담당의 파일·manifest를 대신 수정하거나 범위를 채우기 위한 성공 stub을 만들지 않는다. 계약 변경이 필요하면 소비자는 자신의 인계 문서에 구체 요청을 남기고 계약 담당 B가 원본을 수정한다.
 
 Node.js 24.19.0 / pnpm 11.19.0 / TypeScript 6.0.3과 루트 lockfile을 유지한다.
 
@@ -128,6 +184,16 @@ node scripts/check-execution-plan.mjs
 
 B만 서버 최종 조립을, C만 웹 최종 조립을, F만 공통 설정과 의존성을 수정한다. A는 protocol을 import하지 않고 B가 변환한다. 웹은 서버 실제 맵·game-core·운영 내부값을 import하지 않는다. 제품은 0.2.0의 kkakkung, sandbox 0.1.0은 개발 진단용으로 격리한다. 기존 공개 maze·빈 입장·Playground와 개발 adapter는 production 라우트에서 차단한다. 개발 회귀용 경로만 유지하며 제품 기능을 위해 진단 API를 확장하지 않는다.
 
+구체 파일의 단일 수정자는 [소유권 원본](ownership.json)으로 판별한다. 경로가 가장 구체적인 규칙이 우선하며, 예를 들어 웹 public 자산은 C지만 `public/models/`는 D다. 선언되지 않은 새 경로는 임의 소유로 간주하지 않고 F에게 등록을 요청한다. 작업의 수정·생성 파일에는 glob이나 디렉터리 전체 대신 실제 파일명을 적는다. `check:execution`은 각 선언 경로가 담당의 소유권에 맞는지도 검사한다.
+
+구현 checkout의 시작 SHA를 기록한 뒤 `node scripts/check-role-scope.mjs --role A --base <시작-SHA>`로 commit·stage·미커밋·미추적 변경을 검사한다. rename은 원래 경로와 새 경로 모두 검사한다. 다른 역할의 변경이 섞인 공동 checkout에서는 먼저 담당별 checkout/브랜치로 분리한다. 이 명령은 삭제·수정 권한을 부여하지 않는다. 공통 문서 정비처럼 여러 소유자가 참여하는 변경은 단일 역할 구현 검사와 구분한다.
+
+B의 계약 변경이나 F의 사본 동기화에서만 scope 명령 끝에 `--contract-sync`를 붙인다. 다른 역할 문서는 원본과 일치하는 공통 블록만 바뀌고 역할 본문은 시작 SHA와 같아야 한다. 도구는 commit·stage·working 각각의 수정 버전을 검사하며, 일반 코드·역할 지시 변경이나 F의 B 소유 common 원본 변경까지 면제하지 않는다. 사본 예외 검사 뒤에도 `check:execution`을 실행한다.
+
+- manifest·lockfile·공통 config 요청은 각자 `handoffs/<역할>.md`에 패키지명/정확 버전/실행 또는 개발 의존성/소비 import/필요 script와 이유를 기록한다. F만 한 번에 install·lock 갱신·검증하여 commit을 돌려준다. A–E의 AI가 직접 `pnpm add`를 하지 않으며 어느 역할도 전체 자동 포맷으로 타인 파일을 바꾸지 않는다.
+- 새 asset 출처·라이선스·버전·hash는 소유 자산 옆 README 또는 자기 인계에 기록하고 F가 `docs/third-party-assets.md`를 집계한다. 모든 역할이 같은 집계 문서를 동시에 편집하지 않는다.
+- 개인 산출물/인계 문서는 각 역할만 수정한다. 공통 블록 변경과 `--sync`는 B 계약 변경 또는 F 문서 정비 MR에서만 수행하고 역할 구현 MR에는 다른 다섯 문서의 자동 갱신을 섞지 않는다.
+
 공통 의미 변경은 B가 총괄하여 `docs/execution/common.md`와 `contracts/types.ts`·fixture를 수정한다. D 센서·E 미디어처럼 실제 생산자/소비자가 검토한다. F는 동기화 검사기를 소유한다. A–F 문서의 공통 블록은 직접 편집하지 않고 아래 명령으로 갱신한다.
 
 ```bash
@@ -140,11 +206,37 @@ node scripts/check-execution-plan.mjs
 ## 좌표·시간·라운드 수명
 
 - Cell은 정수 x/y=0–31, Dir은 0북(y−1)/1동(x+1)/2남(y+1)/3서(x−1)다. 3D는 x=cell.x,z=cell.y, 셀 크기 1이며 기존 −15.5 보정을 섞지 않는다. TracePoint만 교환 중점의 0.5 좌표를 허용한다.
-- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가한다. 본 경기 로딩에서 matchId와 Tick을 다시 만들지 않는다.
+- matchId는 로비 라운드부터 유지하고 새 라운드에 교체한다. serverTick은 연습을 포함해 50ms/20Hz로 연속 증가하고 공개 stateVersion도 같은 match 안에서 연속 증가한다. 본 경기 로딩에서 matchId·Tick·stateVersion을 다시 만들지 않는다.
 - PLAYING startTick과 deadlineTick=startTick+3600을 고정한다. 이동 9 Tick·회전 6 Tick이다. startAt/서버 timeout은 서버 monotonic ms, JWT 만료/회수는 epoch 초다.
 - 웹 표시 시간은 `clock-probe/clock-reply`로 추정한다. 시작·재접속 뒤 5회 probe를 250ms 간격으로 보내고 RTT가 가장 작은 3회의 offset 중앙값을 사용한다. RTT=(수신클라이언트시각−clientSentAtMs)−(serverSentAtMs−serverReceivedAtMs), offset=((serverReceivedAtMs−clientSentAtMs)+(serverSentAtMs−클라이언트수신시각))/2다. 음수/RTT>1000ms 표본은 버리고 10초마다 재측정한다. serverEpoch가 바뀌면 표본을 폐기한다.
 - 클라이언트 추정 시각은 렌더링/안내용이다. serverTick·startAt·포즈 최소 시간을 브라우저 시계와 직접 비교하지 않고 환산한다. 실제 성공 판정은 서버가 한다.
 - B의 온라인 맵 선택은 A Generator의 `next()` 전후로 monotonic deadline을 확인한다. 첫 구현 설정은 maxAttempts=256, onlineMapBudgetMs=100, 한 next의 후보 상한=8이다. 이는 버전 관리할 계산 예산이며 게임 밸런스 값이 아니다. 유한 그리드 검사 후 다음 묶음 전에 이벤트 루프로 반환한다. 같은 스레드의 setTimeout이 동기 무한 루프를 중단한다고 가정하지 않는다. 인증 fallback은 먼저 검증하고, 시간/시도 소진 시 iterator.return(인증 결과)로 종료한다.
+
+## 맵 영역과 fallback 입력 — A/B
+
+A의 `MapPreparationPort`는 원본 검증과 변형 생성을 담당한다. B loader는 `validateTemplate(raw, source)`의 valid 결과만 `createTemplateVariants(template)`로 전달하고 invalid 결과에서 선택기를 실행하지 않는다. 두 결과 union의 error code/path는 내부 진단이며 실제 topology/hash를 공개 오류에 싣지 않는다. 함수명을 각자 다시 정하지 않고 검사 가능한 원본 타입을 사용한다.
+
+A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(raw, players, role)`도 제공한다. B-15가 팀별 1–3명의 현재 playerId를 넘기면 A가 정적 역할 슬롯을 바인딩한 ready/layout 또는 invalid 결과를 반환한다. 연습의 소형 맵·동일 팀 인원·유효 시작점을 검사하되 본경기의 32×32·6인·3출구·거리 제약을 연습에 강제하지 않는다. 연습 layout의 exits는 비우고 포획·승패도 비활성화한다.
+
+`LayoutSelectionInput.fallback`은 구조적으로 유효한 객체가 필수다. 파일 부재·JSON/shape 오류면 B loader가 준비 단계로 복귀하고 dummy fallback을 만들지 않는다. 객체 구조는 맞지만 출처·배치 규칙 인증에 실패한 경우에만 fallback을 불가 상태로 두고 온라인 선발을 시도할 수 있다. 둘 다 사용할 수 없으면 LAYOUT_UNAVAILABLE이며 맵 선택 완료로 처리하지 않는다.
+
+- `LayoutTemplate`은 한 개의 정규화된 변형이다. `MapSource`의 templateId/templateVersion/templateHash/variantId와 topology, taggerRegions 3개, runnerSpawnRegions 3개, exitCandidates를 함께 전달한다. `SpawnRegion`은 regionId/cells/spawnCandidates를 가지며 평면 후보 목록으로 영역 정보를 없애지 않는다.
+- A MP-01/02가 영역·후보·출구 벽면/방향을 함께 검증·변형한다. 역할별 영역 ID는 유일하고 각 영역·후보는 비어 있지 않아야 한다. 술래 영역끼리, 도망자 시작 영역끼리는 겹치지 않으며 후보는 자기 영역의 유효 통로에 속해야 한다. 술래 구역과 도망자 시작 영역 사이의 중첩 금지라는 새 게임 규칙을 추가하지 않는다.
+- B loader는 파일을 읽어 원본 바이트의 SHA-256을 계산하고 승인된 templateId/version과 함께 A에 전달한다. templateHash는 이 원본 바이트 hash이며 변형마다 임의로 재정의하지 않는다. A는 이미 파싱된 자료를 검증한다. 실제 맵·영역·후보·hash·seed는 서버 내부 자료로 유지한다.
+- B는 A가 반환한 검증 변형을 variantId 오름차순으로 정렬하여 `seed % variants.length`(seed는 uint32)로 하나를 선택한다. 빈 목록은 실패다. 선택된 변형과 같은 MapSource 4개 필드의 `FallbackLayout`을 입력한다. A MP-04는 이 변형 안에서 술래 3명에게 서로 다른 구역을 배정하고, 도망자 시작 영역 3개에서 각각 한 후보를 선택한 뒤 출구를 선발한다. selector 내부에서 다른 변형으로 다시 바꾸지 않는다.
+- `LayoutSelectionInput`에는 template/players/seed/maxAttempts/fallback만 있다. 선발 전의 playerId 배정 territories를 받지 않으며, 확정 배정은 기존 `MatchLayout.territories`로 반환한다. fallback은 `{...MapSource,layout}`이며 변형별 자료를 A가 제공한다.
+- 정적 fallback의 playerId/ownerId는 역할별 안정 슬롯 `tagger-1`–`tagger-3`, `runner-1`–`runner-3`으로 저장한다. A의 `certifyFallback`이 input.players를 역할별 playerId 기본 문자열 오름차순(로케일 정렬 금지)으로 정렬하여 슬롯 번호와 일대일 대응하고 players.playerId/exits.ownerId/territories.playerId를 함께 치환한다. 입력을 변경하지 않고 새 layout을 만들며 중복·누락·역할 불일치·미치환 슬롯을 거절한다. B는 정적 슬롯을 실제 코어 참가자로 전달하지 않는다.
+- `certifyFallback`은 출처 4개 필드, topology의 버전·크기·통로 배열, 현재 영역/후보 소속과 기존 거리·연결성·출구 제약을 모두 재검사한다. hash 일치만으로 인증하지 않는다. 성공은 실제 플레이어로 바인딩된 `{status:'selected',layout,source:'fallback'}`, 실패는 `{status:'unavailable',code:'LAYOUT_UNAVAILABLE'}`로 기존 LayoutSelectionResult를 유지한다. 다른 변형/과거 템플릿 자료를 현재 fallback으로 사용하지 않는다. 정상 온라인 결과는 사용 가능하지만 fallback이 인증되지 않았다면 탐색 소진 시 LAYOUT_UNAVAILABLE로 끝낸다.
+
+## 게임 논리 인스턴스와 개인 데이터 폐기 — A/B/C/D
+
+- B는 두 팀 연습과 본 경기마다 역할·좌표를 인코딩하지 않는 새 UUID `gameInstanceId`를 발급한다. A의 CreateMatchInput/CreatePracticeInput과 CoreReadFrame이 이를 전달한다. A의 practice 입력에는 mediaInstanceId를 넣지 않는다. B가 게임 인스턴스와 E의 미디어 인스턴스 관계를 별도로 관리한다.
+- PrivateView.gameScope는 `{gameInstanceId,kind:'practice'|'game',revision}` 또는 `{gameInstanceId:null,kind:'none',revision}`이다. B는 수신자별로 같은 match 안에서 revision을 증가시킨다. 시작은 none/0이며 연습 진입→연습 폐기→본 경기 진입의 예는 practice/1→none/2→game/3이다. 새 라운드는 matchId도 바뀐다. 같은 게임 인스턴스의 미디어 재연결만으로 이 ID/revision을 바꾸지 않는다.
+- scope의 생성·전환·폐기는 내용 변경으로 취급하여 전체 PrivateView를 보낸다. none은 self=null이고 기억 지형/출구·가시 셀/벽면/엔티티가 모두 빈 배열이다. `TEAM_PRACTICE`는 practice, `GAME_LOADING/COUNTDOWN/PLAYING/RESULT`는 game, 나머지 phase는 none으로 정의한다. 폐기 시 C는 이전 지도·장면·교환/출구 문맥·보류 사건을 비운다. D의 MediaScope·트랙 회수는 별도 계약으로 수행한다.
+- C는 `(matchId,gameScope.revision,gameInstanceId)`로 개인 자료를 구분한다. 낮은 revision과 이미 적용한 개인 뷰보다 낮은 stateVersion은 폐기한다. 같은 revision에 다른 ID/kind가 오면 화면에 적용하지 않고 resync한다. 높은 revision은 현재 권위 phase에 맞는 전체 뷰로만 전환하며 새 자료를 이전 지도에 합치지 않는다.
+- 공개 phase가 바뀌면 C는 현재 개인 화면을 즉시 비우고 관측한 전환 stateVersion을 하한으로 저장한다. B는 scope/개인 내용이 같아도 phase 변경마다 해당 전환 stateVersion 이상의 전체 뷰를 한 번 발행한다. C는 하한보다 오래된 뷰를 적용하지 않는다. 공개 상태보다 앞선 뷰는 최신 1개만 최대 1초 보류하고 공개 상태가 따라오면 phase/scope/버전을 다시 검사한다. phase 변경 후 유효한 전체 뷰가 없으면 보류 뷰 유무와 무관하게 최대 1초 동기화 타이머를 시작한다. 하한 때문에 새 초기 뷰를 버렸거나 타이머가 만료되면 기존 view-resync를 요청한다. B는 수신자당 1초에 1회로 제한하고 현재 scope/권위 stateVersion으로 다시 직렬화한 전체 뷰를 보내며 옛 캐시 버전으로 응답하지 않는다.
+- PrivateEvent.gameScope는 ActiveGameScope다. B는 사건을 만든 게임 인스턴스와 수신자의 당시 revision을 붙이며 늦은 작업의 사건을 새 인스턴스로 재표기하지 않는다. C는 과거 scope를 즉시 폐기하고 미래 scope의 사건으로 scope를 전환하지 않는다. 필요한 전체 뷰/참조 버전을 기다리는 사건은 기존 한도인 총 64개/1초 안에서 보류한다. 같은 revision의 ID/kind 불일치와 만료는 폐기·resync한다.
+- B는 접수한 core 명령의 대상 gameInstanceId를 서버 큐 메타데이터에 고정하고 전환 시 옛 큐를 취소·종결한다. CommandEnvelope/receipt/outcome에 임의 필드를 추가하지 않는다. 옛 인스턴스의 accepted 요청도 원래 matchId/requestId로 canceled outcome을 받지만, 그 결과를 새 지도나 도전 생성으로 해석하지 않는다.
 
 ## 명령의 접수와 종결
 
@@ -162,7 +254,7 @@ node scripts/check-execution-plan.mjs
 
 ## 개인 상태·출구·교환·준비
 
-개인 뷰는 초기/허용 내용 변경/명시적 resync 때 전체 교체한다. stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·중복·만료 사건은 폐기한다.
+개인 뷰는 초기/허용 내용 변경/scope 전환/공개 phase 변경/명시적 resync 때 전체 교체한다. 일반적인 stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. phase 전환은 새 하한을 확인할 전체 뷰를 한 번 보내고 resync는 현재 버전으로 재직렬화한다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·구 gameScope·중복·만료 사건은 폐기한다.
 
 - visibleEntities는 종류별 필수 필드가 다르다. **가시 sensor는 wall이 필수**이며 자기 기억인 ownedEquipment와 분리한다. sensor.cell은 접근 셀, wall은 실제 부착 면이다. 다른 장비 위치를 전원에게 전송하지 않는다.
 - self.exchange의 incoming/outgoing은 수신자 기준이다. C는 incoming만 D의 incomingExchangeId로 보내고 요청자는 outgoing 대기를 표시한다. 서버는 toPlayerId만 수락할 수 있게 검사한다.
@@ -175,6 +267,14 @@ node scripts/check-execution-plan.mjs
 ## 서버 미디어와 브라우저 결합
 
 mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다. receiverGeneration은 이 메시지를 받는 플레이어 자신의 연결 세대, participants의 publisherGeneration은 원격 송신자 세대다. bindingRevision은 수신자·인스턴스·연결 세대 안에서 증가하며, 한 사람만 재연결했다고 다른 다섯 명의 receiverGeneration을 바꾸지 않는다. 새 Identity는 회수 완료 후에만 발급한다.
+
+### 초기화 완료와 서비스 준비 — B/E/F
+
+1. E의 동기 factory는 즉시 RECOVERING/readiness와 DRAINING/admission을 제공하고 발급·입장을 잠근다. B는 `await coordinator.initialize()`를 호출하며 중복 호출은 같은 진행 Promise/최초 결과를 공유한다.
+2. initialized 결과는 writer lock과 저널/체크포인트의 복원 판단, 관찰 가능한 RECOVERING 또는 LOCKED 상태를 준비했다는 뜻이다. 안전하게 잠긴 손상/미확인 상태도 reasonCodes와 함께 initialized/LOCKED로 관찰 가능하다. Cloud 회수·예산 확인 완료를 의미하지 않는다.
+3. 중복 writer 등 안전한 인스턴스를 유지할 수 없는 오류는 fatal(WRITER_CONFLICT 또는 INITIALIZATION_FAILED)이다. B는 HTTP listen을 시작하지 않고 close로 자원을 정리한다. 예상하지 못한 Promise 거절도 같은 부팅 실패로 처리한다. 초기화 중에는 listen이 0회여야 한다.
+4. initialized 이후 B가 HTTP를 열어 `/health/live`, 503인 `/health/ready`, 인증된 운영 경로와 서명 검증 Webhook으로 상태를 관찰·복구할 수 있게 한다. E는 이후 Cloud 잔존 정리·공식 예산·저널 쓰기 상태를 확인한다. 완료 전 새 입장·grant·자동 시작은 0이며 복구 실패는 LOCKED로 남겨 관찰한다.
+5. 조건이 충족되면 readiness만 READY로 바뀐다. admission은 DRAINING을 유지하고 운영 resume의 terminal 성공 후에만 OPEN이 된다. 첫 설치·재시작 모두 자동 OPEN하지 않는다. initialize를 다시 호출하여 복구 실패나 잠금을 초기화하지 않는다.
 
 - E는 내부 Gateway·Journal·예산 큐를 소유한다. B가 주입하는 deps/config와 요청·trusted frame·비동기 결과는 아래 정확한 타입을 따른다. E 콜백은 B의 큐로만 들어가며 Tick 상태를 직접 변경하지 않는다.
 - prepareGeneration은 expectedPreviousGeneration을 검사하고 E가 새 세대를 할당한다. 동일 requestId는 같은 논리 결과를 반환한다. Promise 결과는 HTTP 응답용이고 enqueueControl 결과는 게임 큐용이며 B는 requestId+scope로 중복 적용을 막는다. rejected/unknown이면 grant는 null이고, 세대 할당 전 rejected의 receiverGeneration은 null이다. ready는 grant 발급 완료이며 게시 확인 완료가 아니다. 요청 없이 생긴 MEDIA_FAILED는 eventId+scope로 중복 제거한다.
@@ -191,6 +291,8 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 
 ## 센서·입력 callback 수명
 
+C만 `App.tsx`·`SessionRuntime.ts`·room store·`main.tsx`·화면과 CSS를 조립한다. D만 `InteractionRuntime`·제품 입력 listener·장치·video element·track 수명을 소유한다. C는 `onLocalPreview(element)`를 화면 host에 부착하고 null·교체·unmount 때 host 연결만 해제한다. srcObject·track.stop·D element의 미디어 정리는 D가 처리한다. C의 3D texture/geometry는 C가 정리한다. 하나의 제품 세션에는 D runtime 하나만 기동하며 기존 `bindTeamInput`/개발 input을 동시에 연결하지 않는다. React 반복 mount·원격 leave·페이지 비활성·연습→본경기에서 이 소유권을 시험한다.
+
 한 SensorSnapshot의 emittedAtMs를 새 센서 관측으로 해석하지 않는다. 각 Sample은 실제 프레임의 sampledAtMs/frameId를 보존한다. 해당 모델을 실행하지 않은 발행에서는 Sample을 갱신하지 않는다. 미검출은 새 frameId의 missing/null이며, 세대 시작부터 아직 실행하지 않은 센서는 null이다.
 
 - sampledAtMs/receivedAtMs/emittedAtMs는 브라우저 main performance 시간축이다. Worker는 main이 전달한 frameId·sampledAtMs를 그대로 돌려주고 main이 receivedAtMs를 붙인다. 서버 시계와 섞지 않는다.
@@ -201,7 +303,21 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - pageActive=false이면 입력·버퍼를 비우고 새 의도를 막는다. 복귀 때 새 키/중립 복귀를 요구하며 서버 phase를 꾸며내지 않는다.
 - C가 장치/미디어·교환·출구 문맥을 setContext로 반영한다. D가 슬롯·입력 모드를 바꾸면 onInteractionState로 알리고 같은 값의 재적용은 callback을 반복하지 않는다.
 
+## HTTP·WebSocket 진입 보안 — B
+
+- 공통 Origin 검사는 SDK의 OPTIONS 응답과 `/matchmake/*` 실행보다 먼저 적용한다. Express의 `/api/config` 검사만으로 매칭 경로를 보호했다고 보지 않는다. 독립 request listener 하나가 403을 보낸 뒤 다른 SDK listener가 예약을 진행하지 않도록 실제 진입/dispatch 순서를 확인한다.
+- HTTP/WS는 ALLOWED_ORIGINS의 정확한 http/https origin 목록을 공유한다. 목록의 Origin은 허용하고 비허용·문자열 null·빈 값·복수 Origin은 403으로 거절한다. Origin 헤더 자체가 없는 개발 CLI/health 및 서버 간 요청은 기존 정책대로 허용하되, 제품 세션/초대·OPS_TOKEN·Webhook 서명 검사를 대신하지 않는다.
+- 거절한 POST/OPTIONS/WS는 방 생성·좌석 예약·세션 소비를 일으키지 않는다. CORS 허용 헤더만 바꾸고 매칭 실행은 진행시키지 않는다. 허용 OPTIONS는 예약 없이 끝내고 허용 웹/Playground 접속은 유지한다.
+- 매칭 JSON은 2,048바이트로 제한한다. Content-Length 사전 검사와 실제 수신 바이트 상한을 함께 적용하여 길이 누락·chunked에서도 초과를 413으로 끝내고 JSON 파싱/예약을 진행하지 않는다. WebSocket은 기존 8,192바이트 한도를 유지한다. LiveKit raw-body 서명 경로를 JSON 재직렬화하거나 매칭 전용 본문 제한으로 일괄 변경하지 않는다.
+- B의 필수 회귀 시험은 두 룸의 매칭 POST/OPTIONS, 일반 API, WS upgrade에 허용/비허용 Origin을 대입하고 응답과 처리 전후 방/예약 수를 함께 검사한다. 경계 2,048/2,049바이트·길이 없는 초과 본문·Origin 없는 개발 요청도 포함한다. 이 문서는 수정 계획이며 실제 bootstrap과 통합 시험을 구현·실행해야 보안 수정 완료다.
+
 ## 운영 HTTP 계약
+
+B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
+
+F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 실제 운영 입력에서 검증하고 B가 factory에 전달한다. publicWindow=null은 공개 창 미정으로 잠금이며 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·예산·창 조건을 함께 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 F의 시작 절차를 따르며 다른 담당은 F의 config export를 읽는다.
+
+관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
 
 B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호를 맡는다. 세션용 Bearer와 운영용 OPS_TOKEN을 혼용하지 않는다. 운영 명령은 실제 운영 작업을 승인받은 실행에서만 호출하며 문서 작성만으로 원격 실행하지 않는다.
 
@@ -218,9 +334,26 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
 - checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
 
+## 격리 상태의 배포 검증 — B/E/F
+
+외부 공개 여부는 F의 네트워크/프록시 접근 경계이고 admission은 E의 게임 입장 상태다. 서로 다른 두 조건을 하나의 boolean으로 합치지 않는다. 외부 접근 차단은 진행 중 게임의 정상 종료·회수를 방해하지 않도록 기존 연결과 인증된 운영/검증 경로를 유지하면서 일반 이용자의 새 접속을 차단한다.
+
+1. F가 외부 일반 참가자는 새 HTTP 세션·매칭·WS 접속을 못 하고 지정 검증 참가자 6명과 운영자만 접근 가능한 격리를 확인한다. 모든 앱 진입 경로에 적용하고 이름뿐인 smoke 플래그나 클라이언트 claim으로 우회하지 않는다. 격리 수단/검증 참가자/공식 예산·검증 시간 창이 준비되지 않으면 BLOCKED다.
+2. OPS drain의 terminal succeeded와 진행 경기/연습/입장 대기 0, 회수·저널 반영 및 미해결 0을 확인한 뒤 같은 검증 SHA/digest로 교체한다. 격리는 재시작·롤백 동안 유지한다.
+3. B/E의 initialize→HTTP 관찰→RECOVERING 정리→READY를 확인한다. 이때 admission은 여전히 DRAINING이다. READY만 보고 공개하거나 자동 입장시키지 않는다.
+4. 격리를 다시 확인한 후 승인된 검증 시간 창/실제 잔량 조건으로 resume을 요청하고 terminal succeeded 및 READY/OPEN을 확인한다. 일반 이용자는 계속 차단된 상태에서 검증 참가자만 입장하여 6인 smoke를 수행한다. DRAINING에서 입장하는 시험용 예외 API는 만들지 않는다.
+5. 시험 성공 후 검증 참가자 퇴장, 진행 활동 0, 시험 미디어 회수·저널 반영·미해결 0을 확인한다. 공개 시간 창·잔량·READY/OPEN을 다시 검사하고 F가 외부 격리를 해제한다. 격리 해제 전에 하나라도 실패하면 공개하지 않는다.
+6. smoke 실패나 resume 이후 실패에는 격리를 유지한 채 별도 requestId로 다시 drain하고 회수·활동 0을 확인한 뒤 이전 digest로 복귀한다. 회수가 불명확하면 이미지를 교체하여 미해결 상태를 숨기지 않고 ROLLBACK_BLOCKED로 남긴다. 롤백 후에도 같은 초기화·복구·격리 시험 순서를 통과해야 공개할 수 있다.
+
+F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배포 순서를 구현하며 QA-13이 인계 증거를 확인한다. Jenkins·nginx·배포 스크립트의 실제 구현과 원격 적용은 F 작업이다. 공통 문서와 fixture의 순서 검사만으로 해당 구현·원격 시험을 완료 처리하지 않는다.
+
 ## 작업 상태·커밋·MR·인계
 
 실행 상태는 PLANNED → CONTRACT_READY → LOCAL_VERIFIED → INTEGRATED → ACCEPTED로 기록한다. 외부 전제 부재는 BLOCKED, 미정 콘텐츠는 PRODUCT_DECISION_PENDING이다. 이 상태는 문서/로컬 진행 기록이며 Jira 상태를 자동 변경하지 않는다.
+
+진행 기록에는 `localStage`와 `blockedOn`을 분리한다. 예를 들어 단위 시험이 통과했지만 Cloud가 없는 작업은 `localStage: LOCAL_VERIFIED`, `blockedOn: [실제 Cloud 권한·예산]`, 최종 상태 `BLOCKED`로 기록한다. 차단되었다고 검증한 단계까지 없애거나, 단위 통과를 ACCEPTED로 올리지 않는다. 결정 대기 6개는 localStage 없이 PRODUCT_DECISION_PENDING을 유지한다.
+
+공유 인계는 추적되는 `docs/execution/handoffs/A.md`부터 `F.md`까지 **자기 파일 하나**에 작성한다. 작업 ID·단계·실제 export 경로와 signature·적용 commit·실행한 명령과 결과·필요한 소비자 확인·blockedOn·다음 요청을 기록한다. 자신의 구현 commit을 만든 뒤 그 SHA를 인계 문서에 적어 별도 인계 commit으로 남길 수 있다. 아직 존재하지 않는 미래 SHA나 실행하지 않은 성공 기록을 넣지 않는다. 소비자는 다른 역할의 전체 계획 대신 이 공개 인계와 실제 코드를 확인한다. `.local/` 기록은 개인 재개용이며 다른 팀원이 자동으로 읽을 수 있다고 가정하지 않는다. 원격 인계는 담당자의 push/MR 병합 후에야 도착한 것으로 처리한다.
 
 1. 계약/fixture 또는 단위 구현이 검증되면 **중간 커밋을 허용한다.** 작업 ID·이번 단계·실제 검증·미통합 조건을 커밋/MR에 적는다. 깨진 빌드·빈 성공 stub을 인계하지 않는다.
 2. 담당의 완료 조건과 실제 생산자·소비자 연결, 필요한 Cloud/장치 증거가 있어야 ACCEPTED다. 중간 커밋/합병을 기능 완료로 세지 않는다. 완료마다 최종 변경 커밋을 남기되 같은 결과를 중복 커밋하지 않는다.
@@ -256,13 +389,13 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 
 아래 타입은 [검사 가능한 원본](contracts/types.ts)에서 자동 삽입한다. [fixture](contracts/fixtures.ts)는 정상/실패·순서 교차 입력과 기대 상태를 제공하고 [검사](contracts/fixtures.test.ts)는 계약 자료의 정합성을 확인한다. 제품 타입·serializer·reducer·Room·Coordinator 구현과 실제 연결은 각 담당 작업에서 수행한다. 문서용 타입을 제품 런타임 의존성으로 import하지 않는다. 필요한 공개 타입은 해당 소유 모듈에 옮기고 원본과 소비자 호환을 검사한다.
 
-필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
+필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 영역별 맵 입력과 다른 출처 fallback 거절, 같은 match의 연습→none→본경기와 구 scope 지연 데이터 폐기, initialize 완료/READY/OPEN 분리와 fatal 기동 차단, 격리 유지 resume→6인 시험→회수→공개 및 실패 rollback, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단, 매칭 Origin 거절 뒤 예약 0. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
 
 <!-- BEGIN CONTRACT-TYPES -->
 
 ```ts
-// EXEC-CONTRACT-2. Planning contracts; product modules do not exist merely because these types do.
-export const CONTRACT_VERSION = 'EXEC-CONTRACT-2' as const;
+// EXEC-CONTRACT-3. Planning contracts; product modules do not exist merely because these types do.
+export const CONTRACT_VERSION = 'EXEC-CONTRACT-3' as const;
 export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
 export type Cell = Readonly<{ x: number; y: number }>;
 export type TracePoint = Readonly<{ x: number; y: number }>;
@@ -278,6 +411,30 @@ export type SessionResponse = Readonly<{
   expiresAt: number;
   protocolVersion: '0.2.0';
 }>;
+// Server/operator-only. These endpoints do not accept a player's session Bearer token.
+export const INVITATION_ROUTES = {
+  issue: '/api/operations/invitations',
+  revoke: '/api/operations/invitations/:inviteId/revoke',
+} as const;
+export type InvitationScope = Readonly<{
+  allowCreate: boolean;
+  roomCodes: readonly string[];
+}>;
+export type IssueInvitation = Readonly<{ scope: InvitationScope; expiresAt: number }>;
+export type IssuedInvitation = IssueInvitation &
+  Readonly<{ inviteId: string; inviteToken: string }>;
+export type InvitationDenialCode = 'INVALID_INVITATION' | 'NOT_READY' | 'OUTSIDE_PUBLIC_WINDOW';
+export type InvitationIssueResult =
+  | Readonly<{ status: 'issued'; invitation: IssuedInvitation }>
+  | Readonly<{ status: 'rejected'; code: InvitationDenialCode }>;
+export type InvitationCheck = Readonly<{ inviteToken: string }> &
+  ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export interface InvitationPort {
+  issue(input: IssueInvitation): InvitationIssueResult;
+  revoke(inviteId: string): void;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  bindCreatedRoom(inviteId: string, roomCode: string): void;
+}
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
 export type Phase =
   | 'LOBBY'
@@ -434,9 +591,17 @@ export type PlayerKnowledge = Readonly<{
   knownTerrain: readonly KnownTerrain[];
   knownActiveExits: readonly KnownExit[];
 }>;
+export type ActiveGameScope = Readonly<{
+  gameInstanceId: string;
+  kind: 'practice' | 'game';
+  revision: number;
+}>;
+export type GameViewScope =
+  ActiveGameScope | Readonly<{ gameInstanceId: null; kind: 'none'; revision: number }>;
 export type PrivateView = PlayerKnowledge &
   Readonly<{
     matchId: string;
+    gameScope: GameViewScope;
     stateVersion: number;
     self: ActiveSelf | EndedSelf | null;
     visibleCells: readonly Cell[];
@@ -492,6 +657,7 @@ export type EventType = keyof EventPayloads;
 export type PrivateEvent = {
   [K in EventType]: Readonly<{
     matchId: string;
+    gameScope: ActiveGameScope;
     eventId: string;
     tick: number;
     stateVersion: number;
@@ -578,13 +744,13 @@ export type MatchTuning = Readonly<{
 }>;
 export type CreateMatchInput = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   seed: number;
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly { playerId: string; role: Role }[];
 }>;
-export type CreatePracticeInput = CreateMatchInput &
-  Readonly<{ mediaInstanceId: string; role: Role }>;
+export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 export type GameSubject = Readonly<{
   playerId: string;
   role: Role;
@@ -595,6 +761,7 @@ export type GameSubject = Readonly<{
 }>;
 export type CoreReadFrame = Readonly<{
   matchId: string;
+  gameInstanceId: string;
   tick: number;
   phase: Phase;
   counts: Counts;
@@ -622,15 +789,65 @@ export type SelectionProgress = Readonly<{ attempted: number; batchAttempts: num
 export type LayoutSelectionResult =
   | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
   | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
-export type LayoutSelectionInput = Readonly<{
-  template: Topology;
-  players: readonly { playerId: string; role: Role }[];
+export type MapSource = Readonly<{
+  templateId: string;
+  templateVersion: string;
+  templateHash: string;
+  variantId: string;
+}>;
+export type SpawnRegion = Readonly<{
+  regionId: string;
+  cells: readonly Cell[];
   spawnCandidates: readonly Cell[];
-  exitCandidates: readonly WallFace[];
-  territories: MatchLayout['territories'];
+}>;
+export type LayoutTemplate = MapSource &
+  Readonly<{
+    topology: Topology;
+    taggerRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    runnerSpawnRegions: readonly [SpawnRegion, SpawnRegion, SpawnRegion];
+    exitCandidates: readonly WallFace[];
+  }>;
+export type MapPreparationFailure = Readonly<{
+  status: 'invalid';
+  code: 'INVALID_MAP_SOURCE' | 'INVALID_TEMPLATE';
+  path: readonly (string | number)[];
+}>;
+export type MapTemplateResult =
+  Readonly<{ status: 'valid'; template: LayoutTemplate }> | MapPreparationFailure;
+export type MapVariantsResult =
+  Readonly<{ status: 'valid'; variants: readonly LayoutTemplate[] }> | MapPreparationFailure;
+export interface MapPreparationPort {
+  validateTemplate(raw: unknown, source: MapSource): MapTemplateResult;
+  createTemplateVariants(template: LayoutTemplate): MapVariantsResult;
+}
+// Fixed, isolated practice layouts use role slots, never real session IDs in JSON.
+export type PracticeLayoutTemplate = Readonly<{
+  practiceVersion: string;
+  layouts: Readonly<Record<Role, MatchLayout>>;
+}>;
+export type PracticeLayoutResult =
+  | Readonly<{ status: 'ready'; layout: MatchLayout }>
+  | Readonly<{
+      status: 'invalid';
+      code: 'INVALID_PRACTICE_LAYOUT';
+      path: readonly (string | number)[];
+    }>;
+export interface PracticeLayoutPort {
+  preparePracticeLayout(
+    raw: unknown,
+    players: readonly { playerId: string; role: Role }[],
+    role: Role,
+  ): PracticeLayoutResult;
+}
+// Stored layout IDs are tagger-1..3/runner-1..3 slots. certifyFallback binds all
+// player/exit/territory references to role-sorted input.players before validation.
+export type FallbackLayout = MapSource & Readonly<{ layout: MatchLayout }>;
+export type LayoutSelectionInput = Readonly<{
+  template: LayoutTemplate;
+  players: readonly { playerId: string; role: Role }[];
   seed: number;
   maxAttempts: number;
-  fallback: MatchLayout;
+  fallback: FallbackLayout;
 }>;
 export interface LayoutSelectionPort {
   certifyFallback(input: LayoutSelectionInput): LayoutSelectionResult;
@@ -768,7 +985,15 @@ export type Readiness = Readonly<{
   historyComplete: boolean;
   unresolvedCount: number;
 }>;
+export type MediaInitializationResult =
+  | Readonly<{
+      status: 'initialized';
+      readiness: Readiness & Readonly<{ state: 'RECOVERING' | 'LOCKED' }>;
+      admission: 'DRAINING';
+    }>
+  | Readonly<{ status: 'fatal'; code: 'WRITER_CONFLICT' | 'INITIALIZATION_FAILED' }>;
 export interface MediaCoordinator {
+  initialize(): Promise<MediaInitializationResult>;
   prepareGeneration(input: PrepareGenerationRequest): Promise<PreparationResult>;
   observeFrame(frame: TrustedMediaFrame): void;
   retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult>;
@@ -782,6 +1007,7 @@ export interface MediaCoordinator {
 }
 export type MediaCoordinatorDeps = Readonly<{
   config: MediaConfiguration;
+  emitMetric: (sample: MetricSample) => void;
   enqueueControl: (control: MediaControl) => void;
   enqueueBindings: (playerId: string, message: MediaBindings) => void;
   enqueueAudioPolicy: (playerId: string, message: AudioPolicy) => void;
@@ -800,6 +1026,11 @@ export type MediaConfiguration = Readonly<{
   apiSecret: string;
   namespace: string;
   opsDataDir: string;
+  projectAlias: string;
+  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  officialBudgetMaxAgeMs: number;
+  operationTimeoutMs: number;
+  productSecurityReady: boolean;
   initialBudget: {
     remainingMinutes: number;
     remainingBytes: number;
@@ -810,6 +1041,18 @@ export type MediaConfiguration = Readonly<{
   maxTotalApiCallsPer60s: number;
 }>;
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
+export type MetricSample = Readonly<{
+  name: string;
+  value: number;
+  unit: 'count' | 'ms' | 'bytes' | 'ratio';
+  atMs: number;
+  matchRef?: string;
+  generation?: number;
+  requestId?: string;
+}>;
+// E implements the authentication factory; B mounts it before every operator route.
+// This is server-internal configuration, never a client-authorized claim.
+export type CreateOperatorAuth = (token: string) => (authorization: string | undefined) => boolean;
 export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
 export type FaceSensor = Readonly<{
   landmarks: readonly NormalizedLandmark[];
@@ -960,7 +1203,7 @@ export type ServerMessages = {
 
 <!-- END CONTRACT-TYPES -->
 
-<!-- END EXEC-CONTRACT-2 COMMON -->
+<!-- END EXEC-CONTRACT-3 COMMON -->
 
 ## 작업별 구현 지시
 
@@ -970,13 +1213,14 @@ export type ServerMessages = {
 
 **MP-01 · [BE] 마스터 맵 한 개와 후보 데이터**  
 일정: D1 2026-09-08 · **오늘 1번**  
-기획 근거: v0.0.8 **10장**  
+기획 근거: v0.0.8 **05, 10장**
 선행 완료 결과: [B-01](b-game-server.md#b-01) (SV-01, D1)
 
 **수정·생성 파일**
 
 - `packages/game-core/src/match/map/types.ts`
 - `packages/game-core/src/match/map/validate-template.ts`
+- `packages/game-core/src/match/map/prepare-practice-layout.ts`
 - `packages/game-core/src/match/types.ts`
 - `packages/game-core/src/match/index.ts`
 - `server/src/domain/index.ts`
@@ -987,34 +1231,41 @@ export type ServerMessages = {
 
 **구현 순서**
 
-1. 먼저 기존 match/types.ts의 개발용 타입과 제품 MatchState/Cell/Dir/Tuning/MapTemplate 타입을 분리하고 EXEC-CONTRACT-2 Role·상태·좌표를 적용한다. 기존 turn/tryMove/generateMaze 호출 경로는 소비자가 전환될 때까지 명시적 개발 export로 유지한다.
-2. 32행×32열 WALL/PASSAGE 마스터를 설계하고 외곽 한 줄, 벽면 side, 비중첩 술래 구역 후보 3개와 분리된 외곽 도망자 후보 영역 3개를 같은 JSON에 기록한다. 후보는 통로 셀 또는 내부 벽면 참조로 구분하며 약 56셀 구역은 연결성을 희생하는 강제 상수가 아니다.
-3. validateTemplate(unknown)은 행 길이·허용 셀·좌표 범위·외곽 벽·중복 구역·벽면/접근 통로 인접성을 검사해 정규화된 immutable MapTemplate 또는 구조화된 내부 오류를 반환한다. 파일 읽기는 B의 loader가 맡고 A는 이미 파싱된 데이터를 받는다.
+1. 먼저 기존 match/types.ts의 개발용 타입과 제품 MatchState/Cell/Dir/MatchTuning/LayoutTemplate 타입을 분리하고 EXEC-CONTRACT-3 Role·상태·좌표를 적용한다. 기존 turn/tryMove/generateMaze 호출 경로는 소비자가 전환될 때까지 명시적 개발 export로 유지한다. 소문자 개발 Phase/PlayerStatus와 대문자 제품 이름이 barrel에서 충돌하면 개발 타입을 LegacyPhase/LegacyPlayerStatus처럼 명시적으로 구분하고 기존 GameSnapshot의 동작은 그대로 유지한다. 동일 이름의 export star 두 개로 우연히 하나가 선택되게 두지 않는다.
+2. 32행×32열 WALL/PASSAGE 마스터와 templateId/templateVersion을 서버 JSON에 기록한다. 정규화 결과는 LayoutTemplate이며 topology, taggerRegions 3개 tuple, runnerSpawnRegions 3개 tuple, exitCandidates:WallFace[]를 가진다. 각 SpawnRegion은 regionId/cells/spawnCandidates를 유지한다. 술래의 비중첩 구역과 도망자의 분리된 외곽 후보 영역을 평면 후보 목록으로 합치지 않는다. 약 56셀 구역은 연결성을 희생하는 강제 상수가 아니다.
+3. MapPreparationPort.validateTemplate(raw:unknown,source:MapSource)는 B가 원본 바이트의 SHA-256으로 계산한 templateHash와 templateId/templateVersion/variantId, 파싱 본문을 받아 MapTemplateResult를 반환한다. 성공은 `{status:'valid',template}`, 실패는 `{status:'invalid',code,path}`이며 임의 throw/null/boolean으로 소비 계약을 나누지 않는다. 행 길이·허용 셀·외곽 벽·regionId 중복·각 역할 내부 구역 중첩·비어 있는 영역/후보·후보의 해당 영역 소속·실제 통로 여부·벽면/접근 통로 인접성을 검사한다. 파일 IO·hash 계산은 B가 소유하며 클라이언트가 source를 지정하지 못하게 한다.
 4. 50ms/9·6 Tick/180초 등 첫 구현값을 tuningVersion과 함께 서버 전용 JSON에 기록하고 core는 주입된 읽기 전용 설정만 사용한다. 실제 연결성·배치 인증은 MP-03–05에서 완료하므로 이 단계의 구조 검사 통과를 인증이라고 쓰지 않는다.
-5. 연습용 practice-v1.json도 A가 만든다. 본 경기와 다른 고정 소형 통로·팀당 최대 3명 시작점·교환/술래 장비 연습 자원을 기록하되 전체 Colyseus Room이나 Cloud 자원을 만들지 않는다. 해당 자료는 B FL-03이 로드하며 본 경기 마스터의 인증과 구분한다.
+5. 연습용 practice-v1.json도 A가 PracticeLayoutTemplate `{practiceVersion,layouts:{runner,tagger}}` 형태로 만든다. 각 값은 같은 역할의 안정 슬롯 runner-1..3 또는 tagger-1..3이 들어 있는 정적 MatchLayout이며 exits는 빈 배열이다. 본 경기와 다른 고정 소형 통로·서로 다른 팀당 3개 시작점·술래 지형 영역을 기록하되 전체 Room/Cloud 자원을 만들지 않는다. 이동·교환·설치를 연습할 통로·내부 벽면은 있어야 하며 역할별 시작 슬롯이 서로 다른 논리 공간에 있음을 유지한다.
 6. 초기 마스터 작성법도 고정한다: 외곽 x/y=0 또는31은 벽, 나머지는 통로로 시작한다. 내부 x=6/12/18/24의 y=3..28을 벽으로 바꾸되 y=7/15/23에는 통로 틈을 남겨 외곽 우회와 여러 가로 연결을 만든다. 이를 런타임 랜덤 생성기가 아닌 정적 master-v1.json으로 저장한다. 이 패턴의 배치 유효성은 아직 실측된 것이 아니므로 MP-03/04/05를 통과해야 채택한다.
 7. 후보 영역 초안은 술래 {(x7..13,y12..19),(x14..20,y8..15),(x21..27,y12..19)}의 각 약56셀, 도망자 {(x1..4,y1..6),(x27..30,y1..6),(x13..19,y26..30)}로 둔다. 시작 후보는 각 영역의 실제 통로 중 유효 이웃≥2인 셀만 사용하고, 출구 후보는 내부 벽의 실제 통로에 접한 면을 열거한다. 수치 제약을 만족하는 배치를 못 찾으면 MP-05를 실패로 남기고 원문 조건을 완화하지 않는다.
+8. public `preparePracticeLayout(raw,players,role)`은 공통 PracticeLayoutPort를 구현한다. 작은 맵의 양의 크기(각 축 32 이하), walkable 길이·외곽/연결성·통로인 시작점·초기 방향·역할별 3개 유일 슬롯을 검증한다. 입력 players는 지정 role의 서로 다른 1~~3명이어야 한다. 기본 문자열 순서로 현재 ID를 슬롯에 바인딩하고 미사용 슬롯/구역을 제거한 새 MatchLayout을 `{status:'ready',layout}`으로 반환한다. 오류는 `{status:'invalid',code:'INVALID_PRACTICE_LAYOUT',path}`다. 본 경기 6인·3출구·거리18/10/18~~45·구역3개 제약을 연습에 적용하지 않는다. B가 실제 ID를 채운 JSON을 새로 저장하게 하지 않는다.
 
 **연결 계약과 경계**
 
 - Cell 정수 x/y=0..31, side/dir=0북·1동·2남·3서. game-core는 protocol/Colyseus/SDK/시간·파일 IO를 import하지 않는다.
 - 제품 facade에 필요한 공통 타입을 index.ts와 기존 server/domain re-export로 내보내며 B와 이름을 고정한다. package manifest/배포 포함 목록은 F에게 요청한다.
+- LayoutTemplate/SpawnRegion/MapSource는 [공통 타입](contracts/types.ts)과 같아야 한다. 선택 전 데이터에는 playerId가 붙은 territories를 만들지 않는다. 술래 구역과 도망자 영역별 후보를 A MP-04까지 보존한 뒤 최종 MatchLayout.territories에 배정한다.
+- master JSON의 내부 형식은 `{templateId,templateVersion,rows,taggerRegions,runnerSpawnRegions,exitCandidates}`로 고정한다. rows는 32×32의 WALL/PASSAGE 문자열 배열이며 정규화 시 row-major `Topology.walkable`로 바꾼다. 영역·벽면 구조는 공통 타입과 같다. JSON 자체에 자기 바이트의 hash를 넣지 않고 B의 source와 본문 ID/version 일치를 검사한다. 원본 variantId는 `r0`, topologyVersion은 원본 ID/version/variantId 조합으로 고정한다. 파일 접근이 필요한 인증 시험은 테스트에서 바이트/hash를 만들며 core 런타임에 파일 IO를 추가하지 않는다.
 
 **시험 입력 → 기대 결과**
 
 - 31열 행 또는 x=32 후보 -> 구조 오류와 실패 위치만 반환하며 자동 보정하지 않는다.
 - 외곽 통로 또는 접근 셀이 벽인 출구 후보 -> 템플릿 로드 거절.
 - 유효 32×32 후보 JSON -> 같은 정규화 결과, 입력 JSON 객체를 바꾸지 않고 seed/지형을 공개 계약에 포함하지 않는다.
+- 구역 밖 spawnCandidate, 벽인 시작 후보, 중복 regionId, 3개가 아닌 영역 tuple, 서로 겹친 술래 구역 → 템플릿 거절. 정상 자료 → 영역별 cells/candidates와 MapSource 4필드가 손실 없이 남는다.
+- practice의 1명/3명 같은 역할 입력 → 현재 ID만 들어 있는 독립 layout, 입력 JSON 불변. 4명·역할 혼합·중복 ID·잘못된 슬롯·벽 시작점 → invalid. 작은 연습 맵이 본 경기 거리/출구 제약 때문에 거절되지 않으며 두 역할 호출 결과의 지식/설치 상태를 공유하지 않는다.
 
 **추가·보완할 시험 파일**
 
 - `packages/game-core/test/match/template.test.ts`
+- `packages/game-core/test/match/practice-layout.test.ts`
 
 **실행할 검사**
 
 ```bash
 pnpm build:packages
 pnpm exec vitest run packages/game-core/test/match/template.test.ts
+pnpm exec vitest run packages/game-core/test/match/practice-layout.test.ts
 pnpm typecheck
 pnpm lint
 ```
@@ -1043,7 +1294,7 @@ feat: 서버 전용 마스터 맵과 규칙 설정 정의
 
 **완료 인계**
 
-- B SV-01/FL-05에 MapTemplate/Tuning 타입·parse 결과와 loader 입력 예시 인계
+- B SV-01/FL-05에 LayoutTemplate/SpawnRegion/MapSource/Tuning 타입·원본 파일 메타데이터·parse 결과를 인계하고 B의 SHA-256 계산 입력이 원본 바이트임을 확인
 - F에 server/content와 server/config/tuning 배포 포함, 설정 import/복사 경로 요청
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/A/MP-01.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
@@ -1062,20 +1313,22 @@ feat: 서버 전용 마스터 맵과 규칙 설정 정의
 
 **구현 순서**
 
-1. 90도 회전은 (x,y)->(31-y,x), 방향은 (dir+1)%4로 변환하고 반전은 (x,y)->(31-x,y), 동서 방향을 맞바꾼다. 통로·벽면 side·접근 셀·시작 방향·담당 구역을 동일 transform으로 이동한다.
+1. 90도 회전은 (x,y)->(31-y,x), 방향은 (dir+1)%4로 변환하고 반전은 (x,y)->(31-x,y), 동서 방향을 맞바꾼다. LayoutTemplate.topology, taggerRegions/runnerSpawnRegions 각각의 cells·spawnCandidates, exitCandidates의 벽면 side와 대응 접근 셀을 같은 transform으로 이동한다. regionId는 유지하고 변형마다 variantId를 부여한다.
 2. 원본, 90/180/270도 및 각 반전의 8개 후보를 만든 뒤 정규화된 지형+구역/후보 구조의 canonical signature로 대칭 중복을 제거한다. 배열 순서에 따라 다른 signature가 생기지 않게 좌표·식별자를 정렬한다.
-3. 변형 결과를 MP-01 구조 검증에 다시 넣고 원본 ID와 transform ID를 내부 자료로 보관한다. 불법 벽면 또는 외곽 훼손은 해당 변형을 조용히 삭제하지 말고 템플릿 오류로 기록한다.
+3. 변형 결과를 동일 구조 검증에 다시 넣고 templateId/templateVersion/templateHash는 동일 원본의 값을 유지하며 variantId와 topologyVersion의 변형 부분만 갱신한다. public createTemplateVariants(template:LayoutTemplate)는 MapVariantsResult를 반환한다. 성공은 `{status:'valid',variants}`이며 variants는 variantId순의 비어 있지 않은 배열이다. 불법 벽면 또는 외곽 훼손은 `{status:'invalid',code,path}`로 끝내며 일부만 삭제해 성공시키지 않는다.
 
 **연결 계약과 경계**
 
-- 좌표·방향 함수는 MapTemplate에만 적용하며 웹 좌표 x/z 변환을 여기서 하지 않는다.
-- 변형 RNG 선택은 MP-04가 담당; 여기서는 최대 8개의 결정적 후보만 반환.
+- 좌표·방향 함수는 LayoutTemplate에만 적용하며 웹 좌표 x/z 변환을 여기서 하지 않는다.
+- 여기서는 최대 8개의 검증된 LayoutTemplate 변형을 반환한다. B loader가 variantId순 정렬 후 seed(uint32)%변형 수로 한 개를 선택한다. A MP-04는 선택된 단일 변형 내부의 인원·출구만 선발하고 다시 변형하지 않는다.
+- variantId는 회전 전 반전 여부와 시계방향 회전 횟수로 `r0/r1/r2/r3/mr0/mr1/mr2/mr3`을 사용한다. 중복 그룹에서는 기본 문자열 오름차순의 첫 ID를 대표로 남긴다. `validateTemplate/createTemplateVariants`는 A의 match index와 기존 server/domain 경계에서 내보내며 B가 transform 내부 경로를 import하지 않는다.
 
 **시험 입력 → 기대 결과**
 
 - (2,5),dir=0을 90도 회전 -> (26,2),dir=1이며 접근 셀도 같은 변환.
 - 90도 회전 4회 및 반전 2회 -> 정규화 원본과 같다.
 - 완전 대칭 마스터 -> 8개 미만으로 중복 제거되며 비대칭 벽면 참조는 손실되지 않는다.
+- 회전·반전 후 모든 영역의 spawnCandidates가 같은 regionId의 변환된 cells 안에 있으며 실제 통로다. 원본 출처 3필드는 유지되고 variantId와 벽면 방향만 해당 변형에 맞게 바뀐다.
 
 **추가·보완할 시험 파일**
 
@@ -1206,22 +1459,24 @@ feat: 맵 연결성과 시작 경로 검증
 
 **구현 순서**
 
-1. 명시적 seed:uint32를 받아 부작용 없는 nextRandom(state)로 난수를 생성한다. seeded shuffle 알고리즘을 한 모듈에 고정하고 시험용 seed와 후보 순서를 정렬해 같은 입력에서 같은 조합을 얻는다.
-2. 각 변형의 3개 비중첩 구역을 술래에게 무작위 배정하고 해당 구역 내 시작을 선택한다. 도망자 시작은 서로 떨어진 외곽 세 영역에서 각각 하나씩 고른 뒤 출구 접근 셀/소유자 조합과 함께 탐색한다.
+1. LayoutSelectionInput.template의 선택된 단일 LayoutTemplate과 players, seed:uint32를 받는다. 부작용 없는 nextRandom(state)와 seeded shuffle을 한 모듈에 고정하고 후보·playerId 순서를 정렬해 같은 입력에서 같은 조합을 얻는다. 변형 목록 선택은 B가 완료했으므로 여기서 재변형하거나 template.variantId를 바꾸지 않는다.
+2. 선택된 template.taggerRegions의 비중첩 3개 구역을 정확히 3명의 술래에게 seeded 무작위 배정하고 각 구역의 spawnCandidates에서 한 시작점을 선택한다. 도망자도 template.runnerSpawnRegions의 분리된 외곽 3개 영역에서 각각 하나씩 시작점을 고른다. template.exitCandidates의 벽면·접근 통로와 소유자 조합을 함께 탐색한다. 영역 소속을 검사할 수 없는 평면 spawnCandidates나 선배정 territories 입력으로 대체하지 않는다.
 3. 도망자 상호 및 각 도망자-최근접 술래 거리≥18, 출구 간≥10, 개인 출구 거리18..45와 max/min≤1.3, 핵심 성분·시작 이웃·정면 조건을 모두 검사한다. 술래 상호 18셀 조건을 추가하지 않는다.
-4. 유효 후보의 점수/동률 처리 규칙을 내부 설정에 고정하고 상위 유효 후보에서 seeded 선택한다. 선택 결과는 layoutId·spawns·territories·exitAssignments로 반환하며 시간/시도 중단은 MP-05가 감싼다.
+4. 유효 후보의 점수/동률 처리를 내부 설정에 고정하고 seeded 선택한다. 결과는 공통 MatchLayout의 layoutId/topology/players/exits/territories로 반환하며 territories에는 이 단계에서 배정한 술래 playerId와 해당 구역 cells를 담는다. 최종 선택된 출구별 poseKind도 seed와 안정된 소유자 순서로 한 번 배정해 완전한 MatchLayout을 반환한다. EX-01은 이 포즈를 재추첨하지 않고 보존한다. B가 입력한 원본/변형 외 지형은 반환하지 않는다. 시간/시도 중단은 MP-05가 감싼다.
 5. 조합 탐색을 시작할 재현 fixture는 도망자 (2,2)/(29,2)/(16,30), 술래 (8,16)/(16,12)/(25,16), 소유자 순서별 출구 접근 (11,22)/(25,22)/(7,10), 벽면 (12,22,서)/(24,22,동)/(6,10,동)로 둔다. 이는 MP-01 초안 패턴의 계획용 거리 계산 사례다. 실제 구현의 BFS·이중연결·변형·초기정면를 모두 다시 통과해야 fallback으로 채택한다. 첫 정면은 모든 시작에서 북(0)으로 둔다.
 
 **연결 계약과 경계**
 
 - generateMaze/pickSpawn 개발 함수 대신 제품 선택기를 추가하고 B createMatch에 확정 Layout만 주입.
 - seed와 후보 스코어는 protocol/메타데이터/일반 오류에 노출하지 않는다.
+- 입력은 LayoutSelectionInput의 template/players/seed/maxAttempts/fallback만 사용한다. 출력 MatchLayout을 제외한 후보 영역·seed·MapSource/fallback 원문은 서버 내부 자료다.
 
 **시험 입력 → 기대 결과**
 
 - 동일 seed·정렬된 후보 집합 -> 같은 variant/6인 시작/3개 출구 배정.
 - 개인 거리 18,18,24 -> 비율 1.333..으로 탈락; 20,22,26 -> 비율1.3 경계 통과.
 - 술래끼리 10셀이어도 도망자 거리·나머지 조건 충족 -> 통과; 도망자-술래17셀 -> 탈락.
+- 동일 LayoutTemplate·seed에서 입력 player 배열만 재정렬 → 같은 역할별 영역 배정과 시작점. 술래 3명은 서로 다른 taggerRegion, 도망자 3명은 서로 다른 runnerSpawnRegion에 배정된다. 평면 후보만으로 입력하면 구조 검증에서 실패한다.
 
 **추가·보완할 시험 파일**
 
@@ -1262,6 +1517,7 @@ feat: 시작점과 개인 출구 조합 선발
 
 - B FL-05에 확정 Layout·실패 report 구조 인계
 - MP-05에 유효 조합 후보와 인증에 사용할 seed/변형 fixture 전달
+- B가 선택한 variantId를 그대로 소비하는 단일 변형 fixture와 영역별 배정 결과를 제공한다. A selector에서 변형을 다시 선택하지 않았음을 실제 A/B 연결 시험으로 확인한다.
 
 완료 후 실제 검사와 commit SHA를 포함한 다섯 항목 MR 본문을 `.local/mr/A/MP-04.md`에 작성하고 해당 날짜의 합본에도 반영한다. 파일 링크와 복사 가능한 본문을 답변으로 제공한다. 푸시와 MR 생성은 담당자가 직접 수행한다.
 
@@ -1276,13 +1532,14 @@ feat: 시작점과 개인 출구 조합 선발
 
 - `packages/game-core/src/match/map/select-with-fallback.ts`
 - `packages/game-core/src/match/map/validate-layout.ts`
+- `packages/game-core/src/match/index.ts`
 - `server/content/placements/master-v1-fallback.json`
 - `server/config/tuning/mvp-v1.json`
 
 **구현 순서**
 
-1. MP-04에서 실제 모든 조건을 통과한 조합을 마스터/변형 버전과 함께 fallback JSON에 저장한다. certifyFallback(input)은 동일 validateLayout으로 템플릿 hash·버전과 전체 제약을 다시 검사해 성공 LayoutSelectionResult 또는 LAYOUT_UNAVAILABLE를 반환한다. 고정된 한 후보 검사에는 온라인 조합 탐색을 섞지 않는다.
-2. selectWithFallback(input)을 EXEC-CONTRACT-2의 Generator<SelectionProgress, LayoutSelectionResult, void>로 제공한다. 각 next()는 최대 8개 후보만 검사하고 성공하면 done:true 결과, 미완료면 시도 수를 담은 SelectionProgress를 yield한다. 전체 후보 시도 상한도 적용하며 Date.now/performance.now/타이머를 호출하지 않는다.
+1. MP-04의 실제 모든 조건을 통과한 변형별 조합을 FallbackLayout={templateId,templateVersion,templateHash,variantId,layout}으로 fallback JSON에 저장한다. 정적 layout의 players.playerId·exits.ownerId·territories.playerId는 실제 세션 ID 대신 역할별 안정 슬롯 tagger-1..3, runner-1..3을 사용한다. certifyFallback(input)은 input.template과 fallback의 출처 4필드 및 지형 일치를 먼저 확인한다. 내부 bindFallbackPlayers helper는 input.players의 역할별 playerId를 기본 문자열 오름차순으로 정렬해 슬롯 번호와 일대일 대응한다. localeCompare를 쓰지 않고 세 종류의 ID 참조를 모두 새 객체에서 치환한다. 역할별 3명·유일 ID·유효 슬롯/소유자 참조와 기존 영역·시작/출구·경로·거리 전체 제약을 재검사해 실제 플레이어 MatchLayout 또는 null을 반환한다. 공개 certifyFallback은 이 결과를 기존 LayoutSelectionResult의 selected/layout 또는 unavailable로 포장한다. 입력 JSON/players를 변경하거나 이 유한 인증 단계에 온라인 조합 탐색을 섞지 않는다.
+2. selectWithFallback(input)을 EXEC-CONTRACT-3의 Generator<SelectionProgress, LayoutSelectionResult, void>로 제공한다. 각 next()는 최대 8개 후보만 검사하고 성공하면 done:true 결과, 미완료면 시도 수를 담은 SelectionProgress를 yield한다. 전체 후보 시도 상한도 적용하며 Date.now/performance.now/타이머를 호출하지 않는다.
 3. B는 탐색 전 인증한 fallback 결과를 보관한다. 정상 탐색 소진이면 같은 인증 결과를 반환하고, 외부 시간 초과이면 B가 iterator.return(certifiedResult)로 닫은 결과를 사용한다. 인증 실패와 온라인 선발 실패가 겹치면 LAYOUT_UNAVAILABLE이며 부분 배치로 경기를 만들지 않는다.
 4. next() 호출당 후보 수, 유한 인증 검사, return 후 탐색 중단을 순수 시험으로 검증한다. F에게 실제 인증 시험 파일을 test:maps 대상으로 인계하고, B에는 next 전후 monotonic 검사와 setImmediate 양보를 결합할 자료를 전달한다.
 
@@ -1291,6 +1548,8 @@ feat: 시작점과 개인 출구 조합 선발
 - [공통 타입](contracts/types.ts)의 SelectionProgress/LayoutSelectionResult와 selectWithFallback·certifyFallback 시그니처를 그대로 사용한다. A는 후보/제약 검사, B는 실제 시간 예산·파일 IO·이벤트 루프 양보를 소유한다.
 - fallback 인증은 온라인 시간 상한 이전의 유한 검증 단계이며 그 비용도 B가 계측한다. 긴 동기 탐색을 setTimeout으로 중단할 수 있다고 가정하지 않는다.
 - fallback은 server/content/placements에만 보관하며 package.json/루트 명령은 F 소유다.
+- B는 A MP-02의 변형 중 seed로 선택한 template와 정확히 같은 MapSource의 fallback을 묶어서 전달한다. A는 원본 파일을 읽거나 hash를 다시 계산하지 않고 B가 계산한 source와 저장된 fallback source를 비교한다. 다른 variant의 fallback, 출처 누락, 지형 변경은 성공으로 인증하지 않는다.
+- 정적 안정 슬롯을 현재 논리 플레이어로 바인딩하는 책임은 A다. B는 slots가 저장된 FallbackLayout과 인증된 input.players를 전달하고 selected.layout만 core에 주입한다. 정적 JSON을 매 경기 실세션 ID로 덮어쓰거나 슬롯 문자열을 플레이어 신원으로 사용하지 않는다.
 
 **시험 입력 → 기대 결과**
 
@@ -1298,6 +1557,9 @@ feat: 시작점과 개인 출구 조합 선발
 - 부적합 후보 17개 → next 호출별 검사 수가 8 이하이고 yield 사이에 상태를 이어 간다. 같은 입력/seed/호출 순서는 같은 결과다.
 - 중간 yield 후 return(certifiedResult) → done:true와 해당 결과, 이후 next로 후보를 더 검사하지 않는다.
 - 템플릿 벽 변경으로 fallback 경로 단절 + 온라인 소진 → LAYOUT_UNAVAILABLE, 과거 인증이나 부분 배치를 성공으로 재사용하지 않는다.
+- templateId/templateVersion/templateHash/variantId 중 하나만 불일치 → fallback 인증 실패. 4필드는 같아도 topology가 다르거나 시작점이 배정 구역 밖이면 실패한다. 모든 변형별 유효 pair는 같은 전체 제약으로 재인증된다.
+- 정적 runner-1..3/tagger-1..3와 전혀 다른 실제 6명 ID → 역할별 기본 문자열 정렬에 따라 players.playerId/exits.ownerId/territories.playerId가 모두 동일 대응으로 치환된다. input.players 배열 순서만 바꾸어도 결과는 같고 원본 fallback/players는 불변이다.
+- 중복 실제 ID, 역할별 인원 오류, 없는 슬롯을 참조한 출구 또는 구역 → helper null과 공개 unavailable 결과다. 부분 치환·정적 슬롯 잔존을 성공 layout으로 넘기지 않는다.
 
 **추가·보완할 시험 파일**
 
@@ -1316,7 +1578,7 @@ pnpm lint
 
 **완료 조건**
 
-인증 fallback과 호출당 최대 8개 후보의 순수 Generator를 제공한다. B의 실제 시간 제한·양보 경로와 연결해 온라인 상한 도달 시 인증 fallback으로 종료하고, 유효 배치가 하나도 없으면 시작을 막는다. 실제 맵 인증을 test:maps에 연결한 결과를 별도로 기록한다.
+영역 정보를 보존한 단일 변형 입력, 출처 4필드·지형·전체 제약을 재인증한 fallback, 호출당 최대 8개 후보의 순수 Generator를 제공한다. B의 실제 시간 제한·양보 경로와 연결해 온라인 상한 도달 시 인증 fallback으로 종료하고, 유효 배치가 하나도 없으면 시작을 막는다. 실제 맵 인증을 test:maps에 연결한 결과를 별도로 기록한다.
 
 위 조건과 필요한 실제 연결·검증이 충족됐을 때만 완료로 표시한다. 계약 fixture 통과와 실제 생산자·소비자 연결 시험 통과를 구분해 진행 기록과 MR 본문에 남긴다.
 
@@ -1378,7 +1640,7 @@ feat: 맵 배치 fallback과 시작 차단 적용
 **구현 순서**
 
 1. Layout의 서로 다른 내부 벽면/접근 셀을 도망자3명에 1:1로 묶어 ExitRecord를 만든다. ownerId·wall{x,y,side}·approach·active와 서버 내부 poseKind를 분리해 저장한다.
-2. 각 출구의 poseKind는 left/right/y 중 seeded로 한 번 정하고 matchId 동안 유지한다. challenge 재시도에서 포즈 재추첨을 호출하지 않는다.
+2. 각 출구의 poseKind는 MP-04의 최종 선택 또는 인증 fallback의 MatchLayout에 이미 배정된 left/right/y 중 하나다. EX-01은 enum을 검증해 그대로 저장하고 matchId 동안 유지한다. 레지스트리 생성·challenge 재시도에서 두 번째 포즈 추첨을 호출하지 않는다.
 3. closeExit(ownerId)는 기존 항목을 삭제해 배치를 재사용하지 않고 active=false로 원자 전환한다. 재호출은 no-op이고 KN-03이 모든 개인 지식의 활성 출구 집합을 필터링할 수 있게 변경 ID를 반환한다.
 
 **연결 계약과 경계**
@@ -1391,6 +1653,7 @@ feat: 맵 배치 fallback과 시작 차단 적용
 - 3도망자 + 3유효접근셀 -> 각각출구1개, 서로다른 접근셀.
 - 동일 접근셀 출구2개 또는 외곽 벽면 -> 초기화 거절.
 - 한 소유자 출구 폐쇄 두 번 및 재시도 -> 폐쇄1회, 포즈 불변, 새소유자 재배정 없음.
+- MP-04의 selected.layout 또는 MP-05의 fallback layout으로 레지스트리 생성 → 출구별 poseKind가 입력과 정확히 같으며 별도 RNG 소비가 없다.
 
 **추가·보완할 시험 파일**
 
@@ -1522,14 +1785,15 @@ feat: 동시 후보의 순환 우선순위 구현
 
 **구현 순서**
 
-1. createMatch는 주입된 Layout/players/tuning으로 immutable MatchState를 만들고 stepMatch는 이전 상태를 변경하지 않는 nextState를 반환한다. 큰 grid는 읽기 전용으로 공유하고 변경 플레이어/Map만 복사한다.
+1. createMatch는 CreateMatchInput의 gameInstanceId와 Layout/players/tuning으로 immutable MatchState를 만들고 stepMatch는 이전 상태를 변경하지 않는 nextState를 반환한다. 같은 matchId 아래 연습과 본 경기의 gameInstanceId를 별개로 보관한다. 큰 grid는 읽기 전용으로 공유하고 변경 플레이어/Map만 복사한다.
 2. PLAYING·ACTIVE·행동잠금 없는 플레이어의 MOVE_INTENT를 방향벡터에 투영해 목적셀을 계산하고 경계/통로를 검사한다. 유효하면 kind=move,from/to의셀·dir,startTick=T,endTick=T+9를 기록하고 현재셀은 유지한다.
 3. 완료 Tick에 도달한 행동을 이전상태에서 모아 완료후셀 후보를 계산한다. 한 action은 한 번만 완료하고 같은 팀 점유는 이동거절 사유로 쓰지 않는다. 멈춤 의도는 다음행동만 없애고 진행행동은 끝낸다.
 4. stepMatch에 단계별 함수연결을 준비하되 아직 포획/술래 장비가 없으면 해당단계가 미구현임을 명확히 한다. 전체 MVP 검증전 상태를 제품완료로 표기하지 않는다.
-5. createPractice(input) facade는 같은 순수 상태/행동 엔진의 practice 모드를 만든다. 팀당 최대 3명을 허용하고 이동·회전·교환·술래 장비는 재사용하되 포획·팀 승패·본 경기 deadline은 비활성화한다. core 파일은 A만 수정하고 B FL-03에는 이 facade와 practice-v1 자료를 인계한다.
+5. createPractice(input)은 CreatePracticeInput의 gameInstanceId/role을 사용해 같은 순수 엔진의 practice 모드를 만든다. 팀당 최대 3명을 허용하고 이동·회전·교환·술래 장비는 재사용하되 포획·팀 승패·본 경기 deadline은 비활성화한다. mediaInstanceId/receiverGeneration은 입력받지 않는다. core 파일은 A만 수정하고 B FL-03에는 이 facade와 practice-v1 자료를 인계한다.
+   - createMatch의 초기 core phase는 GAME_LOADING이고 `START_PLAYING` control로 startTick과 deadline을 한 번 확정한다. 이미 시작한 core에 같은 control을 재적용해 시간을 바꾸지 않는다. createPractice의 초기 phase는 TEAM_PRACTICE이며 본 경기용 정확히 6명·도망자 3명의 우선순위 초기화·3출구 검증을 재사용하지 않는다. practice의 역할/인원/배치 검사는 MP-01의 별도 검증 결과를 따른다. B의 LOBBY/DEVICE_CHECK/COUNTDOWN은 Room 단계이므로 core 내부에서 임의 전환 타이머를 만들지 않는다.
 6. [공통 타입](contracts/types.ts)의 CorePort<State>/CoreCommand/ControlIntent/DomainEvent/MediaIntent/StepResult를 실제 export에 연결한다. StepResult.outcomes의 readonly CoreOutcome[]에는 이 step이 처리한 모든 명령의 actorId/matchId/requestId/sequence/tick/result/code를 정확히 하나씩 넣는다. applied는 권위 의도 반영·행동 예약의 수용이며 도착 보증이 아니다. 규칙 거절은 rejected와 안전한 code를 내고 그 명령으로 인한 게임 상태 변경을 남기지 않는다. 내부 control에는 사용자 요청 outcome을 만들지 않는다.
 7. getPlayerSelf/getVisibleSurfaces/getFrame을 CorePort의 실제 읽기 전용 selector로 export해 B가 내부 State 구조를 추측하지 않게 한다. getPlayerSelf의 loading은 core에서 null이며 B가 자기 로딩 장벽의 LoadingView를 허용 목록으로 결합한다. B가 보관한 기존 serverTick을 stepMatch 입력으로 주입해 practice→game 전환 뒤에도 Action 시각이 이어지게 한다.
-8. 실제 move 완료가 확정된 Tick에 DomainEvent {type:SPATIAL_SOUND,sound:{eventId,tick,kind:footstep,cell:완료 셀,sourcePlayerId:이동자 ID}}를 한 번 생성한다. eventId는 매치/Tick 내 다른 사건과 충돌하지 않는 결정적 일련번호로 만들고 완료 재평가·중복 명령으로 재발행하지 않는다. 예약 시작·벽 거절·제자리 회전은 발소리 사건을 만들지 않는다.
+8. 실제 move 완료가 확정된 Tick에 DomainEvent {type:SPATIAL_SOUND,sound:{eventId,tick,kind:footstep,cell:완료 셀,sourcePlayerId:이동자 ID}}를 한 번 생성한다. eventId는 matchId/gameInstanceId/Tick과 결정적 일련번호로 다른 논리 공간의 사건과 충돌하지 않게 만들고 완료 재평가·중복 명령으로 재발행하지 않는다. 예약 시작·벽 거절·제자리 회전은 발소리 사건을 만들지 않는다.
 
 **연결 계약과 경계**
 
@@ -1538,6 +1802,7 @@ feat: 동시 후보의 순환 우선순위 구현
 - 순수 예약 이동은 SV-01의 확정 좌표/시간 계약과 MP-01 자료로 구현한다. SV-04의 실제 서버 Tick 연결을 기다리는 역의존은 두지 않는다. B의 Tick 어댑터 결합은 B-04/FL-05와 G3에서 확인한다.
 - A의 CoreOutcome에는 인증 actorId를 포함하고 stateVersion을 넣지 않는다. B가 실제 수신자의 적용 가능한 개인 뷰 버전을 붙여 command-outcome으로 전달한다. 액션 후속 완료·기한 만료 사건은 이미 종결된 원래 명령에 두 번째 outcome을 만들지 않는다.
 - SPATIAL_SOUND의 cell/sourcePlayerId는 서버 전용이다. B가 sound만 TrustedMediaFrame.events에 담아 E로 넘기며, E가 수신자별 audio-policy로 변환한다. 지도 표식 사건이나 클라이언트 원좌표 메시지로 재사용하지 않는다.
+- getFrame의 CoreReadFrame.gameInstanceId는 상태 생성 때 주입한 논리 게임 ID를 그대로 반환한다. A는 미디어 ID·브라우저 revision을 만들지 않는다. B가 이 ID를 현재 수신자의 GameViewScope와 대조하고 PrivateView/PrivateEvent에 scope를 붙인다.
 
 **시험 입력 → 기대 결과**
 
@@ -1548,6 +1813,8 @@ feat: 동시 후보의 순환 우선순위 구현
 - 이동 예약 수용 → 같은 requestId의 applied 1개와 action; 벽 이동 규칙 거절 → rejected 1개와 명령 적용 전후 게임 상태 동일. 다른 명령과 Tick의 자연 경과는 별도로 비교한다.
 - getFrame/getPlayerSelf/getVisibleSurfaces 호출 → 이전 State 변경 없음; LoadingView는 core가 미디어 세대를 추측해 만들지 않는다. 라운드 Tick 500에서 game state의 첫 step → frame.tick=500, 이후 예약 start/end도 같은 시간축이다.
 - T10 예약/T19 완료 → T10~18 음향 사건 없음, T19 footstep 한 개와 완료 셀; 같은 완료 재평가·벽 거절·TURN → 추가 발소리 없음.
+- 같은 matchId/Tick의 팀별 practice 두 개와 본 경기 state → 각각 주입한 gameInstanceId가 frame에 보존되고 좌표·지식·사건이 섞이지 않는다. 미디어 재연결 자체는 core gameInstanceId나 상태 초기화를 유발하지 않는다.
+- 새 createMatch에 START_PLAYING(startTick=500) → 최초 PLAYING과 deadline=4100. 동일 control 재전달 → 두 값 유지. tagger-only/runner-only의 createPractice(1~3명) → 해당 역할 연습 생성, 6인/3출구 불변식의 잘못된 적용 없음.
 
 **추가·보완할 시험 파일**
 
@@ -2061,7 +2328,7 @@ feat: 개인 종료자와 활동자 이탈 정책 적용
 
 - wallface={x,y,side};knownTerrain의wall항목도side필수. private-view에현재visibleCells/visibleWallFaces추가하기로공통계약확정.
 - public시야마스크와영구knownTerrain는서로다른집합;서버내부전체grid는노출금지.
-- 가시 엔티티는 EXEC-CONTRACT-2의 player/sensor/trap discriminated union을 사용한다. 관찰 가능한 sensor에는 접근 cell과 실제 wall:{x,y,side}가 필수이며 dir로 부착 면을 추측하지 않는다. trap에는 wall을 넣지 않는다.
+- 가시 엔티티는 EXEC-CONTRACT-3의 player/sensor/trap discriminated union을 사용한다. 관찰 가능한 sensor에는 접근 cell과 실제 wall:{x,y,side}가 필수이며 dir로 부착 면을 추측하지 않는다. trap에는 wall을 넣지 않는다.
 
 **시험 입력 → 기대 결과**
 

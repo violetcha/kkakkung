@@ -6,13 +6,14 @@ import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import * as prettier from 'prettier';
 import { parsers } from 'prettier/plugins/markdown';
+import { readExecutionPlan, checkDeclaredOwnership } from './lib/execution-plan.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const execution = resolve(root, 'docs/execution');
 const sync = process.argv.includes('--sync');
 if (process.argv.slice(2).some((arg) => arg !== '--sync'))
   throw new Error('Usage: node scripts/check-execution-plan.mjs [--sync]');
-const version = 'EXEC-CONTRACT-2';
+const version = 'EXEC-CONTRACT-3';
 const scope = 'D-2026-09-08-01';
 const deferred = new Set(['MP-06', 'EQ-06', 'EQ-07', 'EQ-08', 'EQ-09', 'EQ-12']);
 const expectedRoles = { A: 33, B: 18, C: 19, D: 17, E: 16, F: 19 };
@@ -52,23 +53,23 @@ for (const file of files) {
   const path = resolve(execution, file);
   let text = (await readFile(path, 'utf8')).replace(/\r\n/g, '\n');
   const marker =
-    /<!-- BEGIN EXEC-CONTRACT-[12] COMMON -->[\s\S]*?<!-- END EXEC-CONTRACT-[12] COMMON -->/;
+    /<!-- BEGIN EXEC-CONTRACT-[123] COMMON -->[\s\S]*?<!-- END EXEC-CONTRACT-[123] COMMON -->/;
   const block =
-    '<!-- BEGIN EXEC-CONTRACT-2 COMMON -->\n\n' +
+    `<!-- BEGIN ${version} COMMON -->\n\n` +
     desiredCommon.trim() +
-    '\n\n<!-- END EXEC-CONTRACT-2 COMMON -->';
+    `\n\n<!-- END ${version} COMMON -->`;
   if (!marker.test(text)) {
     fail(file + ': missing common markers');
     continue;
   }
   if (sync) {
-    text = text.replaceAll('EXEC-CONTRACT-1', version).replace(marker, () => block);
+    text = text.replace(/EXEC-CONTRACT-[12]\b/g, version).replace(marker, () => block);
     text = await prettier.format(text, { ...prettierOptions, parser: 'markdown' });
     await writeFile(path, text, 'utf8');
   }
   contents.set(file, text);
   const common = text.match(
-    /<!-- BEGIN EXEC-CONTRACT-2 COMMON -->\s*([\s\S]*?)\s*<!-- END EXEC-CONTRACT-2 COMMON -->/,
+    /<!-- BEGIN EXEC-CONTRACT-3 COMMON -->\s*([\s\S]*?)\s*<!-- END EXEC-CONTRACT-3 COMMON -->/,
   );
   if (!common || normalize(common[1]) !== expectedCommon) fail(file + ': common block differs');
   const owner = file[0].toUpperCase();
@@ -185,6 +186,15 @@ function visit(id) {
   visited.add(id);
 }
 for (const task of tasks) visit(task.fixed);
+const ownershipPlan = await readExecutionPlan(root);
+for (const error of checkDeclaredOwnership(ownershipPlan)) fail(error);
+for (const task of ownershipPlan.tasks)
+  for (const dependency of task.integrationDependencies) {
+    const predecessor = byFixed.get(dependency);
+    if (!predecessor) fail(task.fixed + ': missing integration prerequisite ' + dependency);
+    else if (!task.pending && predecessor.pending)
+      fail(task.fixed + ': integration waits for undecided item ' + dependency);
+  }
 for (const owner of Object.keys(expectedRoles))
   for (const day of ['D1', 'D2', 'D3']) {
     const sameDay = tasks.filter((t) => t.owner === owner && t.day === day);
@@ -198,6 +208,9 @@ for (const extra of [
   '../mvp-work-plan.md',
   '../spec/README.md',
   '../spec/decisions.md',
+  'prompts.md',
+  'audit.md',
+  ...Object.keys(expectedRoles).map((role) => `handoffs/${role}.md`),
 ]) {
   const p = resolve(execution, extra);
   contents.set(extra, await readFile(p, 'utf8'));
@@ -290,6 +303,20 @@ if (fixtureRun.error || fixtureRun.status !== 0)
   );
 const fixtureChecks = Number(fixtureRun.stdout?.match(/^# tests (\d+)\s*$/m)?.[1] ?? 0);
 if (fixtureChecks === 0) fail('Contract fixture run did not report any tests');
+const toolingRun = spawnSync(
+  process.execPath,
+  ['--test', '--test-reporter=tap', resolve(root, 'scripts/tests/execution-tooling.test.mjs')],
+  { cwd: root, encoding: 'utf8', windowsHide: true },
+);
+if (toolingRun.error || toolingRun.status !== 0)
+  fail(
+    'Execution tooling verification failed:\n' +
+      (toolingRun.error?.message ?? '') +
+      toolingRun.stdout +
+      toolingRun.stderr,
+  );
+const toolingChecks = Number(toolingRun.stdout?.match(/^# tests (\d+)\s*$/m)?.[1] ?? 0);
+if (!toolingChecks) fail('Execution tooling tests did not run');
 
 if (errors.length) {
   console.error(errors.join('\n'));
@@ -306,6 +333,8 @@ if (errors.length) {
         ownedPaths: owners.size,
         commonHash: hash,
         fixtureChecks,
+        toolingChecks,
+        ownershipRegistryChecked: true,
         productIntegrationTested: false,
       },
       null,
