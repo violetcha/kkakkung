@@ -23,6 +23,29 @@ export const PINNED_MODEL_PATHS: ModelPaths = Object.freeze({
 
 export type VisionModelKind = 'face' | 'pose' | 'gesture';
 
+/**
+ * apps/web/public/models/manifest.json에 기록한 실제 sha256이다.
+ * 런타임이 내려받은 바이트를 이 값과 대조해 다르면 모델을 만들지 않는다.
+ */
+export const PINNED_MODEL_SHA256: Readonly<Record<VisionModelKind, string>> = Object.freeze({
+  face: '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff',
+  pose: '59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a',
+  gesture: '97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482',
+});
+
+/** 모델 바이트의 sha256을 계산해 고정값과 대조한다. */
+export async function verifyModelBytes(
+  kind: VisionModelKind,
+  bytes: ArrayBuffer,
+  digest: (data: ArrayBuffer) => Promise<ArrayBuffer>,
+): Promise<boolean> {
+  const hashed = await digest(bytes);
+  const hex = [...new Uint8Array(hashed)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return hex === PINNED_MODEL_SHA256[kind];
+}
+
 export type WorkerInit = Readonly<{
   type: 'init';
   runtimeGeneration: number;
@@ -72,7 +95,12 @@ export type WorkerFailure = Readonly<{
   runtimeGeneration: number;
   /** 프레임 단위 실패면 해당 frameId, 초기화 실패면 null이다. */
   frameId: number | null;
-  code: 'MODEL_LOAD_FAILED' | 'INFERENCE_FAILED' | 'DISPOSED' | 'PROTOCOL_ERROR';
+  code:
+    | 'MODEL_LOAD_FAILED'
+    | 'MODEL_HASH_MISMATCH'
+    | 'INFERENCE_FAILED'
+    | 'DISPOSED'
+    | 'PROTOCOL_ERROR';
 }>;
 
 export type WorkerClosed = Readonly<{ type: 'closed'; runtimeGeneration: number }>;

@@ -11,6 +11,7 @@ import {
 import { readFaceSensor } from './face-sensor';
 import { readGestureSensor } from './gesture-sensor';
 import { readPoseSensor } from './pose-sensor';
+import { verifyModelBytes } from './worker-protocol';
 import type {
   FrameOutcomes,
   ModelPaths,
@@ -18,6 +19,23 @@ import type {
   WorkerRequest,
   WorkerResponse,
 } from './worker-protocol';
+
+/** 고정 hash와 다른 모델은 만들지 않는다. 손상·교체된 자산을 조용히 싣지 않는다. */
+class ModelHashMismatchError extends Error {
+  constructor(readonly kind: VisionModelKind) {
+    super(`model hash mismatch: ${kind}`);
+    this.name = 'ModelHashMismatchError';
+  }
+}
+
+async function loadVerifiedModel(kind: VisionModelKind, url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`model fetch failed: ${kind}`);
+  const bytes = await response.arrayBuffer();
+  const ok = await verifyModelBytes(kind, bytes, (data) => crypto.subtle.digest('SHA-256', data));
+  if (!ok) throw new ModelHashMismatchError(kind);
+  return new Uint8Array(bytes);
+}
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -50,19 +68,25 @@ function closeModels(): void {
 
 async function loadModels(paths: ModelPaths): Promise<readonly VisionModelKind[]> {
   const fileset = await FilesetResolver.forVisionTasks(paths.wasmBasePath);
+  // 경로가 아니라 hash를 검증한 바이트로 모델을 만든다.
+  const [faceBytes, poseBytes, gestureBytes] = await Promise.all([
+    loadVerifiedModel('face', paths.face),
+    loadVerifiedModel('pose', paths.pose),
+    loadVerifiedModel('gesture', paths.gesture),
+  ]);
   const face = await FaceLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: paths.face },
+    baseOptions: { modelAssetBuffer: faceBytes },
     runningMode: 'VIDEO',
     numFaces: 1,
     outputFacialTransformationMatrixes: true,
   });
   const pose = await PoseLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: paths.pose },
+    baseOptions: { modelAssetBuffer: poseBytes },
     runningMode: 'VIDEO',
     numPoses: 1,
   });
   const gesture = await GestureRecognizer.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: paths.gesture },
+    baseOptions: { modelAssetBuffer: gestureBytes },
     runningMode: 'VIDEO',
     numHands: 2,
   });
@@ -114,10 +138,14 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
         if (loaded.length === 0) return;
         post({ type: 'ready', runtimeGeneration, loaded });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         closeModels();
         // 로딩 실패는 한 번 보고하고 무한 재시도하지 않는다.
-        post({ type: 'error', runtimeGeneration, frameId: null, code: 'MODEL_LOAD_FAILED' });
+        const code =
+          error instanceof ModelHashMismatchError ? 'MODEL_HASH_MISMATCH' : 'MODEL_LOAD_FAILED';
+        post({ type: 'error', runtimeGeneration, frameId: null, code });
+        // hash가 다르면 준비하지 않고 Worker를 종료한다.
+        if (code === 'MODEL_HASH_MISMATCH') self.close();
       });
     return;
   }

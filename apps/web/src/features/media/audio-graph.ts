@@ -9,6 +9,8 @@ export type OutputLock = 'open' | 'locked';
 export interface AudioNodeLike {
   connect(target: AudioNodeLike): void;
   disconnect(): void;
+  /** 실제 WebAudio 어댑터가 하위 노드를 실어 보내는 자리. 시험 fake는 생략한다. */
+  readonly node?: unknown;
 }
 
 export interface GainLike extends AudioNodeLike {

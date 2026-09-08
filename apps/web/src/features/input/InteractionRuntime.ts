@@ -47,6 +47,7 @@ import {
   createAudioGraph,
   type AudioGraph,
   type AudioGraphEnvironment,
+  type AudioNodeLike,
   type OutputLock,
 } from '../media/audio-graph';
 import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
@@ -386,6 +387,88 @@ export type KeyboardTarget = Readonly<{
   removeEventListener(type: 'keydown' | 'keyup', listener: (event: KeyboardEvent) => void): void;
 }>;
 
+/**
+ * 사용자 제스처로 연 AudioContext를 재사용하는 기본 그래프 환경.
+ * 브라우저에 Web Audio가 없으면 null이며 그때는 오디오를 구성하지 않는다.
+ */
+function browserAudio(): AudioGraphEnvironment | null {
+  if (typeof AudioContext === 'undefined') return null;
+  const context = new AudioContext();
+  const master = context.createGain();
+  master.connect(context.destination);
+  const wrap = <T extends AudioNode>(node: T) => ({
+    node,
+    connect: (target: AudioNodeLike): void => {
+      const sink = (target as { node?: AudioNode }).node ?? context.destination;
+      node.connect(sink);
+    },
+    disconnect: (): void => node.disconnect(),
+  });
+  return {
+    createSourceFromTrack: (track) => {
+      const source = context.createMediaStreamSource(new MediaStream([track]));
+      return { ...wrap(source) };
+    },
+    createEffectSource: () => {
+      const source = context.createBufferSource();
+      return { ...wrap(source), start: () => source.start(), stop: () => source.stop() };
+    },
+    createGain: () => {
+      const gain = context.createGain();
+      return {
+        ...wrap(gain),
+        get gainValue() {
+          return gain.gain.value;
+        },
+        set gainValue(value: number) {
+          gain.gain.value = value;
+        },
+      };
+    },
+    createFilter: () => {
+      const filter = context.createBiquadFilter();
+      filter.type = 'lowpass';
+      return {
+        ...wrap(filter),
+        get frequency() {
+          return filter.frequency.value;
+        },
+        set frequency(value: number) {
+          filter.frequency.value = value;
+        },
+      };
+    },
+    createPanner: () => {
+      const panner = context.createStereoPanner();
+      return {
+        ...wrap(panner),
+        get azimuthRad() {
+          return Math.asin(panner.pan.value);
+        },
+        set azimuthRad(value: number) {
+          panner.pan.value = Math.max(-1, Math.min(1, Math.sin(value)));
+        },
+      };
+    },
+    destination: {
+      node: context.destination,
+      connect: () => undefined,
+      disconnect: () => undefined,
+    },
+    masterGain: {
+      node: master,
+      connect: () => undefined,
+      disconnect: () => master.disconnect(),
+      get gainValue() {
+        return master.gain.value;
+      },
+      set gainValue(value: number) {
+        master.gain.value = value;
+      },
+    },
+  };
+}
+
 export const createInteractionRuntime = (
   deps: InteractionDeps,
   options: InteractionRuntimeOptions = {},
@@ -416,9 +499,14 @@ export const createInteractionRuntime = (
 
   const ensureAudio = (): AudioGraph | null => {
     if (audioGraph) return audioGraph;
-    if (!options.audio) return null;
+    const environment = options.audio ?? browserAudio();
+    // Web Audio가 없는 환경에서만 null이며, 그 사실을 상태로 보고한다.
+    if (!environment) {
+      patch({ audioPlayback: 'failed', errorCode: 'AUDIO_UNAVAILABLE' });
+      return null;
+    }
     audioGraph = createAudioGraph({
-      environment: options.audio,
+      environment,
       getAudioTrack: (trackSid) => options.getAudioTrack?.(trackSid) ?? null,
     });
     return audioGraph;
