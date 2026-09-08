@@ -1,0 +1,28 @@
+{
+  "projectAlias": "<LiveKit Cloud 프로젝트 이름. 대시보드 표시 이름, 비밀 아님>",
+  "namespace": "kkakkung-qa",
+  "sourceCommit": "<git rev-parse HEAD 전체 SHA>",
+  "lockfileHash": "<sha256sum pnpm-lock.yaml>",
+  "checkedAtEpochMs": 0,
+  "expiresAtEpochMs": 0,
+  "remainingMinutes": 0,
+  "remainingBytes": 0,
+  "allowedCases": ["MC-01"],
+  "budgetReservation": {
+    "reservationId": "mc01-2026-09-08",
+    "participantMinutes": 30,
+    "bytes": 500000000
+  },
+  "credentialEnvNames": [
+    "LIVEKIT_HTTP_URL",
+    "LIVEKIT_WS_URL",
+    "LIVEKIT_API_KEY",
+    "LIVEKIT_API_SECRET"
+  ],
+  "deviceManifest": { "path": "tests/cloud/devices.synthetic.json", "mode": "synthetic" },
+  "evidenceDir": ".local/qa/MC-01",
+  "maxRooms": 1,
+  "maxParticipants": 3,
+  "maxDurationSeconds": 300,
+  "cleanupAllowanceSeconds": 120
+}
