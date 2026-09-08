@@ -324,6 +324,57 @@ describe('createRemoteFaces', () => {
     expect(base.created.every((element) => element.removed)).toBe(true);
   });
 
+  it('keeps a verified audio track out of the pending hold', () => {
+    const base = harness();
+    base.store.apply(
+      bindings([participant(SELF, 1), participant('p2', 2, { audioTrackSid: 'TR_audio_2' })]),
+      SELF,
+    );
+    const audio = { ...remoteTrack(2), trackSid: 'TR_audio_2', kind: 'audio' as const };
+
+    base.faces.addTrack(audio);
+
+    // 검증된 오디오는 보류 대상이 아니다.
+    expect(base.pending.has('TR_audio_2')).toBe(false);
+
+    base.advance(2001);
+    base.faces.sweep();
+
+    // 2초가 지나도 구독을 끊지 않는다. 끊으면 근거리 음성이 죽는다.
+    expect(base.unsubscribed.map((track) => track.trackSid)).not.toContain('TR_audio_2');
+  });
+
+  it('resolves a verified audio track that arrived before its binding', () => {
+    const base = harness();
+    const audio = { ...remoteTrack(2), trackSid: 'TR_audio_2', kind: 'audio' as const };
+    base.faces.addTrack(audio);
+    expect(base.pending.has('TR_audio_2')).toBe(true);
+
+    base.store.apply(
+      bindings([participant(SELF, 1), participant('p2', 2, { audioTrackSid: 'TR_audio_2' })]),
+      SELF,
+    );
+    base.faces.reconcile();
+
+    expect(base.pending.has('TR_audio_2')).toBe(false);
+    base.advance(2001);
+    base.faces.sweep();
+    expect(base.unsubscribed.map((track) => track.trackSid)).not.toContain('TR_audio_2');
+  });
+
+  it('still evicts an audio track that no binding ever approved', () => {
+    const base = harness();
+    base.store.apply(bindings([participant(SELF, 1)]), SELF);
+    const stranger = { ...remoteTrack(9), trackSid: 'TR_audio_9', kind: 'audio' as const };
+
+    base.faces.addTrack(stranger);
+    base.advance(2001);
+    base.faces.sweep();
+
+    expect(base.unsubscribed.map((track) => track.trackSid)).toContain('TR_audio_9');
+    expect(base.refreshes.length).toBeGreaterThan(0);
+  });
+
   it('releases everything on clear', () => {
     const base = harness();
     base.store.apply(bindings([participant(SELF, 1), participant('p2', 2)]), SELF);

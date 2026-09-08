@@ -7,7 +7,6 @@ import type { FrameSource } from '../vision/frame-pump';
 import type { CompositorContext, CompositorEnvironment } from '../media/face-compositor';
 import {
   createInteractionRuntime,
-  InteractionNotImplementedError,
   isVisionReady,
   type InteractionDeps,
   type VisionEnvironment,
@@ -81,6 +80,9 @@ function harness() {
     errorCode: string | null;
   }[] = [];
   const previews: (HTMLVideoElement | null)[] = [];
+  const faceTracks: { playerId: string; element: HTMLVideoElement | null }[] = [];
+  const refreshRequests: unknown[] = [];
+  const unsubscribed: { trackSid: string }[] = [];
   let clock = 1000;
   let workerHandler: ((event: { data: unknown }) => void) | null = null;
   const posted: unknown[] = [];
@@ -154,7 +156,7 @@ function harness() {
     sendCommand: vi.fn(() => 'request-1'),
     requestMediaGrant: vi.fn(),
     reportMediaStatus: vi.fn(),
-    requestBindingsRefresh: vi.fn(),
+    requestBindingsRefresh: (request: unknown) => refreshRequests.push(request),
     onDeviceStatus: (status) =>
       statuses.push({
         camera: status.camera,
@@ -162,18 +164,28 @@ function harness() {
         calibration: status.calibration,
         errorCode: status.errorCode,
       }),
-    onFaceTrack: vi.fn(),
+    onFaceTrack: (event: { playerId: string; element: HTMLVideoElement | null }) =>
+      faceTracks.push(event),
     onMediaStatus: vi.fn(),
     onSensors: (snapshotValue) => sensors.push(snapshotValue),
     onInteractionState: vi.fn(),
     onLocalPreview: (element) => previews.push(element),
   } as unknown as InteractionDeps;
 
-  const runtime = createInteractionRuntime(deps, { environment, vision, compositor });
+  const runtime = createInteractionRuntime(deps, {
+    environment,
+    vision,
+    compositor,
+    createRemoteElement: () => ({ srcObject: null }) as unknown as HTMLVideoElement,
+    unsubscribeTrack: (track) => unsubscribed.push({ trackSid: track.trackSid }),
+  });
   return {
     runtime,
     track,
     processedTrack,
+    faceTracks,
+    refreshRequests,
+    unsubscribed,
     sensors,
     statuses,
     previews,
@@ -346,6 +358,71 @@ describe('createInteractionRuntime', () => {
     expect(() => base.runtime.applyMediaBindings({} as never)).not.toThrow();
     // D-16 이후 applyAudioPolicy도 모양 검사로 조용히 무시한다.
     expect(() => base.runtime.applyAudioPolicy({} as never)).not.toThrow();
+  });
+});
+
+describe('remote media limits and pending sweep', () => {
+  const playing = {
+    matchId: 'match-1',
+    selfPlayerId: 'p1',
+    role: 'runner' as const,
+    phase: 'PLAYING' as const,
+    status: 'ACTIVE' as const,
+    mode: 'motion' as const,
+    pageActive: true,
+  };
+
+  it('uses the practice limit while the authoritative phase is TEAM_PRACTICE', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+
+    base.runtime.setContext({ ...playing, phase: 'TEAM_PRACTICE' });
+    const practiceBindings = {
+      matchId: 'match-1',
+      mediaInstanceId: 'instance-1',
+      receiverGeneration: 1,
+      bindingRevision: 1,
+      participants: [2, 3, 4].map((index) => ({
+        playerId: `p${index}`,
+        publisherGeneration: 1,
+        mediaIdentity: `id-${index}`,
+        participantSid: `PA_${index}`,
+        faceTrackSid: `TR_face_${index}`,
+      })),
+    };
+    for (const index of [2, 3, 4])
+      base.runtime.addRemoteTrack({
+        trackSid: `TR_face_${index}`,
+        kind: 'video',
+        participantSid: `PA_${index}`,
+        attach: () => undefined,
+        detach: () => undefined,
+      });
+    base.runtime.applyMediaBindings(practiceBindings);
+
+    // 연습은 같은 인스턴스 2명까지만 받는다.
+    expect(base.faceTracks.filter((event) => event.element !== null)).toHaveLength(2);
+  });
+
+  it('sweeps the pending hold on a timer even when no binding ever arrives', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+
+    base.runtime.addRemoteTrack({
+      trackSid: 'TR_unknown',
+      kind: 'video',
+      participantSid: 'PA_9',
+      attach: () => undefined,
+      detach: () => undefined,
+    });
+    expect(base.refreshRequests).toHaveLength(0);
+
+    base.advance(2001);
+    base.fireTimers();
+
+    // 바인딩이 한 번도 오지 않아도 만료 청소와 refresh가 일어난다.
+    expect(base.unsubscribed.map((track) => track.trackSid)).toContain('TR_unknown');
   });
 });
 

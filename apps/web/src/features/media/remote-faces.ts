@@ -177,7 +177,16 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
       attach(binding, track, scope);
     }
 
-    // 3) 여전히 검증되지 않은 보류는 만료 규칙을 따른다.
+    // 3) 검증된 오디오 트랙도 보류에서 뺀다. 얼굴만 빼면 2초 뒤 음성 구독이 끊긴다.
+    for (const binding of remote) {
+      if (!binding.audioTrackSid) continue;
+      const track = tracks.get(binding.audioTrackSid);
+      if (!track || track.kind !== 'audio') continue;
+      if (track.participantSid !== binding.participantSid) continue;
+      pending.resolve(binding.audioTrackSid);
+    }
+
+    // 4) 여전히 검증되지 않은 보류는 만료 규칙을 따른다.
     const expired = pending.expire(deps.now());
     dropPending(expired.evicted, expired.needsRefresh);
   };
@@ -186,7 +195,10 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
     addTrack(track) {
       tracks.set(track.trackSid, track);
       const scope = deps.bindings.getScope();
-      const binding = track.kind === 'video' ? deps.bindings.findByFaceTrack(track.trackSid) : null;
+      const binding =
+        track.kind === 'video'
+          ? deps.bindings.findByFaceTrack(track.trackSid)
+          : deps.bindings.findByAudioTrack(track.trackSid);
       if (scope && binding && binding.participantSid === track.participantSid) {
         reconcile();
         return;

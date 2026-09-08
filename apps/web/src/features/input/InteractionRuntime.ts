@@ -59,7 +59,11 @@ import {
 export type { AudioEffect, AudioPolicy, AudioVoice } from '../media/audio-policy';
 export type { OutputLock } from '../media/audio-graph';
 export type { GenerationState, RetireReason } from '../media/media-lifecycle';
-import { createPendingTrackStore, type PendingTrackStore } from '../media/pending-tracks';
+import {
+  createPendingTrackStore,
+  PENDING_TRACK_TTL_MS,
+  type PendingTrackStore,
+} from '../media/pending-tracks';
 import {
   createRemoteFaces,
   type InstancePurpose,
@@ -403,7 +407,9 @@ export const createInteractionRuntime = (
   const context: ContextStore = createContextStore();
   let publisher: TrackPublisher | null = null;
   let qualityPreset: QualityPreset = 'medium';
-  let mediaPurpose: InstancePurpose = 'game';
+  /** 연습 상한(2명)과 본 경기 상한(5명)은 권위 phase에서 파생한다. */
+  const currentPurpose = (): InstancePurpose =>
+    context.get()?.phase === 'TEAM_PRACTICE' ? 'practice' : 'game';
   const bindingStore: BindingStore = createBindingStore();
   const policyStore: PolicyStore = createPolicyStore(bindingStore);
   let audioGraph: AudioGraph | null = null;
@@ -426,6 +432,24 @@ export const createInteractionRuntime = (
     graph.reconcileVoices(policyStore.resolveVoices());
   };
   const pendingTracks: PendingTrackStore = createPendingTrackStore();
+  let sweepTimer: number | null = null;
+
+  /** 보류가 남아 있는 동안만 만료 청소를 예약한다. 무한 polling을 만들지 않는다. */
+  const scheduleSweep = () => {
+    if (sweepTimer !== null || pendingTracks.size === 0) return;
+    sweepTimer = vision.setTimer(() => {
+      sweepTimer = null;
+      if (disposed) return;
+      remoteFaces.sweep();
+      scheduleSweep();
+    }, PENDING_TRACK_TTL_MS);
+  };
+
+  const stopSweep = () => {
+    if (sweepTimer === null) return;
+    vision.clearTimer(sweepTimer);
+    sweepTimer = null;
+  };
   const remoteFaces: RemoteFaces = createRemoteFaces({
     bindings: bindingStore,
     createElement: () =>
@@ -439,7 +463,7 @@ export const createInteractionRuntime = (
     },
     unsubscribe: (track) => options.unsubscribeTrack?.(track),
     requestBindingsRefresh: (request) => deps.requestBindingsRefresh(request),
-    getPurpose: () => mediaPurpose,
+    getPurpose: currentPurpose,
     pending: pendingTracks,
   });
 
@@ -519,6 +543,7 @@ export const createInteractionRuntime = (
         publisher = null;
       },
       releaseRemote: () => {
+        stopSweep();
         remoteFaces.clear();
         bindingStore.reset();
         audioGraph?.dispose();
@@ -882,6 +907,7 @@ export const createInteractionRuntime = (
       if (disposed || !lifecycle.canOperate()) return;
       remoteFaces.addTrack(track);
       if (track.kind === 'audio') reconcileAudio();
+      scheduleSweep();
     },
 
     removeRemoteTrack(trackSid) {
