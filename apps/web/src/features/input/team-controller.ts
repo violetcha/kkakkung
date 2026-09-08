@@ -1,3 +1,7 @@
+// LEGACY. 기존 kkakkung 개발 Room 전용 입력이다. 제품 0.2.0 경로가 아니다.
+// 제품 이동/회전 의도는 move-intent.ts(D-09)와 turn-intent.ts(D-10)가 만들고
+// InteractionRuntime이 조립한다. 이 파일의 150ms move 반복과 seq는 legacy 계약이며
+// 제품 sequence/requestId는 C sender가 부여한다. 두 경로를 동시에 연결하지 않는다.
 type InputTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 type Step = 'forward' | 'back';
 type Turn = 'left' | 'right';
