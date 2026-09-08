@@ -48,6 +48,7 @@ import {
   type GameKey,
   type GestureIntentController,
 } from './gesture-intent';
+import { createInputFallback, type InputFallback } from './input-fallback';
 import { createMoveIntentController, type MoveIntentController } from './move-intent';
 import { createTurnIntentController, type TurnIntentController } from './turn-intent';
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
@@ -394,6 +395,18 @@ export const createInteractionRuntime = (
     turn.reset();
     gestures.reset();
   };
+
+  /** 장애는 보조 입력 전환이다. 참가·Room·미디어 세대를 끝내지 않는다. */
+  const fallback: InputFallback = createInputFallback({
+    clearHolds,
+    onModeChange: (nextMode) => {
+      turn.setMode(nextMode);
+      gestures.setMode(nextMode);
+    },
+    onFailure: (code) => {
+      patch({ errorCode: code });
+    },
+  });
   let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
 
   const vision = options.vision ?? browserVision();
@@ -488,6 +501,7 @@ export const createInteractionRuntime = (
     }
     refreshVisionStatus();
     calibrationObserver?.(snapshot);
+    fallback.observe(snapshot, vision.now(), runtimeGeneration);
     applyMotionIntents(snapshot);
     gestures.observe(snapshot, vision.now(), runtimeGeneration);
     deps.onSensors(snapshot);
@@ -514,6 +528,7 @@ export const createInteractionRuntime = (
         onSnapshot: publishSnapshot,
         onError: (code) => {
           if (generation !== runtimeGeneration) return;
+          fallback.report('WORKER_ERROR');
           patch({ vision: 'failed', errorCode: code });
         },
         onReady: () => {
@@ -608,9 +623,10 @@ export const createInteractionRuntime = (
       onLocalPreview: (element) => deps.onLocalPreview(element),
       onCameraTrack: (track) => {
         if (track !== null) return;
-        // 원본이 사라지면 비전도 멈추고 보정을 버린다.
+        // 원본이 사라지면 비전도 멈추고 보정을 버린다. 참가는 유지한다.
         stopVision();
         calibrator.reset();
+        fallback.report('CAMERA_ENDED');
         patch({ vision: 'idle', calibration: 'idle' });
       },
     });
@@ -662,6 +678,11 @@ export const createInteractionRuntime = (
 
       if (disposed || generation !== runtimeGeneration) return lastStatus;
       const result = calibrator.finish();
+      if (result.state === 'ready')
+        fallback.restoreMotion({
+          calibrated: true,
+          requestedMode: context.get()?.mode ?? 'motion',
+        });
       patch(
         result.state === 'ready'
           ? { calibration: 'ready', errorCode: null }
@@ -708,6 +729,7 @@ export const createInteractionRuntime = (
       unbindKeyboard();
       clearHolds();
       context.clear();
+      fallback.reset();
       stopVision();
       calibrator.reset();
       await devices?.dispose();
