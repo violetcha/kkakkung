@@ -33,16 +33,16 @@ Windows에서 Node.js 24.19.0, pnpm 11.19.0, TypeScript 6.0.3, Chromium 153으�
 
 담당 F 정호성, Jira [S15P21C204-151](https://ssafy.atlassian.net/browse/S15P21C204-151), 브랜치 `ci/S15P21C204-41-jenkins-pipeline`. 아래는 로컬·서버 사실 확인이며 Cloud·장치·부하 증거가 아니다. 비밀값은 기록하지 않는다.
 
-| 항목                          | 확인 결과                                                                                                                                                                     | 상태      |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 도구 버전                     | Node 24.19.0, pnpm 11.19.0, TypeScript 6.0.3, Playwright 1.63.0 Chromium. Windows 작업 PC 는 Node 24.19.0 zip(SHA-256 대조)로 맞춤                                            | CONFIRMED |
-| AWS                           | t3.xlarge(4 vCPU·15 GiB·309 GB), ap-northeast-2a, Ubuntu 24.04.4, 커널 6.17.0-1019-aws, 공인 IP 3.35.18.207 = `dig j15c204.p.ssafy.io` = 서버 egress. IMDS 로 2026-09-08 확인 | CONFIRMED |
-| 포함 전송량                   | 서버 안에서 확인 불가. SSAFY 안내 필요                                                                                                                                        | BLOCKED   |
-| 도메인·TLS                    | `j15c204.p.ssafy.io`, Let's Encrypt, 만료 2026-12-06, certbot 타이머 자동갱신                                                                                                 | CONFIRMED |
-| Jenkins                       | `https://j15c204.p.ssafy.io/jenkins/`, 127.0.0.1:18080 바인딩, GitLab 플러그인·Project Access Token 크리덴셜. 잡·웹훅 미생성                                                  | 부분      |
-| LiveKit Cloud                 | 계정·프로젝트 alias·잔량·한도 미확인                                                                                                                                          | BLOCKED   |
-| 시험 namespace·자격 주입 경로 | `SERVICE_NAMESPACE` 운영 `kkakkung-ec2`, QA 용 별도 값 미정. 주입은 Jenkins 크리덴셜 → env 파일(compose.production.yaml 은 이름만)                                            | 부분      |
-| 대표 장치 6대·부하 발생기     | 미확인                                                                                                                                                                        | BLOCKED   |
+| 항목                          | 확인 결과                                                                                                                                                                                      | 상태      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 도구 버전                     | Node 24.19.0, pnpm 11.19.0, TypeScript 6.0.3, Playwright 1.63.0 Chromium. Windows 작업 PC 는 Node 24.19.0 zip(SHA-256 대조)로 맞춤                                                             | CONFIRMED |
+| AWS                           | t3.xlarge(4 vCPU·15 GiB·309 GB), ap-northeast-2a, Ubuntu 24.04.4, 커널 6.17.0-1019-aws, 공인 IP 3.35.18.207 = `dig j15c204.p.ssafy.io` = 서버 egress. IMDS 로 2026-09-08 확인                  | CONFIRMED |
+| 포함 전송량                   | 서버 안에서 확인 불가. SSAFY 안내 필요                                                                                                                                                         | BLOCKED   |
+| 도메인·TLS                    | `j15c204.p.ssafy.io`, Let's Encrypt, 만료 2026-12-06, certbot 타이머 자동갱신                                                                                                                  | CONFIRMED |
+| Jenkins                       | `https://j15c204.p.ssafy.io/jenkins/`, 127.0.0.1:18080 바인딩, GitLab 플러그인·Project Access Token 크리덴셜. 잡·웹훅 미생성                                                                   | 부분      |
+| LiveKit Cloud                 | 계정·프로젝트 alias·잔량·한도 미확인                                                                                                                                                           | BLOCKED   |
+| 시험 namespace·자격 주입 경로 | `SERVICE_NAMESPACE` 운영 `kkakkung-ec2`, QA 용 별도 값 미정. 주입은 Jenkins 크리덴셜 → env 파일(compose.production.yaml 은 이름만)                                                             | 부분      |
+| 대표 장치 6대·부하 발생기     | 6대 동일 사양(Galaxy Book 960XGL, Ultra 9 185H, 64GB, RTX 4070 Laptop, 내장 카메라, Chrome 152). 부하 발생기는 그중 1대 겸용. `tests/cloud/devices.representative.json`. 유선 가능 여부 미확인 | 부분      |
 
 로컬에서 실행한 검사와 결과:
 
