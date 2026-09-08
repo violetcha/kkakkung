@@ -17,7 +17,8 @@ pipeline {
   environment {
     IMG_GAME  = 'kkakkung-game'
     IMG_WEB   = 'kkakkung-web'
-    COMPOSE   = 'infra/compose.prod.yaml'
+    // 개발용 compose.yaml 위에 운영 override 를 덧씌웁니다 (docs/execution/f-infra-qa.md DP-02).
+    COMPOSE   = '-f infra/compose.yaml -f infra/compose.production.yaml'
     STATE_DIR = '/opt/kkakkung'
     READY_URL = 'http://127.0.0.1:8080/health/ready'   // web-proxy 경유 → game-server
     DEPLOY_BRANCH = 'develop'
@@ -35,6 +36,13 @@ pipeline {
       steps {
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
+          // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃이 같은지 대조합니다 (DP-04).
+          // 웹훅 빌드에서만 값이 오고, 수동 빌드에선 비어 있어 건너뜁니다.
+          def head = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+          def expected = env.gitlabAfter ?: (env.gitlabMergeRequestLastCommit ?: '')
+          if (expected && expected != head) {
+            error("체크아웃된 커밋(${head})이 GitLab 이 보낸 커밋(${expected})과 다릅니다. 배포 중단.")
+          }
           def b = env.BRANCH_NAME ?: (env.GIT_BRANCH ?: '')
           env.IS_DEPLOY = (b == env.DEPLOY_BRANCH || b.endsWith('/' + env.DEPLOY_BRANCH)) ? 'true' : 'false'
           echo "commit=${env.TAG}  branch=${b}  deploy=${env.IS_DEPLOY}"
@@ -54,7 +62,8 @@ pipeline {
 
     stage('Verify') {
       steps {
-        // CONTRIBUTING.md 의 검사에서 e2e(Playwright, 브라우저 필요)만 제외. 나중에 playwright 이미지로 추가.
+        // CONTRIBUTING.md 의 검사 순서 그대로. e2e(Playwright, Chromium 필요)만 아직 제외 → 브라우저 이미지 붙여 추가 예정.
+        // check:execution 은 실행계획 문서·계약·fixture 동기 검사 (F 소유, 루트 node_modules 만 필요).
         sh '''
           $RUN_NODE -v "$WORKSPACE:/workspace" -w /workspace "$NODE_IMAGE" sh -c '
             set -e
@@ -63,6 +72,7 @@ pipeline {
             pnpm config set store-dir /tmp/pnpm-store
             pnpm install --frozen-lockfile
             pnpm format:check
+            pnpm check:execution
             pnpm lint
             pnpm typecheck
             pnpm test
@@ -101,7 +111,7 @@ pipeline {
           echo "직전 정상 태그: ${env.PREV_TAG ?: '없음 (첫 배포)'}"
         }
 
-        sh 'TAG="$TAG" docker compose -f "$COMPOSE" up -d'
+        sh 'TAG="$TAG" docker compose $COMPOSE up -d'
 
         // 컨테이너가 떴다고 앱이 산 건 아닙니다. web-proxy 를 거쳐 game-server 의 ready 를 직접 봅니다.
         sh '''
@@ -118,7 +128,14 @@ pipeline {
           exit 1
         '''
 
-        sh 'echo "$TAG" > "$STATE_DIR/last-good-tag"'
+        // 태그와 함께 이미지 digest 도 기록합니다. 롤백 때 태그가 다른 이미지를 가리키면 멈추기 위해서입니다.
+        sh '''
+          echo "$TAG" > "$STATE_DIR/last-good-tag"
+          {
+            echo "game $(docker image inspect --format '{{.Id}}' "$IMG_GAME:$TAG")"
+            echo "web  $(docker image inspect --format '{{.Id}}' "$IMG_WEB:$TAG")"
+          } > "$STATE_DIR/last-good-digest"
+        '''
       }
     }
   }
@@ -128,7 +145,15 @@ pipeline {
       script {
         if (env.PREV_TAG?.trim()) {
           echo "배포 실패. ${env.PREV_TAG} 로 롤백합니다"
-          sh 'TAG="$PREV_TAG" docker compose -f "$COMPOSE" up -d || true'
+          // 기록된 digest 와 현재 태그의 이미지가 같을 때만 되돌립니다 (latest 추측 금지).
+          sh '''
+            want=$(awk '$1=="game"{print $2}' "$STATE_DIR/last-good-digest" 2>/dev/null || true)
+            have=$(docker image inspect --format '{{.Id}}' "$IMG_GAME:$PREV_TAG" 2>/dev/null || true)
+            if [ -n "$want" ] && [ "$want" != "$have" ]; then
+              echo "ROLLBACK_BLOCKED: $IMG_GAME:$PREV_TAG 의 digest 가 기록과 다릅니다. 수동 확인 필요."; exit 0
+            fi
+            TAG="$PREV_TAG" docker compose $COMPOSE up -d || true
+          '''
         }
       }
     }

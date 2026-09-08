@@ -1,9 +1,13 @@
-# EC2 배포용 compose. 로컬 개발용 infra/compose.yaml 과 별개.
+# EC2 운영 override. 단독으로 쓰지 않고 개발용 compose.yaml 위에 덧씌웁니다.
 #
-# 이미지는 Jenkins 가 커밋 SHA 로 태그해서 미리 빌드해둡니다 (infra/docker/Dockerfile.*).
-# 여기선 빌드 안 하고 태그만 골라서 띄워요. 롤백은 TAG 를 이전 값으로 바꿔 up -d.
+#   TAG=a1b2c3d4 docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d
 #
-#   TAG=a1b2c3d4 docker compose -f infra/compose.prod.yaml up -d
+# compose.yaml 이 서비스 구성·포트(127.0.0.1:8080)·헬스체크·볼륨을 정의하고,
+# 이 파일은 이미지 태그·운영 환경변수·재시작·로그 회전·종료 유예만 바꿉니다.
+# 이미지는 Jenkins 가 커밋 SHA 로 태그해서 미리 빌드해둡니다. 로컬에 그 태그가 있으면
+# compose 는 build 를 다시 하지 않습니다. 롤백은 TAG 를 이전 값으로 바꿔 up -d.
+#
+# 상태 조회·중지는 태그 없이: docker compose -p kkakkung ps / down
 
 name: kkakkung
 
@@ -12,12 +16,7 @@ services:
     image: kkakkung-web:${TAG:?TAG 를 지정하세요 (예 TAG=a1b2c3d4)}
     container_name: kkakkung-web
     restart: unless-stopped
-    # 호스트 nginx(443, TLS)가 여기로 넘깁니다. 외부에 직접 열지 않아요.
-    ports:
-      - '127.0.0.1:8080:80'
-    depends_on:
-      game-server:
-        condition: service_healthy
+    stop_grace_period: 10s
     logging:
       driver: json-file
       options: { max-size: '10m', max-file: '3' }
@@ -26,38 +25,18 @@ services:
     image: kkakkung-game:${TAG:?TAG 를 지정하세요 (예 TAG=a1b2c3d4)}
     container_name: kkakkung-game
     restart: unless-stopped
-    # 호스트 포트를 열지 않습니다. web-proxy 컨테이너만 compose 네트워크로 접근.
+    # 진행 중인 판을 정리할 시간. SIGTERM 뒤 이 시간 안에 안 끝나면 SIGKILL.
+    stop_grace_period: 30s
     environment:
-      # server/src/config/env.ts 가 development | test 만 허용합니다 (NFR-05: 인증·미디어 없이는 production 불가).
-      # production 프로파일이 구현되면 이 한 줄만 바꿉니다.
+      # server/src/config/env.ts 가 development | test 만 허용합니다 (NFR-05).
+      # production 프로파일은 B 초대 인증·E 운영 통합 뒤(D2) 켭니다. 그때 이 한 줄만 바꿉니다.
       NODE_ENV: development
-      HOST: 0.0.0.0
-      PORT: 2567
       # 서버가 이 목록에 없는 Origin 은 HTTP 403 / WS 업그레이드 거절합니다. 도메인 바뀌면 여기.
       ALLOWED_ORIGINS: https://j15c204.p.ssafy.io
-      MEDIA_MODE: disabled
-      OPS_DATA_DIR: /var/lib/kkakkung
-      MAX_ROOMS: 1
-      MAX_SLOTS: 6
       SERVICE_NAMESPACE: kkakkung-ec2
       LOG_LEVEL: info
-    volumes:
-      - operations:/var/lib/kkakkung
-    healthcheck:
-      test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://127.0.0.1:2567/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 6
-      start_period: 10s
+      # LIVEKIT_* / OPS_TOKEN 은 스키마에 들어오면 Jenkins 크리덴셜 → 환경 파일로 주입합니다.
+      # 이 파일에 값을 쓰지 않습니다.
     logging:
       driver: json-file
       options: { max-size: '10m', max-file: '3' }
-
-volumes:
-  operations:

@@ -13,7 +13,7 @@ if ! docker image inspect "kkakkung-game:$TAG" >/dev/null 2>&1; then
   docker build -f infra/docker/Dockerfile.game-server -t "kkakkung-game:$TAG" .
   docker build -f infra/docker/Dockerfile.web         -t "kkakkung-web:$TAG"  .
 fi
-TAG="$TAG" docker compose -f infra/compose.prod.yaml up -d
+TAG="$TAG" docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d
 
 echo "==> 헬스체크"
 for i in $(seq 1 30); do

@@ -76,7 +76,7 @@ Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 �
 
 ## 7. 첫 빌드 전 확인 (완료, 2026-09-08)
 
-- EC2 에서 40번 Dockerfile 두 개 빌드 → `compose.prod.yaml` 로 기동 → `/health/ready` 200, Origin 403/200 확인까지 마쳤습니다.
+- EC2 에서 40번 Dockerfile 두 개 빌드 → `compose.production.yaml` 로 기동 → `/health/ready` 200, Origin 403/200 확인까지 마쳤습니다.
   단, 원본 `Dockerfile.game-server` 는 pnpm 11.19 의 `deploy` 버그(pnpm/pnpm#13754)로 **부팅 시 ERR_MODULE_NOT_FOUND**.
   수정안 `infra/docker/Dockerfile.game-server`(이 스켈레톤) 로 교체해서 통과. 40번 소유 파일이라 이주헌에게 전달.
   재현 순서:
@@ -85,7 +85,7 @@ Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 �
   docker build -f infra/docker/Dockerfile.game-server -t kkakkung-game:test .
   docker build -f infra/docker/Dockerfile.web -t kkakkung-web:test .
   ```
-- compose 파일은 `${TAG:?}` 로 태그를 강제해서 `down`·`ps` 도 `TAG=` 가 필요합니다. 태그 몰라도 되는 방법: `docker compose -p kkakkung ps` / `down`.
+- 운영 기동은 항상 두 파일을 겹칩니다: `TAG=<sha> docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d`. override 는 `${TAG:?}` 로 태그를 강제해서 `down`·`ps` 도 `TAG=` 가 필요합니다. 태그 몰라도 되는 방법: `docker compose -p kkakkung ps` / `down`.
 - pnpm store 캐시 폴더: Jenkinsfile 이 `/var/lib/jenkins/.cache/pnpm-store` 를 만듭니다. 첫 Verify 는 5분 안팎.
 
 ## 알고 있어야 할 것
