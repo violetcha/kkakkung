@@ -11,6 +11,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { runTool } from './lib/run-tool.mjs';
 import { createHash } from 'node:crypto';
 import {
   CLOUD_CASES,
@@ -117,8 +118,8 @@ function main() {
 
   mkdirSync(resolve(root, preflight.evidenceDir), { recursive: true });
   const startedAt = new Date().toISOString();
-  const run = spawnSync(
-    process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+  const run = runTool(
+    'pnpm',
     ['exec', 'vitest', 'run', '--config', 'vitest.cloud.config.ts', selected.file],
     {
       cwd: root,

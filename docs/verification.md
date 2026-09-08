@@ -59,3 +59,11 @@ Windows에서 Node.js 24.19.0, pnpm 11.19.0, TypeScript 6.0.3, Chromium 153으�
 설정 변경: Vitest 기본 include 에 `tests/contracts/**`·`tests/load/**` 추가, `**/*.cloud.test.ts` 기본 제외, `vitest.cloud.config.ts`(worker 1, 120s/30s) 신설, `tsconfig.qa.json` 을 루트 typecheck 에 연결, `apps/web/tsconfig.json` 에서 `*.worker.ts` 제외(D 의 `tsconfig.worker.json` 도착 후 typecheck 추가), `server/src/config/env.ts` 에 LiveKit·OPS·admission 선택 그룹 추가(production 거절·MEDIA_MODE disabled 유지), ESLint 가 `.local/` 을 무시.
 
 Cloud case allowlist 는 `tests/cloud/CloudPreflight.ts` 의 `CLOUD_CASES` 하나가 원본이다. 아직 어떤 case 파일도 인계되지 않았으므로 runner 는 모든 case 를 BLOCKED 로 끝낸다.
+
+## F-04 / DP-04 Jenkins 검증 (2026-09-08)
+
+Jira [S15P21C204-154](https://ssafy.atlassian.net/browse/S15P21C204-154). 예행연습 잡 `kkakkung-rehearsal`(브랜치 Jenkinsfile 을 SCM 으로 읽고 3분 폴링)에서 빌드 #4·#5 SUCCESS: gitleaks → Verify → 이미지 2개 빌드 → Trivy 기록 → develop 아니라 Deploy skip. 이때 Verify 는 개별 pnpm 검사 목록이었고 e2e 가 없었다.
+
+이후 Verify 를 `scripts/ci-verify.mjs` 단일 진입점으로 바꿨다: Node 24.19.0/pnpm 11.19.0 확인 → `EXPECTED_SOURCE_SHA`(GitLab 이 보낸 커밋)와 `git rev-parse HEAD` 대조(불일치면 install 전에 종료 코드 3) → frozen install → Chromium 확인 → `pnpm verify` 정확히 1회. 컨테이너는 `infra/docker/Dockerfile.ci`(Node 24.19.0 + Playwright 1.63.0 Chromium --with-deps) 를 파일 해시로 태그해 쓴다. 계약 시험 `tests/contracts/ci-contract.test.ts` 10개가 계획 순서·verify 1회·Jenkinsfile 의 회귀(개별 검사 재나열, RUN_NODE)·비밀 미포함을 검사한다.
+
+미완: GitLab 커밋 상태 게시(`gitlabCommitStatus`)는 Jenkins 에 GitLab API token 크리덴셜과 GitLab connection 이 없어 BLOCKED. 설정되기 전에는 게시하지 않는다(가짜 성공 없음). 새 Verify 의 Jenkins 실측은 push 후 폴링 빌드 결과를 이 절에 추가한다.

@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { runTool } from './lib/run-tool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -74,9 +74,8 @@ export const OPERATOR_FACT_KEYS = Object.freeze([
   'devices.loadGenerators',
 ]);
 
-const exe = (cmd) => (process.platform === 'win32' && cmd === 'pnpm' ? 'pnpm.cmd' : cmd);
 function run(cmd, args) {
-  const r = spawnSync(exe(cmd), args, { encoding: 'utf8' });
+  const r = runTool(cmd, args, { encoding: 'utf8' });
   return r.status === 0 ? r.stdout.trim() : null;
 }
 

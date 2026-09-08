@@ -22,10 +22,9 @@ pipeline {
     STATE_DIR = '/opt/kkakkung'
     READY_URL = 'http://127.0.0.1:8080/health/ready'   // web-proxy 경유 → game-server
     DEPLOY_BRANCH = 'develop'
-    // .node-version / package.json engines 와 같은 버전. 여기 바꾸면 Dockerfile 도 같이.
-    // slim 이 아닌 이유: check:execution 의 scripts/tests 가 git 을 호출합니다. 런타임 이미지는 slim 그대로.
-    NODE_IMAGE = 'node:24.19.0-bookworm'
-    PNPM_VER   = '11.19.0'
+    // 검증 도구체인은 infra/docker/Dockerfile.ci (Node 24.19.0 + pnpm 11.19.0 + Playwright Chromium).
+    // 파일 해시로 태그해서 Dockerfile.ci 가 바뀔 때만 다시 빌드합니다.
+    CI_IMAGE   = 'kkakkung-ci'
   }
 
   stages {
@@ -46,6 +45,17 @@ pipeline {
           echo "commit=${env.TAG}  branch=${b}  deploy=${env.IS_DEPLOY}"
         }
         sh 'mkdir -p /var/lib/jenkins/.cache/pnpm-store'
+        // 검증 대상 SHA 는 ci-verify.mjs 가 install 전에 다시 대조합니다 (DP-04).
+        script {
+          env.EXPECTED_SOURCE_SHA = env.gitlabAfter ?: (env.gitlabMergeRequestLastCommit ?: '')
+          env.CI_TAG = sh(script: 'sha256sum infra/docker/Dockerfile.ci | cut -c1-12', returnStdout: true).trim()
+        }
+        sh '''
+          if ! docker image inspect "$CI_IMAGE:$CI_TAG" > /dev/null 2>&1; then
+            echo "CI 이미지 빌드: $CI_IMAGE:$CI_TAG"
+            docker build -f infra/docker/Dockerfile.ci -t "$CI_IMAGE:$CI_TAG" infra/docker
+          fi
+        '''
       }
     }
 
@@ -60,24 +70,12 @@ pipeline {
 
     stage('Verify') {
       steps {
-        // CONTRIBUTING.md 의 검사 순서 그대로. e2e(Playwright, Chromium 필요)만 아직 제외 → 브라우저 이미지 붙여 추가 예정.
-        // check:execution 은 실행계획 문서·계약·fixture 동기 검사 (F 소유, 루트 node_modules 만 필요).
-        // 호스트 도구 없이 컨테이너 안에서 pnpm 실행. jenkins uid 로 돌려 root 소유 파일이 안 남게.
-        // pnpm store 는 호스트의 jenkins 홈에 캐시 (첫 빌드 이후 install 이 빨라짐).
-        // $(id -u) 는 환경변수에 넣으면 치환되지 않으므로 여기서 직접 평가합니다.
+        // 단일 진입점 scripts/ci-verify.mjs: 도구체인 확인 → EXPECTED_SOURCE_SHA 대조 → frozen install
+        // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·check:execution·lint·typecheck·test·build·e2e).
+        // 개별 pnpm 검사 목록을 여기 다시 나열하지 않습니다 (DP-04).
+        // jenkins uid 로 돌려 root 소유 파일이 안 남게 하고, pnpm store 는 호스트 jenkins 홈에 캐시합니다.
         sh '''
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e npm_config_prefix=/tmp/npm             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$NODE_IMAGE" sh -c '
-            set -e
-            npm install -g pnpm@'"$PNPM_VER"' > /dev/null
-            export PATH=/tmp/npm/bin:$PATH
-            pnpm config set store-dir /tmp/pnpm-store
-            pnpm install --frozen-lockfile
-            pnpm format:check
-            pnpm check:execution
-            pnpm lint
-            pnpm typecheck
-            pnpm test
-          '
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
         '''
       }
     }

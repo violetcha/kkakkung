@@ -91,6 +91,7 @@ Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 �
   docker build -f infra/docker/Dockerfile.web -t kkakkung-web:test .
   ```
 - 운영 기동은 항상 두 파일을 겹칩니다: `TAG=<sha> docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d`. override 는 `${TAG:?}` 로 태그를 강제해서 `down`·`ps` 도 `TAG=` 가 필요합니다. 태그 몰라도 되는 방법: `docker compose -p kkakkung ps` / `down`.
+- CI 이미지 `kkakkung-ci:<Dockerfile.ci 해시 12자>` 는 Prepare 단계가 없을 때만 빌드합니다(첫 빌드 3~5분, apt 로 Chromium 의존성). Dockerfile.ci 를 바꾸면 해시가 바뀌어 자동으로 다시 빌드됩니다.
 - pnpm store 캐시 폴더: Jenkinsfile 이 `/var/lib/jenkins/.cache/pnpm-store` 를 만듭니다. 첫 Verify 는 5분 안팎.
 
 ## 알고 있어야 할 것
