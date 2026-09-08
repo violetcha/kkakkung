@@ -4,6 +4,7 @@
 
 이 파일은 팀원 AI가 D의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다.
 갱신일 **2026-09-08** · 계약 기준 **EXEC-CONTRACT-3** · 적용 제품 결정 **D-2026-09-08-01**
+Jira: D-01~~D-17 = [S15P21C204-118](https://ssafy.atlassian.net/browse/S15P21C204-118)~~[S15P21C204-134](https://ssafy.atlassian.net/browse/S15P21C204-134) (담당 오명헌)
 시작 SHA `b12cb9c` · 브랜치 `feat/mvp-d-d1` (**로컬 전용, 아직 push하지 않음**)
 
 **아래 인계는 모두 합성 port 단위 검증(LOCAL_VERIFIED)이다. 실제 브라우저·대표 장치·
@@ -33,24 +34,32 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 
 ## 구현 상태
 
-| 고정 번호 / 원본 ID | localStage     | 구현 commit | 실제로 되는 것                                                         |
-| ------------------- | -------------- | ----------- | ---------------------------------------------------------------------- |
-| D-01 / IN-01        | LOCAL_VERIFIED | `be76e52`   | 카메라·마이크 분리 취득, 단일 취득, 늦은 결과 정리, local preview 수명 |
-| D-02 / IN-02        | LOCAL_VERIFIED | `25141f2`   | Worker 전송 계약, inFlight 1개, 고정 모델·WASM 자산과 manifest         |
-| D-03 / IN-03        | LOCAL_VERIFIED | `8f2a58c`   | 얼굴 landmarks·yaw·validity 정규화와 미러 helper                       |
-| D-04 / IN-04        | LOCAL_VERIFIED | `03b9df8`   | 상체 landmarks·visibility·몸통 기울임과 품질 판정                      |
-| D-05 / IN-05        | LOCAL_VERIFIED | `86fb713`   | 손바닥·브이 판정, 양손 충돌 none, 최고 score 1개                       |
-| D-06 / IN-06        | LOCAL_VERIFIED | `f57e9f8`   | 중립 보정, One Euro Filter, 발동/해제 임계값, 비전 파이프라인 기동     |
-| D-07 / ME-01        | LOCAL_VERIFIED | `a1e054c`   | 흑백 얼굴 마스크·가공 Canvas 트랙과 원본 게시 차단 handle              |
-| D-08 / ME-02        | LOCAL_VERIFIED | `b09ddae`   | 추적 실패의 안전 프레임 유지와 기본 얼굴 전환                          |
-| D-09 / IN-07        | LOCAL_VERIFIED | `a5f11c4`   | 전후진 모션·키 의도 통합과 100ms 갱신                                  |
-| D-10 / IN-08        | LOCAL_VERIFIED | `5d052fb`   | 회전 latch·중립 해제와 키 1회 발동                                     |
-| D-11 / IN-09        | LOCAL_VERIFIED | `a5f327d`   | InteractionContext 보관·무효화, 손동작/단축키 중재                     |
-| D-12 / IN-10        | LOCAL_VERIFIED | `5d971a9`   | 장치·추론 장애 감지와 keyboard 폴백                                    |
-| D-13 / ME-03        | LOCAL_VERIFIED | `61d4296`   | 승인 grant의 단일 SDK 연결 수명 (**주입 port로만 검증**)               |
-| D-14–D-17           | PLANNED        | 없음        | 게시·수신·오디오·세대 종료는 아직 구현하지 않았다                      |
+| 고정 번호                                                                     | 원본 ID | Jira                                                                | localStage     | 최종 commit | 실제로 되는 것                                                         |
+| ----------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------- | -------------- | ----------- | ---------------------------------------------------------------------- |
+| D-01                                                                          | IN-01   | [S15P21C204-118](https://ssafy.atlassian.net/browse/S15P21C204-118) | LOCAL_VERIFIED | `92c8707`   | 카메라·마이크 분리 취득, 단일 취득, 늦은 결과 정리, local preview 수명 |
+| D-02                                                                          | IN-02   | [S15P21C204-119](https://ssafy.atlassian.net/browse/S15P21C204-119) | LOCAL_VERIFIED | `ee3ef64`   | Worker 전송 계약, inFlight 1개, 고정 모델·WASM 자산과 manifest         |
+| D-03                                                                          | IN-03   | [S15P21C204-120](https://ssafy.atlassian.net/browse/S15P21C204-120) | LOCAL_VERIFIED | `e8da50e`   | 얼굴 landmarks·yaw·validity 정규화와 미러 helper                       |
+| D-04                                                                          | IN-04   | [S15P21C204-121](https://ssafy.atlassian.net/browse/S15P21C204-121) | LOCAL_VERIFIED | `5373c2b`   | 상체 landmarks·visibility·몸통 기울임과 품질 판정                      |
+| D-05                                                                          | IN-05   | [S15P21C204-122](https://ssafy.atlassian.net/browse/S15P21C204-122) | LOCAL_VERIFIED | `2eeb553`   | 손바닥·브이 판정, 양손 충돌 none, 최고 score 1개                       |
+| D-06                                                                          | IN-06   | [S15P21C204-123](https://ssafy.atlassian.net/browse/S15P21C204-123) | LOCAL_VERIFIED | `743782d`   | 중립 보정, One Euro Filter, 발동/해제 임계값, 비전 파이프라인 기동     |
+| D-07                                                                          | ME-01   | [S15P21C204-124](https://ssafy.atlassian.net/browse/S15P21C204-124) | LOCAL_VERIFIED | `abdb25b`   | 흑백 얼굴 마스크·가공 Canvas 트랙과 원본 게시 차단 handle              |
+| D-08                                                                          | ME-02   | [S15P21C204-125](https://ssafy.atlassian.net/browse/S15P21C204-125) | LOCAL_VERIFIED | `36df3e6`   | 추적 실패의 안전 프레임 유지와 기본 얼굴 전환                          |
+| D-09                                                                          | IN-07   | [S15P21C204-126](https://ssafy.atlassian.net/browse/S15P21C204-126) | LOCAL_VERIFIED | `3bfd4fd`   | 전후진 모션·키 의도 통합과 100ms 갱신                                  |
+| D-10                                                                          | IN-08   | [S15P21C204-127](https://ssafy.atlassian.net/browse/S15P21C204-127) | LOCAL_VERIFIED | `5d4e9a5`   | 회전 latch·중립 해제와 키 1회 발동                                     |
+| D-11                                                                          | IN-09   | [S15P21C204-128](https://ssafy.atlassian.net/browse/S15P21C204-128) | LOCAL_VERIFIED | `4899508`   | InteractionContext 보관·무효화, 손동작/단축키 중재                     |
+| D-12                                                                          | IN-10   | [S15P21C204-129](https://ssafy.atlassian.net/browse/S15P21C204-129) | LOCAL_VERIFIED | `07ab8a1`   | 장치·추론 장애 감지와 keyboard 폴백                                    |
+| D-13                                                                          | ME-03   | [S15P21C204-130](https://ssafy.atlassian.net/browse/S15P21C204-130) | LOCAL_VERIFIED | `34421fc`   | 승인 grant의 단일 SDK 연결 수명 (**주입 port로만 검증**)               |
+| D-14                                                                          | ME-04   | [S15P21C204-131](https://ssafy.atlassian.net/browse/S15P21C204-131) | PLANNED        | 없음        | 가공 얼굴·선택 마이크 게시                                             |
+| D-15                                                                          | ME-05   | [S15P21C204-132](https://ssafy.atlassian.net/browse/S15P21C204-132) | PLANNED        | 없음        | 허용 얼굴 트랙 수신·교체                                               |
+| D-16                                                                          | ME-06   | [S15P21C204-133](https://ssafy.atlassian.net/browse/S15P21C204-133) | PLANNED        | 없음        | 근거리 오디오 그래프·효과음                                            |
+| D-17                                                                          | ME-07   | [S15P21C204-134](https://ssafy.atlassian.net/browse/S15P21C204-134) | PLANNED        | 없음        | 미디어 세대 종료와 참가 종료 분리                                      |
+| 보조 커밋: `944f52c`(chore, Prettier 정리 — 동작 변경 없음, D-02·D-12 파일) · |
+| `84c87e6`(docs, 이 인계 기록 — D-01~D-13).                                    |
 
-포맷 정리 커밋 `1fd7517`은 동작 변경이 없다.
+**2026-09-08 Jira 키 연결로 커밋 메시지를 다시 썼다.** 이 브랜치는 원격에 없고 upstream도
+없어 push 전이 확실했으므로 15개 커밋 전부 메시지만 수정했다. 코드 트리는 백업 브랜치
+`backup/mvp-d-d1-preJira`와 동일하며 author/committer는 오명헌 그대로다. **위 표의 SHA는
+메시지 수정 후 값이다.**
 
 ## C가 연결할 위치와 호출 순서
 
@@ -140,9 +149,9 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
   SDK 라이선스를 모델에 자동 전용하지 않는다.
 - 갱신 책임자 지정도 F가 함께 정한다.
 
-### REQ-D-05 · E/B · 실제 미디어 grant 발급 경로
+### REQ-D-05 · E/B · 실제 미디어 grant 발급 경로 (Jira [S15P21C204-139](https://ssafy.atlassian.net/browse/S15P21C204-139))
 
-- 필요한 것: E-05(MC-02)의 실제 `prepareGeneration` 결과와 B가 C에 전달하는 `MediaGrant`.
+- 필요한 것: E-05 / MC-02 = `S15P21C204-139`(이주헌)의 실제 `prepareGeneration` 결과와 B가 C에 전달하는 `MediaGrant`.
 - 현재 상태: E 인계 0건, `server/src/media`가 아직 없다. D-13은 주입 port 단위 검증뿐이며
   실제 Cloud 연결·재연결·회수는 하나도 실행하지 않았다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
