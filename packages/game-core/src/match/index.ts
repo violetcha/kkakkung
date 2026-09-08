@@ -73,6 +73,41 @@ export {
   type TemplateAnalysis,
 } from './map/validate-connectivity.js';
 
+export {
+  createRng,
+  fnv1a,
+  isUint32,
+  nextInt,
+  nextRandom,
+  pick,
+  shuffle,
+  type RngState,
+} from './random.js';
+
+export {
+  EXIT_CANDIDATES_PER_RUNNER,
+  EXIT_TOP_CHOICES,
+  POSE_KINDS,
+  attemptLayout,
+  compareIds,
+  initialFacing,
+  isValidStart,
+  prepareSelection,
+  selectLayout,
+  sortRoster,
+  type LayoutAttemptResult,
+  type LayoutFailureCode,
+  type SelectionContext,
+  type SortedRoster,
+} from './map/select-layout.js';
+
+export {
+  validateLayout,
+  type LayoutIssue,
+  type LayoutIssueCode,
+  type LayoutValidation,
+} from './map/validate-layout.js';
+
 // ---------------------------------------------------------------------------
 // Development exports. KkakkungRoom (0-stage) still calls these through
 // server/src/domain. They are not the product rules and will be retired when
