@@ -348,3 +348,93 @@ describe('createInteractionRuntime', () => {
     expect(() => base.runtime.applyAudioPolicy({} as never)).not.toThrow();
   });
 });
+
+describe('media generation and participation lifecycle', () => {
+  it('keeps the original camera and the vision pipeline on a plain generation retire', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+    base.emit(1);
+    expect(base.statuses.at(-1)!.camera).toBe('ready');
+
+    await base.runtime.retireMediaGeneration();
+
+    // playerId·게임 Room·원본 카메라는 이 경로에서 닫히지 않는다.
+    expect(base.track.stop).not.toHaveBeenCalled();
+    expect(base.previews.at(-1)).not.toBeNull();
+    expect(base.runtime.getGenerationState()).toBe('closed');
+  });
+
+  it('closes the devices and the worker only on endParticipation', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+
+    await base.runtime.endParticipation();
+
+    expect(base.track.stop).toHaveBeenCalledTimes(1);
+    expect(base.previews.at(-1)).toBeNull();
+  });
+
+  it('cleans up once for a concurrent retire, personal end and dispose', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+
+    await Promise.all([
+      base.runtime.retireMediaGeneration('connection-lost'),
+      base.runtime.endParticipation(),
+      base.runtime.dispose(),
+    ]);
+
+    expect(base.track.stop).toHaveBeenCalledTimes(1);
+    expect(base.processedTrack.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a late binding or policy no longer reopen the retired generation', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+    await base.runtime.retireMediaGeneration('round-ended');
+
+    // 늦은 사건은 현재 세대를 다시 열지 못한다.
+    expect(() => base.runtime.applyMediaBindings({} as never)).not.toThrow();
+    expect(() => base.runtime.applyAudioPolicy({} as never)).not.toThrow();
+    expect(await base.runtime.publishMedia()).toBeNull();
+    expect(base.runtime.getGenerationState()).toBe('closed');
+  });
+
+  it('opens a new generation only through beginMediaGeneration', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    await base.runtime.retireMediaGeneration();
+    expect(base.runtime.getGenerationState()).toBe('closed');
+
+    base.runtime.beginMediaGeneration();
+
+    expect(base.runtime.getGenerationState()).toBe('live');
+  });
+
+  it('keeps the game and the media generation when only the camera fails', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+
+    base.track.end();
+
+    // 카메라 장애는 참가 종료가 아니다.
+    expect(base.runtime.getGenerationState()).toBe('live');
+    expect(base.statuses.at(-1)).toMatchObject({ camera: 'failed', vision: 'idle' });
+  });
+
+  it('refuses every operation after dispose', async () => {
+    const base = harness();
+    await base.runtime.startDevices({ microphone: false });
+    await base.runtime.dispose();
+    await base.runtime.dispose();
+
+    base.runtime.beginMediaGeneration();
+    expect(base.runtime.getGenerationState()).not.toBe('live');
+    expect(base.track.stop).toHaveBeenCalledTimes(1);
+  });
+});

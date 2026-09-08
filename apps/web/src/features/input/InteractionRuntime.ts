@@ -50,9 +50,15 @@ import {
   type OutputLock,
 } from '../media/audio-graph';
 import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
+import {
+  createMediaLifecycle,
+  type MediaLifecycle,
+  type RetireReason,
+} from '../media/media-lifecycle';
 
 export type { AudioEffect, AudioPolicy, AudioVoice } from '../media/audio-policy';
 export type { OutputLock } from '../media/audio-graph';
+export type { GenerationState, RetireReason } from '../media/media-lifecycle';
 import { createPendingTrackStore, type PendingTrackStore } from '../media/pending-tracks';
 import {
   createRemoteFaces,
@@ -200,7 +206,10 @@ export interface InteractionRuntime {
   applyAudioPolicy(policy: AudioPolicy): void;
   applyMediaBindings(bindings: MediaBindings): void;
   setQualityPreset(preset: 'medium' | 'low'): void;
-  retireMediaGeneration(): Promise<void>;
+  retireMediaGeneration(reason?: RetireReason): Promise<void>;
+  /** D-17. 회수 확인 뒤 새 미디어 세대를 연다. */
+  beginMediaGeneration(): void;
+  getGenerationState(): 'live' | 'terminal' | 'closed';
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
@@ -498,6 +507,46 @@ export const createInteractionRuntime = (
 
   const vision = options.vision ?? browserVision();
 
+  /** 세 종료 경로가 공유하는 단일 정리 수명. */
+  const lifecycle: MediaLifecycle = createMediaLifecycle({
+    media: {
+      closeOutput: () => audioGraph?.setOutputLock('locked'),
+      stopListeners: () => {
+        policyStore.reset();
+      },
+      unpublishAll: async () => {
+        await publisher?.unpublishAll();
+        publisher = null;
+      },
+      releaseRemote: () => {
+        remoteFaces.clear();
+        bindingStore.reset();
+        audioGraph?.dispose();
+        audioGraph = null;
+      },
+      disconnect: async () => {
+        await media.retire();
+      },
+    },
+    participation: {
+      stopInput: () => {
+        unbindKeyboard();
+        clearHolds();
+        context.clear();
+        fallback.reset();
+      },
+      stopVision: () => {
+        stopVision();
+        calibrator.reset();
+      },
+      stopDevices: async () => {
+        await devices?.dispose();
+        devices = null;
+      },
+    },
+    now: () => vision.now(),
+  });
+
   const patch = (value: DeviceStatusPatch) => {
     if (!devices) return;
     lastStatus = devices.patchStatus(value);
@@ -791,12 +840,14 @@ export const createInteractionRuntime = (
 
     async connectMedia(grant) {
       if (disposed) return;
+      // terminal 세대에서는 새 연결을 열지 않는다.
+      if (!lifecycle.canOperate()) return;
       await media.connect(grant);
     },
 
     /** 별도 채널의 정책. 참조 bindingRevision과 검증 SID가 맞아야 소리가 난다. */
     applyAudioPolicy(policy: AudioPolicy) {
-      if (disposed) return;
+      if (disposed || !lifecycle.canOperate()) return;
       const result = policyStore.apply(policy);
       if (result.status === 'ignored') return;
       reconcileAudio();
@@ -812,7 +863,7 @@ export const createInteractionRuntime = (
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */
     applyMediaBindings(bindings) {
-      if (disposed) return;
+      if (disposed || !lifecycle.canOperate()) return;
       const selfPlayerId = context.get()?.selfPlayerId ?? '';
       const result = bindingStore.apply(bindings, selfPlayerId);
       if (result.status !== 'applied') return;
@@ -828,7 +879,7 @@ export const createInteractionRuntime = (
 
     /** SDK TrackSubscribed. 검증 전에는 attach하지 않는다. */
     addRemoteTrack(track) {
-      if (disposed) return;
+      if (disposed || !lifecycle.canOperate()) return;
       remoteFaces.addTrack(track);
       if (track.kind === 'audio') reconcileAudio();
     },
@@ -846,6 +897,7 @@ export const createInteractionRuntime = (
 
     /** 가공 얼굴과 선택 마이크만 게시한다. 원본은 handle 검사에서 거절된다. */
     async publishMedia() {
+      if (!lifecycle.canOperate()) return null;
       const scope = media.getScope();
       const target = ensurePublisher();
       if (!scope || !target) return null;
@@ -861,58 +913,35 @@ export const createInteractionRuntime = (
       return publisher?.getPublications() ?? [];
     },
 
-    /** 미디어 세대만 끝낸다. 논리 참가 종료(D-17)와 분리한다. */
-    async retireMediaGeneration() {
-      remoteFaces.clear();
-      bindingStore.reset();
-      policyStore.reset();
-      audioGraph?.dispose();
-      audioGraph = null;
-      await publisher?.unpublishAll();
-      publisher = null;
-      await media.retire();
+    /**
+     * 미디어 세대만 끝낸다. playerId·게임 Room·원본 카메라와 센서는 유지한다.
+     * 로컬 closed일 뿐 서버 회수 확인이 아니다.
+     */
+    async retireMediaGeneration(reason: RetireReason = 'phase-change') {
+      await lifecycle.retireGeneration(reason);
     },
 
-    /** 논리 참가 종료. D-17에서 미디어 세대 종료와 분리해 확장한다. */
+    /** 논리 참가 종료. 입력·Worker·원본 장치까지 닫는다. 게임 Room 수명은 C가 정한다. */
     async endParticipation() {
-      unbindKeyboard();
-      clearHolds();
-      context.clear();
-      fallback.reset();
-      remoteFaces.clear();
-      bindingStore.reset();
-      policyStore.reset();
-      audioGraph?.dispose();
-      audioGraph = null;
-      await publisher?.unpublishAll();
-      publisher = null;
-      await media.dispose();
-      deps.onMediaStatus(IDLE_MEDIA_STATUS);
-      stopVision();
-      calibrator.reset();
-      await devices?.dispose();
-      devices = null;
+      await lifecycle.endParticipation();
       runtimeGeneration += 1;
+    },
+
+    /** 새 미디어 세대 시작. B/E 회수 확인 뒤에만 부른다. */
+    beginMediaGeneration() {
+      lifecycle.beginGeneration();
+    },
+
+    getGenerationState() {
+      return lifecycle.state;
     },
 
     async dispose() {
       if (disposed) return;
-      unbindKeyboard();
-      clearHolds();
-      context.clear();
-      remoteFaces.clear();
-      bindingStore.reset();
-      policyStore.reset();
-      audioGraph?.dispose();
-      audioGraph = null;
-      await publisher?.unpublishAll();
-      publisher = null;
-      await media.dispose();
       disposed = true;
-      stopVision();
-      calibrator.reset();
-      await devices?.dispose();
-      devices = null;
+      await lifecycle.dispose();
+      deps.onMediaStatus(IDLE_MEDIA_STATUS);
+      await media.dispose();
     },
   };
 };
