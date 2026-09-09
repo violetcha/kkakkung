@@ -3,9 +3,9 @@
 수정자: **D만** · [담당 계획](../d-vision-media.md) · [공통 규칙](../common.md)
 
 이 파일은 팀원 AI가 D의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다.
-갱신일 **2026-09-08** · 계약 기준 **EXEC-CONTRACT-3** · 적용 제품 결정 **D-2026-09-08-01**
+갱신일 **2026-09-09** · 계약 기준 **EXEC-CONTRACT-3** · 적용 제품 결정 **D-2026-09-08-01**
 Jira: 담당 D 범위는 `D-01~D-17 = S15P21C204-118~S15P21C204-134` (담당자 오명헌)
-시작 SHA `b12cb9c` · 브랜치 `feat/mvp-d-d1` (**로컬 전용, 아직 push하지 않음**)
+시작 SHA `b12cb9c` · 브랜치 `feat/S15P21C204-118-vision-media-input-runtime` (**원격 push 완료, `develop` MR 대기**)
 
 **아래 인계는 모두 합성 port 단위 검증(LOCAL_VERIFIED)이다. 실제 브라우저·대표 장치·
 Cloud 검증은 0건이며 어떤 항목도 ACCEPTED가 아니다.** 파일이 존재한다는 이유로 상태를
@@ -58,10 +58,16 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 하나도 실행하지 않았다.
 
 보조 커밋: `944f52c`(chore, Prettier 정리 — 동작 변경 없음) ·
-`84c87e6`·`33ee8e8`·`45bcbac`(docs, 이 인계 기록).
+`84c87e6`·`33ee8e8`·`45bcbac`·`408b482`(docs, 이 인계 기록).
 
-**2026-09-08 Jira 키 연결로 커밋 메시지를 다시 썼다.** 이 브랜치는 원격에 없고 upstream도
-없어 push 전이 확실했으므로 메시지만 수정했다. 코드 트리는 백업 브랜치
+후속 수정 커밋 2개는 위 표의 SHA 이후 같은 작업 범위를 고친 것이다.
+`7ae87e8`(fix, D-15/D-16/D-17 — 검증 오디오 조기 해제, 연습 인스턴스 원격 얼굴 상한 미적용,
+보류 sweep 제품 호출자 부재) · `906e8ee`(feat, D-02/D-16 — 고정 모델 sha256 대조와 불일치 시
+`MODEL_HASH_MISMATCH`·모델 close·Worker terminate, 그리고 `AudioContext` 기반 실제 WebAudio
+기본 구현). 두 커밋 뒤 `pnpm test`는 38파일 380건 통과다.
+
+**2026-09-08 Jira 키 연결로 커밋 메시지를 다시 썼다.** 메시지를 고친 시점에 이 브랜치는
+원격에 없고 upstream도 없어 push 전이 확실했으므로 메시지만 수정했다. 코드 트리는 백업 브랜치
 `backup/mvp-d-d1-preJira`와 동일하며 author/committer는 오명헌 그대로다. 위 표의 SHA는
 메시지 수정 후 값이다.
 
@@ -139,6 +145,10 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
   `pnpm format:check`가 3건으로 실패한다. **D 소유 소스의 오류는 0건이다.**
 - 연결 작업: D-02 / IN-02, F QA 공통 검증.
 - 완료 확인 명령: `pnpm lint`, `pnpm format:check`가 각각 통과.
+- **2026-09-09 재확인**: `develop`·`ci/S15P21C204-41-jenkins-pipeline`·`feat/S15P21C204-48-master-map-template`·
+  `feat/S15P21C204-145-revocation-retry` 어디에도 아직 반영되지 않았다. 이 요청이 반영되기 전에
+  D의 MR을 `develop`에 병합하면 `develop`의 `pnpm verify`가 첫 단계에서 실패한다. 따라서 D의 MR은
+  **Draft로 열고 REQ-D-01 반영 뒤 병합**한다.
 
 ### REQ-D-02 · F · main tsconfig에서 Worker 제외와 별도 검사
 
@@ -167,8 +177,12 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 ### REQ-D-05 · E/B · 실제 미디어 grant 발급 경로 (Jira [S15P21C204-139](https://ssafy.atlassian.net/browse/S15P21C204-139))
 
 - 필요한 것: E-05 / MC-02 = `S15P21C204-139`(이주헌)의 실제 `prepareGeneration` 결과와 B가 C에 전달하는 `MediaGrant`.
-- 현재 상태: E 인계 0건, `server/src/media`가 아직 없다. D-13은 주입 port 단위 검증뿐이며
-  실제 Cloud 연결·재연결·회수는 하나도 실행하지 않았다.
+- 현재 상태: **2026-09-09 확인 — `server/src/media`는 2026-09-08 `48f7efa`로 `develop`에 병합됐다.**
+  `GrantIssuer.ts`가 내는 `MediaGrant`(url/token/roomName/mediaIdentity/expiresAt=epoch 초)는
+  D의 `apps/web/src/features/media/media-types.ts` 사본과 필드·단위가 일치한다.
+  다만 `handoffs/E.md`에는 아직 E-02·E-11만 있고 D 대상 인계 항목이 없으며, B의
+  `bootstrap`·`rooms` 조립(E11-B-01)이 없어 실제 발급 경로는 여전히 도달할 수 없다.
+  D-13은 주입 port 단위 검증뿐이며 실제 Cloud 연결·재연결·회수는 하나도 실행하지 않았다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
 
 ### REQ-D-06 · C · 조립점 연결
@@ -197,6 +211,10 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
    E-05/E-09/E-10 인계가 도착하면 실제 연결 회귀만 수행한다.
 4. 대표 장치가 준비되면 튜닝 두 버전(`D-input-1`, `D-safe-face-1`)의 수치를 실측으로 조정하고
    변경한 버전을 여기에 기록한다.
+5. **MR 운영(2026-09-09)**: `feat/S15P21C204-118-vision-media-input-runtime` → `develop` MR을
+   Draft로 먼저 연다. `origin/develop`과 충돌 0건이고 `develop`이 바꾼 파일은 `server/**`와
+   `handoffs/E.md`뿐이라 D 변경과 겹치지 않는다. 병합은 REQ-D-01 반영 뒤에 한다.
+   push·MR 생성·병합은 담당자가 직접 한다.
 
 ## 재개 시 확인
 
