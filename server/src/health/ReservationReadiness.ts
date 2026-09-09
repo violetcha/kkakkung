@@ -1,0 +1,212 @@
+import type { Generation } from '../media/MediaGenerationRegistry.js';
+import { checksum, safeIdentifier, strictObject } from '../operations/CheckpointStore.js';
+import {
+  validateJournalRecord,
+  type JournalEntry,
+  type JournalRecord,
+} from '../operations/OperationJournal.js';
+import { ownsMediaRoom } from '../operations/PreviousGenerationCleanup.js';
+import type { UsageReservation } from '../operations/UsageCheckpoint.js';
+
+export type ReservationReadinessInput = Readonly<{
+  namespace: string;
+  serverEpoch: string;
+  records: readonly JournalEntry[];
+  /** The caller validates the complete durable UsageState before this inspection. */
+  reservations: readonly UsageReservation[];
+  generations: readonly Generation[];
+  /** Exact registry objects currently inside the owner's reserve/persist operation. */
+  pendingPreparations: readonly Generation[];
+}>;
+
+const key = (value: { roomName: string; identity: string; generation: number }) =>
+  JSON.stringify([value.roomName, value.identity, value.generation]);
+
+function belongsToRoot(id: string, root: string): boolean {
+  return id === root || (id.startsWith(`${root}:`) && /^\d+$/.test(id.slice(root.length + 1)));
+}
+
+function sameGeneration(record: JournalRecord, generation: Generation): boolean {
+  return (
+    key(record) === key(generation) &&
+    record.serverEpoch === generation.serverEpoch &&
+    record.matchId === generation.request.matchId &&
+    record.mediaInstanceId === generation.request.mediaInstanceId &&
+    record.reservationId === generation.reservationId &&
+    record.issuedAtEpochMs === generation.issuedAtEpochMs &&
+    record.expiresAtEpochMs === generation.expiresAtEpochMs
+  );
+}
+
+/** Pure runtime accounting inspection. It neither invents recovery proof nor changes admission. */
+export function inspectReservationReadiness(
+  input: ReservationReadinessInput,
+): Readonly<{ consistent: boolean; unresolvedCount: number }> {
+  try {
+    return inspect(input);
+  } catch {
+    // Malformed internal observations never expose their contents or authorize issuance.
+    return { consistent: false, unresolvedCount: 1 };
+  }
+}
+
+function inspect(input: ReservationReadinessInput) {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(input.namespace) ||
+    input.namespace.includes('--') ||
+    !safeIdentifier(input.serverEpoch) ||
+    !Array.isArray(input.records) ||
+    !Array.isArray(input.reservations) ||
+    !Array.isArray(input.generations) ||
+    !Array.isArray(input.pendingPreparations)
+  )
+    throw new Error('INVALID_OBSERVATION');
+
+  let consistent = true;
+  const unresolved = new Set<string>();
+  const generations = new Map<string, Generation>();
+  const generationObjects = new Set(input.generations);
+  if (generationObjects.size !== input.generations.length) consistent = false;
+  for (const generation of input.generations) {
+    if (
+      !ownsMediaRoom(input.namespace, generation.roomName) ||
+      generation.serverEpoch !== generation.roomName.split('--')[1] ||
+      generation.serverEpoch !== input.serverEpoch ||
+      !safeIdentifier(generation.identity) ||
+      !safeIdentifier(generation.reservationId) ||
+      !safeIdentifier(generation.request.matchId) ||
+      !safeIdentifier(generation.request.mediaInstanceId) ||
+      !safeIdentifier(generation.request.playerId) ||
+      !Number.isSafeInteger(generation.generation) ||
+      generation.generation < 1 ||
+      !Number.isSafeInteger(generation.issuedAtEpochMs) ||
+      generation.issuedAtEpochMs < 0 ||
+      !Number.isSafeInteger(generation.expiresAtEpochMs) ||
+      generation.expiresAtEpochMs < generation.issuedAtEpochMs ||
+      typeof generation.terminal !== 'boolean' ||
+      !['PREPARED', 'REVOKING', 'REVOKED', 'UNRESOLVED'].includes(generation.state)
+    )
+      throw new Error('INVALID_GENERATION');
+    const id = key(generation);
+    if (generations.has(id)) consistent = false;
+    generations.set(id, generation);
+    if (generation.state !== 'REVOKED' && (generation.terminal || generation.state !== 'PREPARED'))
+      unresolved.add(id);
+  }
+
+  const pending = new Set<Generation>();
+  for (const generation of input.pendingPreparations) {
+    if (
+      !generationObjects.has(generation) ||
+      pending.has(generation) ||
+      generation.serverEpoch !== input.serverEpoch ||
+      generation.terminal ||
+      generation.state !== 'PREPARED'
+    )
+      consistent = false;
+    else pending.add(generation);
+  }
+
+  const records = new Map<string, JournalRecord>();
+  const identities = new Set<string>();
+  let previousSeq = 0;
+  for (const entry of input.records) {
+    strictObject(entry, ['version', 'seq', 'record', 'checksum']);
+    const record = validateJournalRecord(entry.record);
+    if (
+      entry.version !== 1 ||
+      !Number.isSafeInteger(entry.seq) ||
+      entry.seq <= previousSeq ||
+      entry.checksum !== checksum({ version: 1, seq: entry.seq, record }) ||
+      record.namespace !== input.namespace ||
+      !ownsMediaRoom(input.namespace, record.roomName) ||
+      record.serverEpoch !== record.roomName.split('--')[1] ||
+      !record.reservationId ||
+      records.has(key(record)) ||
+      identities.has(record.identity)
+    )
+      throw new Error('INVALID_JOURNAL_OBSERVATION');
+    previousSeq = entry.seq;
+    records.set(key(record), record);
+    identities.add(record.identity);
+    const generation = generations.get(key(record));
+    if (generation && !sameGeneration(record, generation)) consistent = false;
+    if (record.state !== 'REVOKED') {
+      const currentPrepared =
+        record.state === 'PREPARED' &&
+        record.serverEpoch === input.serverEpoch &&
+        generation !== undefined &&
+        sameGeneration(record, generation) &&
+        generation.state === 'PREPARED' &&
+        !generation.terminal;
+      if (!currentPrepared) unresolved.add(key(record));
+      if (record.serverEpoch === input.serverEpoch && !generation) consistent = false;
+    } else if (generation && generation.state !== 'REVOKED') {
+      consistent = false;
+      unresolved.add(key(record));
+    }
+  }
+
+  const roots = new Map<string, { matchId: string; records: JournalRecord[] }>();
+  const addRoot = (root: string, matchId: string, record?: JournalRecord) => {
+    const group = roots.get(root) ?? { matchId, records: [] };
+    if (group.matchId !== matchId) consistent = false;
+    if (record) group.records.push(record);
+    roots.set(root, group);
+  };
+  for (const record of records.values()) addRoot(record.reservationId!, record.matchId, record);
+  for (const generation of input.generations) {
+    if (generation.state === 'REVOKED' && !records.has(key(generation))) continue;
+    addRoot(generation.reservationId, generation.request.matchId);
+    if (!records.has(key(generation)) && !pending.has(generation)) {
+      consistent = false;
+      unresolved.add(key(generation));
+    }
+  }
+
+  const reservationIds = new Set(input.reservations.map((r) => r.request.reservationId));
+  if (reservationIds.size !== input.reservations.length) consistent = false;
+  for (const [root, group] of roots) {
+    // A pending preparation may be inspected before its very first reserve reaches disk.
+    if (!reservationIds.has(root) && group.records.length > 0) consistent = false;
+  }
+  for (const reservation of input.reservations) {
+    const id = reservation.request.reservationId;
+    const candidates = [...roots].filter(([root]) => belongsToRoot(id, root));
+    if (candidates.length !== 1) {
+      if (reservation.status !== 'RELEASED' || candidates.length > 1) consistent = false;
+      if (reservation.status === 'RETIRING') unresolved.add(`reservation:${id}`);
+      continue;
+    }
+    const [root, group] = candidates[0]!;
+    if (reservation.request.matchId !== group.matchId || !reservationIds.has(root))
+      consistent = false;
+    if (
+      (reservation.status === 'RELEASED' || reservation.status === 'AWAITING_OFFICIAL') &&
+      (group.records.some((record) => record.state !== 'REVOKED') ||
+        input.generations.some(
+          (generation) => generation.reservationId === root && generation.state !== 'REVOKED',
+        ))
+    )
+      consistent = false;
+    if (group.records.length === 0 && reservation.status !== 'RELEASED') {
+      const transient =
+        reservation.status === 'ACTIVE' &&
+        [...pending].some(
+          (generation) =>
+            generation.reservationId === root &&
+            generation.request.matchId === reservation.request.matchId,
+        );
+      if (!transient) consistent = false;
+    }
+    if (
+      reservation.status === 'RETIRING' &&
+      !group.records.some((record) => unresolved.has(key(record))) &&
+      !input.generations.some(
+        (generation) => generation.reservationId === root && unresolved.has(key(generation)),
+      )
+    )
+      unresolved.add(`reservation:${root}`);
+  }
+  return { consistent, unresolvedCount: unresolved.size };
+}

@@ -11,6 +11,188 @@ import {
 
 export * from './types.js';
 
+// ---------------------------------------------------------------------------
+// Product map pipeline (MP-01..05). Server-only data, pure functions.
+// ---------------------------------------------------------------------------
+
+export type {
+  TemplateFailure,
+  TemplateIssue,
+  TemplateIssueCode,
+  TemplateValidation,
+} from './map/types.js';
+export {
+  BASE_VARIANT_ID,
+  approachOf,
+  compareCells,
+  compareWallFaces,
+  isWalkable,
+  passageNeighbors,
+  topologyVersionOf,
+  validateTemplate,
+} from './map/validate-template.js';
+export { MATCH_TUNING_CONSTANTS, validateTuning } from './tuning.js';
+
+export { preparePracticeLayout } from './map/prepare-practice-layout.js';
+
+export {
+  TRANSFORM_IDS,
+  canonicalSignature,
+  createTemplateVariants,
+  rowsFromTopology,
+  transformCell,
+  transformDir,
+  transformFace,
+  transformTemplate,
+  type TransformId,
+} from './map/transform.js';
+
+export {
+  UNREACHABLE,
+  bfsDistances,
+  biconnectedComponents,
+  buildGraph,
+  cellOfNode,
+  distance,
+  distanceMatrix,
+  facesPassage,
+  hasMinPassageNeighbors,
+  isConnected,
+  isInCore,
+  nodeIndex,
+  type BiconnectedAnalysis,
+  type PassageGraph,
+} from './map/graph.js';
+
+export {
+  analyzeTemplate,
+  validateConnectivity,
+  type ConnectivityIssue,
+  type ConnectivityIssueCode,
+  type ConnectivityReport,
+  type TemplateAnalysis,
+} from './map/validate-connectivity.js';
+
+export {
+  createRng,
+  fnv1a,
+  isUint32,
+  nextInt,
+  nextRandom,
+  pick,
+  shuffle,
+  type RngState,
+} from './random.js';
+
+export {
+  EXIT_CANDIDATES_PER_RUNNER,
+  EXIT_TOP_CHOICES,
+  POSE_KINDS,
+  attemptLayout,
+  compareIds,
+  initialFacing,
+  isValidStart,
+  prepareSelection,
+  selectLayout,
+  sortRoster,
+  type LayoutAttemptResult,
+  type LayoutFailureCode,
+  type SelectionContext,
+  type SortedRoster,
+} from './map/select-layout.js';
+
+export {
+  validateLayout,
+  type LayoutIssue,
+  type LayoutIssueCode,
+  type LayoutValidation,
+} from './map/validate-layout.js';
+
+export {
+  RUNNER_SLOTS,
+  TAGGER_SLOTS,
+  UNAVAILABLE,
+  bindFallbackPlayers,
+  certifyFallback,
+  createLayoutSelector,
+  selectWithFallback,
+  type LayoutSelectionPort,
+} from './map/select-with-fallback.js';
+
+export {
+  activeExitAtFace,
+  activeExits,
+  closeExit,
+  createExitRegistry,
+  exitOfOwner,
+  toKnownExit,
+  type CloseExitResult,
+  type ExitRecord,
+  type ExitRegistry,
+  type ExitRegistryError,
+  type ExitRegistryResult,
+} from './exits/registry.js';
+
+export {
+  createPriorityOrder,
+  priorityForTick,
+  selectPriorityCandidate,
+  type PriorityOrder,
+} from './priority.js';
+
+export * from './core-types.js';
+
+export {
+  EMPTY_SURFACES,
+  commandPhase,
+  isTerminal,
+  type HeldMove,
+  type KnowledgeRecord,
+  type MatchMode,
+  type MatchState,
+  type PendingTurn,
+  type PlayerRecord,
+} from './state.js';
+
+export {
+  canStartAction,
+  completeActions,
+  moveTarget,
+  reserveMove,
+  type CompletedMove,
+  type CompletionResult,
+  type MoveDirection,
+} from './movement.js';
+
+export { reserveTurn, turnDir, type TurnDirection } from './rotation.js';
+
+export {
+  clearIntents,
+  clearNextAction,
+  expireMove,
+  holdMove,
+  queueTurn,
+  releaseMove,
+} from './input-buffer.js';
+
+export {
+  createMatch,
+  createPractice,
+  getFrame,
+  getPlayerKnowledge,
+  getPlayerSelf,
+  getVisibleEntities,
+  getVisibleSurfaces,
+  matchCore,
+  stepMatch,
+} from './engine.js';
+
+// ---------------------------------------------------------------------------
+// Development exports. KkakkungRoom (0-stage) still calls these through
+// server/src/domain. They are not the product rules and will be retired when
+// B switches the room to the product facade.
+// ---------------------------------------------------------------------------
+
 /** Direction vectors for north (0), east (1), south (2), and west (3). */
 export const DIR_VECTORS: Record<Dir, { dx: number; dy: number }> = {
   0: { dx: 0, dy: -1 },
@@ -25,7 +207,7 @@ export function turn(dir: Dir, to: TurnDir): Dir {
 
 /**
  * Development stub for cell movement. It currently enforces player state and
- * map bounds only; collision, occupancy, and cooldown rules remain TODO.
+ * map bounds only; collision, occupancy, and cooldown rules live in the product engine.
  */
 export function tryMove(
   state: GameSnapshot,
@@ -48,17 +230,17 @@ export function tryMove(
   return { ok: true };
 }
 
-/** TODO: implement contact capture rules. */
+/** Development stub; the product capture rule is implemented in the match engine. */
 export function checkCapture(_state: GameSnapshot): CaptureEvent[] {
   return [];
 }
 
-/** TODO: implement match win conditions. */
+/** Development stub; the product result rule is implemented in the match engine. */
 export function checkWinCondition(_state: GameSnapshot): Role | null {
   return null;
 }
 
-/** Development-only fixed map; randomized, validated generation remains TODO. */
+/** Development-only fixed map. Product maps come from validated server templates. */
 export function generateMaze(_seed: number): Uint8Array {
   const maze = new Uint8Array(MAZE_SIZE * MAZE_SIZE);
   for (let y = 0; y < MAZE_SIZE; y += 1) {
@@ -71,7 +253,7 @@ export function generateMaze(_seed: number): Uint8Array {
   return maze;
 }
 
-/** Development spawn placement; distributed encounter-safe placement remains TODO. */
+/** Development spawn placement. Product placement comes from the layout selector. */
 export function pickSpawn(
   _maze: Uint8Array,
   role: Role,
