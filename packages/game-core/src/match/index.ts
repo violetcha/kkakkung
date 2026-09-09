@@ -164,6 +164,17 @@ export {
   type MoveDirection,
 } from './movement.js';
 
+export { reserveTurn, turnDir, type TurnDirection } from './rotation.js';
+
+export {
+  clearIntents,
+  clearNextAction,
+  expireMove,
+  holdMove,
+  queueTurn,
+  releaseMove,
+} from './input-buffer.js';
+
 export {
   createMatch,
   createPractice,

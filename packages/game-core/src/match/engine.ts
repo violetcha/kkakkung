@@ -17,8 +17,10 @@ import type {
   VisibleSurfaces,
 } from './core-types.js';
 import { createExitRegistry } from './exits/registry.js';
+import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { completeActions, reserveMove } from './movement.js';
 import { createPriorityOrder } from './priority.js';
+import { reserveTurn } from './rotation.js';
 import {
   EMPTY_SURFACES,
   commandPhase,
@@ -225,10 +227,9 @@ function handleMoveIntent(ctx: StepContext, command: CoreCommand<'MOVE_INTENT'>)
   }
   if (direction === null) {
     // Stop intent: drop only the held move; a running action still completes.
-    ctx.state = withPlayers(ctx.state, [{ ...player, heldMove: null }]);
+    ctx.state = withPlayers(ctx.state, [releaseMove(player)]);
     return outcome(ctx, command, 'applied', null);
   }
-  const held = Object.freeze({ direction, sequence: command.sequence });
   if (player.action === null) {
     if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
       return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
@@ -241,10 +242,32 @@ function handleMoveIntent(ctx: StepContext, command: CoreCommand<'MOVE_INTENT'>)
       ctx.state.tuning.moveTicks,
     );
     if (!reserved) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-    ctx.state = withPlayers(ctx.state, [{ ...reserved, heldMove: held }]);
+    ctx.state = withPlayers(ctx.state, [holdMove(reserved, direction, command.sequence)]);
     return outcome(ctx, command, 'applied', null);
   }
-  ctx.state = withPlayers(ctx.state, [{ ...player, heldMove: held }]);
+  ctx.state = withPlayers(ctx.state, [holdMove(player, direction, command.sequence)]);
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const player = ctx.state.players.get(command.actorId)!;
+  const direction = command.payload.direction;
+  if (direction !== 'left' && direction !== 'right') {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  if (player.action === null) {
+    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
+      return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+    }
+    ctx.state = withPlayers(ctx.state, [
+      reserveTurn(player, direction, ctx.tick, ctx.state.tuning.turnTicks),
+    ]);
+    return outcome(ctx, command, 'applied', null);
+  }
+  // Busy: the turn waits in the single next-action slot; the running move keeps its direction.
+  ctx.state = withPlayers(ctx.state, [queueTurn(player, direction, command.sequence)]);
   return outcome(ctx, command, 'applied', null);
 }
 
@@ -252,9 +275,18 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
   switch (command.type) {
     case 'MOVE_INTENT':
       return handleMoveIntent(ctx, command);
+    case 'TURN':
+      return handleTurn(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
+}
+
+function applyExpireMove(ctx: StepContext, playerId: string, sequence: number): void {
+  const player = ctx.state.players.get(playerId);
+  if (!player || !Number.isInteger(sequence)) return;
+  const expired = expireMove(player, sequence);
+  if (expired !== player) ctx.state = withPlayers(ctx.state, [expired]);
 }
 
 /** Idle players consume their pending slot or held move once per tick. */
@@ -265,6 +297,15 @@ function startQueuedActions(ctx: StepContext): void {
     const player = ctx.state.players.get(id)!;
     if (player.status !== 'ACTIVE' || player.action !== null) continue;
     if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) continue;
+    if (player.nextAction) {
+      // The single-shot turn is consumed before any held move resumes.
+      updated.push(
+        clearNextAction(
+          reserveTurn(player, player.nextAction.direction, ctx.tick, ctx.state.tuning.turnTicks),
+        ),
+      );
+      continue;
+    }
     if (player.heldMove) {
       const reserved = reserveMove(
         ctx.state.layout.topology,
@@ -302,6 +343,8 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   }
   for (const control of input.controls) {
     if (control.type === 'START_PLAYING') applyStartPlaying(ctx, control.startTick);
+    // TTL expiry is decided on the server's monotonic clock before the tick; core only applies it.
+    if (control.type === 'EXPIRE_MOVE') applyExpireMove(ctx, control.playerId, control.sequence);
   }
   completeDueActions(ctx);
   for (const command of input.commands) handleCommand(ctx, command);
