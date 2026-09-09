@@ -54,7 +54,8 @@ describe('command outcomes', () => {
     const result = step(start, 101, [
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }, { matchId: 'other' }),
       command('ghost', 'MOVE_INTENT', { direction: 'forward' }),
-      command('r-a', 'EXCHANGE_REQUEST', { targetPlayerId: 'r-b' }),
+      // EXCHANGE_REQUEST is handled from KN-05 on; INSTALL is still unsupported here.
+      command('r-a', 'INSTALL', { kind: 'trap' }),
     ]);
     expect(result.outcomes.map((o) => [o.result, o.code])).toEqual([
       ['rejected', 'WRONG_MATCH'],
