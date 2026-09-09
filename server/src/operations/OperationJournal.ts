@@ -219,6 +219,23 @@ export class OperationJournal {
     return this.enabled && !this.closed && !this.closing;
   }
 
+  /** Latest durable state per generation; restore() is the immutable boot replay. */
+  snapshot(): Readonly<{ lastSeq: number; records: readonly JournalEntry[]; writable: boolean }> {
+    return {
+      lastSeq: this.seq,
+      records: structuredClone([...this.latest.values()].sort((a, b) => a.seq - b.seq)),
+      writable: this.writable,
+    };
+  }
+
+  /** Wait for already accepted journal work; a failed or closing writer is never confirmed. */
+  async flush(): Promise<void> {
+    const accepted = this.queue;
+    await this.restored;
+    await accepted;
+    if (!this.writable) throw new Error('JOURNAL_NOT_WRITABLE');
+  }
+
   restore(options: { afterSeq?: number } = {}): Promise<JournalRestore> {
     if (this.restored) return this.restored;
     this.restored = this.openAndRestore(options.afterSeq ?? 0);

@@ -2,7 +2,62 @@
 
 수정자: **E** · 2026-09-09 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-13 로컬 검증 인계**다. E-12 MR !20의 develop 병합을 확인했고 이번 기준 SHA는 `fdd47548e82df2ad9fc4341bdb8119c62e0bd228`이다. E-01~E-12는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-14 로컬 검증 인계**다. E-13 MR !27의 develop 병합을 확인했고 이번 기준 SHA는 `56d9691114f4b7919b81c00a27773871c78ba671`이다. E-01~E-13은 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+
+## E-14 / OP-07 — 제한 공개창과 운영 제어
+
+- Jira: [S15P21C204-148](https://ssafy.atlassian.net/browse/S15P21C204-148).
+- localStage: **LOCAL_VERIFIED**. 최종 인수: **BLOCKED**.
+- 구현 commit: `0a289b329efcad7511c15da92418f013eb24aaaa`.
+- 제출 브랜치: `feat/S15P21C204-148-operator-commands` → `develop`. E-13 MR !27 병합 후 `56d9691114f4b7919b81c00a27773871c78ba671`에서 분기했다. 예전 누적 `feat/S15P21C204-148-operations-control`은 이번 제출 대상이 아니다.
+- 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
+- blockedOn: B 실제 운영 라우트/HTTP 공통 경계·활동 집계·입장 조립, F OPS_TOKEN/공개창·공식 잔량과 revision 근거·감사 이력 최초 생성 증빙/지속 볼륨, E-15 전체 product readiness/factory, 실제 Cloud/격리 배포 검증.
+- 이번 실행은 E-14 하나다. E-15~E-16 구현·푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다. 사용자가 병합한 뒤 최신 develop에서 E-15를 시작한다.
+
+### 공개 API와 조립 순서
+
+1. `server/src/operations/OperatorAuth.ts`의 `createOperatorAuth(OPS_TOKEN)`을 B가 생성한다. 비어 있거나 잘못된 token/Authorization은 거절하고, 유효한 동일 길이 토큰만 timingSafeEqual로 비교한다. OPS_TOKEN은 HTTP body·protocol·로그에 전달하지 않는다.
+2. `OperationsAudit.ts`의 `OperationsAudit({opsDataDir, nowEpochMs, isWritable: () => journal.writable, actorAlias?, allowMissingHistory?})`는 같은 writer 아래 `operations-audit.json`을 저장한다. 이력 누락의 기본값은 차단이다. `allowMissingHistory`는 과거 운영 명령이 없는 최초 생성의 외부 증거를 소유자가 확인했을 때만 true로 주입하며 빈 디렉터리만으로 판단하지 않는다.
+3. `OperationsBindings.ts`의 `OperationsBindings(options)`에 기존 journal·UsageBudget·동일 E-11/E-13 retry 엔진들, 필요 시 RecoveryCleanupBindings, F 검증 config, 시계, 실제 `getGameActivity`, **E-15의 전체 product getReadiness**를 주입한다. `getOfficialRevision(checkpoint)`은 해당 공식 입력의 검증된 periodId/version을 서버 내부에서 반환한다. 중앙 6필드 OfficialBudgetCheckpoint나 클라이언트 명령에 revision 필드를 추가하지 않는다. 임의 기간·현재 시각으로 revision을 만들지 않는다.
+4. `OperationsController.ts`의 `OperationsController(options)`에 bindings의 `setAdmission/getStatus/canResume/canComplete/run`, 같은 감사 저장소, epoch/monotonic 시계, `config.operationTimeoutMs`를 연결한다. run은 `(command, signal, beforeDispatch)`를 모두 전달한다. 클래스 메서드는 화살표 함수나 `.bind(bindings)`로 감싸 this를 유지한다(예: `run: (command, signal, guard) => bindings.run(command, signal, guard)`). journal/usage/recovery를 먼저 초기화하고 `initializeAudit()`를 기다린 다음 OperationsPort를 공개한다. 감사 초기화 실패에는 OPEN으로 진행하지 않는다.
+5. `getOperations()`는 이 Controller의 `submit/getSnapshot/getStatus`를 위임한다. `submit`은 동기 accepted+snapshot 또는 conflict+REQUEST_ID_CONFLICT다. `parseOperationsCommand`/`validateOperationsCommand`, `isOperationsRequestId`를 공통 strict 검사에 사용한다. 모르는 필드/action, retry-retirement의 retirementId 누락·다른 action의 retirementId는 거절한다.
+6. `OperationsHandlers.ts`의 `createOperationsHandlers({authorize, operations, audit, onAuditFailure})`는 Express RequestHandler `command/snapshot/status`를 반환한다. B가 POST `/api/operations/commands`, GET `/api/operations/commands/:requestId`, GET `/api/operations/status`에 각각 등록한다. 인증 오류 403, schema 오류 400, accepted 202, 다른 body 재사용 409, 없는 조회 404, 내부 실패 고정 503을 반환하며 no-store와 응답 필드 제한을 적용한다.
+7. 실제 HTTP에서는 **B가 JSON parser 앞 공통 인증·no-store 경계와 JSON 오류 처리도 조립**한다. 핸들러에 도달하기 전의 깨진 원시 JSON을 이 모듈이 처리했다고 계산하지 않는다. B 기존 InvitationRoutes의 인증 오류 401 분기와 운영 공통 경계의 403 정책도 실제 조립에서 대조한다.
+8. B `InviteStore.operationsReady`, 입장/방 생성/자동 시작의 await 전후, E GrantIssuer·UsageBudget의 canIssue는 같은 `bindings.canIssue()`를 참조한다. 실제 InviteStore와 GrantIssuer 소비 시험은 이번에 연결했지만 B의 실제 Room 집계·서버 부팅 연결은 아직 없다.
+
+### 명령의 완료와 실패 경계
+
+- **drain:** submit 안에서 admission=DRAINING을 먼저 적용한다. activeMatches/activePractices/pendingAdmissions가 모두 검증 가능한 0이고, 현재 내구 저널의 모든 세대가 REVOKED이며 회수·저장·이력 확인이 충족돼야 성공한다. 이미 진행 중인 게임/연습을 강제 종료하지 않는다. AWAITING_OFFICIAL 예약은 남아 있어도 drain이 완료될 수 있지만 예약 해제나 배포 성공을 뜻하지 않는다.
+- **resume:** 보통의 DRAINING과 readiness를 구분한다. 공개창 [opensAt, closesAt), 제품 인증·전체 READY/historyComplete·미해결 0·정상 저널/공식 예산·양수 가용량을 확인한다. 시간 초과된 공식 입력 저장이 아직 진행 중이면 재개하지 않는다. 저장 후에도 다시 검사하며, 창이 닫힌 뒤 타이머가 늦어도 다음 입장 검사에서 차단한다. 실패 뒤 자동 OPEN하지 않는다.
+- **retry-retirement:** 지정한 UNRESOLVED ID 하나만 기존 엔진으로 보낸다. 다른 세대·이미 REVOKED인 대상·없는 ID는 실행하지 않는다. 공급자 대기 불명을 운영 명령 자체로 확인했다고 바꾸지 않는다. E-13 엔진의 성공은 추가 잔존 방 대조까지 확인한다. 예약은 AWAITING_OFFICIAL로 남으며 Cloud API 총한도를 우회하지 않는다.
+- **checkpoint:** `OPS_DATA_DIR/official-usage-input.json`의 기존 6필드만 읽고 신선도·프로젝트·비음수·실제 확인자와 별도 신뢰 revision을 검증해 UsageBudget의 내구 기록에 반영한다. 공식 입력을 기록하려고 가짜 Media Generation/JournalRecord를 만들지 않는다. 확인된 회수와 이력이 있는 예약에만 공식 조정 후 해제를 적용한다. 기록 유실 잠금은 새 공식 잔량으로 해제하지 않는다.
+- 접수 시점부터 monotonic timeout을 적용하고 내부 실행은 직렬화한다. 같은 requestId+body는 같은 operationId이며 서버 재시작 뒤에도 side effect를 재실행하지 않는다. pending 감사 기록 → 실행 → 내구 terminal → 외부 성공 공개 순서다. 타이머 지연·늦은 응답·감사 저장 경합 뒤에도 오래된 resume이 OPEN을 만들 수 없다.
+- 실패는 admission 잠금을 유지한다. timeout 이후 이미 전송한 원격 작업에서 도착한 실제 회수 증거/429 대기는 보존하지만 운영 결과를 succeeded로 뒤집지 않는다. 감사의 남은 pending은 재시작 시 RECOVERY_UNCONFIRMED로 내구 종결한다.
+- 감사에는 안전한 actor 별칭·requestId·operationId·action·상태/고정 코드·시각 및 멱등 비교용 명령 해시만 저장한다. 원시 retirementId, OPS_TOKEN/JWT, 맵/좌표, Identity 목록, 임의 예외 메시지를 응답이나 감사에 복사하지 않는다.
+
+### 종료와 선행 모듈 보완
+
+새 producer/운영 HTTP 접수를 먼저 닫고 bindings.close와 controller.close를 시작한다. controller는 감사 저장/보상 큐를, bindings는 이미 접수한 로컬 작업을 기다린다. 기존 E-13 cleanup/E-11 retry 작업도 중지·배출한 뒤 E-12 bootstrap.close로 usage/retry 저장을 끝내고 마지막 journal writer 잠금을 해제한다. checkpoint 쓰기 중 writer lease를 먼저 해제하면 안 된다.
+
+`OperationJournal.snapshot()`은 현재 내구 세대 기록을 복사해 반환하고 `flush()`는 접수된 기록 큐를 기다린다. 부팅 때 캐시된 restore 결과를 현재 drain 증거로 사용하지 않는다. `RevocationRetries.retryNow`의 signal/beforeDispatch는 운영 기한을 실제 dispatch까지 전달한다. `UsageBudget.reconcileOfficial/releaseConfirmed`의 beforeCommit은 큐 실행 직전에 취소를 확인한다. 공식 검증은 큐 대기 후 시각/신선도를 재검사하며 유효하지 않은 epoch 값을 허용하지 않는다.
+
+전체 `createMediaCoordinator(deps)` factory와 E-15 health/product READY, E-16 세대 전환은 후속 스토리다. 이 모듈들을 독립 호스트 감시자나 즉시 원격 강제 종료 보장으로 표현하지 않는다.
+
+### 실제 검증과 남은 조건
+
+Node 24.19.0 / pnpm 11.19.0에서 `pnpm verify` **전체 통과**: 62개 시험 파일 **731개 시험**, E-14 신규 8개 파일 **192개 시험**, 기존 Room 브라우저 E2E **2개**. 포맷·실행 계약·lint/경계·workspace 타입·빌드를 모두 통과했다. 신규 8개 시험 파일을 별도 strict NodeNext 타입 검사로도 확인했다.
+
+검증 로그는 작업 폴더 `.local/execution/E-14-verify.log`에 보존한다. 최초 검사는 재사용 node_modules가 이전 checkout의 protocol을 참조하여 중단됐고, 작업 폴더 내부의 workspace 링크를 현재 브랜치로 고친 뒤 전체 재실행이 종료 코드 0으로 완료됐다. manifest/lockfile과 다른 checkout은 변경하지 않았다. node_modules 재사용, 기존 web 청크 크기·THREE.Clock·색상 환경 경고가 남는다.
+
+실제 Cloud 호출은 **0회**다. 네트워크 전송·공식 예산/revision·완전한 product Readiness의 명시적 로컬 fixture를 실제 F 환경이나 E-15 구현으로 바꾸어 보고하지 않는다. 운영 경로 시험은 로컬 Express fixture이며 실제 B bootstrap/배포 서버 조립은 미실행이다.
+
+### 다른 소유자에게 요청
+
+- **E14-B-01 / B:** `server/src/bootstrap.ts`, 운영 router/Room·입장 집계. 위 고정 3경로, E 인증과 JSON parser 앞 no-store/auth, 오류 정책, 실제 getGameActivity 세 수치, 초대/방/grant await 전후 공통 admission을 연결한다. syntax-invalid JSON·세션 Bearer·pendingAdmissions 경합·drain→회수→resume을 실제 서버로 시험하고 commit/결과를 인계한다.
+- **E14-F-01 / F:** `server/src/config/`, `infra/`, 운영 배포/QA. OPS_TOKEN·공개창·operationTimeoutMs·공식 입력과 연결된 신뢰 periodId/version·감사 이력 최초 생성 증거를 검증하여 주입한다. 기존 환경은 disabled/development이며 임의 production 활성화를 하지 않는다. 같은 지속 볼륨에서 감사/usage/retry/journal 쓰기·SIGKILL 복구와 중복 requestId·terminal 조회를 시험한다. 실제 Cloud 회수 및 격리 resume→smoke→drain 배포 증거를 제공한다. 패키지/lockfile 변경 요청은 없다.
+- **E-15:** 전체 product readiness/factory에서 E-14의 admission과 작업 수명을 조립한다. RecoveryState.READY만으로 bindings.getReadiness를 대체하지 않는다. 정상 drain은 건강한 readiness와 분리하고 감사/기록 실패는 영구 잠금으로 전달한다.
+
+공유 API·시험·이 인계는 MR에 포함한다. 개인 진행 기록과 작업별·이번 실행분 MR 본문은 `.local/`에 보존한다.
 
 ## E-13 / OP-06 — 이전 세대·잔존 방 대조와 회수
 
@@ -12,7 +67,7 @@
 - 제출 브랜치: `feat/S15P21C204-147-boot-cleanup` → `develop`. 기준은 E-12 MR !20 병합 후 `fdd47548e82df2ad9fc4341bdb8119c62e0bd228`이다. 예전 누적 브랜치 `feat/S15P21C204-147-previous-generation-cleanup`은 제출 대상이 아니다.
 - 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
 - blockedOn: F-01 실제 namespace/Cloud 프로젝트 소유권·공식 예산·검증된 회수 프로필, 실제 Cloud/배포 볼륨 회귀, E-14~E-15 전체 coordinator 조립과 B의 실제 서버 연결.
-- 이번 실행에서는 E-13만 구현했고 푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다. 사용자가 이 스토리를 develop에 병합한 뒤 E-14를 새 develop 브랜치에서 진행한다.
+- 이후 사용자 요청으로 `783838a96d40d75fab8734e362694364342f8e97`까지 푸시했고 사용자가 MR !27을 develop에 병합했다(`56d9691114f4b7919b81c00a27773871c78ba671`, squash `d1d3014d72dd79aa38c8723b6dd99e6a78727b59`). 제출한 E 코드·시험·인계 파일과 병합 결과가 동일함을 확인했다. Jira 완료는 별도다.
 
 ### 공개 진입점과 실제 연결
 
