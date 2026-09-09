@@ -29,8 +29,15 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 `PoseKind`, `MediaGrant`, `MediaStatus`, `MediaBindings`, `AudioPolicy`, `FaceTrackEvent`.
 
 `createInteractionRuntime(deps, options?)`의 두 번째 인수는 **시험·주입 전용**이다. 제품
-경로는 생략하고 실제 DOM/navigator/Worker/Canvas를 쓴다. `createMediaRoom`만은 아직
-주입이 없으면 실제 SDK Room을 만들지 못하고 명확한 오류로 끝난다.
+경로는 생략하고 실제 DOM/navigator/Worker/Canvas/SDK를 쓴다. **2026-09-09부터 미디어
+네 port에도 제품 구현이 있다.** C는 SDK를 주입하지 않는다.
+
+| 생략한 option      | 제품 경로가 대신 쓰는 것                              |
+| ------------------ | ----------------------------------------------------- |
+| `createMediaRoom`  | `loadLiveKit()`으로 적재한 실제 `livekit-client` Room |
+| `getPublisher`     | 현재 세대 Room의 `localParticipant`                   |
+| `unsubscribeTrack` | 해당 `RemoteTrackPublication.setSubscribed(false)`    |
+| `getAudioTrack`    | 구독 중인 오디오 트랙의 `mediaStreamTrack`            |
 
 ## 구현 상태
 
@@ -113,6 +120,29 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 - **카메라 장애는 참가 종료가 아니다.** 세대와 게임을 유지하고 IN-10 보조 입력과
   ME-02 안전 얼굴로 전환한다.
 
+## SDK 어댑터 — 2026-09-09 추가
+
+`apps/web/src/features/media/livekit-adapter.ts`가 `livekit-client` 2.22.2를 감싼다.
+D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조립하지 않는다.
+
+- SDK 모듈은 정적 import하지 않고 `loadLiveKit()`의 **동적 import**로 받는다. 연결을 한 번도
+  하지 않는 세션은 SDK를 내려받지 않고, Node 시험도 브라우저 전용 SDK를 적재하지 않는다.
+  `connectMedia`가 `media.connect` 전에 적재를 기다린다. 세대마다 다시 적재하지 않는다.
+- **stop 인수는 전부 D 소유 쪽이다.** `room.disconnect(false)`, `unpublishTrack(track, false)`,
+  `replaceTrack(next, true)`. 세대 회수가 원본 카메라·마이크를 끄면 안 되기 때문이다.
+  이 세 값은 각각 되돌리면 실패하는 회귀 시험이 있다.
+- 버려진 Room의 늦은 `TrackSubscribed`는 현재 세대를 건드리지 않는다. `removeAllListeners`가
+  media-session의 수명 listener와 어댑터의 구독 listener를 함께 떼고 트랙 지도를 비운다.
+- 어댑터는 **검증을 하지 않는다.** 구독 사건을 D의 `RemoteTrack` 모양으로 옮길 뿐이고
+  얼굴 검증·상한·보류는 그대로 remote-faces가 판단한다.
+- 시험은 실제 SDK 대신 같은 모양의 가짜 모듈을 주입한다(`options.loadLiveKit`). 대신
+  `livekit-adapter.test.ts`가 **타입 전용 import**로 실제 `Room`·`LocalParticipant`·
+  `RemoteTrackPublication`·`Track.Source`가 어댑터의 구조 타입에 할당 가능한지 컴파일 시점에
+  검사한다. 이 검사가 실제로 SDK 서명 불일치 2건을 잡았다.
+
+**여전히 Cloud 검증 0건이다.** 실제 grant·실제 SFU 연결·실제 회수는 하나도 실행하지 않았다.
+어댑터가 있다고 D-13~D-17이 ACCEPTED가 되지 않는다.
+
 ## 소비자가 알아야 할 계약 세부
 
 - `DeviceStatus.vision`은 **모델 로드만으로 ready가 되지 않는다.** 모델 로드 + 신선한 유효
@@ -183,6 +213,8 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
   다만 `handoffs/E.md`에는 아직 E-02·E-11만 있고 D 대상 인계 항목이 없으며, B의
   `bootstrap`·`rooms` 조립(E11-B-01)이 없어 실제 발급 경로는 여전히 도달할 수 없다.
   D-13은 주입 port 단위 검증뿐이며 실제 Cloud 연결·재연결·회수는 하나도 실행하지 않았다.
+- **클라이언트 쪽 준비는 2026-09-09에 끝났다.** SDK 어댑터가 붙어 실제 grant만 도착하면
+  `connectMedia`가 실제 Room에 연결한다. 남은 것은 D가 아니라 E 인계와 B 조립이다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
 
 ### REQ-D-06 · C · 조립점 연결
@@ -211,7 +243,11 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
    E-05/E-09/E-10 인계가 도착하면 실제 연결 회귀만 수행한다.
 4. 대표 장치가 준비되면 튜닝 두 버전(`D-input-1`, `D-safe-face-1`)의 수치를 실측으로 조정하고
    변경한 버전을 여기에 기록한다.
-5. **MR 운영(2026-09-09)**: `feat/S15P21C204-118-vision-media-input-runtime` → `develop` MR을
+5. **SDK 어댑터(2026-09-09 완료)**: `livekit-adapter.ts`로 미디어 네 port의 제품 구현을
+   채웠다. Vite lib 시험 빌드에서 `livekit-client`가 별도 청크(636.74 kB, gzip 147.20 kB)로
+   떨어지고 `vision.worker` 청크(158.88 kB)도 함께 방출되는 것을 확인했다. 다만 C의 조립
+   (REQ-D-06)이 없어 제품 번들에는 아직 D runtime 자체가 들어가지 않는다.
+6. **MR 운영(2026-09-09)**: `feat/S15P21C204-118-vision-media-input-runtime` → `develop` MR을
    Draft로 먼저 연다. `origin/develop`과 충돌 0건이고 `develop`이 바꾼 파일은 `server/**`와
    `handoffs/E.md`뿐이라 D 변경과 겹치지 않는다. 병합은 REQ-D-01 반영 뒤에 한다.
    push·MR 생성·병합은 담당자가 직접 한다.
