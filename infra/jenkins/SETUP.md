@@ -107,3 +107,18 @@ sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung &&
 ```
 
 oauth2-proxy 가 먼저 떠 있어야 nginx 의 `auth_request` 가 502 를 내지 않습니다. 쿠키 시크릿은 32자 hex(표준 base64 44자는 거절). GitLab OAuth 앱: 프로필 → Preferences → Applications, Confidential, Redirect `https://j15c204.p.ssafy.io/oauth2/callback`, scopes openid profile email read_api.
+
+## 9. 실패 알림 (Mattermost DM)
+
+빌드가 실패하면 `post { failure }` 가 `scripts/notify-build-failure.mjs` 를 호스트 Node 로 실행해 실패한 사람에게 Mattermost DM 을 보낸다.
+
+| 항목        | 값                                                                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 웹훅 URL    | Jenkins 크리덴셜 **Secret text**, ID `mattermost-webhook` (Manage Jenkins → Credentials → Global). 저장소·문서·로그에 URL 을 두지 않는다            |
+| 수신자 매핑 | `infra/jenkins/notify-map.json` 의 `byEmail`: GitLab 계정/커밋 이메일 → MM `@사용자명`. 웹훅 payload 의 `username` 은 비어 오므로 이메일로 대조한다 |
+| 수신자 결정 | MR 잡: `gitlabUserEmail` → develop 잡: 실패 커밋 author 이메일 → 둘 다 없으면 웹훅 기본 채널                                                        |
+| 메시지      | 잡·빌드 번호, 브랜치, 커밋, 실패 단계(`FAILED_STAGE`), MR 링크, 콘솔 링크                                                                           |
+| 실패 처리   | 크리덴셜 없음·전송 실패·작업공간 없음 모두 echo 후 계속. 빌드 결과는 바뀌지 않는다                                                                  |
+| 점검        | `NOTIFY_DRY_RUN=1 node scripts/notify-build-failure.mjs` 는 payload 만 출력하고 보내지 않는다. 계약 시험 `tests/contracts/notify-contract.test.ts`  |
+
+DM 발신자는 웹훅을 만든 계정으로 표시된다(팀 봇 계정 없음). 새 팀원은 `notify-map.json` 에 이메일과 MM 아이디를 추가한다.
