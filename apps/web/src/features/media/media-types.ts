@@ -96,4 +96,7 @@ export const ROOM_EVENTS = Object.freeze({
   signalReconnecting: 'signalReconnecting',
   reconnected: 'reconnected',
   disconnected: 'disconnected',
+  /** 구독 사건. media-session이 아니라 SDK 어댑터가 듣는다. */
+  trackSubscribed: 'trackSubscribed',
+  trackUnsubscribed: 'trackUnsubscribed',
 });

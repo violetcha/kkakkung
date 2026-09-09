@@ -9,6 +9,7 @@ import {
   createInteractionRuntime,
   isVisionReady,
   type InteractionDeps,
+  type InteractionRuntimeOptions,
   type VisionEnvironment,
 } from './InteractionRuntime';
 import { INPUT_TUNING } from './input-tuning';
@@ -70,7 +71,7 @@ function snapshot(frameId: number, atMs: number, generation: number): SensorSnap
   };
 }
 
-function harness() {
+function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
   const track = videoTrack();
   const sensors: SensorSnapshot[] = [];
   const statuses: {
@@ -178,6 +179,7 @@ function harness() {
     compositor,
     createRemoteElement: () => ({ srcObject: null }) as unknown as HTMLVideoElement,
     unsubscribeTrack: (track) => unsubscribed.push({ trackSid: track.trackSid }),
+    ...overrides,
   });
   return {
     runtime,
@@ -513,5 +515,204 @@ describe('media generation and participation lifecycle', () => {
     base.runtime.beginMediaGeneration();
     expect(base.runtime.getGenerationState()).not.toBe('live');
     expect(base.track.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('제품 경로의 livekit SDK 어댑터', () => {
+  const NOW_SECONDS = 1_800_000_000;
+  const playing = {
+    matchId: 'match-1',
+    selfPlayerId: 'p1',
+    role: 'runner' as const,
+    phase: 'PLAYING' as const,
+    status: 'ACTIVE' as const,
+    mode: 'motion' as const,
+    pageActive: true,
+  };
+  const grant = {
+    matchId: 'match-1',
+    mediaInstanceId: 'instance-1',
+    receiverGeneration: 1,
+    url: 'wss://media.example',
+    token: 'grant-token',
+    roomName: 'room-1',
+    mediaIdentity: 'identity-p1-g1',
+    expiresAt: NOW_SECONDS + 600,
+  };
+
+  /** 실제 SDK 대신 같은 모양의 모듈을 준다. Node 시험은 livekit-client를 적재하지 않는다. */
+  function fakeSdk() {
+    const rooms: {
+      connect: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+      emit: (event: string, ...args: unknown[]) => void;
+      publishTrack: ReturnType<typeof vi.fn>;
+    }[] = [];
+    const Room = function Room() {
+      const listeners = new Map<string, ((...args: never[]) => void)[]>();
+      const publishTrack = vi.fn(async () => ({ trackSid: 'local-face' }));
+      const room = {
+        localParticipant: { publishTrack, unpublishTrack: vi.fn(async () => undefined) },
+        connect: vi.fn(async () => undefined),
+        disconnect: vi.fn(async () => undefined),
+        on: (event: string, listener: (...args: never[]) => void) => {
+          listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+        },
+        removeAllListeners: () => listeners.clear(),
+        emit: (event: string, ...args: unknown[]) => {
+          for (const listener of [...(listeners.get(event) ?? [])])
+            (listener as (...rest: unknown[]) => void)(...args);
+        },
+        publishTrack,
+      };
+      rooms.push(room);
+      return room;
+    };
+    const load = vi.fn(async () => ({
+      Room: Room as never,
+      Track: { Source: { Camera: 'camera', Microphone: 'microphone' } },
+    }));
+    return { rooms, load };
+  }
+
+  function sdkHarness(extra: Partial<InteractionRuntimeOptions> = {}) {
+    const sdk = fakeSdk();
+    const base = harness({
+      loadLiveKit: sdk.load,
+      unsubscribeTrack: undefined,
+      epochNowSeconds: () => NOW_SECONDS,
+      ...extra,
+    });
+    return { ...base, sdk };
+  }
+
+  it('createMediaRoom 주입이 없으면 SDK를 적재해 실제 Room으로 연결한다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+
+    await base.runtime.connectMedia(grant);
+
+    expect(base.sdk.load).toHaveBeenCalledTimes(1);
+    expect(base.sdk.rooms).toHaveLength(1);
+    expect(base.sdk.rooms[0]?.connect).toHaveBeenCalledWith(grant.url, grant.token, {
+      autoSubscribe: false,
+    });
+  });
+
+  it('createMediaRoom 주입이 있으면 SDK를 적재하지 않는다', async () => {
+    const injected = {
+      connect: vi.fn(async () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+    const base = sdkHarness({ createMediaRoom: () => injected });
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+
+    await base.runtime.connectMedia(grant);
+
+    expect(base.sdk.load).not.toHaveBeenCalled();
+    expect(injected.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('세대마다 SDK를 다시 적재하지 않는다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+
+    await base.runtime.retireMediaGeneration();
+    base.runtime.beginMediaGeneration();
+    await base.runtime.connectMedia({ ...grant, receiverGeneration: 2 });
+
+    expect(base.sdk.load).toHaveBeenCalledTimes(1);
+    expect(base.sdk.rooms).toHaveLength(2);
+  });
+
+  it('SDK TrackSubscribed는 검증 전이라 attach하지 않고 보류로만 들어간다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+
+    base.sdk.rooms[0]?.emit(
+      'trackSubscribed',
+      { kind: 'video', mediaStreamTrack: {}, attach: vi.fn(), detach: vi.fn() },
+      { trackSid: 'face-2', setSubscribed: vi.fn() },
+      { sid: 'sid-p2' },
+    );
+
+    // 검증 바인딩이 없으므로 얼굴을 넘기지 않는다. 보류만 잡는다.
+    expect(base.faceTracks).toHaveLength(0);
+
+    base.advance(2_001);
+    base.fireTimers();
+
+    // 바인딩을 한 번도 받지 못했으면 참조할 revision이 없어 재전송을 요청하지 않는다.
+    expect(base.faceTracks).toHaveLength(0);
+    expect(base.refreshRequests).toHaveLength(0);
+  });
+
+  it('구독 해제 주입이 없으면 SDK publication의 구독을 실제로 멈춘다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+    const setSubscribed = vi.fn();
+    base.sdk.rooms[0]?.emit(
+      'trackSubscribed',
+      { kind: 'video', mediaStreamTrack: {}, attach: vi.fn(), detach: vi.fn() },
+      { trackSid: 'face-intruder', setSubscribed },
+      { sid: 'sid-intruder' },
+    );
+
+    // 검증 목록에 없는 참가자다. 보류가 만료되면 구독을 멈추고 목록 재전송을 요청한다.
+    base.runtime.applyMediaBindings({
+      matchId: 'match-1',
+      mediaInstanceId: 'instance-1',
+      receiverGeneration: 1,
+      bindingRevision: 7,
+      participants: [],
+    });
+    base.advance(2_001);
+    base.fireTimers();
+
+    expect(setSubscribed).toHaveBeenCalledWith(false);
+    expect(base.refreshRequests).toContainEqual(
+      expect.objectContaining({ lastBindingRevision: 7 }),
+    );
+  });
+
+  it('getPublisher 주입이 없으면 현재 Room의 LocalParticipant로 게시한다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+    base.emit(1);
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+
+    const faceSid = await base.runtime.publishMedia();
+
+    expect(faceSid).toBe('local-face');
+    expect(base.sdk.rooms[0]?.publishTrack).toHaveBeenCalledWith(base.processedTrack, {
+      source: 'camera',
+      simulcast: false,
+      videoEncoding: { maxBitrate: 100_000, maxFramerate: 10 },
+    });
+  });
+
+  it('세대 회수는 Room을 stopTracks=false로 끊어 원본 카메라를 살려 둔다', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.ready();
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+
+    await base.runtime.retireMediaGeneration();
+
+    expect(base.sdk.rooms[0]?.disconnect).toHaveBeenCalledWith(false);
+    expect(base.track.stop).not.toHaveBeenCalled();
   });
 });

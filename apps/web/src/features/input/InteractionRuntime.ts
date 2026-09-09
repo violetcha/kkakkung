@@ -73,6 +73,12 @@ import {
 } from '../media/remote-faces';
 import { IDLE_MEDIA_STATUS, type MediaRoomFactory } from '../media/media-types';
 import {
+  createLiveKitAdapter,
+  loadLiveKit,
+  type LiveKitAdapter,
+  type LiveKitModule,
+} from '../media/livekit-adapter';
+import {
   createTrackPublisher,
   type PublisherPort,
   type PublicationRecord,
@@ -255,17 +261,19 @@ export type InteractionRuntimeOptions = Readonly<{
   environment?: DeviceEnvironment;
   vision?: VisionEnvironment;
   compositor?: CompositorEnvironment;
-  /** SDK Room 주입점. 생략하면 실제 livekit-client Room을 만든다. */
+  /** SDK Room 주입점. 생략하면 loadLiveKit()으로 실제 livekit-client Room을 만든다. */
   createMediaRoom?: MediaRoomFactory;
-  /** SDK LocalParticipant 주입점. 생략하면 게시를 시도하지 않는다. */
+  /** SDK 모듈 적재 주입점. 생략하면 livekit-client를 동적 import한다. 시험은 가짜 모듈을 준다. */
+  loadLiveKit?: () => Promise<LiveKitModule>;
+  /** SDK LocalParticipant 주입점. 생략하면 SDK 어댑터의 LocalParticipant를 쓴다. */
   getPublisher?: () => PublisherPort | null;
   /** 원격 video element 생성. 생략하면 document를 쓴다. */
   createRemoteElement?: () => HTMLVideoElement;
-  /** SDK 구독 해제. 생략하면 아무 것도 하지 않는다. */
+  /** SDK 구독 해제 주입점. 생략하면 SDK 어댑터가 setSubscribed(false)를 부른다. */
   unsubscribeTrack?: (track: RemoteTrack) => void;
   /** 사용자 제스처로 연 AudioContext 기반 그래프. 생략하면 오디오를 구성하지 않는다. */
   audio?: AudioGraphEnvironment;
-  /** 검증된 오디오 트랙 조회. */
+  /** 검증된 오디오 트랙 조회 주입점. 생략하면 SDK 어댑터의 구독 트랙을 읽는다. */
   getAudioTrack?: (trackSid: string) => MediaStreamTrack | null;
   epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
@@ -489,6 +497,8 @@ export const createInteractionRuntime = (
   const calibrator = createCalibrator(tuning);
   const context: ContextStore = createContextStore();
   let publisher: TrackPublisher | null = null;
+  /** 제품 경로의 SDK 어댑터. createMediaRoom 주입이 있으면 만들지 않는다. */
+  let liveKit: LiveKitAdapter | null = null;
   let qualityPreset: QualityPreset = 'medium';
   /** 연습 상한(2명)과 본 경기 상한(5명)은 권위 phase에서 파생한다. */
   const currentPurpose = (): InstancePurpose =>
@@ -507,7 +517,9 @@ export const createInteractionRuntime = (
     }
     audioGraph = createAudioGraph({
       environment,
-      getAudioTrack: (trackSid) => options.getAudioTrack?.(trackSid) ?? null,
+      // 주입이 없으면 SDK 어댑터가 들고 있는 구독 오디오 트랙을 읽는다.
+      getAudioTrack: (trackSid) =>
+        options.getAudioTrack?.(trackSid) ?? liveKit?.getAudioTrack(trackSid) ?? null,
     });
     return audioGraph;
   };
@@ -549,24 +561,59 @@ export const createInteractionRuntime = (
     onFaceTrack: (event) => {
       if (!disposed) deps.onFaceTrack(event);
     },
-    unsubscribe: (track) => options.unsubscribeTrack?.(track),
+    // 검증되지 않은 트랙은 실제로 구독을 멈춘다. 주입이 없으면 SDK 어댑터가 처리한다.
+    unsubscribe: (track) => {
+      if (options.unsubscribeTrack) options.unsubscribeTrack(track);
+      else liveKit?.unsubscribeTrack(track);
+    },
     requestBindingsRefresh: (request) => deps.requestBindingsRefresh(request),
     getPurpose: currentPurpose,
     pending: pendingTracks,
   });
 
+  /** SDK TrackSubscribed 처리. 어댑터와 C의 직접 호출이 같은 경로를 쓴다. */
+  const handleRemoteTrack = (track: RemoteTrack) => {
+    if (disposed || !lifecycle.canOperate()) return;
+    remoteFaces.addTrack(track);
+    if (track.kind === 'audio') reconcileAudio();
+    scheduleSweep();
+  };
+
+  const handleRemoteTrackRemoved = (trackSid: string) => {
+    if (disposed) return;
+    remoteFaces.removeTrack(trackSid);
+    reconcileAudio();
+  };
+
+  /**
+   * 제품 경로의 SDK를 적재한다. createMediaRoom 주입이 있으면 SDK를 건드리지 않는다.
+   * 동적 import라 연결을 한 번도 하지 않는 세션은 SDK를 내려받지 않는다.
+   */
+  const ensureLiveKit = async (): Promise<void> => {
+    if (options.createMediaRoom || liveKit || disposed) return;
+    const adapter = createLiveKitAdapter(await (options.loadLiveKit ?? loadLiveKit)(), {
+      onRemoteTrack: handleRemoteTrack,
+      onRemoteTrackRemoved: handleRemoteTrackRemoved,
+    });
+    // 적재를 기다리는 동안 폐기됐으면 어댑터를 남기지 않는다.
+    if (disposed) return;
+    liveKit = adapter;
+  };
+
   const ensurePublisher = (): TrackPublisher | null => {
     if (publisher) return publisher;
-    const participant = options.getPublisher?.() ?? null;
+    // 주입이 없으면 현재 세대 Room의 LocalParticipant를 쓴다. Room이 없으면 게시하지 않는다.
+    const participant = options.getPublisher?.() ?? liveKit?.getPublisher() ?? null;
     if (!participant) return null;
     publisher = createTrackPublisher({ participant, now: () => vision.now() });
     return publisher;
   };
   const media: MediaSession = createMediaSession({
     createRoom: () => {
-      if (!options.createMediaRoom)
-        throw new InteractionNotImplementedError('createMediaRoom', 'F/D 실제 SDK 주입');
-      return options.createMediaRoom();
+      if (options.createMediaRoom) return options.createMediaRoom();
+      // connectMedia가 ensureLiveKit을 먼저 기다린다. 여기 도달하면 적재가 끝나 있다.
+      if (!liveKit) throw new InteractionNotImplementedError('createMediaRoom', 'SDK 적재 실패');
+      return liveKit.createRoom();
     },
     onStatus: (status) => {
       if (!disposed) deps.onMediaStatus(status);
@@ -955,6 +1002,9 @@ export const createInteractionRuntime = (
       if (disposed) return;
       // terminal 세대에서는 새 연결을 열지 않는다.
       if (!lifecycle.canOperate()) return;
+      // SDK 적재를 먼저 끝낸다. 적재 실패는 연결 실패로 드러난다.
+      await ensureLiveKit();
+      if (disposed || !lifecycle.canOperate()) return;
       await media.connect(grant);
     },
 
@@ -990,18 +1040,13 @@ export const createInteractionRuntime = (
       reconcileAudio();
     },
 
-    /** SDK TrackSubscribed. 검증 전에는 attach하지 않는다. */
+    /** SDK TrackSubscribed. 검증 전에는 attach하지 않는다. 어댑터도 같은 경로를 쓴다. */
     addRemoteTrack(track) {
-      if (disposed || !lifecycle.canOperate()) return;
-      remoteFaces.addTrack(track);
-      if (track.kind === 'audio') reconcileAudio();
-      scheduleSweep();
+      handleRemoteTrack(track);
     },
 
     removeRemoteTrack(trackSid) {
-      if (disposed) return;
-      remoteFaces.removeTrack(trackSid);
-      reconcileAudio();
+      handleRemoteTrackRemoved(trackSid);
     },
 
     /** C VI-05의 저사양 전환. 이후 게시부터 낮은 인코딩을 쓴다. */
@@ -1056,6 +1101,8 @@ export const createInteractionRuntime = (
       await lifecycle.dispose();
       deps.onMediaStatus(IDLE_MEDIA_STATUS);
       await media.dispose();
+      // 어댑터는 Room과 함께 버린다. 폐기한 runtime을 다시 쓰지 않는다.
+      liveKit = null;
     },
   };
 };
