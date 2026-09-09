@@ -27,7 +27,7 @@
 | 15   | `feat/S15P21C204-95-practice-coordinator`           | `dbb3a95`                                                 | B-15 / S15P21C204-95 · MR [!49](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/49) develop 병합 `ad0a5fb`(2026-09-09) |
 | 16   | `feat/S15P21C204-96-layout-loader-loading-barrier`  | `b75f7bd`                                                 | B-16 / S15P21C204-96 · MR [!50](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/50) develop 병합 `4b01e7b`(2026-09-09) |
 | 17   | `feat/S15P21C204-97-countdown`                      | `1ec6356`                                                 | B-17 / S15P21C204-97 · MR [!54](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/54) develop 병합 `c4fa69a`(2026-09-09) |
-| 18   | `feat/S15P21C204-98-rematch`                        | `e916cd2`                                                 | B-18 / S15P21C204-98                                                                                                                       |
+| 18   | `feat/S15P21C204-98-rematch`                        | `e916cd2`                                                 | B-18 / S15P21C204-98 · MR [!57](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/57) develop 병합 `cddffd1`(2026-09-09) |
 | 19   | `feat/S15P21C204-84-kkakkung-room-assembly`         | `4a2b42a`(조립), `a70e95f`(문서), develop 병합, `b1be16d` | 조립: B-04 대표, 키 82·84·87·89~98                                                                                                         |
 
 ## 요약 표
