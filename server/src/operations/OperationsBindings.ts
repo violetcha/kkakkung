@@ -36,6 +36,8 @@ export type OperationsBindingsOptions = Readonly<{
     checkpoint: OfficialBudgetCheckpoint,
   ) => Readonly<{ periodId: string; version: number }> | null;
   refreshBudget?: () => void;
+  /** E-16's exact bounded first-attempt retirement; never exempts UNRESOLVED. */
+  isRetirementInFlight?: (record: JournalRecord) => boolean;
 }>;
 
 /** E-14 action wiring. B owns HTTP/Room assembly; E-15 supplies the complete readiness gate. */
@@ -308,7 +310,9 @@ export class OperationsBindings {
       this.options.journal
         .snapshot()
         .records.filter(
-          ({ record }) => record.state === 'REVOKING' || record.state === 'UNRESOLVED',
+          ({ record }) =>
+            record.state === 'UNRESOLVED' ||
+            (record.state === 'REVOKING' && !this.options.isRetirementInFlight?.(record)),
         ).length,
     );
     return {

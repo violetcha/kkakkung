@@ -126,6 +126,7 @@ export type ReadinessGateOptions = Readonly<{
   capability: () => CapabilityReport | null;
   /** Only the bound issuer's reserve -> PREPARED write interval is exempt from orphan detection. */
   pendingPreparations: () => readonly Generation[];
+  pendingRetirements?: () => readonly Generation[];
 }>;
 
 /** Complete product readiness, independent of OPEN/DRAINING and with no network or disk IO. */
@@ -223,6 +224,7 @@ export class ReadinessGate {
         reservations: validated.reservations,
         generations: o.registry.all(),
         pendingPreparations: o.pendingPreparations(),
+        pendingRetirements: o.pendingRetirements?.(),
       });
       if (!accounting.consistent) codes.add('RESERVATION_HISTORY_MISMATCH');
     } catch {

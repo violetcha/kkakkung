@@ -17,6 +17,8 @@ export type ReservationReadinessInput = Readonly<{
   generations: readonly Generation[];
   /** Exact registry objects currently inside the owner's reserve/persist operation. */
   pendingPreparations: readonly Generation[];
+  /** Exact current-process objects in a bounded first retirement, never retries or UNKNOWN. */
+  pendingRetirements?: readonly Generation[];
 }>;
 
 const key = (value: { roomName: string; identity: string; generation: number }) =>
@@ -26,7 +28,7 @@ function belongsToRoot(id: string, root: string): boolean {
   return id === root || (id.startsWith(`${root}:`) && /^\d+$/.test(id.slice(root.length + 1)));
 }
 
-function sameGeneration(record: JournalRecord, generation: Generation): boolean {
+export function sameJournalGeneration(record: JournalRecord, generation: Generation): boolean {
   return (
     key(record) === key(generation) &&
     record.serverEpoch === generation.serverEpoch &&
@@ -66,6 +68,15 @@ function inspect(input: ReservationReadinessInput) {
   const unresolved = new Set<string>();
   const generations = new Map<string, Generation>();
   const generationObjects = new Set(input.generations);
+  const retiring = new Set(input.pendingRetirements ?? []);
+  for (const generation of retiring) {
+    if (
+      !generationObjects.has(generation) ||
+      generation.serverEpoch !== input.serverEpoch ||
+      !['PREPARED', 'REVOKING', 'REVOKED'].includes(generation.state)
+    )
+      throw new Error('INVALID_PENDING_RETIREMENT');
+  }
   if (generationObjects.size !== input.generations.length) consistent = false;
   for (const generation of input.generations) {
     if (
@@ -90,7 +101,11 @@ function inspect(input: ReservationReadinessInput) {
     const id = key(generation);
     if (generations.has(id)) consistent = false;
     generations.set(id, generation);
-    if (generation.state !== 'REVOKED' && (generation.terminal || generation.state !== 'PREPARED'))
+    if (
+      generation.state !== 'REVOKED' &&
+      !retiring.has(generation) &&
+      (generation.terminal || generation.state !== 'PREPARED')
+    )
       unresolved.add(id);
   }
 
@@ -130,16 +145,21 @@ function inspect(input: ReservationReadinessInput) {
     records.set(key(record), record);
     identities.add(record.identity);
     const generation = generations.get(key(record));
-    if (generation && !sameGeneration(record, generation)) consistent = false;
+    if (generation && !sameJournalGeneration(record, generation)) consistent = false;
     if (record.state !== 'REVOKED') {
       const currentPrepared =
         record.state === 'PREPARED' &&
         record.serverEpoch === input.serverEpoch &&
         generation !== undefined &&
-        sameGeneration(record, generation) &&
+        sameJournalGeneration(record, generation) &&
         generation.state === 'PREPARED' &&
         !generation.terminal;
-      if (!currentPrepared) unresolved.add(key(record));
+      const currentRetiring =
+        generation !== undefined &&
+        retiring.has(generation) &&
+        sameJournalGeneration(record, generation) &&
+        ['PREPARED', 'REVOKING'].includes(record.state);
+      if (!currentPrepared && !currentRetiring) unresolved.add(key(record));
       if (record.serverEpoch === input.serverEpoch && !generation) consistent = false;
     } else if (generation && generation.state !== 'REVOKED') {
       consistent = false;
@@ -201,6 +221,20 @@ function inspect(input: ReservationReadinessInput) {
     }
     if (
       reservation.status === 'RETIRING' &&
+      !(
+        [...retiring].some((g) => g.reservationId === root) &&
+        group.records.every(
+          (record) =>
+            record.state === 'REVOKED' ||
+            [...retiring].some(
+              (g) =>
+                sameJournalGeneration(record, g) && ['PREPARED', 'REVOKING'].includes(record.state),
+            ),
+        ) &&
+        input.generations
+          .filter((g) => g.reservationId === root)
+          .every((g) => g.state === 'REVOKED' || retiring.has(g))
+      ) &&
       !group.records.some((record) => unresolved.has(key(record))) &&
       !input.generations.some(
         (generation) => generation.reservationId === root && unresolved.has(key(generation)),

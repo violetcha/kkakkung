@@ -294,4 +294,104 @@ describe('runtime reservation and generation readiness', () => {
     (generation as unknown as { state: string }).state = 'private-untrusted-value';
     expect(inspectReservationReadiness(input)).toEqual({ consistent: false, unresolvedCount: 1 });
   });
+
+  it('keeps an exact bounded current retirement ready through PREPARED, REVOKING and durable REVOKED accounting', () => {
+    const { generation, input } = setup();
+    generation.terminal = true;
+    for (const state of ['PREPARED', 'REVOKING', 'REVOKED'] as const) {
+      generation.state = state;
+      const retiring = {
+        ...input,
+        records: [entry(generation)],
+        reservations: [reservation(generation.reservationId, { status: 'RETIRING' })],
+        pendingRetirements: [generation],
+      };
+      expect(inspectReservationReadiness(retiring)).toEqual({
+        consistent: true,
+        unresolvedCount: 0,
+      });
+      expect(
+        inspectReservationReadiness({ ...retiring, pendingRetirements: [] }).unresolvedCount,
+      ).toBe(1);
+    }
+    expect(
+      inspectReservationReadiness({
+        ...input,
+        records: [entry(generation)],
+        reservations: [reservation(generation.reservationId, { status: 'AWAITING_OFFICIAL' })],
+      }),
+    ).toEqual({ consistent: true, unresolvedCount: 0 });
+  });
+
+  it.each(['cloned', 'unlisted', 'prior-boot', 'unresolved'] as const)(
+    'rejects a %s retirement exemption instead of hiding unknown occupancy',
+    (kind) => {
+      const { generation, input } = setup();
+      generation.state = 'REVOKING';
+      generation.terminal = true;
+      if (kind === 'unresolved') generation.state = 'UNRESOLVED';
+      const retiring: ReservationReadinessInput = {
+        ...input,
+        records: [entry(generation)],
+        reservations: [reservation(generation.reservationId, { status: 'RETIRING' })],
+        generations: kind === 'unlisted' ? [] : input.generations,
+        serverEpoch: kind === 'prior-boot' ? randomUUID() : input.serverEpoch,
+        pendingRetirements: [kind === 'cloned' ? structuredClone(generation) : generation],
+      };
+      expect(inspectReservationReadiness(retiring)).toEqual({
+        consistent: false,
+        unresolvedCount: 1,
+      });
+    },
+  );
+
+  it('never exempts another unresolved identity that shares a pending retirement reservation root', () => {
+    const { registry, generation, input } = setup();
+    const second = registry.allocate(
+      { ...prepareRequest, requestId: 'second-retirement', playerId: 'q' },
+      NOW,
+    );
+    second.reservationId = generation.reservationId;
+    generation.state = 'REVOKING';
+    generation.terminal = true;
+    second.state = 'UNRESOLVED';
+    second.terminal = true;
+    const retiring = {
+      ...input,
+      records: [entry(generation), entry(second, 2)],
+      generations: registry.all(),
+      reservations: [
+        reservation(generation.reservationId, { status: 'RETIRING' }),
+        reservation(`${generation.reservationId}:1`, { status: 'RETIRING' }),
+      ],
+      pendingRetirements: [generation],
+    };
+    expect(inspectReservationReadiness(retiring)).toEqual({ consistent: true, unresolvedCount: 1 });
+    expect(
+      inspectReservationReadiness({ ...retiring, pendingRetirements: [generation, second] }),
+    ).toEqual({ consistent: false, unresolvedCount: 1 });
+  });
+
+  it('does not let a pending retirement cover a different durable identity or falsely released accounting', () => {
+    const { generation, input } = setup();
+    generation.state = 'REVOKING';
+    generation.terminal = true;
+    expect(
+      inspectReservationReadiness({
+        ...input,
+        records: [entry(generation, 1, { identity: 'different-identity' })],
+        pendingRetirements: [generation],
+      }).consistent,
+    ).toBe(false);
+    for (const status of ['AWAITING_OFFICIAL', 'RELEASED'] as const) {
+      expect(
+        inspectReservationReadiness({
+          ...input,
+          records: [entry(generation)],
+          pendingRetirements: [generation],
+          reservations: [reservation(generation.reservationId, { status })],
+        }).consistent,
+      ).toBe(false);
+    }
+  });
 });
