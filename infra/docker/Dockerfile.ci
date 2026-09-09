@@ -11,7 +11,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 
 RUN npm install --global pnpm@${PNPM_VERSION} \
  && npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
- && chmod -R a+rX /ms-playwright \
+ && chmod -R a+rwX /ms-playwright \
  && rm -rf /root/.npm /var/lib/apt/lists/*
 
 WORKDIR /workspace

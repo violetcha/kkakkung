@@ -7,6 +7,7 @@
 //   CI_VERIFY_DRY_RUN=1 node scripts/ci-verify.mjs   # print the plan, run nothing
 
 import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import { runTool } from './lib/run-tool.mjs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,7 @@ export const PLAN = Object.freeze([
   { id: 'toolchain', description: 'Node 24.19.0 / pnpm 11.19.0 확인' },
   { id: 'source-sha', description: 'EXPECTED_SOURCE_SHA 와 git rev-parse HEAD 대조 (설정 시)' },
   { id: 'install', command: [pnpm, 'install', '--frozen-lockfile'] },
+  // CI 이미지(Dockerfile.ci)에는 Chromium 이 PLAYWRIGHT_BROWSERS_PATH 에 이미 있어 설치를 건너뜁니다.
   { id: 'chromium', command: [pnpm, 'exec', 'playwright', 'install', 'chromium'] },
   { id: 'verify', command: [pnpm, 'verify'] },
 ]);
@@ -36,6 +38,11 @@ function run(step, command) {
   const r = runTool(command[0], command.slice(1), { cwd: root, stdio: 'inherit' });
   if (r.error) fail(step, r.error.message, 127);
   if (r.status !== 0) fail(step, `exit ${r.status}`, r.status ?? 1);
+}
+
+export function chromiumPresent(browsersPath) {
+  if (!browsersPath || !existsSync(browsersPath)) return false;
+  return readdirSync(browsersPath).some((d) => /^chromium/.test(d));
 }
 
 export function checkToolchain(nodeVersion, pnpmVersion) {
@@ -76,7 +83,16 @@ function main() {
   if (shaProblem) fail('source-sha', shaProblem, 3);
 
   // 3-5. install → chromium → verify (exactly once)
-  for (const step of PLAN) if (step.command) run(step.id, step.command);
+  for (const step of PLAN) {
+    if (!step.command) continue;
+    if (step.id === 'chromium' && chromiumPresent(process.env.PLAYWRIGHT_BROWSERS_PATH)) {
+      console.log(
+        `ci-verify: chromium: 이미 설치됨 (${process.env.PLAYWRIGHT_BROWSERS_PATH}), 설치 생략`,
+      );
+      continue;
+    }
+    run(step.id, step.command);
+  }
   console.log(dryRun ? 'ci-verify: DRY_RUN 완료' : 'ci-verify: 완료');
 }
 

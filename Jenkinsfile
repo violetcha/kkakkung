@@ -8,6 +8,8 @@ pipeline {
   agent any
 
   options {
+    // GitLab 커밋 상태 게시 (Jenkins 관리 → System → GitLab connection 'ssafy-gitlab', 크리덴셜 gitlab-api-token)
+    gitLabConnection('ssafy-gitlab')
     timestamps()
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -31,6 +33,7 @@ pipeline {
 
     stage('Prepare') {
       steps {
+        updateGitlabCommitStatus name: 'jenkins', state: 'running'
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
           // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃이 같은지 대조합니다 (DP-04).
@@ -147,6 +150,7 @@ pipeline {
 
   post {
     failure {
+      updateGitlabCommitStatus name: 'jenkins', state: 'failed'
       script {
         if (env.PREV_TAG?.trim()) {
           echo "배포 실패. ${env.PREV_TAG} 로 롤백합니다"
@@ -163,6 +167,7 @@ pipeline {
       }
     }
     success {
+      updateGitlabCommitStatus name: 'jenkins', state: 'success'
       // 최근 5개만 남기고 정리. 지금 태그와 직전 정상 태그는 절대 지우지 않습니다.
       sh '''
         keep1="$TAG"; keep2="$(cat "$STATE_DIR/last-good-tag" 2>/dev/null || true)"
