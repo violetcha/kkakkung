@@ -2,7 +2,53 @@
 
 수정자: **E** · 2026-09-09 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-14 로컬 검증 인계**다. E-13 MR !27의 develop 병합을 확인했고 이번 기준 SHA는 `56d9691114f4b7919b81c00a27773871c78ba671`이다. E-01~E-13은 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-15 로컬 검증 인계**다. E-14 MR !33의 develop 병합을 확인했고 이번 기준 SHA는 `7e6489bfea2569d7c3f5a8d9fc8c3081085dadb5`이다. E-01~E-14는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+
+## E-15 / OP-08 — live·ready와 공통 입장·발급 장벽
+
+- Jira: [S15P21C204-149](https://ssafy.atlassian.net/browse/S15P21C204-149).
+- localStage: **LOCAL_VERIFIED**. 최종 인수: **BLOCKED**.
+- 구현 commit: `068e4b0bef8c83db74aaf9cffd16ea307a4748ee`.
+- 제출 브랜치: `feat/S15P21C204-149-product-readiness` → `develop`. E-14 MR !33 병합 후 `7e6489bfea2569d7c3f5a8d9fc8c3081085dadb5`에서 새로 분기했다. 예전 누적 `feat/S15P21C204-149-health-readiness`는 이번 제출 대상이 아니다.
+- 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
+- blockedOn: B 실제 health/운영 라우트·제품 인증/입장/자동 시작·활동 집계 조립, F-05 지속 볼륨/단일 쓰기자와 공식 Cloud·예산·운영 입력 증거, E-16 전체 MediaCoordinator 조립과 D-17 세대 전환, 실제 Cloud/격리 배포 검증.
+- E-15의 독립 구현은 B/D의 전체 완료를 선행으로 요구하지 않는다. F-05의 실제 환경 인수가 없으므로 로컬 시험을 배포 완료로 계산하지 않는다. 이번에 E-16·푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다.
+
+### 공개 API와 연결 순서
+
+`server/src/health/Readiness.ts`는 `ReadinessGate`, `ReadinessGateOptions`, `sanitizeReadiness`를 제공한다. `ReadinessRuntime.ts`의 `createReadinessRuntime(options)`는 기존 E-12 복구, E-14 운영 제어, E-05 발급기와 E-03 예약을 같은 판정으로 연결한다. **이 factory는 E-15 조립이며 전체 createMediaCoordinator의 구현 완료가 아니다.** E-16의 전환 큐와 B/D의 실제 이벤트 연결은 별도다.
+
+1. 기존 `OperationJournal`, `UsageCheckpoint/UsageBudget`, retry/cleanup 체크포인트, `OperationsAudit`, `MediaGenerationRegistry`를 공유한다. 체크포인트와 감사의 isWritable은 같은 journal.writable을 참조한다. 다른 writer나 SDK/API 예산을 추가하지 않는다. UsageBudget 생성 시 `canIssue: () => ({ allowed: runtime?.canIssue() ?? false })`처럼 아직 factory가 없으면 거절하는 참조를 연결한다.
+2. 기존 E-12 `createRecoveryBootstrap`에 registry.serverEpoch를 공유하고 E-13의 `beginCleanup: input => cleanup.run(input)`, `closeCleanup: () => cleanup.close()`, `onReport → state.completeCleanup/refreshBudget`를 연결한다. 최초 설치·namespace 소유권·감사 최초 생성 증거는 F가 확인한 실제 근거만 사용한다. 빈 디렉터리나 빈 Cloud 목록에서 true를 추정하지 않는다.
+3. `createReadinessRuntime`에는 같은 config/recovery/registry/journal/usageBudget/audit/retryCheckpoint/cleanupCheckpoint, 기존 E-11/E-13 retries, recoveryCleanup, epoch/monotonic 시계, B getGameActivity와 정확한 공식 입력의 getOfficialRevision을 전달한다. `mediaMode()`는 F가 검증한 실제 운영 모드(`cloud|disabled|mock|null`), `productSecurityReady()`는 B의 현재 인증·입장 보호 확인, `namespaceOwnershipConfirmed()`와 `capability()`는 검증된 증거를 반환한다. config.productSecurityReady와 동적 확인을 모두 요구하며 환경의 임의 true로 충족하지 않는다.
+4. `await runtime.initialize()`는 로컬 복구·감사 복원까지만 기다린다. Cloud 정리는 기다리지 않는다. initialized는 DRAINING과 RECOVERING/LOCKED를 반환한다. 감사 손상도 health로 관찰 가능한 initialized/LOCKED이며 발급과 운영 변경은 차단한다. fatal WRITER_CONFLICT/INITIALIZATION_FAILED에는 B가 listen/health를 열지 않는다.
+5. `createHealthHandlers({getReadiness: runtime.getReadiness, isInitialized: runtime.isInitialized})`의 live/ready를 **B가** GET `/health/live`, GET `/health/ready`에 등록한다. 초기화 전에는 두 핸들러가 503, initialized 이후 live는 복구 상태와 독립적으로 200이다. ready는 검증된 READY에만 200, 나머지는 503이다. 모든 응답은 no-store이고 state와 고정 reasonCodes만 공개한다.
+6. B `InviteStore.operationsReady`, 방 생성·입장·자동 시작의 await 전후와 UsageBudget.canIssue는 **runtime.canIssue**를 사용한다. 운영 HTTP에는 runtime.getOperations()와 E-14 핸들러를 연결한다. ready 상태와 admission은 별개이며 신규 발급은 READY + OPEN을 요구한다.
+7. E-16 조립자는 `runtime.createGrantIssuer({retire,onPrepared,sign?})`로 기존 E-05 발급기를 한 번만 만든다. retire/onPrepared는 실제 회수/게임 제어 큐에 연결한다. sign 생략 시 기존 SDK의 실제 로컬 JWT 서명을 사용한다. runtime이 같은 usageLease로 예약하고 PREPARED를 내구 기록한 다음에만 발급기가 서명한다. 세대 전환·구 세대 회수 순서는 E-16이 추가하며 이 함수 자체가 전환을 구현하지 않는다.
+8. 종료 시 B가 새 요청을 닫고 E 조립자가 **runtime.close → 기존 E-11/E-13 종료 → RecoveryBootstrap.close** 순서로 진행한다. runtime.close는 발급을 봉쇄하고 운영/감사 쓰기를 배출하지만 주입받은 registry/복구/저널의 전체 수명을 대신 소유하지 않는다. 마지막 복구 종료가 usage/retry/cleanup 저장을 기다리고 journal writer를 해제하도록 기존 closeCleanup 연결을 유지한다. 최종 Gateway/API 예산과 registry 종료도 E-16 전체 coordinator 소유자가 처리한다.
+
+### 판정과 실패 경계
+
+- 저널 무결·현재 쓰기·단일 writer, 복구 이력과 이전 세대 회수, 현재 공식 예산의 프로젝트/신선도·예약 정합, retry/cleanup/감사 저장소, 실제 cloud 모드·제품 인증·namespace 소유권·검증된 권한 프로필을 모두 확인한다. SDK 버전·프로젝트·namespace·미래 시험 시각 또는 불완전한 권한 증거도 거절한다.
+- `ReservationReadiness.ts`의 `inspectReservationReadiness`는 현재 durable 저널과 예약·registry를 대조한다. 현재 정상 PREPARED는 미회수로 세지 않는다. 이전 epoch, REVOKING/UNRESOLVED, 종료 세대의 모순된 예약과 orphan 예약은 차단한다.
+- 예약 fsync → PREPARED fsync 사이에는 **발급기가 실제 추적 중인 동일 registry 객체**만 일시적 예외다. 단순히 메모리에 할당된 객체나 사본은 예외가 아니다. 실패/기록 완료 시 추적을 해제하고 토큰은 PREPARED 기록 이후에만 발급한다. 이 구간의 예산이 이미 디스크에 남았으면 실패를 이유로 예약을 삭제하지 않는다.
+- 정상 drain은 READY를 유지하면서 admission만 DRAINING으로 바꾼다. 복구 완료·증거 회복·첫 설치가 OPEN을 만들지 않는다. 검증된 새 resume의 내구 terminal succeeded 이후에만 OPEN이다. 과거 succeeded 요청 재전송은 입장을 다시 열지 않는다.
+- 현재 시각으로 공식 잔량을 다시 검사하고 예약 총액이 공식 잔량보다 크면 잠근다. 런타임 저장/감사 실패는 영구 잠금으로 남는다. 일시적인 보안/Cloud/예산 조건이 회복되어도 OPEN은 자동 복구되지 않는다.
+- F의 disabled/mock production 시작 차단을 변경하지 않았다. B 현재 bootstrap의 스켈레톤 health는 이 제품 핸들러와 별개이며 실제 교체를 완료한 것으로 표시하지 않는다.
+
+### 실제 검증과 남은 조건
+
+Node 24.19.0 / pnpm 11.19.0에서 `pnpm verify` 전체가 종료 코드 0으로 통과했다. 포맷·실행 계약·lint/경계·workspace 타입·빌드, 75개 시험 파일 **867개 시험**, 기존 Room 브라우저 E2E **2개**를 포함한다. 로그는 작업 폴더 `.local/execution/E-15-verify.log`에 보존한다. 기존 설치 의존성을 재사용하고 workspace 패키지 링크는 이번 브랜치로 연결했다. manifest/lockfile 변경은 없으며 기존 node_modules 구조·web 청크 크기·THREE.Clock·색상 환경 경고가 남는다.
+
+신규 시험은 공개 HTTP 30개, 예약 대조 18개, 실제 로컬 복구/운영/초대/발급 통합 25개로 **73개**다. 초기화 후 복구 대기, 명시적 resume과 정상 drain, 두 참가자의 공유 예약·서명, 5개 저장소의 쓰기 불가, 감사 손상, 과거 미회수 Identity, 공식 예산 누락/시간/과다 예약, 단일 writer 충돌, 서명 대기 중 저장 실패를 확인했다. 신규 시험 파일의 strict NodeNext 타입 검사와 E 소유권 검사도 통과했다.
+
+외부 Cloud 권한·namespace/최초 설치·공식 잔량·운영 모드, B 보안/활동 상태, retire/onPrepared 콜백, E-13 정리 보고서는 명시적인 로컬 fixture 또는 spy다. 실제 저널·사용량·복구 상태·운영 제어·InviteStore·GrantIssuer를 사용했으며 이번 E-15 시험이 실제 RecoveryCleanupBindings의 Cloud 정리를 실행한 것은 아니다. 실제 Cloud 호출은 **0회**이며 토큰 원문을 인계에 기록하지 않았다. 실제 B bootstrap에서 연습→경기→종료→재경기, F의 Docker/지속 볼륨·격리 배포, 실제 장치/Cloud 권한 회귀는 미실행이다. 이 테스트 통과는 ACCEPTED나 Jira 완료가 아니다.
+
+### 다른 소유자에게 요청
+
+- **E15-B-01 / B / server/src/bootstrap.ts·session·rooms·game:** initialized 이후 위 health/운영 경로를 등록하고 fatal에는 listen하지 않는다. 기존 스켈레톤 health와 제품 응답을 중복 등록하지 않는다. 실제 제품 인증/입장 보호 상태·getGameActivity와 공통 canIssue를 초대/방 생성/입장/자동 시작에 연결한다. 정상 drain READY/DRAINING, Cloud 대기 live200/ready503, 늦은 resume·입장 경합·동적 실패 거절을 실제 서버로 시험하여 SHA/결과를 인계한다. 확인 명령은 pnpm verify 및 실제 HTTP/Room 통합 시험이다.
+- **E15-F-01 / F / server/src/config/·infra/·tests:** F-05의 실제 지속 볼륨/단일 호스트·단일 writer, 같은 볼륨의 journal/usage/retry/cleanup/audit, 공식 잔량/기간/버전·Cloud capability·namespace 소유권·최초 생성 증거와 검증된 모드 export를 인계한다. 현재 compose의 ready healthcheck를 무한 재시작으로 연결하지 말고 live/ready 용도를 구분한다. disabled/mock production 차단을 유지한 채 격리 smoke·재시작·disk 오류·회수 실패로 QA-05/DP-06을 확인한다. 패키지/lockfile 변경 요청은 없다.
+- **E-16 / B/D:** D-17 공개 연결이 도착하면 이번 runtime의 같은 getReadiness/canIssue/getOperations와 bound GrantIssuer를 전체 MediaCoordinator에 연결한다. 실제 세대 전환·재경기·권한 회수 검증 후 B에 인계한다. E-15 구현 완료를 기다리는 동안 D의 다른 독립 구현을 막지 않는다.
 
 ## E-14 / OP-07 — 제한 공개창과 운영 제어
 
@@ -13,6 +59,7 @@
 - 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
 - blockedOn: B 실제 운영 라우트/HTTP 공통 경계·활동 집계·입장 조립, F OPS_TOKEN/공개창·공식 잔량과 revision 근거·감사 이력 최초 생성 증빙/지속 볼륨, E-15 전체 product readiness/factory, 실제 Cloud/격리 배포 검증.
 - 이번 실행은 E-14 하나다. E-15~E-16 구현·푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다. 사용자가 병합한 뒤 최신 develop에서 E-15를 시작한다.
+- 이후 사용자 요청으로 `586070d6a077259df0691429a899f578bfa786d4`까지 푸시했고 사용자가 MR !33을 develop에 병합했다(`7e6489bfea2569d7c3f5a8d9fc8c3081085dadb5`, squash `b23f9ed28f3ea8e787ff5f5b2f8aca9f8c3a8d4f`). 제출한 E 코드·시험·인계와 병합 결과가 동일함을 확인했다. E-15 최신 연결은 위 인계를 우선하며 이 항목의 후속 대기는 당시 상태다.
 
 ### 공개 API와 조립 순서
 
