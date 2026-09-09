@@ -9,6 +9,7 @@ import type {
   AbortReason,
   VisibleSurfaces,
 } from './core-types.js';
+import type { ExchangeSessions } from './exchange/session.js';
 import type { ExitRegistry } from './exits/registry.js';
 import type { PriorityOrder } from './priority.js';
 import type { Cell, Dir, MatchLayout, Phase, PlayerStatus, MatchTuning, Role } from './types.js';
@@ -74,6 +75,9 @@ export type MatchState = Readonly<{
   abortReason: AbortReason | null;
   knowledge: ReadonlyMap<string, KnowledgeRecord>;
   visibility: ReadonlyMap<string, VisibleSurfaces>;
+  /** Open map exchange sessions keyed by exchangeId (KN-05). */
+  exchanges: ExchangeSessions;
+  exchangeSeq: number;
   eventSeq: number;
 }>;
 

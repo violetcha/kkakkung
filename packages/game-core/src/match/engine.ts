@@ -18,6 +18,7 @@ import type {
 } from './core-types.js';
 import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
+import { endExchange, openExchange, requestEligibility, verifyAccept } from './exchange/session.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
@@ -135,6 +136,8 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     abortReason: null,
     knowledge,
     visibility: new Map(),
+    exchanges: new Map(),
+    exchangeSeq: 0,
     eventSeq: 0,
   };
   // First real sight from the spawn pose is part of the initial knowledge.
@@ -317,6 +320,53 @@ function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
   return outcome(ctx, command, 'applied', null);
 }
 
+function handleExchangeRequest(ctx: StepContext, command: CoreCommand<'EXCHANGE_REQUEST'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const targetId = command.payload.targetPlayerId;
+  if (typeof targetId !== 'string' || targetId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const actor = ctx.state.players.get(command.actorId)!;
+  const target = ctx.state.players.get(targetId);
+  if (!target) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+  const reason = requestEligibility(ctx.state, actor, target);
+  if (reason) return outcome(ctx, command, 'rejected', reason);
+  const opened = openExchange(ctx.state, actor, target, ctx.tick);
+  ctx.state = opened.state;
+  // Only the recipient learns of the offer; no knowledge moves and no tagger trace is made.
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [target.playerId],
+    type: 'EXCHANGE_OFFER',
+    payload: {
+      exchangeId: opened.session.exchangeId,
+      fromPlayerId: opened.session.fromPlayerId,
+      expiresAtTick: opened.session.expiresAtTick,
+    },
+  });
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_ACCEPT'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const exchangeId = command.payload.exchangeId;
+  if (typeof exchangeId !== 'string' || exchangeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const verified = verifyAccept(ctx.state, command.actorId, exchangeId, ctx.tick);
+  if (verified.status === 'rejected') {
+    // A passed deadline ends the session so the UI can close on the outcome alone.
+    if (verified.expired) ctx.state = endExchange(ctx.state, verified.expired);
+    return outcome(ctx, command, 'rejected', verified.code);
+  }
+  // The verified pair is what KN-07 merges; the id ends here either way.
+  ctx.state = endExchange(ctx.state, verified.session);
+  return outcome(ctx, command, 'applied', null);
+}
+
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
   if (ctx.endedThisStep.has(command.actorId)) {
     // The actor's personal result was fixed earlier in this step: cancel, do not reject.
@@ -327,6 +377,10 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleMoveIntent(ctx, command);
     case 'TURN':
       return handleTurn(ctx, command);
+    case 'EXCHANGE_REQUEST':
+      return handleExchangeRequest(ctx, command);
+    case 'EXCHANGE_ACCEPT':
+      return handleExchangeAccept(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }

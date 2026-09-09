@@ -205,6 +205,21 @@ export {
 export { discoverExits, knownActiveExits } from './knowledge/exits.js';
 
 export {
+  activeDiscoveredExits,
+  endExchange,
+  exchangeViewFor,
+  hasNewInformation,
+  inExchangeRange,
+  openExchange,
+  pairEligibility,
+  requestEligibility,
+  verifyAccept,
+  type ExchangeAcceptResult,
+  type ExchangeSession,
+  type ExchangeSessions,
+} from './exchange/session.js';
+
+export {
   createMatch,
   createPractice,
   getFrame,
