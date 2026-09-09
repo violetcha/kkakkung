@@ -8,6 +8,8 @@ export default [
       '**/.local/**',
       '**/test-results/**',
       '**/playwright-report/**',
+      // D-02 의 MediaPipe WASM 글루 .js 는 벤더 산출물이라 검사하지 않는다 (REQ-D-01)
+      'apps/web/public/models/**',
     ],
   },
   js.configs.recommended,
@@ -22,6 +24,8 @@ export default [
         URL: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        fetch: 'readonly',
+        AbortController: 'readonly',
       },
     },
   },
