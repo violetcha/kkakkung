@@ -8,27 +8,27 @@
 
 선형 이력을 Jira 스토리별 스택 브랜치로 잘랐다. 각 브랜치는 바로 위 행의 브랜치를 부모로 하며, MR도 같은 순서로 앞 브랜치를 대상으로 올린 뒤 앞 MR 병합 후 대상을 `develop`으로 바꾼다. 이전 선형 브랜치는 `backup/b-linear-2026-09-09`로 보존했고 최종 트리는 동일하다(`git diff` 없음). SHA는 cherry-pick으로 바뀌었으며 아래 표와 요약 표가 현재 값이다.
 
-| 순서 | 브랜치                                              | 커밋                                                      | 작업 / Jira                        |
-| ---- | --------------------------------------------------- | --------------------------------------------------------- | ---------------------------------- |
-| 1    | `feat/S15P21C204-81-match-state-contract`           | `e4ac6bf`                                                 | B-01 / S15P21C204-81               |
-| 2    | `feat/S15P21C204-82-command-envelope-http-boundary` | `4f21ff4`, `92f46f8`                                      | B-02 / S15P21C204-82               |
-| 3    | `feat/S15P21C204-83-command-queue-limits`           | `b7c55d4`                                                 | B-03 / S15P21C204-83               |
-| 4    | `feat/S15P21C204-84-match-driver-single-tick`       | `4d6c28f`                                                 | B-04 / S15P21C204-84               |
-| 5    | `feat/S15P21C204-85-room-tick-coordinator`          | `90d5e43`                                                 | B-05 / S15P21C204-85               |
-| 6    | `feat/S15P21C204-86-invitation-issue-verify`        | `6dd3619`                                                 | B-06 / S15P21C204-86               |
-| 7    | `feat/S15P21C204-88-product-session`                | `e0dff93`                                                 | B-08 / S15P21C204-88               |
-| 8    | `feat/S15P21C204-89-slot-registry`                  | `34addb0`                                                 | B-09 / S15P21C204-89               |
-| 9    | `feat/S15P21C204-87-session-routes-admission`       | `ee24c83`                                                 | B-07 / S15P21C204-87               |
-| 10   | `feat/S15P21C204-90-heartbeat-clock-sync`           | `4d47ba7`                                                 | B-10 / S15P21C204-90               |
-| 11   | `feat/S15P21C204-94-private-view-projection`        | `9af13c4`                                                 | B-14 / S15P21C204-94               |
-| 12   | `feat/S15P21C204-91-event-dispatcher-resync`        | `9a13eb3`                                                 | B-11 / S15P21C204-91               |
-| 13   | `feat/S15P21C204-93-room-expiry-host`               | `8c85e92`                                                 | B-13 / S15P21C204-93               |
-| 14   | `feat/S15P21C204-92-lobby-ready-roles`              | `14d6334`                                                 | B-12 / S15P21C204-92               |
-| 15   | `feat/S15P21C204-95-practice-coordinator`           | `dbb3a95`                                                 | B-15 / S15P21C204-95               |
-| 16   | `feat/S15P21C204-96-layout-loader-loading-barrier`  | `b75f7bd`                                                 | B-16 / S15P21C204-96               |
-| 17   | `feat/S15P21C204-97-countdown`                      | `1ec6356`                                                 | B-17 / S15P21C204-97               |
-| 18   | `feat/S15P21C204-98-rematch`                        | `e916cd2`                                                 | B-18 / S15P21C204-98               |
-| 19   | `feat/S15P21C204-84-kkakkung-room-assembly`         | `4a2b42a`(조립), `a70e95f`(문서), develop 병합, `b1be16d` | 조립: B-04 대표, 키 82·84·87·89~98 |
+| 순서 | 브랜치                                              | 커밋                                                      | 작업 / Jira                                                                                                                      |
+| ---- | --------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `feat/S15P21C204-81-match-state-contract`           | `e4ac6bf`                                                 | B-01 / S15P21C204-81 · 푸시됨, MR [!19](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/19) open(2026-09-09) |
+| 2    | `feat/S15P21C204-82-command-envelope-http-boundary` | `4f21ff4`, `92f46f8`                                      | B-02 / S15P21C204-82                                                                                                             |
+| 3    | `feat/S15P21C204-83-command-queue-limits`           | `b7c55d4`                                                 | B-03 / S15P21C204-83                                                                                                             |
+| 4    | `feat/S15P21C204-84-match-driver-single-tick`       | `4d6c28f`                                                 | B-04 / S15P21C204-84                                                                                                             |
+| 5    | `feat/S15P21C204-85-room-tick-coordinator`          | `90d5e43`                                                 | B-05 / S15P21C204-85                                                                                                             |
+| 6    | `feat/S15P21C204-86-invitation-issue-verify`        | `6dd3619`                                                 | B-06 / S15P21C204-86                                                                                                             |
+| 7    | `feat/S15P21C204-88-product-session`                | `e0dff93`                                                 | B-08 / S15P21C204-88                                                                                                             |
+| 8    | `feat/S15P21C204-89-slot-registry`                  | `34addb0`                                                 | B-09 / S15P21C204-89                                                                                                             |
+| 9    | `feat/S15P21C204-87-session-routes-admission`       | `ee24c83`                                                 | B-07 / S15P21C204-87                                                                                                             |
+| 10   | `feat/S15P21C204-90-heartbeat-clock-sync`           | `4d47ba7`                                                 | B-10 / S15P21C204-90                                                                                                             |
+| 11   | `feat/S15P21C204-94-private-view-projection`        | `9af13c4`                                                 | B-14 / S15P21C204-94                                                                                                             |
+| 12   | `feat/S15P21C204-91-event-dispatcher-resync`        | `9a13eb3`                                                 | B-11 / S15P21C204-91                                                                                                             |
+| 13   | `feat/S15P21C204-93-room-expiry-host`               | `8c85e92`                                                 | B-13 / S15P21C204-93                                                                                                             |
+| 14   | `feat/S15P21C204-92-lobby-ready-roles`              | `14d6334`                                                 | B-12 / S15P21C204-92                                                                                                             |
+| 15   | `feat/S15P21C204-95-practice-coordinator`           | `dbb3a95`                                                 | B-15 / S15P21C204-95                                                                                                             |
+| 16   | `feat/S15P21C204-96-layout-loader-loading-barrier`  | `b75f7bd`                                                 | B-16 / S15P21C204-96                                                                                                             |
+| 17   | `feat/S15P21C204-97-countdown`                      | `1ec6356`                                                 | B-17 / S15P21C204-97                                                                                                             |
+| 18   | `feat/S15P21C204-98-rematch`                        | `e916cd2`                                                 | B-18 / S15P21C204-98                                                                                                             |
+| 19   | `feat/S15P21C204-84-kkakkung-room-assembly`         | `4a2b42a`(조립), `a70e95f`(문서), develop 병합, `b1be16d` | 조립: B-04 대표, 키 82·84·87·89~98                                                                                               |
 
 ## 요약 표
 
