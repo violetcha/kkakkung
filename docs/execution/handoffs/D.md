@@ -95,6 +95,11 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
    권위 상태 변경 callback이 아니며 같은 값 echo는 발생하지 않는다.
 6. `connectMedia(grant)`는 TEAM_PRACTICE/MAP_FINALIZING/GAME_LOADING/COUNTDOWN/PLAYING에서만
    성공한다. LOBBY/DEVICE_CHECK에서는 SDK를 부르지 않고 `PHASE_NOT_ALLOWED`로 거절한다.
+7. `reportMediaStatus`는 **D가 부르지 않는다.** deps 선언만 있고 호출자는 C/B다. E 인계
+   (2026-09-09 `origin/develop`)가 순서를 못박았다: `status: 'closed'`는 D의
+   `await retireMediaGeneration()`이 **완료된 뒤에** 보낸다. 서버는 이 신고로 이전 세대의
+   대기를 풀기 때문에, 정리를 호출했다는 사실이나 `ready` 신고로 대신하면 안 된다.
+   `recovering`/`failed`를 반복해도 서버의 10초 창은 늘어나지 않는다.
 
 ## D-17 즉시 인계 — E-16과 B 경기 전환을 막지 않기 위한 요약
 
@@ -185,7 +190,11 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 
 ## 다른 소유자에게 요청할 변경
 
-### REQ-D-01 · F · 루트 lint/format에서 모델 자산 제외 (**차단 중**)
+### REQ-D-01 · F · 루트 lint/format에서 모델 자산 제외 (**2026-09-09 반영 완료**)
+
+**F가 `eeeba9b`(2026-09-09 16:55)로 반영했다.** `.prettierignore`에 `apps/web/public/models/`,
+`eslint.config.mjs`의 `ignores`에 `apps/web/public/models/**`가 들어갔다. 이 요청은 닫힌다.
+아래 원문은 기록으로 남긴다.
 
 - 대상 파일: `eslint.config.mjs`, `.prettierignore`
 - 필요한 변경: 두 파일의 무시 목록에 `apps/web/public/models/**`를 추가한다.
@@ -194,13 +203,12 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   `pnpm format:check`가 3건으로 실패한다. **D 소유 소스의 오류는 0건이다.**
 - 연결 작업: D-02 / IN-02, F QA 공통 검증.
 - 완료 확인 명령: `pnpm lint`, `pnpm format:check`가 각각 통과.
-- **2026-09-09 15:03 `457ed45` 재확인**: 아직 반영되지 않았다. `.prettierignore`와
-  `eslint.config.mjs`의 무시 목록 어디에도 `apps/web/public/models/**`가 없다.
-- **이제 CI가 이 실패를 게시한다.** F가 같은 날 `90831cf`로 Jenkins를 `develop`에 병합했다.
-  `Jenkinsfile`이 MR 사건에서 `scripts/ci-verify.mjs` → `pnpm verify`를 돌리고 GitLab에 커밋
-  상태를 게시한다. `pnpm verify`의 첫 단계가 `format:check`이므로 D의 MR은 **파이프라인 실패로
-  표시된다.** `develop`에는 `apps/web/public/models/`가 없어 이 실패의 원인은 D의 MR뿐이다.
-- 따라서 D의 MR은 **Draft로 열고 REQ-D-01 반영 뒤 병합**한다.
+- F가 같은 날 `90831cf`로 Jenkins를 `develop`에 병합해 MR 사건마다 `scripts/ci-verify.mjs` →
+  `pnpm verify`가 돌고 GitLab에 커밋 상태가 게시된다. REQ-D-01 반영 전에는 첫 단계
+  `format:check`에서 실패했다.
+- **반영 후 실측: `origin/develop` `7ea0151`을 병합한 D 브랜치에서 `pnpm verify` 전체가
+  exit 0으로 통과했다.** format:check 위반 0건, eslint 오류 0건, 134파일 1539시험 통과,
+  build·e2e 통과. 이제 Draft를 ready로 바꿔 병합할 수 있다.
 
 ### REQ-D-02 · F · main tsconfig에서 Worker 제외와 별도 검사
 
@@ -265,6 +273,11 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
     `audio-policy`(`c066382`에서 대응)가 둘 다 이 리셋을 견딘다.
   - **남은 것은 B의 조립이다.** `server/src/bootstrap.ts`는 여전히 `mediaEnabled: false`와
     stage `skeleton`이라 Coordinator가 기동되지 않는다.
+  - **E 인계 도착 — `7ea0151`.** `handoffs/E.md`에 "세대 전환과 D의 로컬 정리 조건" 절이
+    생겼다. 핵심은 `closed` 신고 순서다(위 "C가 연결할 위치와 호출 순서" 7번). D가
+    바꿔야 할 공개 계약은 없다. `MediaStatusReport`는 그대로이고 `playerId`는 B가 인증
+    세션에서 채운다. `reconnect`/`round-ended`/`phase-change` reason 구분도 D의
+    `RetireReason`과 같다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
 
 ### REQ-D-06 · C · 조립점 연결
@@ -297,15 +310,13 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 
 ## blockedOn 요약
 
-| 항목                                 | 막는 대상           | 영향                                              |
-| ------------------------------------ | ------------------- | ------------------------------------------------- |
-| F의 lint/format 무시 목록 (REQ-D-01) | 공통 검증           | `pnpm verify`가 현재 실패                         |
-| E-05 실제 grant (REQ-D-05)           | D-13 실제 연결      | 미디어 통합 전부                                  |
-| `MediaCoordinator` 구현체 부재       | D-14–D-17           | `enqueueBindings`·`enqueueAudioPolicy` 호출자 0곳 |
-| B의 `bootstrap` 미디어 조립          | D-13–D-17           | `bootstrap.ts`가 `mediaEnabled: false`            |
-| B의 grant 세대 정규화 (REQ-D-07)     | D-13 첫 연결        | 첫 요청이 `STALE_GENERATION`으로 거절             |
-| B-02 strict payload, A-10/A-11 규칙  | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                             |
-| 대표 장치·실제 브라우저              | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부         |
+| 항목                                | 막는 대상           | 영향                                      |
+| ----------------------------------- | ------------------- | ----------------------------------------- |
+| E-05 실제 grant (REQ-D-05)          | D-13 실제 연결      | E 구현·인계 도착(`7ea0151`), B 조립 대기  |
+| B의 `bootstrap` 미디어 조립         | D-13–D-17           | `bootstrap.ts`가 `mediaEnabled: false`    |
+| B의 grant 세대 정규화 (REQ-D-07)    | D-13 첫 연결        | 첫 요청이 `STALE_GENERATION`으로 거절     |
+| B-02 strict payload, A-10/A-11 규칙 | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                     |
+| 대표 장치·실제 브라우저             | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
 
 ## 다음 단계
 
@@ -319,9 +330,10 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
    채웠다. Vite lib 시험 빌드에서 `livekit-client`가 별도 청크(636.74 kB, gzip 147.20 kB)로
    떨어지고 `vision.worker` 청크(158.88 kB)도 함께 방출되는 것을 확인했다. 다만 C의 조립
    (REQ-D-06)이 없어 제품 번들에는 아직 D runtime 자체가 들어가지 않는다.
-6. **MR 운영(2026-09-09)**: `feat/S15P21C204-118-vision-media-input-runtime` → `develop` MR을
-   Draft로 먼저 연다. `origin/develop`과 충돌 0건이고 `develop`이 바꾼 파일은 `server/**`와
-   `handoffs/E.md`뿐이라 D 변경과 겹치지 않는다. 병합은 REQ-D-01 반영 뒤에 한다.
+6. **MR 운영(2026-09-09 저녁)**: F가 `eeeba9b`로 REQ-D-01을 반영했고, D 브랜치에
+   `origin/develop` `7ea0151`을 병합한 뒤 `pnpm verify` 전체가 exit 0으로 통과했다
+   (format·check:execution·lint·typecheck·134파일 1539시험·build·e2e). D 소유 경로에는
+   develop 변경이 0건이고 충돌도 없었다. Draft를 ready로 바꿔 병합할 수 있는 상태다.
    push·MR 생성·병합은 담당자가 직접 한다.
 
 ## 재개 시 확인
