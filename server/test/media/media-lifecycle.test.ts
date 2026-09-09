@@ -9,7 +9,7 @@ import { MediaGenerationRegistry } from '../../src/media/MediaGenerationRegistry
 import type { RetireGenerationRequest } from '../../src/media/types.js';
 import { practiceFrame, prepareRequest } from './generation-fixtures.js';
 
-function setup() {
+function setup(extra: Partial<MediaLifecycleOptions> = {}) {
   let now = 100;
   const timers = new Set<{ callback: () => void; at: number }>();
   const registry = new MediaGenerationRegistry('e-fixture');
@@ -49,6 +49,7 @@ function setup() {
     onFailure: vi.fn(),
     onGameDisconnected: vi.fn(),
     onRecoveryStarted: vi.fn(),
+    ...extra,
   };
   const lifecycle = new MediaLifecycle(options);
   const report: LifecycleReport = {
@@ -101,6 +102,39 @@ function setup() {
 }
 
 describe('authenticated lifecycle side port; scoped reports are not Cloud proof', () => {
+  it('stops the ordinary window after a fatal policy end already handled by the coordinator', () => {
+    let allowed = true;
+    const s = setup({ isRecoveryAllowed: () => allowed });
+    s.connect();
+    s.lifecycle.report(s.report);
+    allowed = false;
+    s.generation.terminal = true;
+    s.lifecycle.reconcile();
+    expect(s.timers.size).toBe(0);
+    expect(s.lifecycle.recoveryStartedAt(s.generation)).toBeNull();
+    s.time(10101, true);
+    expect(s.options.onFailure).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'preserves the first deadline after local closed, remote terminal=%s',
+    (terminal) => {
+      const s = setup();
+      s.connect();
+      s.lifecycle.report(s.report);
+      s.time(9000);
+      s.lifecycle.report({ ...s.report, status: 'closed' });
+      s.generation.terminal = terminal;
+      if (terminal) s.generation.state = 'REVOKED';
+      s.refreshCamera(9500);
+      s.time(9500);
+      s.lifecycle.reconcile();
+      expect(s.lifecycle.recoveryStartedAt(s.generation)).toBe(100);
+      s.time(10101, true);
+      expect(s.options.onFailure).toHaveBeenCalledExactlyOnceWith(s.generation, 'TIMEOUT');
+    },
+  );
+
   it('requires B to establish a live game connection before accepting recovery or ready', () => {
     const s = setup();
     expect(s.lifecycle.isGameConnected('m', 'p')).toBe(false);
@@ -345,7 +379,7 @@ describe('authenticated lifecycle side port; scoped reports are not Cloud proof'
     );
   });
 
-  it('does not revive a terminal generation or invent recovery from a missing inspection', () => {
+  it('keeps an existing deadline through retirement without accepting new recovery reports', () => {
     const s = setup();
     s.connect();
     s.clearInspection();
@@ -353,7 +387,8 @@ describe('authenticated lifecycle side port; scoped reports are not Cloud proof'
     expect(s.timers.size).toBe(1);
     s.generation.terminal = true;
     s.lifecycle.reconcile();
-    expect(s.timers.size).toBe(0);
+    expect(s.timers.size).toBe(1);
+    expect(s.lifecycle.recoveryStartedAt(s.generation)).toBe(100);
     expect(s.lifecycle.report(s.report)).toBe(false);
     expect(s.options.onFailure).not.toHaveBeenCalled();
   });

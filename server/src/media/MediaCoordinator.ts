@@ -216,7 +216,10 @@ class Coordinator implements MediaCoordinatorRuntime {
       onOccupancyEnded: async (g) => {
         const group = this.registry
           .all()
-          .filter((other) => other.reservationId === g.reservationId);
+          .filter(
+            (other) =>
+              other.reservationId === g.reservationId && !this.registry.wasNeverIssued(other),
+          );
         const durable = this.journal.snapshot().records.map((entry) => entry.record);
         if (
           group.length &&
@@ -295,6 +298,7 @@ class Coordinator implements MediaCoordinatorRuntime {
       monotonicNow: deps.monotonicNow,
       inspect: (g) => this.policy.inspect(g),
       onRecoveryStarted: (g) => this.policy.requestReconciliation(g),
+      isRecoveryAllowed: (g) => this.transition.isAllowed(g.request.matchId, g.request.playerId),
       onFailure: (g, code) => this.fail(g, code),
       onGameDisconnected: ({ matchId, playerId }) =>
         this.transition.invalidatePlayer(matchId, playerId, 'connection-lost'),
@@ -304,7 +308,11 @@ class Coordinator implements MediaCoordinatorRuntime {
       onPrepared: () => {},
       canIssue: (g) =>
         !this.closed &&
-        this.registry.all().filter((current) => !this.durablyRevoked(current)).length <=
+        this.registry
+          .all()
+          .filter(
+            (current) => !this.registry.wasNeverIssued(current) && !this.durablyRevoked(current),
+          ).length <=
           config.maxConcurrentParticipants - (g ? 0 : 1) &&
         (!g || (this.activePlayer(g.request) && !this.lifecycle.hasLocalRetirement(g))),
       retire: (g) => {
@@ -350,7 +358,12 @@ class Coordinator implements MediaCoordinatorRuntime {
         )
           return this.rawRetire(this.retirement(g, 'shutdown')).then(() => undefined);
       },
-      awaitLocalRetirement: (input, signal) => this.lifecycle.awaitLocalRetirement(input, signal),
+      awaitLocalRetirement: (input, signal) => {
+        const g = this.find(input);
+        return g && this.registry.wasNeverIssued(g)
+          ? Promise.resolve(!signal.aborted)
+          : this.lifecycle.awaitLocalRetirement(input, signal);
+      },
       onBlocked: (input, code) => {
         const g = this.registry.get(input.matchId, input.playerId);
         if (g) this.emitFailure(g, code);
@@ -414,7 +427,10 @@ class Coordinator implements MediaCoordinatorRuntime {
     // Request retries keep the original transition kind/deadline even after current changes.
     let recovery = this.recoveryRequests.get(captured.requestId);
     if (!recovery) {
-      const replacing = !!old && old.request.mediaInstanceId === captured.mediaInstanceId;
+      const replacing =
+        !!old &&
+        !this.registry.wasNeverIssued(old) &&
+        old.request.mediaInstanceId === captured.mediaInstanceId;
       recovery = {
         recovery: replacing,
         recoveryStartedAt: replacing
@@ -590,9 +606,10 @@ class Coordinator implements MediaCoordinatorRuntime {
         .filter((g) => g.request.playerId === input.playerId && g.request.matchId !== input.matchId)
         .every(
           (g) =>
-            this.durablyRevoked(g) &&
-            !this.retirements.has(g) &&
-            this.lifecycle.hasLocalRetirement(g),
+            this.registry.wasNeverIssued(g) ||
+            (this.durablyRevoked(g) &&
+              !this.retirements.has(g) &&
+              this.lifecycle.hasLocalRetirement(g)),
         )
     );
   }
@@ -635,7 +652,9 @@ class Coordinator implements MediaCoordinatorRuntime {
   }
   private async cleanupRoomOnce(roomName: string): Promise<void> {
     const allRevoked = () => {
-      const group = this.registry.all().filter((g) => g.roomName === roomName);
+      const group = this.registry
+        .all()
+        .filter((g) => g.roomName === roomName && !this.registry.wasNeverIssued(g));
       return group.length > 0 && group.every((g) => this.durablyRevoked(g));
     };
     if (!allRevoked()) return;
@@ -672,6 +691,10 @@ class Coordinator implements MediaCoordinatorRuntime {
   private rawRetire(input: RetireGenerationRequest): Promise<RetirementResult> {
     const g = this.find(input);
     if (!g) return Promise.resolve({ ...input, status: 'unknown', code: 'STALE_GENERATION' });
+    // A definitive pre-signing rejection created no Cloud identity or browser connection.
+    // This is local cancellation, not evidence that any issued token was remotely revoked.
+    if (this.registry.wasNeverIssued(g))
+      return Promise.resolve(this.finishRetirement({ ...input, status: 'confirmed', code: null }));
     const existing = this.retirements.get(g);
     if (existing) return existing.then((result) => this.finishRetirement({ ...result, ...input }));
     const now = this.deps.monotonicNow();

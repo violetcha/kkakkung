@@ -2,7 +2,48 @@
 
 수정자: **E** · 2026-09-09 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-16 로컬 검증 인계**다. E-15 MR !37의 develop 병합을 확인했고 이번 기준 SHA는 `79e590392a84d929bb56f1dd00b253fb58767cab`이다. E-01~E-15는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **S15P21C204-170 E 보완 인계**다. E-16 MR !38 병합 후 `45057e166a1fad0f32bf0fe477eacb8bc1fa7931`에서 시작했다. 아래 E-01~E-16 항목은 당시 검증·인계를 보존하며 과거의 선행 미도착 설명보다 이번 보완 항목을 우선한다. 병합과 최종 기능 인수는 구분한다.
+
+## S15P21C204-170 — 권한·복구 경계와 MC-01 시험 보완
+
+- Jira: [S15P21C204-170](https://ssafy.atlassian.net/browse/S15P21C204-170), E / 이주헌. 사용자 요청에 따라 기존 E 작업의 네 보완 항목을 **한 스토리·한 브랜치**로 처리했다.
+- 브랜치: `fix/S15P21C204-170-media-hardening` → `develop`. 구현 commit: `055e51c203d6fd5eeba75e7a5cf7063971441ed9`.
+- localStage: **LOCAL_VERIFIED**. 최종 인수: **BLOCKED**. 실제 Cloud 호출은 **0회**이며 실제 권한 지원·옛 JWT 회수·장치 통합의 성공 증거는 만들지 않았다.
+- 계약: EXEC-CONTRACT-3 / D-2026-09-08-01. 공개 요청·응답의 필수 필드와 라우트 소유권은 유지한다. B/D의 소비 검토와 F의 실제 시험 인수가 필요하다.
+
+### 수정된 동작과 소비자 주의점
+
+1. readiness가 READY를 잃어 기존 구독의 유효성이 사라지면 `SubscriptionController`가 `onUnknown`을 전달한다. factory는 `POLICY_UNKNOWN` 실패 통지와 해당 세대 원격 회수를 수행한다. 복원 후 같은 세대의 권한을 자동 재개하지 않는다. READY가 유지되는 정상 admission DRAINING은 이 종료 조건에 해당하지 않는다.
+2. `lifecycle.report(status:'closed')`는 D의 로컬 정리 확인이다. 최초 recovering/failed의 monotonic 10초는 구세대 원격 회수와 새 요청 사이에도 유지된다. 기한 초과는 TIMEOUT이고 새 토큰은 발급하지 않는다. 이미 치명적 실패/게임 종료가 처리된 경우 factory의 내부 `isRecoveryAllowed`가 타이머를 정리해 뒤늦은 TIMEOUT을 중복 통지하지 않는다.
+3. 명확한 예산 예약 거절만 `MediaGenerationRegistry.abandonUnissued()`로 표시한다. 서명·저널 이전의 미발급 시도는 새 match 입장, 참가자 용량, 같은 예약/방 정리를 막지 않는다. 같은 match의 새 요청은 거절 결과의 `receiverGeneration`을 `expectedPreviousGeneration`으로 사용하며 번호를 재사용하지 않는다. 이 시도의 종료 확인은 원격 회수 증거가 아닌 로컬 취소다. 예산 저장 예외·서명 결과 불명·실제 발급 세대에는 이 예외를 적용하지 않는다.
+4. [공식 MC-01 시험](../../../server/test/media/capability.cloud.test.ts)과 [합성 브라우저 계측](../../../server/test/media/cloud/capability-browser.ts)을 추가했다. 실제 CAMERA/MICROPHONE 최소 grant, autoSubscribe=false, 허용 수신·직접 구독 차단·같은 수신자의 허용 대조·재차 차단, 미입장/퇴장/SDK 갱신 토큰 재접속 거절을 시험한다. 원격 API ACK만으로 실제 수신이나 토큰 회수를 확정하지 않는다.
+
+### F가 준비한 뒤 실행할 MC-01
+
+비밀값을 문서·명령 인수·로그·브라우저 저장소에 넣지 않고 프로세스 환경으로 주입한다. 다음 여섯 이름이 F preflight의 `credentialEnvNames`에도 있어야 한다: `LIVEKIT_HTTP_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_PROJECT_ALIAS`, `SERVICE_NAMESPACE`. HTTPS/WSS의 host가 일치하고 별칭·namespace가 승인된 preflight와 같아야 한다. `.env` 자동 로딩은 하지 않는다.
+
+- F의 `CloudPreflight` 원본 parser를 사용한다. 현재 **최종 HEAD**와 lockfile hash, 유효 기간, 예약/공식 잔여량, 격리 namespace, 합성 deviceManifest와 `.local/qa/` 증거 경로를 확인한다. 추적/미추적 변경이 있는 checkout, DEBUG/PWDEBUG가 활성화된 실행도 거절한다.
+- 이 시나리오는 방 1개·합성 Identity 5개를 사용한다. 승인 `maxParticipants >= 5`, `maxDurationSeconds` 60~~300, `cleanupAllowanceSeconds` 30~~120이 필요하다. 최소 예약은 **5 × (승인 실행 초 + 정리 초) / 60 참가자분**, **(승인 실행 초 + 정리 초) × 1,000,000 bytes**다. 공식 잔량을 대신 계산하거나 예약을 임의 생성하지 않는다.
+- 실제 본 시험은 승인 시간 이내, 최대 240초로 제한한다. 관리 API는 공통 `LiveKitGateway`/`ApiBudget`을 거쳐 60초 정상 40회·총 60회, 시험 전체 정상 40회·정리 20회 이내다. 명시 cutoff는 매 호출 현재 epoch 초 + 5이며 실제 방 생성 시각으로 계산한 시계 오차 상한도 증거에 남긴다.
+- Vite/Chromium 준비가 끝난 뒤 첫 Cloud 요청을 보낸다. 영상 색 표식·음성 주파수·수신 bytes를 계측하고, 갱신 JWT는 고정 SDK 2.22.2의 시험 전용 `EngineEvent.TokenRefreshed` 계측으로 페이지 메모리에만 유지한다. 임의 네트워크 오류나 만료 토큰의 실패를 회수 성공으로 계산하지 않는다.
+- 실패/timeout 시 브라우저를 종료하고 정리 예약 범위에서 모든 생성 Identity의 회수·부재를 확인한다. 하나가 실패해도 나머지는 계속 시도한다. 전부 확인된 뒤에만 방을 삭제하며 미확인 결과는 BLOCKED다.
+
+```bash
+node scripts/run-cloud-check.mjs --case MC-01 --preflight .local/qa/cloud-preflight.json --evidence .local/qa/MC-01
+```
+
+실제 preflight의 `evidenceDir`을 명령과 맞춘다. 자격/예산 미확보는 skip 성공이 아니라 BLOCKED/비정상 종료다. 결과는 `capability-evidence.json`, `capability-report.json`, F runner의 `run-summary.json`이다. 모든 수신·차단·토큰 회수·정리 증거가 있어야 SUPPORTED다. F가 검토 후 보고서를 `OPS_DATA_DIR`에 명시적으로 배치하며 시험기가 제품 설정을 자동 활성화하지 않는다. SDK 근거: [토큰 회수](https://docs.livekit.io/frontends/reference/tokens-grants/), [RoomService API](https://docs.livekit.io/reference/other/roomservice-api/).
+
+### 검증과 남은 인계
+
+- `pnpm verify` exit 0: **87개 파일, 1,128개 시험**, 기존 Room E2E 2개, format/실행 계약/lint/전체 타입/build 통과.
+- 추가 시험 파일 5개의 strict NodeNext 타입 검사 통과. Cloud 시험 도구의 로컬 검증에는 공식 runner의 preflight 부재 차단, 증거/예약 거절, 부분 정리 실패, **실제 로컬 Chromium에서 Cloud 연결 없이 계측 페이지 로딩**이 포함된다. 이 결과는 실제 Cloud 합격이 아니다.
+- 코드 소유권 검사 14경로 통과. 인계 문서를 포함한 최종 변경도 `node scripts/check-role-scope.mjs --role E --base 45057e166a1fad0f32bf0fe477eacb8bc1fa7931`로 확인한다. 개인 기록/검증 로그/MR 초안은 로컬 `.local/`이며 다른 checkout에 있다고 가정하지 않는다.
+- **E170-B-01 / B:** `bootstrap.ts`·Room의 실제 `createMediaCoordinator`/authenticated report/게임 연결 생존/health/운영 조립과 MEDIA_FAILED 큐 반영을 완료한다. 기존 TIMEOUT→MEDIA_UNAVAILABLE, POLICY_UNKNOWN→MEDIA_POLICY_UNCERTAIN 경계를 검증한다.
+- **E170-D-01 / D:** `reportMediaStatus` 실제 전달을 연결한다. recovering은 즉시, closed는 진행 중 게시까지 정리한 뒤 정확한 구세대 scope로 보고한다. 구세대 바인딩 거절과 늦은 게시 완료의 보상 정리를 D 소유 파일에서 검증한다. D-01~17 원격 코드가 존재하므로 과거의 “D-17 없음” 문구를 현재 상태로 해석하지 않는다.
+- **E170-F-01 / F:** 실제 프로젝트 별칭·공식 예산 예약·격리 namespace·deviceManifest/preflight 및 Chromium 실행 환경을 승인·인계한다. 위 MC-01을 실행하고 증거 검토 후 capability 보고서를 배치한다. Jenkins/컨테이너의 기존 실측과 별도로 E 제품 readiness/단일 writer/권한·회수·복구 실증은 필요하다.
+
+요청은 이 인계 파일에 기록한 것이며 팀원에게 외부 메시지를 보내거나 다른 역할의 파일을 수정하지 않았다.
 
 ## E-16 / MC-08 — 미디어 세대 전환과 게임 연결을 유지하는 복구
 
