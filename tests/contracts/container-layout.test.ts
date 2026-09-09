@@ -13,10 +13,16 @@ const game = read('infra/docker/Dockerfile.game-server');
 const web = read('infra/docker/Dockerfile.web');
 const envExample = read('infra/production.env.example');
 const jenkinsfile = read('Jenkinsfile');
+const stripComments = (s: string) =>
+  s
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n');
+const servicesOf = (yaml: string) => yaml.split(/^volumes:/m)[0]!;
 
 describe('compose base + production override', () => {
   it('keeps exactly two services and one replica each', () => {
-    expect(base.match(/^  [a-z-]+:$/gm)).toEqual(['  web-proxy:', '  game-server:']);
+    expect(servicesOf(base).match(/^  [a-z-]+:$/gm)).toEqual(['  web-proxy:', '  game-server:']);
     expect(prod).not.toMatch(/replicas:\s*[2-9]/);
     expect(base).not.toMatch(/replicas:/);
   });
@@ -64,7 +70,7 @@ describe('runtime images', () => {
     expect(game).toMatch(/^USER node$/m);
     expect(game).toMatch(/CMD \["node", "dist\/main\.js"\]/);
     expect(game).toMatch(/WORKDIR \/app\/server/);
-    expect(game).not.toMatch(/pnpm\s+(?:--filter \S+\s+)?deploy/);
+    expect(stripComments(game)).not.toMatch(/pnpm\s+(?:--filter \S+\s+)?deploy/);
     expect(game).toMatch(
       /pnpm install --prod --frozen-lockfile --filter @kkakkung\/game-server\.\.\./,
     );
