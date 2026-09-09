@@ -174,8 +174,10 @@ export class UsageBudget {
   reconcileOfficial(
     input: OfficialBudgetCheckpoint,
     revision: { periodId: string; version: number },
+    context: { beforeCommit?: () => boolean } = {},
   ): Promise<{ status: 'applied' | 'duplicate' | 'rejected'; code?: string }> {
     if (this.closed) return Promise.resolve({ status: 'rejected', code: 'STORAGE_FAILURE' });
+    revision = { periodId: revision.periodId, version: revision.version };
     let checkpoint: OfficialBudgetCheckpoint;
     try {
       checkpoint = validateOfficialBudget(input, {
@@ -193,6 +195,18 @@ export class UsageBudget {
       return Promise.resolve({ status: 'rejected', code: 'INVALID_OFFICIAL_CHECKPOINT' });
     }
     return this.serialize(async () => {
+      if (context.beforeCommit?.() === false)
+        return { status: 'rejected', code: 'OPERATION_CANCELLED' };
+      // The operation may have waited behind a slow reservation/checkpoint write.
+      try {
+        validateOfficialBudget(checkpoint, {
+          projectAlias: this.options.projectAlias,
+          nowEpochMs: this.options.now(),
+          maxAgeMs: this.options.officialBudgetMaxAgeMs,
+        });
+      } catch {
+        return { status: 'rejected', code: 'INVALID_OFFICIAL_CHECKPOINT' };
+      }
       if (
         !this.restored ||
         this.integrity === 'corrupt' ||
@@ -242,13 +256,31 @@ export class UsageBudget {
   releaseConfirmed(
     reservationId: string,
     proof: { remoteConfirmed: true; periodId: string; version: number },
+    context: { beforeCommit?: () => boolean } = {},
   ): Promise<boolean> {
     if (this.closed) return Promise.resolve(false);
+    proof = {
+      remoteConfirmed: proof.remoteConfirmed,
+      periodId: proof.periodId,
+      version: proof.version,
+    };
     return this.serialize(async () => {
+      if (context.beforeCommit?.() === false) return false;
       const reservation = this.state.reservations.find(
         (r) => r.request.reservationId === reservationId,
       );
       const official = this.state.official;
+      if (official) {
+        try {
+          validateOfficialBudget(official.checkpoint, {
+            projectAlias: this.options.projectAlias,
+            nowEpochMs: this.options.now(),
+            maxAgeMs: this.options.officialBudgetMaxAgeMs,
+          });
+        } catch {
+          return false;
+        }
+      }
       if (
         !reservation ||
         !official ||

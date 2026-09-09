@@ -197,8 +197,48 @@ export class RevocationRetries {
   /** An operator explicitly authorizes one more attempt, still through the same budget. */
   async retryNow(
     retirementId: string,
-    options: { providerWaitConfirmed?: boolean } = {},
+    options: {
+      providerWaitConfirmed?: boolean;
+      signal?: AbortSignal;
+      beforeDispatch?: () => boolean;
+    } = {},
   ): Promise<RetryIntent> {
+    const { signal, beforeDispatch } = options;
+    const allowed = () => {
+      try {
+        return !signal?.aborted && (!beforeDispatch || beforeDispatch() === true);
+      } catch {
+        return false;
+      }
+    };
+    const requireAllowed = () => {
+      if (!allowed()) throw new Error('OPERATOR_RETRY_CANCELLED');
+    };
+    const waitWhileActive = async (work: Promise<void>) => {
+      if (!signal) return work;
+      if (signal.aborted) {
+        void work.catch(() => undefined);
+        throw new Error('OPERATOR_RETRY_CANCELLED');
+      }
+      await new Promise<void>((resolve, reject) => {
+        const cancel = () => {
+          signal.removeEventListener('abort', cancel);
+          reject(new Error('OPERATOR_RETRY_CANCELLED'));
+        };
+        signal.addEventListener('abort', cancel, { once: true });
+        void work.then(
+          () => {
+            signal.removeEventListener('abort', cancel);
+            resolve();
+          },
+          (error: unknown) => {
+            signal.removeEventListener('abort', cancel);
+            reject(error);
+          },
+        );
+      });
+    };
+    requireAllowed();
     if (this.closed) throw new Error('RETRIES_CLOSED');
     const entry = this.entries.get(retirementId);
     if (!entry) throw new Error('RETRY_NOT_FOUND');
@@ -206,14 +246,19 @@ export class RevocationRetries {
     if (entry.intent.status === 'REVOKED') return entry.intent;
     if (entry.intent.providerWaitUnknown) {
       if (options.providerWaitConfirmed !== true) throw new Error('PROVIDER_WAIT_UNCONFIRMED');
-      await this.write(entry, (current) => ({ ...current, providerWaitUnknown: false }));
+      await waitWhileActive(
+        this.write(entry, (current) => ({ ...current, providerWaitUnknown: false }), allowed),
+      );
+      requireAllowed();
     }
     if (entry.nextAttemptMs !== null && entry.nextAttemptMs > this.options.monotonicNow()) {
       throw new Error('RETRY_NOT_DUE');
     }
-    const work = this.attempt(entry, true);
+    const work = this.attempt(entry, true, allowed);
     this.track(work);
-    await work;
+    await waitWhileActive(work);
+    // Remote proof remains durable even if the operation expired after dispatch.
+    requireAllowed();
     return entry.intent;
   }
 
@@ -296,7 +341,12 @@ export class RevocationRetries {
     await this.markUnresolved(entry);
   }
 
-  private async attempt(entry: Entry, operator: boolean): Promise<void> {
+  private async attempt(
+    entry: Entry,
+    operator: boolean,
+    operatorAllowed: () => boolean = () => true,
+  ): Promise<void> {
+    if (operator && !operatorAllowed()) return;
     if (entry.sending || this.closed || entry.intent.status === 'REVOKED') return;
     if (!operator && (entry.intent.status !== 'REVOKING' || entry.intent.attempt >= DELAYS.length))
       return;
@@ -319,13 +369,18 @@ export class RevocationRetries {
     if (entry.retryTimer !== undefined) this.clearTimer(entry.retryTimer);
     entry.retryTimer = undefined;
     try {
-      await this.write(entry, (current) => ({
-        ...current,
-        attempt: current.attempt + 1,
-        lastAttemptEpochMs: this.options.epochNowMs(),
-        nextAttemptEpochMs: null,
-      }));
-      entry.nextAttemptMs = null;
+      await this.write(
+        entry,
+        (current) => ({
+          ...current,
+          attempt: current.attempt + 1,
+          lastAttemptEpochMs: this.options.epochNowMs(),
+          nextAttemptEpochMs: null,
+        }),
+        operator ? operatorAllowed : undefined,
+      );
+      if (entry.intent.nextAttemptEpochMs === null) entry.nextAttemptMs = null;
+      if (operator && !operatorAllowed()) return;
       // Disk IO may outlive shutdown, the target deadline, or a terminal-state change.
       if (this.closed) return;
       if (
@@ -341,6 +396,7 @@ export class RevocationRetries {
       try {
         response = await this.options.send(entry.intent, {
           beforeDispatch: () => {
+            if (operator && !operatorAllowed()) throw new Error('OPERATOR_RETRY_CANCELLED');
             if (this.closed) throw new Error('RETRIES_CLOSED');
             if (!this.options.isTerminal(entry.intent)) throw new Error('RETRY_NOT_TERMINAL');
             if (
@@ -418,9 +474,14 @@ export class RevocationRetries {
     }
   }
 
-  private write(entry: Entry, update: (current: RetryIntent) => RetryIntent): Promise<void> {
+  private write(
+    entry: Entry,
+    update: (current: RetryIntent) => RetryIntent,
+    beforeWrite?: () => boolean,
+  ): Promise<void> {
     entry.writes = entry.writes
       .then(async () => {
+        if (beforeWrite && !beforeWrite()) return;
         const next = Object.freeze(update(entry.intent));
         validIntent(next);
         await this.options.persist(next);

@@ -72,7 +72,11 @@ export function validateOfficialBudget(
     throw new Error('INVALID_OFFICIAL_BUDGET');
   if (
     options &&
-    (o.projectAlias !== options.projectAlias ||
+    (!Number.isSafeInteger(options.nowEpochMs) ||
+      options.nowEpochMs < 0 ||
+      !Number.isSafeInteger(options.maxAgeMs) ||
+      options.maxAgeMs <= 0 ||
+      o.projectAlias !== options.projectAlias ||
       (o.checkedAtEpochMs as number) > options.nowEpochMs ||
       options.nowEpochMs - (o.checkedAtEpochMs as number) > options.maxAgeMs)
   )
