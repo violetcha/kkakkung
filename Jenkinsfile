@@ -36,6 +36,7 @@ pipeline {
         updateGitlabCommitStatus name: 'jenkins', state: 'running'
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
+          env.GIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
           // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃이 같은지 대조합니다 (DP-04).
           // 웹훅 빌드에서만 값이 오고, 수동 빌드에선 비어 있어 건너뜁니다.
           def head = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
@@ -87,8 +88,8 @@ pipeline {
       steps {
         // 컨텍스트는 저장소 루트 (workspace 패키지 의존). 루트 .dockerignore 가 node_modules/dist 를 걸러줍니다.
         sh '''
-          docker build -f infra/docker/Dockerfile.game-server -t "$IMG_GAME:$TAG" .
-          docker build -f infra/docker/Dockerfile.web         -t "$IMG_WEB:$TAG"  .
+          docker build -f infra/docker/Dockerfile.game-server -t "$IMG_GAME:$TAG" --label "org.opencontainers.image.revision=$GIT_SHA" .
+          docker build -f infra/docker/Dockerfile.web         -t "$IMG_WEB:$TAG"  --label "org.opencontainers.image.revision=$GIT_SHA" .
         '''
       }
     }
