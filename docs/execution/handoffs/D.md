@@ -120,6 +120,25 @@ runtime·센서·문맥의 공개 타입은 이 진입점에서 재노출한다:
 - **카메라 장애는 참가 종료가 아니다.** 세대와 게임을 유지하고 IN-10 보조 입력과
   ME-02 안전 얼굴로 전환한다.
 
+## 세대 교체와 policyRevision — 2026-09-09 결함 수정
+
+계약 실대조에서 D 쪽 결함을 하나 찾아 고쳤다. 서버 `AudioProjection`은 policyRevision을
+`(matchId, mediaInstanceId, playerId, receiverGeneration)`마다 **1부터 다시 센다.** D의
+`audio-policy`는 세대와 무관하게 마지막 적용본의 policyRevision을 바닥으로 썼다.
+
+따라서 회수 없이 서버가 새 수신자 세대의 바인딩·정책을 밀어 넣으면, 구 세대에서 revision이
+7까지 올라가 있던 경우 새 세대의 revision 1~7 정책이 전부 `STALE_POLICY`로 버려지고
+**근거리 음성이 조용히 사라진다.** `media-bindings`는 세대가 바뀌면 스스로 비우는데
+`audio-policy`만 그러지 않아 생긴 비대칭이다.
+
+이제 policyRevision 바닥은 **같은 세대의 적용본에만** 적용한다. 늦게 도착한 구 세대 정책은
+바닥이 되지도 않고 현재 세대의 적용본을 지우지도 않으며 `WRONG_SCOPE`로 끝난다.
+되돌리면 실패하는 회귀 시험 3개를 넣었다.
+
+이 경로는 `retireMediaGeneration` 없이 세대가 바뀔 때만 나타난다. D 자신은 항상
+`beginMediaGeneration()`으로 세대를 열지만, `applyMediaBindings`가 다른 `receiverGeneration`을
+받는 것은 D-15가 지원하는 경로라 양쪽을 같게 맞췄다.
+
 ## SDK 어댑터 — 2026-09-09 추가
 
 `apps/web/src/features/media/livekit-adapter.ts`가 `livekit-client` 2.22.2를 감싼다.
@@ -215,6 +234,17 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   D-13은 주입 port 단위 검증뿐이며 실제 Cloud 연결·재연결·회수는 하나도 실행하지 않았다.
 - **클라이언트 쪽 준비는 2026-09-09에 끝났다.** SDK 어댑터가 붙어 실제 grant만 도착하면
   `connectMedia`가 실제 Room에 연결한다. 남은 것은 D가 아니라 E 인계와 B 조립이다.
+- **2026-09-09 계약 실대조 결과** (`origin/develop` `48f7efa` 기준, 근거는 실제 파일 확인):
+  - 타입은 일치한다. `server/src/media/types.ts`의 `MediaScope`·`MediaBinding`·`MediaBindings`·
+    `AudioPolicy`·`MediaGrant`·`RetireGenerationRequest`·`RetirementResult`·`MediaFailureCode`는
+    `docs/execution/contracts/types.ts`와 같은 모양이며 D 사본과도 어긋나지 않는다.
+  - 값 생성 경로도 맞는다. `AudioProjection.project`는 voice의 `trackSid`를 그 playerId 바인딩의
+    `audioTrackSid`로 채우고 `audioTrackSid`가 없는 voice는 아예 빼며, `receiverGeneration`을
+    바인딩에서 가져온다. D `resolveVoices`의 조인 조건과 정확히 같다.
+  - **다만 이 값을 플레이어에게 보내는 코드가 없다.** `enqueueBindings`·`enqueueAudioPolicy`는
+    `types.ts` 선언에만 있고 호출자가 0곳이다. `MediaCoordinator` 구현체도 `types.ts` 밖에
+    없으며 `server/src/bootstrap.ts`는 `mediaEnabled: false`와 stage `skeleton`이다.
+    즉 D-15/D-16/D-17 의 생산자는 아직 존재하지 않는다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
 
 ### REQ-D-06 · C · 조립점 연결
@@ -225,15 +255,32 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   (`team-controller.ts`에 legacy 표식을 달아 두었다).
 - D는 App·SessionRuntime·room store·WorldCanvas·styles.css·웹 진입점을 수정하지 않았다.
 
+### REQ-D-07 · B · grant 요청의 세대 필드를 null로 정규화
+
+- 대상: B가 `MediaGrantRequest`(브라우저)를 `PrepareGenerationRequest`(서버)로 옮기는 지점.
+- 필요한 변경: `previousReceiverGeneration`이 없을 때 `expectedPreviousGeneration`에
+  `undefined`가 아니라 **`null`**을 넣는다.
+- 이유: 두 타입의 표현이 다르다. 계약의 `MediaGrantRequest.previousReceiverGeneration`은
+  `number` **선택 필드**이고, `PrepareGenerationRequest.expectedPreviousGeneration`은
+  `number | null` **필수 필드**다. `server/src/media/GrantIssuer.ts`는
+  `(old?.generation ?? null) !== input.expectedPreviousGeneration`으로 **엄격 비교**하므로,
+  이전 세대가 없는 첫 요청에서 `null !== undefined`가 참이 되어 `STALE_GENERATION`으로
+  거절된다. 즉 **첫 연결이 항상 실패한다.**
+- 연결 작업: D-13 = `S15P21C204-130`, E-05 = `S15P21C204-139`.
+- 완료 확인: 이전 세대가 없는 첫 `connectMedia`가 `STALE_GENERATION` 없이 grant를 받는다.
+- D가 `requestMediaGrant`를 직접 부르지 않는다. 이 변환은 D 소유가 아니라 B 소유다.
+
 ## blockedOn 요약
 
-| 항목                                 | 막는 대상           | 영향                                      |
-| ------------------------------------ | ------------------- | ----------------------------------------- |
-| F의 lint/format 무시 목록 (REQ-D-01) | 공통 검증           | `pnpm verify`가 현재 실패                 |
-| E-05 실제 grant (REQ-D-05)           | D-13 실제 연결      | 미디어 통합 전부                          |
-| E-09/E-10 바인딩·회수                | D-14–D-17           | 게시·수신·오디오·세대 종료                |
-| B-02 strict payload, A-10/A-11 규칙  | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                     |
-| 대표 장치·실제 브라우저              | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
+| 항목                                 | 막는 대상           | 영향                                              |
+| ------------------------------------ | ------------------- | ------------------------------------------------- |
+| F의 lint/format 무시 목록 (REQ-D-01) | 공통 검증           | `pnpm verify`가 현재 실패                         |
+| E-05 실제 grant (REQ-D-05)           | D-13 실제 연결      | 미디어 통합 전부                                  |
+| `MediaCoordinator` 구현체 부재       | D-14–D-17           | `enqueueBindings`·`enqueueAudioPolicy` 호출자 0곳 |
+| B의 `bootstrap` 미디어 조립          | D-13–D-17           | `bootstrap.ts`가 `mediaEnabled: false`            |
+| B의 grant 세대 정규화 (REQ-D-07)     | D-13 첫 연결        | 첫 요청이 `STALE_GENERATION`으로 거절             |
+| B-02 strict payload, A-10/A-11 규칙  | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                             |
+| 대표 장치·실제 브라우저              | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부         |
 
 ## 다음 단계
 
