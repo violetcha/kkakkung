@@ -1,0 +1,17 @@
+# CI 검증 전용 이미지 (F-04 / DP-04). 배포 이미지가 아니라 Jenkins Verify 단계가 pnpm verify 를
+# 돌리는 고정 도구체인입니다: Node 24.19.0 + pnpm 11.19.0 + Playwright 1.63.0 Chromium 과 시스템 의존성.
+# Jenkins 는 이 파일의 해시로 태그해서 바뀔 때만 다시 빌드합니다. 컨테이너는 jenkins uid 로 실행되므로
+# 브라우저는 모두가 읽을 수 있는 /ms-playwright 에 둡니다.
+FROM node:24.19.0-bookworm
+
+ARG PNPM_VERSION=11.19.0
+ARG PLAYWRIGHT_VERSION=1.63.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    CI=true
+
+RUN npm install --global pnpm@${PNPM_VERSION} \
+ && npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
+ && chmod -R a+rwX /ms-playwright \
+ && rm -rf /root/.npm /var/lib/apt/lists/*
+
+WORKDIR /workspace
