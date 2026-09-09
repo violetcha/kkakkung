@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kkakkung LiveKit probe (MC-01)</title>
+    <style>
+      body {
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+        margin: 16px;
+        max-width: 900px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 2px 0 8px;
+      }
+      pre {
+        background: #111;
+        color: #ddd;
+        padding: 12px;
+        overflow: auto;
+        max-height: 60vh;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>LiveKit Cloud probe · 합성 트랙만 사용</h1>
+    <p>토큰은 메모리에만 있고 저장·전송 기록을 남기지 않습니다. 카메라·마이크를 열지 않습니다.</p>
+    <label
+      >LiveKit WS URL <input id="url" placeholder="wss://&lt;project&gt;.livekit.cloud"
+    /></label>
+    <label
+      >Access token (memory only) <input id="token" type="password" autocomplete="off"
+    /></label>
+    <label
+      ><input id="publish" type="checkbox" checked style="width: auto" /> 합성 video+audio
+      게시</label
+    >
+    <div class="row">
+      <button id="connect">connect</button>
+      <button id="reconnect">reconnect (same token)</button>
+      <button id="disconnect">disconnect</button>
+    </div>
+    <label>remote trackSid <input id="sid" /></label>
+    <div class="row">
+      <button id="subscribe">setSubscribed(true)</button>
+      <button id="unsubscribe">setSubscribed(false)</button>
+    </div>
+    <pre id="state">idle</pre>
+    <script type="module" src="./probe.ts"></script>
+  </body>
+</html>

@@ -147,7 +147,9 @@ export class SubscriptionController {
     target.uncertainty.check();
     if (target.terminal || target.inFlight) return;
     if (!this.deps.validateKey(target.key)) {
-      this.retire(target.key);
+      // Lost permission must reach the owner's remote retirement path. A local terminal
+      // flag alone leaves previously acknowledged subscriptions active indefinitely.
+      target.uncertainty.fail();
       return;
     }
     target.desired = new Set(
@@ -225,7 +227,7 @@ export class SubscriptionController {
             return;
           }
           if (!this.deps.validateKey(target.key)) {
-            this.retire(target.key);
+            target.uncertainty.fail();
             return;
           }
           if (!permitted) {

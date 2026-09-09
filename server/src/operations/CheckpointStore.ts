@@ -84,6 +84,8 @@ export class CheckpointStore<T> {
   readonly filePath: string;
   private queue: Promise<void> = Promise.resolve();
   private failed = false;
+  private closed = false;
+  private closing: Promise<void> | null = null;
 
   constructor(
     private readonly options: {
@@ -97,7 +99,7 @@ export class CheckpointStore<T> {
   }
 
   get writable(): boolean {
-    return !this.failed && (this.options.isWritable?.() ?? true);
+    return !this.closed && !this.failed && (this.options.isWritable?.() ?? true);
   }
 
   async read(): Promise<CheckpointRead<T>> {
@@ -129,8 +131,11 @@ export class CheckpointStore<T> {
   }
 
   write(checkpoint: Checkpoint<T>): Promise<void> {
+    if (this.closed) return Promise.reject(new Error('CHECKPOINT_NOT_WRITABLE'));
     const run = this.queue.then(async () => {
-      if (!this.writable) throw new Error('CHECKPOINT_NOT_WRITABLE');
+      // Already accepted writes retain the writer lease until close has drained them.
+      if (this.failed || !(this.options.isWritable?.() ?? true))
+        throw new Error('CHECKPOINT_NOT_WRITABLE');
       if (!Number.isSafeInteger(checkpoint.lastSeq) || checkpoint.lastSeq < 0)
         throw new Error('INVALID_CHECKPOINT_SEQUENCE');
       // Validate before serializing so unknown fields are rejected, never silently stripped.
@@ -162,7 +167,11 @@ export class CheckpointStore<T> {
     return run;
   }
 
-  async close(): Promise<void> {
-    await this.queue;
+  close(): Promise<void> {
+    if (!this.closing) {
+      this.closed = true;
+      this.closing = this.queue;
+    }
+    return this.closing;
   }
 }

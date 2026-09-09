@@ -1,5 +1,38 @@
 import { z } from 'zod';
 
+// Owned by F (docs/execution/f-infra-qa.md, F-01/DP-01). B maps the parsed values into
+// MediaConfiguration / admission policy; E never reads process.env directly.
+//
+// Rules kept from the skeleton: NODE_ENV production is rejected until B authentication and
+// E readiness are integrated (NFR-05), MEDIA_MODE only accepts 'disabled', origins are exact.
+// New optional groups are additive. A group is either fully present or absent; a partial
+// group is a configuration error, never a silent default.
+
+const positiveSafeInt = z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional();
+const nonEmpty = z.string().min(1).optional();
+const httpUrl = z
+  .string()
+  .min(1)
+  .refine((s) => {
+    try {
+      return ['http:', 'https:'].includes(new URL(s).protocol);
+    } catch {
+      return false;
+    }
+  }, 'must be an http(s) URL')
+  .optional();
+const wsUrl = z
+  .string()
+  .min(1)
+  .refine((s) => {
+    try {
+      return ['ws:', 'wss:'].includes(new URL(s).protocol);
+    } catch {
+      return false;
+    }
+  }, 'must be a ws(s) URL')
+  .optional();
+
 const environment = z.object({
   NODE_ENV: z.enum(['development', 'test']).default('development'),
   HOST: z.string().min(1).default('127.0.0.1'),
@@ -14,19 +47,61 @@ const environment = z.object({
     .regex(/^[a-z0-9-]+$/)
     .default('kkakkung-local'),
   MEDIA_MODE: z.literal('disabled').default('disabled'),
-  MAX_ROOMS: z.coerce
-    .number()
-    .refine((n) => n === 1)
-    .default(1),
-  MAX_SLOTS: z.coerce
-    .number()
-    .refine((n) => n === 6)
-    .default(6),
+  // Capacity: one room is six seats. The service cap is rooms * 6 and only rooms that were
+  // actually load-tested may be opened (QA-10/QA-11 raise this step by step).
+  MAX_ROOMS: z.coerce.number().int().min(1).max(10).default(1),
+  MAX_SLOTS: z.coerce.number().int().min(6).max(60).default(6),
   OPS_DATA_DIR: z.string().default('./.local/operations'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
+
+  // LiveKit Cloud (E-05 / MC-02). Secrets are injected by the runtime environment only.
+  LIVEKIT_HTTP_URL: httpUrl,
+  LIVEKIT_WS_URL: wsUrl,
+  LIVEKIT_API_KEY: nonEmpty,
+  LIVEKIT_API_SECRET: nonEmpty,
+  LIVEKIT_PROJECT_ALIAS: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+
+  // Operator API token (E OP-07). Separate from session bearer tokens.
+  OPS_TOKEN: nonEmpty,
+
+  // Public window and budget policy (E operations).
+  OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: positiveSafeInt,
+  OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: positiveSafeInt,
+  OPS_OFFICIAL_BUDGET_MAX_AGE_MS: positiveSafeInt,
+  OPS_OPERATION_TIMEOUT_MS: positiveSafeInt,
+  MEDIA_MAX_NORMAL_API_CALLS_PER_60S: z.coerce.number().int().positive().max(600).optional(),
+  MEDIA_MAX_TOTAL_API_CALLS_PER_60S: z.coerce.number().int().positive().max(900).optional(),
+
+  // Invite and admission policy (B AC-01/AC-02). No implicit defaults: unset means LOCKED.
+  INVITE_MAX_TTL_MS: positiveSafeInt,
+  SESSION_ATTEMPT_WINDOW_MS: positiveSafeInt,
+  SESSION_ATTEMPTS_PER_INVITE: positiveSafeInt,
+  SESSION_ATTEMPTS_PER_IP: positiveSafeInt,
+  ROOM_IDLE_TTL_MS: positiveSafeInt,
 });
 
-export function parseConfig(env: Record<string, string | undefined>) {
+type Raw = z.infer<typeof environment>;
+
+function group<K extends keyof Raw>(raw: Raw, keys: readonly K[], name: string) {
+  const present = keys.filter((k) => raw[k] !== undefined);
+  if (present.length === 0) return null;
+  if (present.length !== keys.length) {
+    const missing = keys.filter((k) => raw[k] === undefined).join(', ');
+    throw new Error(`Incomplete ${name} configuration: missing ${missing}`);
+  }
+  return raw as Raw & { [P in K]-?: NonNullable<Raw[P]> };
+}
+
+export function parseConfig(input: Record<string, string | undefined>) {
+  // An empty value in an env file (KEY=) means "not configured", the same as an absent key.
+  // Existing server/.env files from the older template keep working; a configured group must
+  // still be complete, which the group checks below enforce.
+  const env = Object.fromEntries(
+    Object.entries(input).filter(([, v]) => v !== undefined && v !== ''),
+  );
   const parsed = environment.safeParse(env);
   if (!parsed.success) {
     // Report names only; never echo environment values or secrets.
@@ -48,6 +123,47 @@ export function parseConfig(env: Record<string, string | undefined>) {
     })
   )
     throw new Error('ALLOWED_ORIGINS must contain exact HTTP origins');
+  if (raw.MAX_SLOTS !== raw.MAX_ROOMS * 6)
+    throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
+
+  const livekit = group(
+    raw,
+    ['LIVEKIT_HTTP_URL', 'LIVEKIT_WS_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET'] as const,
+    'LiveKit',
+  );
+  const publicWindow = group(
+    raw,
+    ['OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS', 'OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS'] as const,
+    'public window',
+  );
+  if (
+    publicWindow &&
+    publicWindow.OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS >=
+      publicWindow.OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS
+  )
+    throw new Error('OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS must be before the close time');
+  const apiLimits = group(
+    raw,
+    ['MEDIA_MAX_NORMAL_API_CALLS_PER_60S', 'MEDIA_MAX_TOTAL_API_CALLS_PER_60S'] as const,
+    'media API limit',
+  );
+  if (
+    apiLimits &&
+    apiLimits.MEDIA_MAX_NORMAL_API_CALLS_PER_60S > apiLimits.MEDIA_MAX_TOTAL_API_CALLS_PER_60S
+  )
+    throw new Error('MEDIA_MAX_NORMAL_API_CALLS_PER_60S must not exceed the total limit');
+  const admission = group(
+    raw,
+    [
+      'INVITE_MAX_TTL_MS',
+      'SESSION_ATTEMPT_WINDOW_MS',
+      'SESSION_ATTEMPTS_PER_INVITE',
+      'SESSION_ATTEMPTS_PER_IP',
+      'ROOM_IDLE_TTL_MS',
+    ] as const,
+    'admission policy',
+  );
+
   return {
     host: raw.HOST,
     port: raw.PORT,
@@ -58,6 +174,39 @@ export function parseConfig(env: Record<string, string | undefined>) {
     maxSlots: raw.MAX_SLOTS,
     opsDataDir: raw.OPS_DATA_DIR,
     logLevel: raw.LOG_LEVEL,
+    livekit: livekit
+      ? {
+          httpUrl: livekit.LIVEKIT_HTTP_URL,
+          wsUrl: livekit.LIVEKIT_WS_URL,
+          apiKey: livekit.LIVEKIT_API_KEY,
+          apiSecret: livekit.LIVEKIT_API_SECRET,
+          projectAlias: raw.LIVEKIT_PROJECT_ALIAS ?? null,
+        }
+      : null,
+    opsToken: raw.OPS_TOKEN ?? null,
+    publicWindow: publicWindow
+      ? {
+          opensAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS,
+          closesAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS,
+        }
+      : null,
+    officialBudgetMaxAgeMs: raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS ?? null,
+    operationTimeoutMs: raw.OPS_OPERATION_TIMEOUT_MS ?? null,
+    mediaApiLimits: apiLimits
+      ? {
+          maxNormalApiCallsPer60s: apiLimits.MEDIA_MAX_NORMAL_API_CALLS_PER_60S,
+          maxTotalApiCallsPer60s: apiLimits.MEDIA_MAX_TOTAL_API_CALLS_PER_60S,
+        }
+      : null,
+    admission: admission
+      ? {
+          inviteMaxTtlMs: admission.INVITE_MAX_TTL_MS,
+          sessionAttemptWindowMs: admission.SESSION_ATTEMPT_WINDOW_MS,
+          sessionAttemptsPerInvite: admission.SESSION_ATTEMPTS_PER_INVITE,
+          sessionAttemptsPerIp: admission.SESSION_ATTEMPTS_PER_IP,
+          roomIdleTtlMs: admission.ROOM_IDLE_TTL_MS,
+        }
+      : null,
   };
 }
 

@@ -143,8 +143,7 @@ export class GrantIssuer {
     try {
       if (!(await d.reserve(generation))) {
         // No JWT exists, but leave the allocated generation terminal so this attempt cannot reopen.
-        generation.terminal = true;
-        generation.state = 'REVOKED';
+        d.registry.abandonUnissued(generation);
         return result('BUDGET_EXHAUSTED', generation.generation);
       }
       await d.persist(generation);
