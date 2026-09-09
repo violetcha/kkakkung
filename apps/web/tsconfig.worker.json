@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": []
+  },
+  "include": [
+    "src/features/vision/vision.worker.ts",
+    "src/features/vision/worker-protocol.ts",
+    "src/features/vision/sensor-types.ts",
+    "src/features/vision/face-sensor.ts",
+    "src/features/vision/pose-sensor.ts",
+    "src/features/vision/gesture-sensor.ts"
+  ]
+}

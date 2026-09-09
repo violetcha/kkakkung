@@ -1,0 +1,97 @@
+{
+  "manifestVersion": 1,
+  "generatedAt": "2026-09-08",
+  "note": "Runtime reads only these pinned local assets. Never a latest CDN URL.",
+  "sdk": {
+    "package": "@mediapipe/tasks-vision",
+    "version": "1.0.1",
+    "license": "Apache-2.0",
+    "licenseSource": "apps/web/node_modules/@mediapipe/tasks-vision/package.json license field",
+    "wasmBasePath": "/models/mediapipe/1.0.1/wasm",
+    "files": [
+      {
+        "file": "vision_wasm_internal.js",
+        "sha256": "e170ee67dd4e16c1a6fcd8840a206687e5a59b22c20e4a902bc445b095454d73",
+        "bytes": 323377,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      },
+      {
+        "file": "vision_wasm_internal.wasm",
+        "sha256": "8da277a733926eacd0474b8704b36742d6ec3231c57a860c5b889dff8f1df886",
+        "bytes": 11756954,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      },
+      {
+        "file": "vision_wasm_module_internal.js",
+        "sha256": "da8934057f147b622e82cfb4c0dbd85461c598e268588b5a8ba9ca963a8ff82d",
+        "bytes": 323415,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      },
+      {
+        "file": "vision_wasm_module_internal.wasm",
+        "sha256": "2dabd8e23c60984628beb7bb338764c81a08e6837145273f59578684b5d53c1b",
+        "bytes": 11756972,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      },
+      {
+        "file": "vision_wasm_nosimd_internal.js",
+        "sha256": "e81d715a3d42cc3373602eb2f7aff795d164934db680e32496b65dab537f9658",
+        "bytes": 323180,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      },
+      {
+        "file": "vision_wasm_nosimd_internal.wasm",
+        "sha256": "a28483cd42e74e855bf5ebdb6b40d9b66a5b49e35e95020bc97669e6822a3192",
+        "bytes": 10960242,
+        "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
+        "acquiredAt": "2026-09-08"
+      }
+    ]
+  },
+  "models": {
+    "face": {
+      "publicPath": "/models/face/face_landmarker.task",
+      "variant": "face_landmarker",
+      "precision": "float16",
+      "release": 1,
+      "sourceUrl": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+      "bytes": 3758596,
+      "acquiredAt": "2026-09-08",
+      "license": "pending",
+      "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models",
+      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+    },
+    "pose": {
+      "publicPath": "/models/pose/pose_landmarker.task",
+      "variant": "pose_landmarker_lite",
+      "precision": "float16",
+      "release": 1,
+      "sourceUrl": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+      "bytes": 5777746,
+      "acquiredAt": "2026-09-08",
+      "license": "pending",
+      "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker#models",
+      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+    },
+    "gesture": {
+      "publicPath": "/models/gesture/gesture_recognizer.task",
+      "variant": "gesture_recognizer",
+      "precision": "float16",
+      "release": 1,
+      "sourceUrl": "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
+      "sha256": "97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482",
+      "bytes": 8373440,
+      "acquiredAt": "2026-09-08",
+      "license": "pending",
+      "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer#models",
+      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+    }
+  }
+}
