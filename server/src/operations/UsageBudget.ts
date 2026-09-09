@@ -41,6 +41,8 @@ export class UsageBudget {
   private restored = false;
   private failed = false;
   private queue: Promise<void> = Promise.resolve();
+  private closed = false;
+  private closing: Promise<void> | null = null;
 
   constructor(
     private readonly options: {
@@ -62,6 +64,7 @@ export class UsageBudget {
   async restore(
     options: { allowInitializeMissing?: boolean } = {},
   ): Promise<ReturnType<UsageBudget['snapshot']>> {
+    if (this.closed) return this.snapshot();
     return this.serialize(async () => {
       if (this.restored) return this.snapshot();
       const result = await this.options.store.read();
@@ -83,6 +86,7 @@ export class UsageBudget {
   }
 
   reserve(input: UsageRequest): Promise<UsageResult> {
+    if (this.closed) return Promise.resolve({ status: 'rejected', code: 'STORAGE_FAILURE' });
     let request: UsageRequest;
     try {
       request = validateUsageRequest(input);
@@ -146,6 +150,7 @@ export class UsageBudget {
   }
 
   markRetiring(reservationId: string): Promise<boolean> {
+    if (this.closed) return Promise.resolve(false);
     return this.serialize(async () => {
       const reservation = this.state.reservations.find(
         (r) => r.request.reservationId === reservationId,
@@ -170,6 +175,7 @@ export class UsageBudget {
     input: OfficialBudgetCheckpoint,
     revision: { periodId: string; version: number },
   ): Promise<{ status: 'applied' | 'duplicate' | 'rejected'; code?: string }> {
+    if (this.closed) return Promise.resolve({ status: 'rejected', code: 'STORAGE_FAILURE' });
     let checkpoint: OfficialBudgetCheckpoint;
     try {
       checkpoint = validateOfficialBudget(input, {
@@ -213,6 +219,7 @@ export class UsageBudget {
   }
 
   markRemoteConfirmed(reservationId: string): Promise<boolean> {
+    if (this.closed) return Promise.resolve(false);
     return this.serialize(async () => {
       const reservation = this.state.reservations.find(
         (r) => r.request.reservationId === reservationId,
@@ -236,6 +243,7 @@ export class UsageBudget {
     reservationId: string,
     proof: { remoteConfirmed: true; periodId: string; version: number },
   ): Promise<boolean> {
+    if (this.closed) return Promise.resolve(false);
     return this.serialize(async () => {
       const reservation = this.state.reservations.find(
         (r) => r.request.reservationId === reservationId,
@@ -278,7 +286,7 @@ export class UsageBudget {
     const activeBytes = active.reduce((sum, r) => sum + r.bytes, 0);
     return structuredClone({
       integrity: this.integrity,
-      writable: !this.failed && this.options.store.writable,
+      writable: !this.closed && !this.failed && this.options.store.writable,
       official: this.state.official,
       reservations: this.state.reservations,
       activeMinutes,
@@ -296,8 +304,17 @@ export class UsageBudget {
     });
   }
 
+  /** Stop accepting work synchronously and drain usage persistence before releasing its writer. */
+  close(): Promise<void> {
+    if (!this.closing) {
+      this.closed = true;
+      this.closing = this.queue.then(() => this.options.store.close());
+    }
+    return this.closing;
+  }
+
   private blockedCode(): UsageRejection | null {
-    if (this.failed || !this.options.store.writable) return 'STORAGE_FAILURE';
+    if (this.closed || this.failed || !this.options.store.writable) return 'STORAGE_FAILURE';
     if (!this.restored || this.integrity !== 'ok' || !this.state.official)
       return 'BUDGET_UNCONFIRMED';
     if (
