@@ -2,7 +2,15 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/test-results/**', '**/playwright-report/**'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/.local/**',
+      '**/test-results/**',
+      '**/playwright-report/**',
+      // D-02 의 MediaPipe WASM 글루 .js 는 벤더 산출물이라 검사하지 않는다 (REQ-D-01)
+      'apps/web/public/models/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

@@ -6,6 +6,8 @@ services:
       dockerfile: infra/docker/Dockerfile.web
     ports:
       - '127.0.0.1:8080:80'
+    # 시작 의존성은 live 기준(healthcheck 가 /health/live). 복구 중(ready 503)에도 프록시가 떠서
+    # live/ready·운영 경로를 관찰할 수 있다. 배포 승인은 Jenkins 가 /health/ready 로 따로 본다 (DP-02).
     depends_on:
       game-server:
         condition: service_healthy
@@ -30,7 +32,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:2567/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:2567/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 3s

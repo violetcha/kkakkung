@@ -1,0 +1,79 @@
+{
+  "mode": "representative",
+  "note": "QA-02(성능)·QA-09(6대 5판) 용. 2026-09-08 기준 6대 동일 사양. 실제 시험 전 각 장치에서 OS/브라우저/카메라를 다시 확인해 확인란을 채운다.",
+  "network": "SSAFY 캠퍼스 Wi-Fi 6E (AX211). 유선 가능 여부·UDP/TURN 실측은 F-06 에서 확인",
+  "devices": [
+    {
+      "slot": 1,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": "2026-09-08 (F PC)",
+      "participant": null
+    },
+    {
+      "slot": 2,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": null,
+      "participant": null
+    },
+    {
+      "slot": 3,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": null,
+      "participant": null
+    },
+    {
+      "slot": 4,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": null,
+      "participant": null
+    },
+    {
+      "slot": 5,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": null,
+      "participant": null
+    },
+    {
+      "slot": 6,
+      "model": "Samsung Galaxy Book 960XGL",
+      "os": "Windows 11 Enterprise 26200",
+      "cpu": "Intel Core Ultra 9 185H",
+      "ramGb": 64,
+      "gpu": "NVIDIA RTX 4070 Laptop 8GB / Intel Arc",
+      "camera": "Intel AVStream (내장)",
+      "browser": "Chrome 152.0.7977",
+      "verifiedOnDevice": null,
+      "participant": null
+    }
+  ]
+}

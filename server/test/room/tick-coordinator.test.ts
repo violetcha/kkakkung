@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import { RoomTickCoordinator } from '../../src/game/RoomTickCoordinator.js';
+import type { MetricSample } from '../../src/game/ports.js';
+import { fakeClock } from './test-harness.js';
+
+function setup() {
+  const clock = fakeClock(0);
+  const metrics: MetricSample[] = [];
+  const coordinator = new RoomTickCoordinator({
+    now: clock.now,
+    emitMetric: (s) => metrics.push(s),
+  });
+  const ticks: Record<string, number[]> = {};
+  const overloads: Record<string, number[]> = {};
+  const register = (id: string) => {
+    ticks[id] = [];
+    overloads[id] = [];
+    coordinator.register(id, {
+      onTick: (lag) => ticks[id]!.push(lag),
+      onOverload: (lag) => overloads[id]!.push(lag),
+    });
+  };
+  return { clock, coordinator, ticks, overloads, metrics, register };
+}
+
+describe('RoomTickCoordinator', () => {
+  it('catches up late rooms in due order for at most four rounds and then yields', () => {
+    const h = setup();
+    h.register('a');
+    h.clock.set(50 + 190);
+    const result = h.coordinator.run();
+    expect(result.executed).toBe(4);
+    expect(result.yielded).toBe(false);
+    expect(h.ticks.a).toHaveLength(4);
+    expect(h.ticks.a![0]).toBe(190);
+    expect(h.ticks.a![3]).toBe(40);
+    h.clock.set(50 + 249);
+    // 4 ticks moved nextDue to 250; a fifth tick is due but must wait for the next run.
+    expect(h.coordinator.run().executed).toBe(1);
+  });
+
+  it('does not replay ticks after a long stall: overload fires once and nextDue jumps to now', () => {
+    const h = setup();
+    h.register('a');
+    h.clock.set(2050);
+    const result = h.coordinator.run();
+    expect(result.executed).toBe(0);
+    expect(result.overloaded).toEqual(['a']);
+    expect(h.overloads.a).toEqual([2000]);
+    expect(h.coordinator.run().overloaded).toEqual([]);
+    expect(h.ticks.a).toEqual([]);
+    h.coordinator.rearm('a');
+    h.clock.advance(50);
+    expect(h.coordinator.run().executed).toBe(1);
+  });
+
+  it('invalidates only the room whose lag exceeds 250ms and all rooms on a process-wide stall', () => {
+    const h = setup();
+    h.register('a');
+    h.clock.set(50);
+    h.coordinator.run();
+    h.clock.set(100);
+    h.register('b');
+    // a is due at 100, b at 150. At 352 only a exceeds the 250ms limit.
+    h.clock.set(352);
+    const first = h.coordinator.run();
+    expect(first.overloaded).toEqual(['a']);
+    expect(h.overloads.a).toEqual([252]);
+    expect(h.overloads.b).toEqual([]);
+    expect(h.ticks.b).toHaveLength(4);
+    h.coordinator.rearm('a');
+    // Process-wide stall: both rooms fall behind together and each aborts exactly once.
+    h.clock.set(352 + 50 + 300);
+    const second = h.coordinator.run();
+    expect(second.overloaded.sort()).toEqual(['a', 'b']);
+    expect(h.overloads.a).toHaveLength(2);
+    expect(h.overloads.b).toHaveLength(1);
+    expect(h.coordinator.run().overloaded).toEqual([]);
+  });
+
+  it('treats exactly 250ms as late but valid and emits allow-listed metric names', () => {
+    const h = setup();
+    h.register('a');
+    h.clock.set(50 + 250);
+    expect(h.coordinator.run().executed).toBe(4);
+    expect(h.overloads.a).toEqual([]);
+    const names = new Set(h.metrics.map((m) => m.name));
+    expect([...names].sort()).toEqual(['eventLoop.lag', 'tick.catchup', 'tick.due']);
+    expect(h.metrics.every((m) => m.unit === 'count' || m.unit === 'ms')).toBe(true);
+  });
+});

@@ -1,0 +1,19 @@
+{
+  "mode": "synthetic",
+  "note": "MC-01 은 실제 장치 없이 합성 참가자 3명. QA-02/QA-09 는 representative manifest 를 따로 만든다.",
+  "participants": [
+    {
+      "identity": "synthetic-1",
+      "role": "publisher+subscriber",
+      "video": "canvas 320x240 20fps",
+      "audio": "440Hz tone"
+    },
+    {
+      "identity": "synthetic-2",
+      "role": "publisher+subscriber",
+      "video": "canvas 320x240 20fps",
+      "audio": "440Hz tone"
+    },
+    { "identity": "synthetic-3", "role": "subscriber", "video": null, "audio": null }
+  ]
+}
