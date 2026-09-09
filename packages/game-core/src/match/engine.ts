@@ -365,13 +365,15 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }
-  let terminal = settleResult(ctx, { includeTimeout: false });
-  if (terminal) {
+  // Terminal before commands: cancel the rest of this step. The later settle only
+  // needs to apply the deadline result; the control loop below always runs because
+  // applyConnectionLost/abortMatch check isTerminal themselves.
+  if (settleResult(ctx, { includeTimeout: false })) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
   } else {
     for (const command of input.commands) handleCommand(ctx, command);
     startQueuedActions(ctx);
-    terminal = settleResult(ctx, { includeTimeout: true });
+    settleResult(ctx, { includeTimeout: true });
   }
   for (const control of input.controls) {
     if (control.type === 'CONNECTION_LOST') {
