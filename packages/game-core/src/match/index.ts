@@ -184,6 +184,26 @@ export {
 } from './participation.js';
 export { abortMatch, applyConnectionLost, type DisconnectionResult } from './disconnection.js';
 
+export { segmentClear, type Point } from './vision/raycast.js';
+export {
+  FOV_HALF_DEGREES,
+  VIEW_RANGE,
+  cameraFor,
+  computeVisibility,
+  visibilityOf,
+  type Camera,
+} from './vision/visibility.js';
+export {
+  EMPTY_KNOWLEDGE,
+  borderingFaces,
+  floorKey,
+  initialTerrain,
+  knownTerrainOf,
+  observeTerrain,
+  wallKey,
+} from './knowledge/terrain.js';
+export { discoverExits, knownActiveExits } from './knowledge/exits.js';
+
 export {
   createMatch,
   createPractice,
