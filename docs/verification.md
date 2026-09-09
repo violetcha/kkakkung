@@ -91,3 +91,22 @@ EC2 실측 (2026-09-09 05:0x Z, Jenkins 빌드 #13 이미지 `b6ecefde`, jenkins
 증거 `.local/qa/DP-02/container-smoke.json`(서버 `/var/lib/jenkins/kk-smoke/`)와 로컬 사본. 정적 계약은 `tests/contracts/container-layout.test.ts` 10개. 서버에 Node 24.19.0 을 `/usr/local` 에 설치했다(tarball SHA-256 대조). 로컬 PC 는 Docker daemon 이 없어 smoke 가 BLOCKED 로 끝나는 것을 확인했다.
 
 미완: production 프로파일 활성화와 READY/재시작 최종 시험은 B 초대 인증·E OP-08 통합 후(D2, F/E 공동). 단일 writer lock·두 번째 인스턴스 거절은 E OP-01 구현 후 smoke 에 추가. `/monitor`·`/playground`·`/api/dev-sessions` 는 호스트 nginx 차단 외에 B 의 서버측 보호 대기(F-REQ-01~03). A 의 content/config 가 생기면 `server/package.json` files 와 Dockerfile 복사 범위를 맞춘다.
+
+## F-06 / DP-03 도메인·TLS·WSS·접근 제한 (2026-09-09)
+
+Jira [S15P21C204-156](https://ssafy.atlassian.net/browse/S15P21C204-156). 브랜치 `ci/S15P21C204-156-domain-tls-wss`.
+
+| 항목                                  | 결과                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DNS → 공인 IP → TLS                   | `j15c204.p.ssafy.io` = 3.35.18.207 = 서버 egress. Let's Encrypt(YE1), TLS 1.3, 만료 2026-12-06(87일). certbot `installer = nginx` 라 갱신 시 reload 자동, 타이머 매일 23:54                                                                                                                                     |
+| 인증서 갱신 dry-run                   | 2026-09-09 실행 → Let's Encrypt 스테이징 `rateLimited: Service busy` 로 시뮬레이션 실패. 설정 오류 아님, 재시도 예정                                                                                                                                                                                            |
+| 공용 인바운드                         | UFW 22/80/443 만. Node 2567 은 Docker 내부(호스트 포트 없음, container-smoke 확인)                                                                                                                                                                                                                              |
+| SSH                                   | 키 전용(passwordauthentication no), 최근 2일 접속 IP 1곳(121.178.98.12, F PC). IP 대역 제한은 캠퍼스 Wi-Fi 변동 위험으로 **미적용**, 키 전용 유지로 기록                                                                                                                                                        |
+| 호스트 nginx `host.conf`              | 서버 적용(백업 3개 보존). 80→301, /jenkins, /health 개방, /monitor·/playground 404, WS 업그레이드·3600s                                                                                                                                                                                                         |
+| **외부 접근 제어**                    | 문서의 "IP 격리 스위치"를 만들어 ON/OFF 실측(비허용 503·허용 200·health/jenkins 유지)한 뒤 **담당자 결정으로 GitLab SSO 로 교체**(팀원이 캠퍼스 밖에서도 접속). oauth2-proxy v7.8.1, 프로젝트 `S15P21C204` Reporter 이상만, PKCE S256, 쿠키 7일. 담당자 브라우저에서 GitLab 인가 → 앱 진입 → 새로고침 유지 확인 |
+| deployment-smoke (비로그인)           | 9 PASS / 0 FAIL / 8 NOT_RUN: 301, TLS, live 200, ready 200, SSO 게이트 302→/oauth2/start, /oauth2/start→lab.ssafy.com, /monitor·/playground 404, secure context. NOT_RUN 은 로그인 쿠키(`SMOKE_COOKIE`)가 필요한 앱·API·WSS 검사와 D 모델·마이크 UI                                                             |
+| deployment-smoke (SSO 적용 전, 15:1x) | 13 PASS: 실제 sandbox 방 입장 후 WSS 2.58초 유지, 허용 외 Origin WSS 403, 모듈 스크립트 MIME/immutable 캐시                                                                                                                                                                                                     |
+
+계약 시험 `tests/contracts/proxy-contract.test.ts` 11개(TLS·SSO 게이트·health 개방·진단 차단·WS·컨테이너 라우팅·캐시·SSO compose·비밀 미포함). `scripts/deployment-smoke.mjs` 는 `--base-url` 대상, `SMOKE_COOKIE` 로 로그인 검사 확장.
+
+미완·인계: 인증서 dry-run 재시도, 로그인 쿠키로 smoke 전체 실행(담당자), D 모델 도착 후 wasm MIME·CSP, `/api/dev-sessions` 차단(C-02 이후), B 의 초대 운영 라우트 허용/거절 검증(B 구현 후). DP-06 에는 "배포 검증 중 외부 격리" 대신 SSO 게이트가 상시 적용된다는 점과 심사 시 해제 절차를 인계.

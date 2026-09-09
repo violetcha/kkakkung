@@ -28,7 +28,8 @@
     "cloud:check": "node scripts/run-cloud-check.mjs",
     "probe:build": "vite build --config tests/cloud/vite.config.ts",
     "probe:dev": "vite --config tests/cloud/vite.config.ts",
-    "livekit:token": "node scripts/livekit-token.mjs"
+    "livekit:token": "node scripts/livekit-token.mjs",
+    "deploy:smoke": "node scripts/deployment-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -42,6 +43,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",
     "vite": "8.2.2",
-    "vitest": "5.0.0"
+    "vitest": "5.0.0",
+    "ws": "8.21.3"
   }
 }
