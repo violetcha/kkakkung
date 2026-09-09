@@ -71,6 +71,12 @@ export class MediaGenerationRegistry {
     return this.current.get(playerKey(matchId, playerId));
   }
 
+  isLatestScope(matchId: string, playerId: string, mediaInstanceId: string): boolean {
+    return (
+      !this.closed && this.playerInstances.get(playerKey(matchId, playerId)) === mediaInstanceId
+    );
+  }
+
   all(): readonly Generation[] {
     return [...this.generations];
   }

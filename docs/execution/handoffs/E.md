@@ -2,7 +2,112 @@
 
 수정자: **E** · 2026-09-09 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-15 로컬 검증 인계**다. E-14 MR !33의 develop 병합을 확인했고 이번 기준 SHA는 `7e6489bfea2569d7c3f5a8d9fc8c3081085dadb5`이다. E-01~E-14는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-16 로컬 검증 인계**다. E-15 MR !37의 develop 병합을 확인했고 이번 기준 SHA는 `79e590392a84d929bb56f1dd00b253fb58767cab`이다. E-01~E-15는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+
+## E-16 / MC-08 — 미디어 세대 전환과 게임 연결을 유지하는 복구
+
+- Jira: [S15P21C204-150](https://ssafy.atlassian.net/browse/S15P21C204-150).
+- localStage: **LOCAL_VERIFIED**. 최종 인수: **BLOCKED**.
+- 구현 commit: `3a9838601936873c84d3578a1aa9138da576be83`, 운영 감사/내구 회수 보완 `5e52bfed8240d63e66d103b5bb6cfddf9ebf5a9d`.
+- 제출 브랜치: `feat/S15P21C204-150-media-generation-lifecycle` → `develop`. E-15 병합 후 `79e590392a84d929bb56f1dd00b253fb58767cab`에서 새로 분기한 E-16 단일 스토리다. 이전 누적 브랜치는 제출 대상이 아니다.
+- 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01. 기존 `MediaCoordinator`·`MediaCoordinatorDeps`의 필수 구조는 유지한다. 아래 E 소유 추가 조립/수명 API는 B/D의 소비 검토와 B의 공통 계약 반영이 필요하다.
+- 직접 선행 E-05/E-10 및 E-11~E-15 구현은 이 기준 develop에 있다. **D-17의 실제 InteractionRuntime 정리·전환 구현 인계는 아직 없다.** B/D/F 공개 인계는 검증 0건의 양식이며, 현재 B bootstrap은 여전히 개발 skeleton이다.
+- blockedOn: B 실제 미디어 HTTP·게임 제어 큐·개별 게임 연결 생존·health/운영/입장 조립 및 추가 API 계약 검토, D-17의 로컬 정리/게시/재연결, F-01/F-05의 실제 Cloud 권한·회수 프로필·namespace 소유권·공식 예산·지속 볼륨/격리 환경, 실제 Cloud/장치 통합 검증.
+- E 소유 모듈의 구현과 로컬 연결 검증은 먼저 진행했다. 실제 제품 통합, Cloud 성공, ACCEPTED, Jira 완료와 구분한다. 이번 작업에 푸시·MR 생성·원격 병합·Jira 변경은 포함하지 않는다.
+
+### 전체 factory와 공개 진입점
+
+`server/src/media/MediaCoordinator.ts`는 `createMediaCoordinator(deps, services?)`, `MediaCoordinatorServices`, `MediaCoordinatorRuntime`을 제공한다. 반환값은 기존 `MediaCoordinator` 메서드에 `lifecycle`, bound `isInitialized/canIssue`, `reconcile()`, `createOperationsHandlers(authorize)`를 추가한다. B가 라우트·Room·Tick·HTTP listen을 소유하며, E는 E-05 발급, E-10/E-11 회수, E-12/E-13 복구, E-14 운영, E-15 readiness를 같은 registry·journal·사용량·API 예산으로 조립한다.
+
+1. `deps`는 기존 `MediaCoordinatorDeps` 그대로다. F가 검증한 config, epoch 초/monotonic ms 시계, B의 실제 `getGameActivity`, `enqueueControl`, `enqueueBindings`, `enqueueAudioPolicy`, F의 관측 callback을 전달한다. B의 방·게임 상태를 E callback 안에서 직접 변경하지 않고 기존 제어/송신 큐로 전달한다.
+2. `services.mediaMode`, `productSecurityReady`, `namespaceOwnershipConfirmed`는 현재의 검증된 서버 증거를 반환해야 한다. `firstInstallationConfirmed`, `firstAuditConfirmed`는 각각 최초 설치/감사 최초 생성의 외부 근거를 확인한다. `getOfficialRevision(checkpoint)`은 해당 공식 입력과 결합된 실제 periodId/version을 반환한다. 임의 true·빈 디렉터리·현재 시각으로 근거를 만들지 않는다. 생략된 필수 증거는 발급 차단으로 남는다.
+3. `services.clientFactory/sign`은 명시적인 로컬 시험 주입점이다. 실제 운영 조립에서 시험 transport나 가짜 서명 함수를 넣어 실제 Cloud 검증으로 계산하지 않는다. 기본 Gateway/SDK와 서명을 사용해도 실제 Cloud 시험 통과를 자동 의미하지 않는다.
+4. `initialize()`는 같은 Promise를 공유한다. `OPS_DATA_DIR/capability-report.json`과 로컬 기록을 검사하고, 회수·공식 예산 복구는 초기화 이후 진행한다. `initialBudget`의 예시 잔량을 공식 사용량 증거로 바꾸지 않는다. 공식 입력은 `official-usage-input.json`과 별도 신뢰 revision 검증을 거친다.
+5. initialized는 관찰 가능한 RECOVERING/LOCKED와 DRAINING이다. B는 initialized 이후 health/인증 운영/서명 webhook을 열고 fatal 또는 예상 밖 초기화 거절이면 listen 없이 close한다. 복구가 READY가 되어도 운영 resume의 내구 terminal 성공 전까지 OPEN하지 않는다.
+6. `createHealthHandlers({getReadiness: () => media.getReadiness(), isInitialized: media.isInitialized})`를 사용한다. B의 초대·새 입장·방 생성·자동 시작은 같은 `media.canIssue`를 await 전후 검사한다. 운영 HTTP는 `media.createOperationsHandlers(createOperatorAuth(검증된OPS_TOKEN))`의 command/snapshot/status를 기존 E-14 경로에 등록한다. 이 함수가 내부의 동일 OperationsAudit와 onAuditFailure 잠금을 연결하므로 B는 별도 감사 저장소를 만들지 않는다. HTTP 밖에서는 `media.getOperations()`를 사용할 수 있다. 스켈레톤 health를 함께 등록하여 응답을 가리지 않는다.
+7. `reconcile()`는 E의 유지 루프와 같은 진행 작업을 공유하며 게임 Tick 밖에서 트랙·구독·복구/사용량 상태를 대조한다. 별도 SDK나 별도 API 예산을 추가하지 않는다. 실제 게임 frame은 `observeFrame()`으로만 전달한다.
+8. B가 새 요청·외부 producer 접수를 닫은 뒤 `await media.close()`로 종료한다. E는 새 세대 발급/전환/정책을 봉쇄하고 회수·운영·복구의 접수된 로컬 기록을 정리한 뒤 journal writer를 해제한다. 한 하위 종료 오류 때문에 나머지 정리를 생략해서는 안 된다.
+
+아래는 B의 조립 위치에 넣을 호출 순서다. `mediaDeps`, `verifiedServices`, 세션/요청/연결 상태 변수는 **B/F가 실제 구현·검증하여 제공할 값**이며 이 이름의 기존 export가 이미 있다는 뜻이 아니다. 검증된 callback을 전달하며 운영 증거를 true로 채우는 실행 예제가 아니다.
+
+```ts
+import { createMediaCoordinator } from './media/MediaCoordinator.js';
+import { createHealthHandlers } from './health/HealthHandlers.js';
+import { createOperatorAuth } from './operations/OperatorAuth.js';
+
+const media = createMediaCoordinator(mediaDeps, verifiedServices);
+const initialized = await media.initialize();
+if (initialized.status === 'fatal') {
+  await media.close();
+  throw new Error(initialized.code);
+}
+const health = createHealthHandlers({
+  getReadiness: () => media.getReadiness(),
+  isInitialized: media.isInitialized,
+});
+const operations = media.createOperationsHandlers(createOperatorAuth(validatedOpsToken));
+// B: health/운영/미디어 경로를 등록하고 initialized 이후에만 listen.
+
+media.lifecycle.setGameConnection({
+  matchId: serverMatchId,
+  playerId: authenticatedPlayerId,
+  connected: authoritativeGameConnectionAlive,
+});
+media.observeFrame(trustedFrame);
+const preparation = await media.prepareGeneration(serverPreparedRequest);
+// B: preparation과 enqueueControl 결과를 requestId + scope로 중복 제거.
+
+// B: 실제 게임 연결 종료 판정을 받으면 같은 setGameConnection에 판정 결과를 전달.
+// B: 새 요청과 producer를 닫은 뒤 await media.close().
+```
+
+grant가 기다리는 closed 보고는 **별도의 report HTTP 처리기**에서 아래처럼 전달한다. 위 prepareGeneration의 완료를 기다린 다음 보고를 처리하는 직렬 구조로 만들면 안 된다.
+
+```ts
+media.lifecycle.report({ ...validatedMediaReport, playerId: authenticatedPlayerId });
+```
+
+### 세대 전환과 D의 로컬 정리 조건
+
+`GenerationTransition.ts`의 `GenerationTransition`은 matchId/playerId별 전환과 회수를 직렬화한다. 동일 requestId의 논리 결과를 공유하며 다른 내용 재사용과 옛 scope 결과를 거절한다. 연습→경기는 phase-change, 같은 미디어 instance의 전체 Identity 교체는 reconnect, 라운드 종료/재경기의 이전 세대 종료는 round-ended로 전달한다.
+
+- 새 발급은 기존 E-10/E-11의 **원격 ACK + 참가자 부재 + 내구 REVOKED**와 D의 **로컬 정리 완료**를 각각 확인한 뒤 진행한다. unknown이면 새 token/grant는 없고 B는 loading/countdown을 진행하면 안 된다.
+- `MediaLifecycle.ts`의 `MediaLifecycle`과 `LifecycleReport`는 B를 위한 서버 내부 포트다. `lifecycle.setGameConnection({matchId, playerId, connected})`는 B가 확인한 개별 게임 연결 상태를 받는다. ACTIVE frame이나 activeMatches 합계가 개별 게임 연결 생존 증거를 대신하지 않는다.
+- `lifecycle.report({playerId, matchId, mediaInstanceId, receiverGeneration, status})`는 기존 wire `MediaStatusReport`의 `ready|recovering|failed|closed`와 **인증 세션에서 얻은 playerId**를 받는다. B가 요청자가 해당 scope의 소유자인지 검사하고, 서버가 전환 중이라고 기록한 옛 세대의 closed 보고도 정확한 대상에만 전달한다. 클라이언트가 새 generation/playerId/mediaInstanceId를 선택하게 하지 않는다.
+- `closed`는 D의 `await retireMediaGeneration()` 완료 후 보내는 로컬 정리 신고다. 해당 이전 세대의 대기를 해제할 뿐 원격 회수·토큰 폐기·권한 성공을 증명하지 않는다. D 정리를 호출했다는 사실이나 `ready` 신고를 두 확인 조건의 대체재로 쓰지 않는다.
+- `awaitLocalRetirement`/`hasLocalRetirement`는 E 내부에서 해당 registry 세대 객체에 묶인 로컬 정리 증거를 확인한다. 신호 취소·기한 초과·옛 응답은 새 세대 발급을 허용하지 않는다. B/D가 미연결이면 성공 stub 대신 대기/거절을 유지한다.
+- 같은 SDK 연결 안의 짧은 reconnect는 현재 Identity/generation을 유지하며 서버 트랙 대조를 다시 요청한다. 최초 일반 미디어 장애부터 monotonic 10초를 적용하고 반복 recovering/failed 신고로 기한을 늘리지 않는다. ready 신고만으로 해제하지 않으며 장애 이후 동일 Identity/participant SID의 실제 camera 게시 대조를 확인한다. 권한 UNKNOWN의 1초 차단은 이 10초 창과 별개로 우선한다.
+- P2 한 명의 전체 교체에서는 P2 receiverGeneration/Identity만 바뀐다. 다른 다섯 명은 자기 receiverGeneration을 유지하고 P2 publisherGeneration/Identity/SID와 자기 bindingRevision만 갱신한다. E는 gameInstanceId나 gameScope.revision을 생성하지 않는다.
+- 실제 게임 연결 상실·개인 종료·라운드 종료·close가 시작되면 늦은 prepare/sign/ready/webhook이 새 연결을 되살리지 않아야 한다. 이전 instance의 frame과 현재 instance에서 사라진 참가자의 처리는 현재 권위 scope와 함께 검사한다. 이 경계는 아래 실제 factory 회귀 시험에서 확인했다.
+
+### 정책·회수·예산 조립
+
+`MediaPolicyBindings.ts`는 E-06~E-09의 가청/음향/구독/트랙·서명 webhook을 묶는다. 새 SDK SID는 서버 대조 전 허용하지 않고, 세대 종료 시 해당 수신자·발신자의 오래된 바인딩/정책을 정리한다. D의 로컬 ready를 원격 게시 확인으로 사용하지 않는다.
+
+`SharedRetryCheckpoint.ts`의 `SharedRetryCheckpoint`는 E-13의 이전 부팅 intent와 E-11의 현재 프로세스 intent를 하나의 `revocation-checkpoint.json`에 직렬 병합한다. E-13은 검증된 이전 이력을 받고 E-11은 현재 새 registry에 대응하는 빈 초기 집합에서 시작한다. snapshot에서 빠졌다는 이유로 다른 엔진의 intent를 삭제하지 않으며 lastSeq 최댓값, 신원/세대/예약 불변성, attempt/terminal 진행을 검사한다. 기록 누락/손상을 성공 이력으로 만들지 않고 accepted 쓰기를 배출한 뒤 닫는다.
+
+E-15 readiness의 회수 진행 예외는 실제 현재 registry 객체에 대한 **유계 최초 정상 회수**만 대상으로 한다. 현재 최초 회수의 3초 이내 구간만 인정하고 monotonic 역행도 거절한다. 그동안 해당 플레이어는 terminal/전환 큐로 차단하고 원격 확인을 기다리되 정상 진행 때문에 전체 admission을 자동 DRAINING으로 떨어뜨리지는 않는다. 과거 부팅 이력, UNKNOWN/UNRESOLVED, 실패 재시도·기한 초과는 예외가 아니며 실패 후 자동 OPEN하지 않는다. 정원은 설정된 maxConcurrentParticipants와 내구 회수 기록으로 검사한다. 같은 예약의 모든 세대가 내구 REVOKED여야 점유 종료를 반영하며 공식 사용량 조정 전에는 예약을 해제하지 않는다.
+
+### 실제 검증과 남은 조건
+
+Node 24.19.0 / pnpm 11.19.0에서 `pnpm verify` 전체가 종료 코드 0으로 통과했다. 포맷·실행 계약·lint/경계·workspace 타입·빌드, **80개 시험 파일 1,008개 시험**, 기존 Room 브라우저 E2E **2개**를 포함한다. 최종 로그는 이번 작업 폴더 `.local/execution/E-16-verify.log`에 보존한다. 중간 편집 중 실행에서 시험 fixture 초기화 오류를 발견해 수정했고 최종 고정 상태에서 전체 검사를 다시 통과했다.
+
+- E-16 추가 회귀 **141개**: 전환 43, 수명 31, 정책 조립 16, 전체 factory 24, 공유 retry checkpoint 20, readiness 예약 대조 7. 마지막 파일은 기존 18개에 7개를 추가했다.
+- 실제 factory 시험은 E-12/E-13 로컬 복구·E-14 resume·E-15 READY/OPEN·실제 로컬 JWT 서명·원격 회수 adapter·D 신고 포트를 연결한다. 원격 ACK와 D closed의 양쪽 장벽, 6명 중 1명 교체, 이전 match 정리, 구 frame·누락 참가자·정원·예산 갱신 실패·서명 중 종료·요청별 회수 결과·마지막 Identity 확인 뒤 방 삭제를 검사했다. 추가로 실제 loopback 운영 HTTP와 동일 감사 저장소의 이벤트/명령 공존, 감사 실패 잠금, 원격·로컬 ACK 뒤 REVOKED 저장 대기 중 재경기 차단을 검증했다.
+- 새로 발급할 토큰의 만료 검사는 유지한다. 기존 검증된 연결은 사용량 예약을 갱신하고, 미입장/부재인 만료 세대는 회수한다. JWT 초기 접속 만료와 연결 수명의 구분은 [LiveKit 공식 문서](https://docs.livekit.io/frontends/reference/tokens-grants/)와 기존 E-02/E-05 계약으로 확인했으며 5분 이후 연결/사용량 유지 및 만료된 grant 재응답 거절을 시험했다.
+- 신규·수정 시험 6개 파일 strict NodeNext 타입 검사 통과. E 소유권 검사와 문서 포맷·링크·실행 계약, `git diff --check`도 확인했다. 외부 소유 manifest/lockfile/config/라우트/공통 계약은 수정하지 않았다.
+- 기존 설치 의존성을 재사용하여 workspace 구조 경고가 남지만 이 작업 폴더의 protocol/game-core 링크를 사용한다. 기존 web 청크 크기·THREE.Clock·색상 환경 경고는 실패가 아니며 변경하지 않았다.
+
+로컬 시험은 실제 E 모듈·디스크를 연결하고 **Cloud transport, B/D caller, 공식 잔량·namespace 소유권·최초 설치·운영 증거는 명시적 fixture**로 제공한다. 실제 Cloud 호출은 이번 작업에서 **0회**다. 실제 장치 게시/수신·옛 토큰 재입장 거절·연습→경기→종료→재경기·격리 배포/볼륨 장애는 **미실행**이며 최종 인수는 BLOCKED다. 공식 Cloud 자격/예산/시험 환경과 실제 B/D 소비자가 도착하면 그 경계의 회귀를 별도로 수행해야 한다.
+
+### 다른 소유자에게 요청
+
+- **E16-B-01 / B / `server/src/bootstrap.ts`, `server/src/session/`, `server/src/rooms/`, `server/src/game/`:** 전체 factory의 initialize/listen/close, 같은 canIssue와 운영/health, 실제 활동 집계·개별 게임 연결 생존을 조립한다. `/api/media/grants`는 인증 세션/phase에서 requestId·playerId·mediaInstanceId·expectedPreviousGeneration을 결정한다. `/api/media/report`는 현재 또는 서버가 회수 중인 이전 scope를 검증한 뒤 lifecycle에 전달한다. `/api/livekit/webhook`은 JSON 재직렬화 없이 raw body/Authorization을 E에 전달한다. 세션 Bearer·OPS_TOKEN·webhook 서명을 혼용하지 않는다. 확인: 실제 B HTTP/Room 통합 시험과 `pnpm verify`, 인계 commit/결과.
+- **E16-B-02 / B / `server/src/game/ports.ts`, `docs/execution/common.md`, `docs/execution/contracts/`, 관련 protocol/소비 경계:** 기존 EXEC-CONTRACT-3 필수 형태를 유지한 E 추가 `MediaCoordinatorServices`와 `MediaCoordinatorRuntime.lifecycle/isInitialized/canIssue/reconcile/createOperationsHandlers` 소비 계약을 검토하여 공통 원본·타입·fixture에 일관되게 반영한다. 현재 E만 원본을 바꾸지 않았다. `MEDIA_PREPARED/MEDIA_RETIRED`는 requestId와 전체 scope로 중복/구세대를 제거하고, `MEDIA_FAILED`는 eventId와 scope로 제거한다. **TIMEOUT → ABORT_MATCH의 MEDIA_UNAVAILABLE, POLICY_UNKNOWN → MEDIA_POLICY_UNCERTAIN**을 B 제어 큐에서 매핑한다. 기타 실패 코드의 loading/countdown 차단도 실제 경로로 확인한다. ready grant는 게시 완료가 아니므로 현재 self faceTrackSid와 LOAD_READY를 함께 확인한다. 확인: `pnpm check:execution`, B/E/D 계약 소비 시험, 실제 queue/Room 회귀 및 구현 SHA.
+- **E16-D-01 / D / D-17, `apps/web/src/features/media/`·InteractionRuntime:** `retireMediaGeneration()`의 기존 트랙·구독·재생 그래프·video element 정리 완료 후 정확한 이전 MediaScope로 closed를 보고하고 새 grant 연결을 시작한다. C의 texture 정리 callback도 보존한다. SDK 내 reconnect와 전체 Identity 교체를 구분하고 recovering/failed/ready를 현재 세대에만 보고한다. 이전 ready/grant/FaceTrackEvent가 새 세대를 열거나 닫지 않는 실제 소비 시험, 한 명만 교체할 때 나머지 다섯 명 세대가 유지되는 증거와 인계 SHA를 제공한다. 확인: D 담당 미디어 수명 시험과 `pnpm verify`, B/E와 실제 브라우저 연결 시험.
+- **E16-F-01 / F / F-01·F-05·QA-06/QA-07, `server/src/config/`, `infra/`, `tests/`, `server/src/observability/`:** 실제 Cloud capability/회수 프로필·namespace 소유권·공식 예산과 기간/버전·격리된 시험 대상/시간 창·최초 설치/감사 생성 증거를 인계한다. 같은 지속 볼륨과 writer 아래 journal/usage/retry/cleanup/audit를 검증한다. 실제 토큰 재입장 거절, 새 SID·동일 SID replaceTrack·한 명 전체 교체, 429/UNKNOWN/재부팅·disk 실패·예약 조정을 회귀하고 안전한 지표/결과만 남긴다. Cloud 자격만 있다는 이유로 예산 전제를 생략하지 않는다. 확인: F가 인계할 격리 Cloud/배포 시험 명령과 실제 결과·commit. 새 패키지/lockfile 변경 요청은 없다.
+
+공유 코드와 최종 시험·이 인계는 E-16 MR에 포함한다. `.local/`에는 개인 진행 기록과 복사용 작업별/합본 MR 본문을 두며 다른 팀원에게 이 디렉터리가 있다고 가정하지 않는다. 원격 제출과 병합은 사용자가 별도로 진행하고 실제 통합 인수는 각 선행 증거를 확인한 후 갱신한다.
 
 ## E-15 / OP-08 — live·ready와 공통 입장·발급 장벽
 
@@ -13,6 +118,8 @@
 - 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
 - blockedOn: B 실제 health/운영 라우트·제품 인증/입장/자동 시작·활동 집계 조립, F-05 지속 볼륨/단일 쓰기자와 공식 Cloud·예산·운영 입력 증거, E-16 전체 MediaCoordinator 조립과 D-17 세대 전환, 실제 Cloud/격리 배포 검증.
 - E-15의 독립 구현은 B/D의 전체 완료를 선행으로 요구하지 않는다. F-05의 실제 환경 인수가 없으므로 로컬 시험을 배포 완료로 계산하지 않는다. 이번에 E-16·푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다.
+
+- 이후 사용자 요청으로 `143f6ace773a2c8627e5c36b0810de97c9216f57`까지 푸시했고 사용자가 MR !37을 develop에 병합했다(`79e590392a84d929bb56f1dd00b253fb58767cab`, squash `cd791f483eb9d8ff1970e7fd1854e725917f2aea`). 제출한 E 코드·시험·인계와 병합 결과가 동일함을 확인했다. E-16 전체 factory와 새 소비 요청은 위 최신 인계를 우선하며 이 항목의 후속 대기는 당시 상태다.
 
 ### 공개 API와 연결 순서
 

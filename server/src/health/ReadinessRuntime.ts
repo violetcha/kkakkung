@@ -8,6 +8,7 @@ import {
 } from '../operations/OperationsBindings.js';
 import { OperationsController } from '../operations/OperationsController.js';
 import { ReadinessGate, type ReadinessGateOptions } from './Readiness.js';
+import { sameJournalGeneration } from './ReservationReadiness.js';
 
 export type ReadinessRuntimeOptions = Omit<
   ReadinessGateOptions,
@@ -56,6 +57,14 @@ export class ReadinessRuntime {
       nowEpochMs: options.nowEpochMs,
       getOfficialRevision: options.getOfficialRevision,
       refreshBudget: () => options.recovery.refreshBudget(),
+      isRetirementInFlight: (record) =>
+        (options.pendingRetirements?.() ?? []).some(
+          (g) =>
+            options.registry.all().includes(g) &&
+            g.serverEpoch === options.registry.serverEpoch &&
+            ['PREPARED', 'REVOKING', 'REVOKED'].includes(g.state) &&
+            sameJournalGeneration(record, g),
+        ),
     });
     this.operations = new OperationsController({
       nowEpochMs: options.nowEpochMs,
@@ -123,7 +132,8 @@ export class ReadinessRuntime {
 
   /** Reuses E-05; E-16 will supply real retirement/control callbacks and its transition queue. */
   createGrantIssuer(
-    callbacks: Pick<GrantIssuerDeps, 'retire' | 'onPrepared' | 'sign'>,
+    callbacks: Pick<GrantIssuerDeps, 'retire' | 'onPrepared' | 'sign'> &
+      Partial<Pick<GrantIssuerDeps, 'canIssue'>>,
   ): GrantIssuer {
     if (this.issuer) throw new Error('GRANT_ISSUER_ALREADY_BOUND');
     this.issuer = new GrantIssuer({
@@ -132,7 +142,7 @@ export class ReadinessRuntime {
       registry: this.options.registry,
       nowEpochMs: this.options.nowEpochMs,
       capability: this.options.capability,
-      canIssue: this.canIssue,
+      canIssue: (generation) => this.canIssue() && (callbacks.canIssue?.(generation) ?? true),
       lock: this.lock,
       reserve: async (generation) => {
         this.pending.add(generation);
