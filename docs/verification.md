@@ -71,3 +71,23 @@ Jenkins 실측(2026-09-09 04:43~04:46Z, 빌드 #10, 커밋 `3331e2a`): CI 이미
 GitLab 커밋 상태 게시: Jenkins 에 `gitlab-api-token`(GitLab API token 종류, 기존 gitlab-token 의 값을 Jenkins 내부에서 복사)과 connection `ssafy-gitlab` 을 init 스크립트로 등록했고 빌드 #10 의 `updateGitlabCommitStatus`(running·success) 가 오류 없이 실행됐다. MR !15 화면에서 아이콘 표시는 담당자 육안 확인 대기.
 
 남은 것: `EXPECTED_SOURCE_SHA` 는 GitLab 웹훅 빌드에서만 채워지므로 폴링 빌드에서는 대조를 생략했다(로그에 명시). 정식 잡 전환 후 웹훅 빌드에서 실측한다.
+
+## F-05 / DP-02 단일 서버 운영 컨테이너 (2026-09-09)
+
+Jira [S15P21C204-155](https://ssafy.atlassian.net/browse/S15P21C204-155). 운영 compose 는 `infra/compose.yaml`(기본) + `infra/compose.production.yaml`(override) 두 파일이며 web-proxy 와 game-server 두 서비스, 복제본 1개다. 시작 의존성은 `/health/live` 기준으로 바꿔 복구 중(ready 503)에도 프록시가 뜨고, 배포 승인은 Jenkins 가 `/health/ready` 로 따로 본다. 비밀값은 Jenkins Secret file 크리덴셜 → `/opt/kkakkung/production.env`(600) → `env_file` 로 game-server 에만 들어가고 이미지·compose 에는 이름만 있다. 이미지는 커밋 SHA 8자리 태그와 전체 SHA 라벨을 가진다.
+
+EC2 실측 (2026-09-09 05:0x Z, Jenkins 빌드 #13 이미지 `b6ecefde`, jenkins 계정으로 `scripts/container-smoke.mjs` 실행): 15개 검사 전부 PASS, 종료 코드 0, 실행 후 컨테이너 0개.
+
+| 검사                                                                                                        | 결과 |
+| ----------------------------------------------------------------------------------------------------------- | ---- |
+| compose 두 파일 병합, 서비스 = game-server·web-proxy                                                        | PASS |
+| game-server 호스트 포트 없음, 운영 저널 named volume, override 에 env_file, compose 파일에 비밀 리터럴 없음 | PASS |
+| 이미지 존재 `kkakkung-game:b6ecefde`·`kkakkung-web:b6ecefde`                                                | PASS |
+| 런타임 이미지 안에서 `@kkakkung/protocol`·`@kkakkung/game-core` import, `USER=node`                         | PASS |
+| game-server healthy(live), 프록시 경유 `/health/live` 200, `/health/ready` 200                              | PASS |
+| 허용 외 Origin → 403                                                                                        | PASS |
+| restart unless-stopped, json-file 10m 회전, `/var/lib/kkakkung` volume                                      | PASS |
+
+증거 `.local/qa/DP-02/container-smoke.json`(서버 `/var/lib/jenkins/kk-smoke/`)와 로컬 사본. 정적 계약은 `tests/contracts/container-layout.test.ts` 10개. 서버에 Node 24.19.0 을 `/usr/local` 에 설치했다(tarball SHA-256 대조). 로컬 PC 는 Docker daemon 이 없어 smoke 가 BLOCKED 로 끝나는 것을 확인했다.
+
+미완: production 프로파일 활성화와 READY/재시작 최종 시험은 B 초대 인증·E OP-08 통합 후(D2, F/E 공동). 단일 writer lock·두 번째 인스턴스 거절은 E OP-01 구현 후 smoke 에 추가. `/monitor`·`/playground`·`/api/dev-sessions` 는 호스트 nginx 차단 외에 B 의 서버측 보호 대기(F-REQ-01~03). A 의 content/config 가 생기면 `server/package.json` files 와 Dockerfile 복사 범위를 맞춘다.

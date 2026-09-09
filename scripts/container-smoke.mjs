@@ -9,7 +9,7 @@
 //   TAG=<sha8> node scripts/container-smoke.mjs --compose infra/compose.yaml --override infra/compose.production.yaml [--build] [--keep] [--evidence .local/qa/DP-02]
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -106,7 +106,11 @@ record('docker daemon', true, `server ${daemon.stdout.trim()}`);
 // 1. merged config validates and has exactly the two services
 const config = docker(['compose', ...files, 'config']);
 if (config.status !== 0) fail(`compose config 실패: ${config.stderr.trim().split('\n').pop()}`);
-const servicesBlock = config.stdout.split(/^volumes:/m)[0];
+// `config` 는 networks/volumes 절을 덧붙이고 env_file 을 environment 로 풀어 넣으므로
+// 서비스 목록은 services 절만 보고, env_file·비밀 리터럴은 compose 파일 원문으로 판정한다.
+const servicesBlock = config.stdout.split(/^(?:networks|volumes):/m)[0];
+const overrideText = readFileSync(resolve(root, opt.override), 'utf8');
+const baseText = readFileSync(resolve(root, opt.compose), 'utf8');
 const services = [...servicesBlock.matchAll(/^ {2}([a-z-]+):$/gm)].map((m) => m[1]);
 record(
   'services',
@@ -118,10 +122,10 @@ const gameBlock = servicesBlock
   .split(/^ {2}[a-z-]+:$/m)[0];
 record('game-server has no host ports', !/^\s{4}ports:/m.test(gameBlock));
 record('operations named volume', /^volumes:\n\s+operations:/m.test(config.stdout));
-record('env_file for secrets', /env_file/.test(config.stdout), 'compose.production.yaml env_file');
+record('env_file for secrets', /^\s+env_file:/m.test(overrideText), 'override env_file');
 record(
-  'no secret literals in compose',
-  !/(LIVEKIT_API_SECRET|OPS_TOKEN):\s*\S/.test(config.stdout),
+  'no secret literals in compose files',
+  !/(LIVEKIT_API_SECRET|LIVEKIT_API_KEY|OPS_TOKEN):\s*\S/.test(overrideText + baseText),
 );
 
 // 2. images: build if asked, otherwise require them
