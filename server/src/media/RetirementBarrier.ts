@@ -1,5 +1,6 @@
 import type { CapabilityReport } from './CloudCapabilityProbe.js';
 import type { Generation } from './MediaGenerationRegistry.js';
+import { confirmRemoteRevocation } from './RemoteRevocation.js';
 import type { RetireGenerationRequest, RetirementResult } from './types.js';
 
 export type RetirementBarrierDeps = {
@@ -99,33 +100,12 @@ export class RetirementBarrier {
       d.stopPermissions(generation);
       generation.state = 'REVOKING';
       await d.persist(generation);
-      const profile = d.capability();
-      if (
-        profile?.status !== 'SUPPORTED' ||
-        !profile.revocationProfile ||
-        !profile.revocationVerified
-      )
-        throw new Error('CAPABILITY_UNVERIFIED');
-      const now = d.nowEpochSeconds();
-      const revoke = profile.revocationProfile;
-      if (
-        !Number.isFinite(now) ||
-        now <= 0 ||
-        !Number.isSafeInteger(Math.floor(now)) ||
-        !Number.isSafeInteger(revoke.bufferSeconds) ||
-        revoke.bufferSeconds < 0 ||
-        !Number.isFinite(revoke.maxObservedClockOffsetMs) ||
-        revoke.maxObservedClockOffsetMs < 0 ||
-        revoke.bufferSeconds * 1000 + revoke.maxObservedClockOffsetMs >= 60_000
-      )
-        throw new Error('INVALID_CLOCK');
-      const cutoff =
-        revoke.mode === 'explicit-cutoff'
-          ? BigInt(Math.floor(now) + revoke.bufferSeconds)
-          : undefined;
-      await d.remove(generation, cutoff);
-      // A 404, room absence or expiration cannot replace the acknowledged revocation call.
-      if (!(await d.absent(generation))) throw new Error('PARTICIPANT_REMAINS');
+      await confirmRemoteRevocation({
+        capability: () => d.capability(),
+        nowEpochSeconds: () => d.nowEpochSeconds(),
+        remove: (cutoff) => d.remove(generation, cutoff),
+        absent: () => d.absent(generation),
+      });
       generation.state = 'REVOKED';
       await d.persist(generation);
       await d.onConfirmed(generation);

@@ -2,7 +2,62 @@
 
 수정자: **E** · 2026-09-09 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-12 로컬 검증 인계**다. E-11 MR !16의 develop 병합을 확인했고 이번 기준 SHA는 `e1b93937328e6ef1650abbb9b89be80df0f4e294`이다. E-01~E-11은 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 **E-13 로컬 검증 인계**다. E-12 MR !20의 develop 병합을 확인했고 이번 기준 SHA는 `fdd47548e82df2ad9fc4341bdb8119c62e0bd228`이다. E-01~E-12는 병합 이력이며 아래 이전 항목은 당시 검증·인계를 보존한다. 병합과 최종 기능 인수는 구분한다.
+
+## E-13 / OP-06 — 이전 세대·잔존 방 대조와 회수
+
+- Jira: [S15P21C204-147](https://ssafy.atlassian.net/browse/S15P21C204-147).
+- localStage: **LOCAL_VERIFIED**. 최종 인수: **BLOCKED**.
+- 구현 commit: `740025ff722380a583ab20bd102ed0db323696f0`.
+- 제출 브랜치: `feat/S15P21C204-147-boot-cleanup` → `develop`. 기준은 E-12 MR !20 병합 후 `fdd47548e82df2ad9fc4341bdb8119c62e0bd228`이다. 예전 누적 브랜치 `feat/S15P21C204-147-previous-generation-cleanup`은 제출 대상이 아니다.
+- 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
+- blockedOn: F-01 실제 namespace/Cloud 프로젝트 소유권·공식 예산·검증된 회수 프로필, 실제 Cloud/배포 볼륨 회귀, E-14~E-15 전체 coordinator 조립과 B의 실제 서버 연결.
+- 이번 실행에서는 E-13만 구현했고 푸시·MR 생성·원격 병합·Jira 변경은 하지 않았다. 사용자가 이 스토리를 develop에 병합한 뒤 E-14를 새 develop 브랜치에서 진행한다.
+
+### 공개 진입점과 실제 연결
+
+`server/src/operations/PreviousGenerationCleanup.ts`는 `PreviousGenerationCleanup`, `ownsMediaRoom`, `CleanupRunInput`, `CleanupTarget`, `CleanupObservedTarget`, `CleanupCallContext`를 제공한다. `CleanupInput/CleanupReport`는 E-12 `RecoveryState.ts` 원본을 재사용한다. `run(input)`은 저널·Cloud 목록·영속 observedTargets의 합집합을 정리한다. 동시 실행은 CLEANUP_IN_PROGRESS로 거절하고 완료 뒤 명시적으로 재실행할 수 있다.
+
+- namespace와 UUIDv4 형식, 기록 epoch 일치, 체크섬·순번·세대 불변 정보를 확인한다. 현재 serverEpoch, 타 서비스, 모호한 자기 prefix 방에는 참가자 조회·회수·삭제를 보내지 않는다.
+- 목록에 없는 PREPARED/미입장 Identity도 회수 대상이다. 모든 기록 방을 포함해 참가자 조회 → 확인 가능한 Identity 회수 → 방 삭제 → 전역 목록과 각 방 참가자 재조회 → 체크포인트 순서를 따른다.
+- 최종 조회에서 새 소유 방이나 모호한 이름이 나타나도 성공으로 간주하지 않는다. unknown Identity를 정리한 사실은 발급 이력을 복구한 증거가 아니다.
+- callback의 `CleanupCallContext`를 실제 Gateway dispatch까지 전달하고 비동기 응답 후 guard를 다시 확인한다. 취소 후 삭제·저장으로 계속 진행하지 않는다.
+
+`server/src/operations/RecoveryCleanupBindings.ts`의 `RecoveryCleanupBindings`는 위 알고리즘을 **실제 E Gateway·E-11 RevocationRetries·journal·사용량·체크포인트**에 연결한다. 공개 옵션은 같은 파일의 `RecoveryCleanupBindingsOptions`이고 저장 스키마는 `CleanupCheckpointState`, `validateCleanupCheckpoint`다.
+
+1. F가 확인한 namespace/projectAlias, `namespaceOwnershipConfirmed()`, 검증된 `capability()`, 기존 `journal`, `usageBudget`, **같은 Gateway/API 예산**, epoch/monotonic 시계, 기존 retryCheckpoint와 새 cleanupCheckpoint를 주입한다. cleanupCheckpoint는 `OPS_DATA_DIR/cleanup-checkpoint.json`, validator는 `validateCleanupCheckpoint`, isWritable은 같은 journal.writable로 연결한다. 별도 Cloud SDK나 API 예산을 만들지 않는다.
+2. E coordinator의 부팅 조립에서 `beginCleanup: input => cleanup.run(input)`, `closeCleanup: () => cleanup.close()`, `allowIncompleteHistoryCleanup: true`로 `createRecoveryBootstrap`에 연결한다. 이 opt-in은 E-13의 소유권·영속 기록 보호 어댑터에만 사용한다. 기본 E-12 동작은 유지하며 integrity/scope/retry/clock 오류가 있으면 여전히 정리를 시작하지 않는다.
+3. 누락 이력의 정리를 허용해도 input/report의 historyComplete는 false로 고정하고 LOCKED/DRAINING을 유지한다. 최초 설치 외부 증거와 공식 예산을 임의로 만들지 않는다.
+4. 모든 조회·회수·삭제는 cleanup 우선순위, 요청별 1초 deadline, signal과 실제 발송 guard를 사용한다. 소유권 증거/프로필/저장 가능성이 바뀌면 발송하지 않는다. 정상 API가 잠겨도 남은 cleanup 예산 안에서 정리하며 총한도는 우회하지 않는다.
+5. 알려진 저널 Identity는 회수 전 미확인 intent와 journal을 내구 저장하고, ACK → 참가자 부재 확인 → REVOKED 내구 기록 순으로 진행한다. 응답 불명으로 끝나면 E-11의 1/2/4초·10초 창과 429 대기 규칙을 재사용한다. 최초 요청 도중 재부팅한 intent는 공급자 대기 불명으로 보존해 즉시 재전송하지 않는다.
+6. `retries`는 기존 E-11 엔진이다. 재시도 성공 후에는 자동으로 방 삭제·최종 조회를 다시 수행한다. `reconcile()`는 이 부팅 정리의 명시적 재대조이며 살아 있는 현재 epoch 방의 주기적 청소 명령이 아니다. `snapshot()`은 마지막 pass의 CleanupReport만 반환한다.
+7. `onReport(report)`는 `bootstrap.state.completeCleanup(report)`와 `bootstrap.refreshBudget()`에 연결한다. **onUnresolved는 경보 코드 통지**다. 일시적인 RECOVERY_UNCONFIRMED/RETIREMENT_UNRESOLVED를 RecoveryState.lock의 영구 reason으로 추가하지 않는다. 현재 보고의 unresolved가 준비 잠금을 유지하며 재대조 성공 후 해제될 수 있다. JOURNAL_WRITE_FAILED는 영구 저장 실패 잠금으로 전달한다. historyComplete=false는 이후 빈 목록으로 해제하지 않는다.
+8. 전체 대조가 확인된 후 같은 예약의 모든 저널 세대가 REVOKED이면 사용량을 AWAITING_OFFICIAL까지 반영한다. REVOKED 저장 직후 중단된 경우도 다음 sweep에서 이어 간다. 공식 조정 전에는 예약/잔량을 해제하지 않는다.
+9. 종료는 위 closeCleanup hook을 반드시 포함한다. 원격 응답 대기를 취소하고 늦은 결과를 무시하되 접수된 journal/retry/cleanup 저장은 모두 기다린다. 새 cleanup 체크포인트의 rename도 끝난 뒤에야 E-12가 writer 잠금을 해제한다. Gateway/API 예산의 최종 close는 같은 소유자가 이어서 수행한다.
+
+### 이력 불명·회수 확인의 경계
+
+저널 밖 참가자와 REVOKED 뒤 다시 관측된 Identity는 회수 **전에** cleanup 체크포인트의 observedTargets에 저장한다. 다음 재부팅에서 Cloud 목록에 없더라도 다시 대조한다. 기존 terminal 저널을 UNRESOLVED로 뒤집거나 없는 playerId/purpose/예약을 만들어 `Generation`으로 복원하지 않는다. 발급 이력/예약이 없는 관측 대상에는 가짜 RetryIntent를 만들지 않고 현재 회수 결과와 고정 경보를 보존하며 후속 명시적 대조·운영자 확인을 기다린다.
+
+`server/src/media/RemoteRevocation.ts`의 `confirmRemoteRevocation`을 E-10 RetirementBarrier와 E-13이 함께 사용한다. remove ACK와 참가자 부재를 모두 요구한다. **RemoveParticipant의 404는 성공이 아니다.** 조회의 typed not_found/404는 현재 참가자 부재로만 해석하고, 이미 없는 방의 DeleteRoom 404도 최종 재조회를 생략하는 근거가 되지 않는다. GatewayError의 429/Retry-After 정보는 원본대로 재시도에 전달한다.
+
+전체 `createMediaCoordinator(deps)` 런타임 factory와 E-14 운영 명령·E-15 제품 readiness는 아직 후속 스토리다. 이번 연결 시험은 E-12/E-13 실제 로컬 모듈 연결이며 B의 HTTP 서버·Cloud 실환경 조립 완료가 아니다. 복구 구성 요소가 READY여도 admission은 DRAINING이며 제품 전체 READY와 명시적 resume 전까지 발급/입장을 허용하면 안 된다.
+
+### 실제 검증과 남은 조건
+
+Node 24.19.0 / pnpm 11.19.0에서 `pnpm verify` 전체 통과: 40개 시험 파일 **465개 시험**, E-13 신규 **126개**(정리 알고리즘 45·공유 회수 27·실제 로컬 연결 24·체크포인트 18·복구 수명 12), 기존 Room 브라우저 E2E **2개**. 포맷·실행 계약·lint/경계·workspace 타입·빌드가 통과했다. 신규 5개 시험 파일의 별도 strict NodeNext 타입 검사도 통과했다.
+
+검증 로그는 작업 폴더 `.local/execution/E-13-verify.log`에 보존한다. 기존 node_modules를 재사용했고 manifest/lockfile 변경은 없다. 기존 web 청크 크기·THREE.Clock·색상 환경 경고가 있었으며 전체 검사는 종료 코드 0이다.
+
+모든 Cloud 응답·공식 잔량·소유권 증거는 명시한 로컬 fixture이고 실제 Cloud 호출은 **0회**다. 실제 SDK/Cloud의 옛 토큰 재접속 거절, 잔존 방·미입장 토큰 회수, Linux 배포 볼륨 장애와 연습→경기→종료→재경기 검증은 미실행이다. 이 결과를 Cloud 성공이나 최종 ACCEPTED로 표시하지 않는다.
+
+### 다른 소유자에게 요청
+
+- **E13-B-01 / B:** 대상 `server/src/bootstrap.ts`, `server/src/rooms/`. 후속 전체 E factory의 initialize → initialized이면 listen/fatal이면 close 계약과 같은 readiness/admission을 연결한다. E 비동기 콜백의 게임 상태 반영은 `enqueueControl`로 처리한다. B 인계 SHA, 부팅 중 grant 0·복구/종료 후 재개 순서의 실제 HTTP 시험 및 `pnpm verify`를 제공한다.
+- **E13-F-01 / F:** 대상 `server/src/config/`, `infra/`, `tests/`, `server/src/observability/`. 실제 Cloud 프로젝트와 namespace의 소유권 증거, 공식 minutes/bytes 예산·시점/기간/버전, 회수 프로필과 격리된 시험 범위를 인계한다. `cleanup-checkpoint.json`을 journal·retry·usage와 같은 지속 볼륨/단일 writer 아래 두고 Linux sync/rename·재부팅 회귀를 실행한다. QA-05에는 PREPARED 미입장, unknown 소유 방, 타 서비스 보존, remove 성공 뒤 재조회 실패, 429와 늦은 응답을 포함한다. 고정 경보/요약만 공개하고 원시 Identity·Secret은 로그에 넣지 않는다. 새 패키지나 버전 변경 요청은 없다.
+- **E-14~E-15:** E-13의 미해결 경보·report, E-11 `retries`, E-12 closeCleanup 수명 연결을 실제 운영/전체 readiness 조립에서 사용한다. 운영자가 공급자 대기를 확인하지 않은 429와 이력 유실 잠금은 resume으로 우회하지 않는다.
+
+공유 API·시험·이 인계는 MR에 포함한다. 개인 진행 기록과 작업별·이번 실행분 MR 본문만 `.local/`에 보존한다.
 
 ## E-12 / OP-05 — 부팅 복구 상태와 기록 검사
 
@@ -12,7 +67,7 @@
 - 제출 브랜치: `feat/S15P21C204-146-boot-recovery` → `develop`. 기준 SHA는 `e1b93937328e6ef1650abbb9b89be80df0f4e294`이며 E-11 병합 후 새로 분기한 E-12 단일 스토리다.
 - 계약 기준: EXEC-CONTRACT-3 / D-2026-09-08-01.
 - blockedOn: 전체 `createMediaCoordinator(deps)`의 E-13~E-15 조립, B의 실제 HTTP 초기화/발급 장벽 연결, E-13 실제 잔존 세대 정리, F-01 공식 예산·최초 설치 증빙·격리 Cloud 환경 및 배포 볼륨 검증.
-- 이번 실행의 푸시·MR 생성·원격 병합·Jira 변경은 없다. 사용자가 이 스토리를 develop에 병합한 뒤 최신 develop에서 E-13을 시작한다.
+- 이후 사용자 요청으로 `177b3d0e85f758a675f834253d6b5dc6c09bf65c`까지 푸시했고, 사용자가 MR !20을 develop에 병합했다(`fdd47548e82df2ad9fc4341bdb8119c62e0bd228`). squash 병합이지만 제출한 E 코드·시험·인계 파일과 병합 결과가 동일함을 확인했다. Jira 완료 상태는 별도다.
 
 ### 공개 진입점과 B 초기화 연결
 

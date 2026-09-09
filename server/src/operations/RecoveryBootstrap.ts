@@ -31,6 +31,10 @@ export type RecoveryBootstrapOptions = Readonly<{
   monotonicNow: () => number;
   officialBudgetMaxAgeMs: number;
   beginCleanup?: (input: RecoveryCleanupInput) => Promise<CleanupReport>;
+  /** Stop accepting cleanup writes synchronously, then drain its local checkpoint queue. */
+  closeCleanup?: () => Promise<void>;
+  /** Only the E-13 adapter may clean observed resources while missing history stays locked. */
+  allowIncompleteHistoryCleanup?: boolean;
   /** External provisioning evidence, never inferred from missing files or an empty Cloud list. */
   firstInstallationConfirmed?: () => Promise<boolean>;
 }>;
@@ -151,22 +155,16 @@ export class RecoveryBootstrap {
   private async recover(journal: JournalRestore): Promise<CleanupReport | null> {
     if (this.closed) return null;
     const snapshot = this.state.snapshot();
-    if (
-      !this.records ||
-      this.records.reasonCodes.length > 0 ||
-      !snapshot.historyComplete ||
-      !snapshot.singleWriter ||
-      !snapshot.writable
-    )
-      return null;
+    if (!this.records || !this.canCleanUp()) return null;
     if (!this.options.beginCleanup) {
       this.state.lock('CLEANUP_NOT_CONFIGURED');
       return null;
     }
     try {
-      const report = await this.options.beginCleanup({
+      const historyComplete = snapshot.historyComplete && this.records.reasonCodes.length === 0;
+      const cleanupReport = await this.options.beginCleanup({
         records: structuredClone(this.records.records),
-        historyComplete: snapshot.historyComplete,
+        historyComplete,
         singleWriter: snapshot.singleWriter,
         serverEpoch: this.serverEpoch,
         lastSeq: journal.lastSeq,
@@ -175,15 +173,13 @@ export class RecoveryBootstrap {
         retryDeadlines: structuredClone(this.records.retryDeadlines),
         reservations: this.options.usageBudget.snapshot().reservations,
         signal: this.abort.signal,
-        beforeDispatch: () =>
-          !this.closed &&
-          !this.abort.signal.aborted &&
-          this.options.journal.writable &&
-          this.options.retryCheckpoint.writable &&
-          this.state.snapshot().historyComplete &&
-          this.state.snapshot().singleWriter,
+        beforeDispatch: () => this.canCleanUp(),
       });
       if (this.closed) return null;
+      const report = {
+        ...cleanupReport,
+        historyComplete: historyComplete && cleanupReport.historyComplete,
+      };
       this.state.completeCleanup(report);
       this.refreshBudget();
       return structuredClone(report);
@@ -191,6 +187,33 @@ export class RecoveryBootstrap {
       if (!this.closed) this.state.lock('CLEANUP_FAILED');
       return null;
     }
+  }
+
+  private canCleanUp(): boolean {
+    if (this.closed || this.abort.signal.aborted || !this.records) return false;
+    const snapshot = this.state.snapshot();
+    const usage = this.options.usageBudget.snapshot();
+    if (
+      !snapshot.singleWriter ||
+      !snapshot.writable ||
+      !['ok', 'missing'].includes(snapshot.integrity) ||
+      !['ok', 'missing'].includes(usage.integrity) ||
+      !this.options.journal.writable ||
+      !usage.writable ||
+      !this.options.retryCheckpoint.writable
+    )
+      return false;
+    if (this.records.reasonCodes.length === 0 && snapshot.historyComplete) return true;
+    return (
+      this.options.allowIncompleteHistoryCleanup === true &&
+      this.records.reasonCodes.every((reason) =>
+        [
+          'JOURNAL_HISTORY_MISSING',
+          'USAGE_HISTORY_MISSING',
+          'RESERVATION_HISTORY_MISMATCH',
+        ].includes(reason),
+      )
+    );
   }
 
   private fatal(code: 'WRITER_CONFLICT' | 'INITIALIZATION_FAILED'): MediaInitializationResult {
@@ -237,11 +260,19 @@ export class RecoveryBootstrap {
   private async closeOnce(): Promise<void> {
     // Close admission to both checkpoint queues before yielding. Keep the writer lease until
     // every already-started local write has drained, including usage fsync/rename operations.
+    const startClosing = (close: () => void | Promise<void>): Promise<void> => {
+      try {
+        return Promise.resolve(close());
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    };
     const checkpointClosing = Promise.allSettled([
-      this.options.usageBudget.close(),
-      this.options.retryCheckpoint.close(),
+      startClosing(() => this.options.closeCleanup?.()),
+      startClosing(() => this.options.usageBudget.close()),
+      startClosing(() => this.options.retryCheckpoint.close()),
+      this.initialization ?? Promise.resolve(),
     ]);
-    await this.initialization;
     // Cleanup callbacks must observe signal/beforeDispatch; a stuck network reply cannot hold shutdown.
     const results = await checkpointClosing;
     await this.options.journal.close();
