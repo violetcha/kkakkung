@@ -98,3 +98,15 @@ Jenkinsfile 은 `GIT_BRANCH`(단일 잡) 또는 `BRANCH_NAME`(Multibranch) 을 �
 
 - 빌드가 컨트롤러(built-in node)에서 돕니다. 서버 한 대라 에이전트 분리 실익이 적어 안 나눕니다. 서버가 늘면 노드 추가 + `agent { label }`.
 - e2e(Playwright) 는 CI 에서 아직 안 돌립니다. 브라우저 이미지(`mcr.microsoft.com/playwright`) 를 붙이면 추가 가능.
+
+## 8. GitLab SSO 게이트 (2026-09-09 적용)
+
+```bash
+sudo install -d /opt/kkakkung/sso && sudo cp infra/compose.sso.yaml /opt/kkakkung/sso/
+sudo cp infra/sso.env.example /opt/kkakkung/sso.env && sudo chmod 600 /opt/kkakkung/sso.env   # CLIENT_ID·CLIENT_SECRET 은 담당자가 nano 로, COOKIE_SECRET 은 openssl rand -hex 16
+sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml up -d
+sudo docker logs kkakkung-sso | tail -3    # "OAuthProxy configured for GitLab" 확인
+sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung && sudo nginx -t && sudo systemctl reload nginx
+```
+
+oauth2-proxy 가 먼저 떠 있어야 nginx 의 `auth_request` 가 502 를 내지 않습니다. 쿠키 시크릿은 32자 hex(표준 base64 44자는 거절). GitLab OAuth 앱: 프로필 → Preferences → Applications, Confidential, Redirect `https://j15c204.p.ssafy.io/oauth2/callback`, scopes openid profile email read_api.

@@ -6,7 +6,8 @@
 - `compose.production.yaml` — **EC2 운영 override.** 위에 덧씌워 이미지 태그·운영 env·재시작·로그 회전만 바꿉니다. 단독 실행 안 함.
 - `docker/` — 이미지 정의. 개발과 배포가 같은 Dockerfile 을 씁니다.
 - `nginx/default.conf` — web-proxy **컨테이너 안** nginx. 정적파일(캐시 헤더) + API + WebSocket 라우팅, X-Forwarded-* 전달.
-- `nginx/host.conf` — **EC2 호스트** nginx. TLS 종단, `/jenkins`, 나머지는 컨테이너로.
+- `nginx/host.conf` — **EC2 호스트** nginx. TLS 종단, `/jenkins`, GitLab SSO 게이트(`auth_request`), 나머지는 컨테이너로.
+- `compose.sso.yaml` — **GitLab SSO 게이트**(oauth2-proxy). 앱 배포와 별개 프로젝트. 비밀은 `/opt/kkakkung/sso.env` (토대 `sso.env.example`).
 - `jenkins/SETUP.md` — Jenkins 설치·잡 생성 순서.
 
 ## 배포가 의존하는 것
@@ -33,14 +34,20 @@ LiveKit 키(`LIVEKIT_*`)는 서버 스키마가 아직 읽지 않아 compose 에
 
 ```
 인터넷 :443 ─ 호스트 nginx (TLS) ─┬─ /jenkins            → 127.0.0.1:18080 Jenkins
+                                   ├─ /oauth2/*           → 127.0.0.1:4180 oauth2-proxy (GitLab SSO)
+                                   ├─ /health/*           → 127.0.0.1:8080 (SSO 없이, 배포 확인용)
                                    ├─ /monitor,/playground → 404
-                                   └─ /                   → 127.0.0.1:8080 web-proxy 컨테이너
+                                   └─ /  (auth_request 로 SSO 통과한 요청만) → 127.0.0.1:8080 web-proxy 컨테이너
                                                                  ├─ 정적파일
                                                                  └─ /api, /matchmake, WS → game-server:2567 (내부 네트워크)
 ```
 
 `game-server` 는 호스트 포트를 열지 않습니다. `web-proxy` 는 127.0.0.1 에만 묶습니다.
 클라우드 방화벽이 1024~65535 를 열어둬서, `0.0.0.0` 으로 띄우면 UFW 와 무관하게 노출됩니다.
+
+## 접근 제어 (GitLab SSO)
+
+서비스 주소는 인터넷에 열려 있지만 `/`·`/api`·WebSocket 은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 만 통과한다. 로그인 안 된 요청은 `/oauth2/start` → GitLab 인가 → 돌아와 쿠키(`_oauth2_proxy`, 7일) 를 받는다. `/health/*` 와 `/jenkins` 는 SSO 밖이다. 심사·시연 때 외부인이 접속해야 하면 그 사람을 프로젝트에 Reporter 로 초대하거나, `host.conf` 의 `auth_request` 두 줄을 주석 처리하고 reload 한다. GitLab OAuth 앱은 정호성 계정의 `kkakkung-sso`(redirect `/oauth2/callback`, scopes openid profile email read_api).
 
 ## 파이프라인
 
