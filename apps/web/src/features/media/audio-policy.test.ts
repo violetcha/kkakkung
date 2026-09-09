@@ -265,3 +265,50 @@ describe('createPolicyStore', () => {
     });
   });
 });
+
+describe('세대 교체와 policyRevision 바닥', () => {
+  // 서버 AudioProjection은 (matchId, mediaInstanceId, playerId, receiverGeneration)마다
+  // policyRevision을 1부터 다시 센다. 세대가 바뀌면 새 정책의 revision이 이전 세대보다 낮다.
+  const gen2Scope = { ...scope, receiverGeneration: 2 };
+
+  it('새 세대의 policyRevision 1을 구 세대 revision 때문에 버리지 않는다', () => {
+    const store = createBindingStore();
+    const policies = createPolicyStore(store);
+    store.apply(bindings(), SELF);
+    expect(policies.apply(policy({ policyRevision: 7 })).status).toBe('applied');
+
+    // 회수 없이 서버가 새 수신자 세대의 바인딩을 밀어 넣는다.
+    store.apply(bindings({ ...gen2Scope, bindingRevision: 4 }), SELF);
+    const next = policies.apply(policy({ ...gen2Scope, policyRevision: 1, bindingRevision: 4 }));
+
+    expect(next.status).toBe('applied');
+    // 새 세대에서도 근거리 음성이 살아 있어야 한다.
+    expect(policies.resolveVoices().map((voice) => voice.trackSid)).toEqual(['TR_audio_2']);
+  });
+
+  it('같은 세대 안에서는 같거나 낮은 policyRevision을 그대로 버린다', () => {
+    const store = createBindingStore();
+    const policies = createPolicyStore(store);
+    store.apply(bindings(), SELF);
+    policies.apply(policy({ policyRevision: 7 }));
+
+    expect(policies.apply(policy({ policyRevision: 7 }))).toMatchObject({ reason: 'STALE_POLICY' });
+    expect(policies.apply(policy({ policyRevision: 3 }))).toMatchObject({ reason: 'STALE_POLICY' });
+  });
+
+  it('늦게 도착한 구 세대 정책이 현재 세대의 적용본을 무효로 만들지 않는다', () => {
+    const store = createBindingStore();
+    const policies = createPolicyStore(store);
+    store.apply(bindings({ ...gen2Scope, bindingRevision: 4 }), SELF);
+    const current = policy({ ...gen2Scope, policyRevision: 2, bindingRevision: 4 });
+    expect(policies.apply(current).status).toBe('applied');
+
+    // 구 세대의 높은 revision이 뒤늦게 도착한다.
+    expect(policies.apply(policy({ policyRevision: 99 }))).toMatchObject({
+      reason: 'WRONG_SCOPE',
+    });
+
+    expect(policies.getPolicy()).toEqual(current);
+    expect(policies.resolveVoices()).toHaveLength(1);
+  });
+});

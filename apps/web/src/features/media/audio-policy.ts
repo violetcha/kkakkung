@@ -116,10 +116,28 @@ export function createPolicyStore(
     });
   };
 
+  /** policyRevision은 receiverGeneration 안에서만 의미가 있다. 서버는 세대마다 1부터 다시 센다. */
+  const sameGeneration = (left: AudioPolicy, right: AudioPolicy): boolean =>
+    isSameScope(
+      {
+        matchId: left.matchId,
+        mediaInstanceId: left.mediaInstanceId,
+        receiverGeneration: left.receiverGeneration,
+      },
+      {
+        matchId: right.matchId,
+        mediaInstanceId: right.mediaInstanceId,
+        receiverGeneration: right.receiverGeneration,
+      },
+    );
+
   const consider = (policy: AudioPolicy, nowMs: number): PolicyApplyResult => {
     if (!isPolicyShape(policy)) return { status: 'ignored', reason: 'MALFORMED' };
-    // 같거나 낮은 policyRevision은 중복/과거다.
-    if (applied && policy.policyRevision <= applied.policyRevision)
+    // 다른 세대의 적용본은 revision 바닥이 되지 않는다. 여기서 applied를 지우지는 않는다.
+    // 늦게 도착한 구 세대 정책이 현재 세대의 적용본을 무효로 만들면 안 되기 때문이다.
+    const previous = applied && sameGeneration(applied, policy) ? applied : null;
+    // 같은 세대에서 같거나 낮은 policyRevision은 중복·과거다.
+    if (previous && policy.policyRevision <= previous.policyRevision)
       return { status: 'ignored', reason: 'STALE_POLICY' };
     if (!scopeMatches(policy)) {
       // 바인딩이 아직 없으면 최신 1개만 보류한다. scope가 달라도 여기서 판단할 수 없다.
