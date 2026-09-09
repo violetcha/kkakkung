@@ -22,7 +22,7 @@ const servicesOf = (yaml: string) => yaml.split(/^volumes:/m)[0]!;
 
 describe('compose base + production override', () => {
   it('keeps exactly two services and one replica each', () => {
-    expect(servicesOf(base).match(/^  [a-z-]+:$/gm)).toEqual(['  web-proxy:', '  game-server:']);
+    expect(servicesOf(base).match(/^ {2}[a-z-]+:$/gm)).toEqual(['  web-proxy:', '  game-server:']);
     expect(prod).not.toMatch(/replicas:\s*[2-9]/);
     expect(base).not.toMatch(/replicas:/);
   });

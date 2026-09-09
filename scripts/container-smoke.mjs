@@ -107,7 +107,7 @@ record('docker daemon', true, `server ${daemon.stdout.trim()}`);
 const config = docker(['compose', ...files, 'config']);
 if (config.status !== 0) fail(`compose config 실패: ${config.stderr.trim().split('\n').pop()}`);
 const servicesBlock = config.stdout.split(/^volumes:/m)[0];
-const services = [...servicesBlock.matchAll(/^  ([a-z-]+):$/gm)].map((m) => m[1]);
+const services = [...servicesBlock.matchAll(/^ {2}([a-z-]+):$/gm)].map((m) => m[1]);
 record(
   'services',
   services.slice().sort().join(',') === 'game-server,web-proxy',
@@ -115,7 +115,7 @@ record(
 );
 const gameBlock = servicesBlock
   .slice(servicesBlock.indexOf('  game-server:'))
-  .split(/^  [a-z-]+:$/m)[0];
+  .split(/^ {2}[a-z-]+:$/m)[0];
 record('game-server has no host ports', !/^\s{4}ports:/m.test(gameBlock));
 record('operations named volume', /^volumes:\n\s+operations:/m.test(config.stdout));
 record('env_file for secrets', /env_file/.test(config.stdout), 'compose.production.yaml env_file');
