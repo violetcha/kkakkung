@@ -7,3 +7,5 @@ test-results
 .local
 # Preserve the supplied planning document without reformatting.
 docs/spec/*.html
+# MediaPipe 모델·WASM 글루 자산 (D 소유 벤더 산출물, REQ-D-01)
+apps/web/public/models/
