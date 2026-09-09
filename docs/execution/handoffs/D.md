@@ -194,10 +194,13 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   `pnpm format:check`가 3건으로 실패한다. **D 소유 소스의 오류는 0건이다.**
 - 연결 작업: D-02 / IN-02, F QA 공통 검증.
 - 완료 확인 명령: `pnpm lint`, `pnpm format:check`가 각각 통과.
-- **2026-09-09 재확인**: `develop`·`ci/S15P21C204-41-jenkins-pipeline`·`feat/S15P21C204-48-master-map-template`·
-  `feat/S15P21C204-145-revocation-retry` 어디에도 아직 반영되지 않았다. 이 요청이 반영되기 전에
-  D의 MR을 `develop`에 병합하면 `develop`의 `pnpm verify`가 첫 단계에서 실패한다. 따라서 D의 MR은
-  **Draft로 열고 REQ-D-01 반영 뒤 병합**한다.
+- **2026-09-09 15:03 `457ed45` 재확인**: 아직 반영되지 않았다. `.prettierignore`와
+  `eslint.config.mjs`의 무시 목록 어디에도 `apps/web/public/models/**`가 없다.
+- **이제 CI가 이 실패를 게시한다.** F가 같은 날 `90831cf`로 Jenkins를 `develop`에 병합했다.
+  `Jenkinsfile`이 MR 사건에서 `scripts/ci-verify.mjs` → `pnpm verify`를 돌리고 GitLab에 커밋
+  상태를 게시한다. `pnpm verify`의 첫 단계가 `format:check`이므로 D의 MR은 **파이프라인 실패로
+  표시된다.** `develop`에는 `apps/web/public/models/`가 없어 이 실패의 원인은 D의 MR뿐이다.
+- 따라서 D의 MR은 **Draft로 열고 REQ-D-01 반영 뒤 병합**한다.
 
 ### REQ-D-02 · F · main tsconfig에서 Worker 제외와 별도 검사
 
@@ -206,6 +209,16 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   공통 검사에 넣는다. D 소유 `apps/web/tsconfig.worker.json`은 이미 통과한다.
 - 이유: Worker 전용 lib(WebWorker)와 main lib(DOM)을 분리해 검사한다.
 - 완료 확인 명령: `pnpm typecheck`와 `pnpm exec tsc -p apps/web/tsconfig.worker.json --noEmit`이 모두 통과.
+- **2026-09-09 `457ed45` 기준 절반 반영.** F가 `apps/web/tsconfig.json`의 `exclude`에
+  `src/**/*.worker.ts`를 넣었다. 그러나 `tsconfig.worker.json`을 실행하는 곳은 `develop`
+  어디에도 없다(`pnpm verify`·`scripts/ci-verify.mjs`·`apps/web` typecheck 모두 없음).
+- **그래서 D의 MR이 병합되는 순간 `vision.worker.ts`는 어떤 검사도 받지 않게 된다.** 지금은
+  `develop`에 해당 파일이 없어 빈틈이 드러나지 않을 뿐이다. D 브랜치에서는 아직 main tsconfig가
+  worker를 검사하고 있어 통과한다.
+- F 문서(`docs/verification.md`, `f-infra-qa.md`)는 "D의 `tsconfig.worker.json` 도착 후
+  typecheck 추가"로 적어 두었고 `handoffs/F.md`의 blockedOn에도 같은 항목이 있다. 즉 이
+  나머지 절반은 **D의 MR 병합이 선행**이다. 반대로 REQ-D-01은 D의 MR과 무관하게 지금
+  반영할 수 있다. 두 요청의 순서를 섞지 않는다.
 
 ### REQ-D-03 · F · 모델·WASM의 정적 MIME과 Worker CSP
 
@@ -241,10 +254,17 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   - 값 생성 경로도 맞는다. `AudioProjection.project`는 voice의 `trackSid`를 그 playerId 바인딩의
     `audioTrackSid`로 채우고 `audioTrackSid`가 없는 voice는 아예 빼며, `receiverGeneration`을
     바인딩에서 가져온다. D `resolveVoices`의 조인 조건과 정확히 같다.
-  - **다만 이 값을 플레이어에게 보내는 코드가 없다.** `enqueueBindings`·`enqueueAudioPolicy`는
-    `types.ts` 선언에만 있고 호출자가 0곳이다. `MediaCoordinator` 구현체도 `types.ts` 밖에
-    없으며 `server/src/bootstrap.ts`는 `mediaEnabled: false`와 stage `skeleton`이다.
-    즉 D-15/D-16/D-17 의 생산자는 아직 존재하지 않는다.
+  - **생산자 도착 — 2026-09-09 15:03 `457ed45`(E-150)에서 정정.** 오전 `48f7efa` 시점에는
+    `enqueueBindings`·`enqueueAudioPolicy` 호출자가 0곳이었으나, 지금은
+    `server/src/media/MediaCoordinator.ts`와 `MediaPolicyBindings.ts`가 실제로 호출한다.
+  - **발행 순서와 세대 처리도 D와 맞는다** (`MediaPolicyBindings.ts` 확인):
+    바인딩이 바뀐 경우 `enqueueBindings`를 **먼저** 보내고 같은 `bindings` 객체로 정책을
+    투영해 `enqueueAudioPolicy`를 보낸다. `receiverGeneration`은 수신자 자신의 세대다.
+    `bindingRevision`은 `bindingVersions`가 generation을 키로 잡아 **세대마다 1부터** 다시
+    센다. policyRevision과 같은 성질이며, D의 `media-bindings`(원래 대응)와
+    `audio-policy`(`c066382`에서 대응)가 둘 다 이 리셋을 견딘다.
+  - **남은 것은 B의 조립이다.** `server/src/bootstrap.ts`는 여전히 `mediaEnabled: false`와
+    stage `skeleton`이라 Coordinator가 기동되지 않는다.
 - 완료 확인: 실제 grant로 `connectMedia`가 connected를 보고하고 회수 후 새 세대가 격리됨.
 
 ### REQ-D-06 · C · 조립점 연결
@@ -268,6 +288,11 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   거절된다. 즉 **첫 연결이 항상 실패한다.**
 - 연결 작업: D-13 = `S15P21C204-130`, E-05 = `S15P21C204-139`.
 - 완료 확인: 이전 세대가 없는 첫 `connectMedia`가 `STALE_GENERATION` 없이 grant를 받는다.
+- **2026-09-09 `457ed45`에서 근거가 늘었다.** `GenerationTransition.ts`가 입력을 직접 검증한다.
+  `expectedPreviousGeneration !== null`이면 `Number.isSafeInteger`와 `>= 1`을 요구하므로
+  `undefined`는 그 자리에서 거절된다(90~92행). 같은 파일 207행과 `MediaGenerationRegistry` 89행,
+  `GrantIssuer` 123행도 모두 엄격 비교다. `server/src/game/ports.ts` 284행이 B가 채우는
+  자리이며 타입은 `number | null`이다.
 - D가 `requestMediaGrant`를 직접 부르지 않는다. 이 변환은 D 소유가 아니라 B 소유다.
 
 ## blockedOn 요약
