@@ -1,6 +1,6 @@
 # 까꿍 게임 서버
 
-Node.js + Colyseus 서버 권위형 매치 서버. [기존 개발 프로토콜](docs/protocol.md)은 현재 0.1 개발 Room의 호환 동작만 설명한다. 제품 구현은 [최신 결정 정정표](../docs/spec/decisions.md), [공통 실행 계약](../docs/execution/common.md), [B 실행 문서](../docs/execution/b-game-server.md)를 따른다. 기존 문서의 개발 필드·빈 입장·전체 맵 공개를 제품 계약으로 확장하지 않는다.
+Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프로토콜 문서](../docs/protocol.md), [최신 결정 정정표](../docs/spec/decisions.md), [공통 실행 계약](../docs/execution/common.md), [B 실행 문서](../docs/execution/b-game-server.md), [B 인계 기록](../docs/execution/handoffs/B.md)을 따른다. [기존 개발 프로토콜](docs/protocol.md)은 개발 `kkakkung` Room의 0.1 호환 동작만 설명한다.
 
 ## 실행
 
@@ -16,36 +16,47 @@ pnpm dev:server
 - 테스트 화면: http://localhost:2567/playground — 방 접속 · 메시지 전송 · 상태 확인
 - 관리 화면: http://localhost:2567/monitor
 
-playground 탭을 두 개 열어 각각 `kkakkung` 룸에 접속 → 둘 다 `ready` 전송 → 한쪽에서 `move {"seq":1,"dir":"forward"}` 를 보내면 다른 탭의 상태에서 좌표가 바뀐다.
+`main.ts`는 아직 **개발 profile**로 기동한다. 개발 profile은 진단 `sandbox`(0.1.0)와 개발 `kkakkung`(`DevKkakkungRoom`, 0.1 wire, 전체 maze 공개)을 등록하며 웹 e2e·Playground 회귀용이다. 제품 `kkakkung` Room은 `createApplication(config, product)`에 `ProductProfile`을 주입할 때만 등록된다. F의 설정 export가 도착하면 `main.ts`가 profile을 조립한다.
 
-서버는 기존 `kkakkung` Room 외에 새 React 연동 검증용 `sandbox` Room을 등록한다. 두 Room의 wire 계약은 서로 다르며 현재 프로세스 전체 Room 용량 하나를 공유하므로 동시에 사용하지 않는다. `/health`는 기존 호환 별칭이고 개발 profile에서 `/monitor`, `/playground`를 제공한다.
+## 제품 조립 (`ProductProfile`)
 
-로컬 Playground의 빈 `{}` 입장은 기존 개발 흐름을 위해 development에서만 허용한다. join option에 토큰을 제공하면 엄격하게 검증하고 한 번만 소비한다. React 웹은 기본 `kkakkung`과 선택형 `sandbox` 모두 일회성 토큰을 사용한다. production은 두 방식 모두 현재 차단한다.
+`src/bootstrap.ts`의 `ProductProfile`은 담당별 산출물을 명시적으로 받는다.
 
-현재 Origin 감사에서 `/api/config`의 Express 검사는 작동하지만 SDK가 먼저 처리하는 `/matchmake/*`에는 같은 검사가 적용되지 않는 문제가 확인됐다. [B-02](../docs/execution/b-game-server.md#b-02)의 공통 HTTP 경계·예약 부작용 회귀 시험으로 수정할 계획이며 이 문서 변경만으로 해결된 것은 아니다. 기본 loopback 설정을 유지하고 인증 없는 개발 관리 화면을 외부에 공개하지 않는다.
+| 필드                                                                                                                    | 소유             | 없을 때                                   |
+| ----------------------------------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------- |
+| `core`, `tuning`, `practice`, `layouts.maps/selection`                                                                  | A                | 준비 단계에서 멈추고 `blockedReason` 기록 |
+| `createMediaCoordinator`, `mediaConfig`, `createOperatorAuth`                                                           | E(+F 값)         | 미디어 비활성, 운영 경로 503              |
+| `maxRooms`, `inviteMaxTtlMs`, `publicWindow`, `sessionAttempts`, `roomIdleTtlMs`, `trustProxy`, `opsToken`, 콘텐츠 경로 | F                | 초대 발급 NOT_READY, admission LOCKED     |
+| `developmentAdmission`                                                                                                  | 개발/테스트 전용 | production은 parseConfig가 거절           |
+
+기동 순서: E `initialize()` → fatal이면 listen 없이 close → `server.listen` → `installHttpBoundary`(SDK 매칭·OPTIONS 이전 Origin/2KB) → `RoomTickCoordinator` 10ms 타이머.
 
 ## 구조
 
 ```
 src/
-├─ domain/      규칙 계산 (손주연). Colyseus 를 import 하지 않는다. 지금은 스텁
-├─ rooms/       Room · Schema · StateView (정유림). domain 을 호출만 한다
-│  ├─ KkakkungRoom.ts
-│  └─ schema/GameState.ts
-├─ integrations/  LiveKit 등 외부 연동 (3단계)
-└─ index.ts     서버 기동
+├─ domain/       A 규칙 재노출 (손주연). Colyseus를 import하지 않는다
+├─ game/         B. ports.ts(A/E/F 포트 타입), MatchContext, CommandAdapter/Queue/Limiter,
+│                MatchDriver(단일 Tick), RoomTickCoordinator, Heartbeat, ClockSync,
+│                EventDispatcher, PlayerProjection(allowlist 뷰), LayoutLoader
+├─ session/      B. HttpBoundary, InviteStore/InvitationRoutes, ProductSessionStore,
+│                SessionRoutes, AdmissionLimiter, SlotRegistry, RoomAdmission, RoomExpiry,
+│                OperationsRoutes, SessionStore(개발 1회용)
+├─ rooms/        B. KkakkungRoom(제품 0.2.0), DevKkakkungRoom(개발 0.1), GameRoom(sandbox),
+│                Lobby/Practice/Loading/Countdown/Rematch coordinator, RoomDirectory
+├─ media/ operations/ health/   E
+├─ config/ observability/       F
+└─ bootstrap.ts / main.ts        B 조립
 ```
 
-`src/domain`은 기존 담당과 함수 이름을 유지하면서 `@kkakkung/game-core/match` 경계를 재노출한다. `src/rooms/schema/GameState.ts`는 `@kkakkung/protocol/game-schema`를 재노출한다. 이 이동은 소유권 변경이나 스텁 완성을 뜻하지 않는다.
+시험: `server/tests/`(개발 회귀), `server/test/protocol|room|session/`(제품 단위·통합). `server/test/room/test-harness.ts`의 `FakeCore`는 서버 경계 검증용 double이며 A 엔진이 아니다. 이 harness로 통과한 결과는 LOCAL_VERIFIED이고 실제 A/E/F 결합 뒤에만 INTEGRATED/ACCEPTED다.
 
-## 현재 단계: 0단계 뼈대
+## 현재 단계
 
-- [x] 6인 방, 입장 시 Player 생성, 고정 맵
-- [x] move / turn / ready → domain 판정 → 상태 변경
-- [x] 상태 머신 골격 waiting → playing → result
-- [x] StateView 골격: 술래 패킷에 `exits` 없음
-- [ ] [E2] 방 코드 참가 · 6인 강제
-- [ ] [E2] 서버 역할 배정 (현재는 입장 순서 임시)
-- [ ] [E2] StateView 시야 필터링 (1단계)
+- [x] 0.2.0 공개 계약·개인 뷰 allowlist·명령 접수/종결 원장·단일 Tick 경로
+- [x] 초대·세션·좌석·heartbeat·clock·재동기화·6인 준비·연습·맵 로더·로딩 장벽·카운트다운·재경기 (FakeCore 통합 시험)
+- [x] SDK 매칭 이전 HTTP Origin/2KB 경계와 WS Origin
+- [ ] A core/맵 포트, E 미디어·운영 인증, F 설정의 실제 결합 (blockedOn, [B 인계](../docs/execution/handoffs/B.md))
+- [ ] G4 정보 은폐·G5 6대·10방 부하의 실제 검증
 
-현재 전체 maze와 players 공개는 0단계 호환 동작이다. 입력 계약을 엄격히 검사하고 술래 상태에서 `exits` 골격을 제외해도 G4 전체 정보 은폐를 통과한 것은 아니다. 전체 게임 규칙과 실제 맵 검증도 후속 작업이다.
+기본 loopback 설정을 유지하고 인증 없는 개발 관리 화면을 외부에 공개하지 않는다.
