@@ -191,6 +191,27 @@ async function signed(generation: Generation, id = 'event') {
 }
 
 describe('actual E policy and track bindings composition with synthetic Cloud transport', () => {
+  it('notifies remote retirement when readiness is lost rather than abandoning active permissions', async () => {
+    let allowed = true;
+    const s = setup(2, { isPermissionsAllowed: () => allowed });
+    await s.binding.reconcile();
+    await settle();
+    const before = s.updateSubscriptions.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+    allowed = false;
+    await s.binding.reconcile();
+    await settle();
+    expect(s.onFailure).toHaveBeenCalledTimes(2);
+    for (const generation of s.generations)
+      expect(s.onFailure).toHaveBeenCalledWith(generation, 'POLICY_UNKNOWN');
+    allowed = true;
+    s.binding.observeFrame(frame(2, { frameRevision: 2 }));
+    await s.binding.reconcile();
+    await settle();
+    expect(s.updateSubscriptions).toHaveBeenCalledTimes(before);
+    expect(s.onFailure).toHaveBeenCalledTimes(2);
+  });
+
   it('publishes only verified self and peer bindings, no internal positions, using one API budget', async () => {
     const s = setup();
     expect(s.updateSubscriptions).not.toHaveBeenCalled();

@@ -26,6 +26,8 @@ export type MediaLifecycleOptions = Readonly<{
   onFailure: (generation: Generation, code: MediaFailureCode) => void;
   onGameDisconnected: (scope: PlayerScope) => void;
   onRecoveryStarted: (generation: Generation) => void;
+  /** The coordinator can end a recovery after an already-reported fatal policy/phase failure. */
+  isRecoveryAllowed?: (generation: Generation) => boolean;
 }>;
 type Recovery = { startedAt: number; baselineSid: string | null; cancel: () => void };
 
@@ -78,7 +80,9 @@ export class MediaLifecycle {
     if (!generation) return false;
     if (input.status === 'closed') {
       this.retired.add(generation);
-      this.stopRecovery(generation);
+      // Local disposal is not recovery. Keep the original deadline through remote
+      // retirement and the gap before the replacement request arrives.
+      this.check(generation);
       for (const finish of this.waiters.get(generation) ?? []) finish(true);
       return true;
     }
@@ -204,7 +208,10 @@ export class MediaLifecycle {
     recovery.cancel();
     if (
       this.closed ||
-      !this.options.registry.isCurrent(generation) ||
+      this.options.isRecoveryAllowed?.(generation) === false ||
+      this.options.registry.get(generation.request.matchId, generation.request.playerId) !==
+        generation ||
+      !this.options.registry.eligible(generation.request) ||
       !this.isGameConnected(generation.request.matchId, generation.request.playerId)
     ) {
       this.stopRecovery(generation);
@@ -219,6 +226,8 @@ export class MediaLifecycle {
     }
     const state = this.inspect(generation);
     if (
+      !generation.terminal &&
+      !this.retired.has(generation) &&
       recovery.baselineSid !== null &&
       state &&
       !state.dirty &&

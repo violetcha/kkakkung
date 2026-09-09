@@ -140,7 +140,7 @@ function revocation(input: unknown): RevocationProfile {
   });
 }
 
-/** Validates evidence structure, not the truth of a Cloud measurement. F owns the actual probe. */
+/** Validates structure only. E's MC-01 harness measures Cloud behavior; F approves the evidence. */
 export function parseCapabilityReport(input: unknown): CapabilityReport {
   const data = record(
     input,

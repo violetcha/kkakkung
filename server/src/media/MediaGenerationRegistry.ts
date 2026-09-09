@@ -21,6 +21,7 @@ export class MediaGenerationRegistry {
   readonly serverEpoch = randomUUID();
   private readonly current = new Map<string, Generation>();
   private readonly generations: Generation[] = [];
+  private readonly unissued = new WeakSet<Generation>();
   private readonly rooms = new Map<string, string>();
   private readonly frames = new Map<string, TrustedMediaFrame>();
   private readonly playerInstances = new Map<string, string>();
@@ -79,6 +80,18 @@ export class MediaGenerationRegistry {
 
   all(): readonly Generation[] {
     return [...this.generations];
+  }
+
+  /** Only a definitive reservation rejection BEFORE persistence/signing may use this path. */
+  abandonUnissued(value: Generation): void {
+    if (!this.generations.includes(value)) throw new Error('UNKNOWN_GENERATION');
+    value.terminal = true;
+    value.state = 'REVOKED';
+    this.unissued.add(value);
+  }
+
+  wasNeverIssued(value: Generation): boolean {
+    return this.unissued.has(value);
   }
 
   allocate(input: PrepareGenerationRequest, nowEpochMs: number): Generation {

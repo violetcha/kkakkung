@@ -284,6 +284,167 @@ async function operationsHttp(f: Fixture) {
 }
 
 describe('E-16 actual coordinator factory with real local disk and synthetic Cloud transport', () => {
+  it('never treats an uncertain reservation exception as a safe unissued cancellation', async () => {
+    const sign = vi.fn(async () => 'synthetic-test-token');
+    const f = await fixture({ sign });
+    await open(f);
+    alive(f, game());
+    const reservation = vi
+      .spyOn(UsageBudget.prototype, 'reserve')
+      .mockRejectedValueOnce(new Error('synthetic-checkpoint-error'));
+    expect(await f.coordinator.prepareGeneration(request())).toMatchObject({
+      status: 'unknown',
+      code: 'REMOTE_UNAVAILABLE',
+    });
+    reservation.mockRestore();
+    alive(f, game(1, { matchId: 'next-match' }));
+    expect(
+      await f.coordinator.prepareGeneration(
+        request('p1', { requestId: 'after-unknown', matchId: 'next-match' }),
+      ),
+    ).toMatchObject({ status: 'rejected' });
+    expect(sign).not.toHaveBeenCalled();
+    expect(f.coordinator.canIssue()).toBe(false);
+  });
+
+  it('does not restart the 10s window between old local/remote retirement and a replacement request', async () => {
+    const sign = vi.fn(async () => 'synthetic-test-token');
+    const f = await fixture({ sign });
+    await open(f);
+    alive(f, game());
+    const first = await prepare(f);
+    f.publish(first.grant, 'p1');
+    await f.coordinator.reconcile();
+    expect(
+      f.coordinator.lifecycle.report({
+        matchId: first.matchId,
+        playerId: first.playerId,
+        mediaInstanceId: first.mediaInstanceId,
+        receiverGeneration: first.receiverGeneration,
+        status: 'recovering',
+      }),
+    ).toBe(true);
+    f.clock.offset = 9000;
+    localClosed(f, first);
+    expect(
+      await f.coordinator.retireGeneration({
+        requestId: 'old-before-replacement',
+        matchId: first.matchId,
+        playerId: first.playerId,
+        mediaInstanceId: first.mediaInstanceId,
+        receiverGeneration: first.receiverGeneration,
+        reason: 'reconnect',
+      }),
+    ).toMatchObject({ status: 'confirmed' });
+    f.clock.offset = 10_100;
+    expect(
+      await f.coordinator.prepareGeneration(
+        request('p1', { requestId: 'too-late-replacement', expectedPreviousGeneration: 1 }),
+      ),
+    ).toMatchObject({ status: 'rejected', code: 'TIMEOUT' });
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(f.deps.enqueueControl).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'MEDIA_FAILED', code: 'TIMEOUT' }),
+    );
+  });
+
+  it('retires existing Cloud identities when product readiness disappears', async () => {
+    let securityReady = true;
+    const f = await fixture({ productSecurityReady: () => securityReady });
+    await open(f);
+    alive(f, game(2));
+    const first = await prepare(f, request('p1'));
+    const second = await prepare(f, request('p2'));
+    f.publish(first.grant, 'p1');
+    f.publish(second.grant, 'p2');
+    await f.coordinator.reconcile();
+    await flush();
+    expect(f.updateSubscriptions.mock.calls.length).toBeGreaterThan(0);
+    securityReady = false;
+    await f.coordinator.reconcile();
+    await vi.waitFor(() => expect(f.removeParticipant).toHaveBeenCalledTimes(2));
+    securityReady = true;
+    const calls = f.updateSubscriptions.mock.calls.length;
+    await f.coordinator.reconcile();
+    expect(f.updateSubscriptions).toHaveBeenCalledTimes(calls);
+    expect(f.coordinator.canIssue()).toBe(false);
+    expect(f.deps.enqueueControl).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'MEDIA_FAILED', code: 'POLICY_UNKNOWN' }),
+    );
+  });
+
+  it.each([false, true])(
+    'allows admission after a definitive unissued budget rejection, next match=%s',
+    async (nextMatch) => {
+      const f = await fixture();
+      await open(f);
+      alive(f, game());
+      const reservation = vi
+        .spyOn(UsageBudget.prototype, 'reserve')
+        .mockResolvedValueOnce({ status: 'rejected', code: 'MINUTES_EXHAUSTED' });
+      const first = await f.coordinator.prepareGeneration(request());
+      expect(first).toMatchObject({
+        status: 'rejected',
+        code: 'BUDGET_EXHAUSTED',
+        grant: null,
+        receiverGeneration: 1,
+      });
+      reservation.mockRestore();
+      const matchId = nextMatch ? 'next-match' : 'm';
+      if (nextMatch) alive(f, game(1, { matchId }));
+      const second = await f.coordinator.prepareGeneration(
+        request('p1', {
+          requestId: 'retry-admission',
+          matchId,
+          expectedPreviousGeneration: nextMatch ? null : 1,
+        }),
+      );
+      expect(second).toMatchObject({ status: 'ready', receiverGeneration: nextMatch ? 1 : 2 });
+      expect(f.removeParticipant).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reclaims no participant capacity for an unissued attempt and still cleans the issued room', async () => {
+    const f = await fixture();
+    await open(f);
+    alive(f, game());
+    for (let attempt = 0; attempt < f.deps.config.maxConcurrentParticipants + 1; attempt++) {
+      const reservation = vi
+        .spyOn(UsageBudget.prototype, 'reserve')
+        .mockResolvedValueOnce({ status: 'rejected', code: 'MINUTES_EXHAUSTED' });
+      expect(
+        await f.coordinator.prepareGeneration(
+          request('p1', {
+            requestId: `rejected-${attempt}`,
+            expectedPreviousGeneration: attempt || null,
+          }),
+        ),
+      ).toMatchObject({ code: 'BUDGET_EXHAUSTED' });
+      reservation.mockRestore();
+    }
+    const grant = await prepare(
+      f,
+      request('p1', {
+        requestId: 'accepted-after-rejections',
+        expectedPreviousGeneration: f.deps.config.maxConcurrentParticipants + 1,
+      }),
+    );
+    f.rooms.set(grant.grant.roomName, new Room({ name: grant.grant.roomName }));
+    localClosed(f, grant);
+    expect(
+      await f.coordinator.retireGeneration({
+        matchId: grant.matchId,
+        playerId: grant.playerId,
+        mediaInstanceId: grant.mediaInstanceId,
+        receiverGeneration: grant.receiverGeneration,
+        requestId: 'retire-issued',
+        reason: 'round-ended',
+      }),
+    ).toMatchObject({ status: 'confirmed' });
+    await vi.waitFor(() => expect(f.deleteRoom).toHaveBeenCalledWith(grant.grant.roomName));
+    expect(f.removeParticipant).toHaveBeenCalledTimes(1);
+  });
+
   it('initializes E-12/E-13 and exposes READY/DRAINING until an explicit durable operator resume', async () => {
     const f = await fixture();
     expect(f.coordinator.isInitialized()).toBe(false);
