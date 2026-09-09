@@ -66,4 +66,8 @@ Jira [S15P21C204-154](https://ssafy.atlassian.net/browse/S15P21C204-154). 예행
 
 이후 Verify 를 `scripts/ci-verify.mjs` 단일 진입점으로 바꿨다: Node 24.19.0/pnpm 11.19.0 확인 → `EXPECTED_SOURCE_SHA`(GitLab 이 보낸 커밋)와 `git rev-parse HEAD` 대조(불일치면 install 전에 종료 코드 3) → frozen install → Chromium 확인 → `pnpm verify` 정확히 1회. 컨테이너는 `infra/docker/Dockerfile.ci`(Node 24.19.0 + Playwright 1.63.0 Chromium --with-deps) 를 파일 해시로 태그해 쓴다. 계약 시험 `tests/contracts/ci-contract.test.ts` 10개가 계획 순서·verify 1회·Jenkinsfile 의 회귀(개별 검사 재나열, RUN_NODE)·비밀 미포함을 검사한다.
 
-미완: GitLab 커밋 상태 게시(`gitlabCommitStatus`)는 Jenkins 에 GitLab API token 크리덴셜과 GitLab connection 이 없어 BLOCKED. 설정되기 전에는 게시하지 않는다(가짜 성공 없음). 새 Verify 의 Jenkins 실측은 push 후 폴링 빌드 결과를 이 절에 추가한다.
+Jenkins 실측(2026-09-09 04:43~04:46Z, 빌드 #10, 커밋 `3331e2a`): CI 이미지 `kkakkung-ci:80f730fbd4f8` 빌드 1분 35초 → gitleaks 클린 → ci-verify(toolchain OK, Chromium 생략, `pnpm verify` 1회: Vitest 14 파일 122개, Playwright 2개 통과) → `kkakkung-game:3331e2a9`·`kkakkung-web:3331e2a9` 빌드 → Trivy 기록(game HIGH 52/CRITICAL 4, web HIGH 7/CRITICAL 1, 대부분 util-linux CVE-2026-76642 등 베이스 이미지 패키지) → develop 아니라 Deploy skip → SUCCESS. 전체 3분 21초. 중간 실패 #8·#9 는 jenkins uid 가 `/ms-playwright` 락을 못 만든 문제였고 "설치 생략"으로 해결.
+
+GitLab 커밋 상태 게시: Jenkins 에 `gitlab-api-token`(GitLab API token 종류, 기존 gitlab-token 의 값을 Jenkins 내부에서 복사)과 connection `ssafy-gitlab` 을 init 스크립트로 등록했고 빌드 #10 의 `updateGitlabCommitStatus`(running·success) 가 오류 없이 실행됐다. MR !15 화면에서 아이콘 표시는 담당자 육안 확인 대기.
+
+남은 것: `EXPECTED_SOURCE_SHA` 는 GitLab 웹훅 빌드에서만 채워지므로 폴링 빌드에서는 대조를 생략했다(로그에 명시). 정식 잡 전환 후 웹훅 빌드에서 실측한다.
