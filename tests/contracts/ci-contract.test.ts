@@ -124,6 +124,11 @@ describe('Jenkinsfile uses the single entry point', () => {
     expect(jenkinsfile).toContain("file(credentialsId: 'kkakkung-production-env'");
     expect(jenkinsfile).not.toMatch(/LIVEKIT_API_SECRET\s*=/);
   });
+  it('reports commit status to GitLab for running, success and failure', () => {
+    expect(jenkinsfile).toContain("gitLabConnection('ssafy-gitlab')");
+    for (const state of ['running', 'failed', 'success'])
+      expect(jenkinsfile).toContain(`updateGitlabCommitStatus name: 'jenkins', state: '${state}'`);
+  });
   it('never turns a failure into success in post actions', () => {
     const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
     expect(post).toMatch(/failure \{/);
