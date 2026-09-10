@@ -206,6 +206,29 @@ export {
 export { activeDiscovered, discoverExits, knownActiveExits } from './knowledge/exits.js';
 
 export {
+  advanceInstallations,
+  armDueEquipment,
+  dropInstall,
+  frontWallFace,
+  isOccupied,
+  planInstall,
+  reserveInstall,
+  verifyInstallCancel,
+  type CompletedInstallation,
+  type InstallPlan,
+  type InstallReservation,
+  type InstallTarget,
+  type InstallationUpkeepResult,
+} from './equipment/install.js';
+
+export {
+  installationViewOf,
+  type InstallationTiming,
+  type PendingInstallation,
+  type PendingInstallations,
+} from './equipment/types.js';
+
+export {
   cancelExchange,
   endReasonOf,
   sweepExchanges,

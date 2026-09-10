@@ -18,6 +18,13 @@ import type {
 } from './core-types.js';
 import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
+import {
+  advanceInstallations,
+  dropInstall,
+  planInstall,
+  reserveInstall,
+  verifyInstallCancel,
+} from './equipment/install.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
 import { mergeKnowledge } from './exchange/merge.js';
 import { midpointOf, releaseTraces, scheduleTrace } from './exchange/trace.js';
@@ -71,7 +78,11 @@ function initialPlayer(entry: RosterEntry, input: CreateMatchInput): PlayerRecor
     connected: true,
     restraintUntilTick: null,
     restraintImmuneUntilTick: null,
-    equipment: Object.freeze({ sensor: 0, trap: 0 }),
+    // Runner items stay at zero until the product decision (D-2026-09-08-01).
+    equipment:
+      entry.role === 'tagger'
+        ? Object.freeze({ sensor: 1, trap: 1 })
+        : Object.freeze({ sensor: 0, trap: 0 }),
     ownedEquipment: Object.freeze([]),
     installation: null,
     exchange: null,
@@ -148,6 +159,8 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     exchanges: new Map(),
     exchangeSeq: 0,
     traces: new Map(),
+    installations: new Map(),
+    installationSeq: 0,
     eventSeq: 0,
   };
   // First real sight from the spawn pose is part of the initial knowledge.
@@ -468,6 +481,39 @@ function publishDueTraces(ctx: StepContext): void {
   }
 }
 
+function handleInstall(ctx: StepContext, command: CoreCommand<'INSTALL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const actor = ctx.state.players.get(command.actorId)!;
+  const plan = planInstall(ctx.state, actor, command.payload.kind);
+  if (plan.status === 'rejected') return outcome(ctx, command, 'rejected', plan.code);
+  // Reserving spends no charge: only a finished placement does.
+  ctx.state = reserveInstall(ctx.state, actor, plan.target, ctx.tick).state;
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleInstallCancel(ctx: StepContext, command: CoreCommand<'INSTALL_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const installationId = command.payload.installationId;
+  if (typeof installationId !== 'string' || installationId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = verifyInstallCancel(ctx.state, command.actorId, installationId);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = dropInstall(ctx.state, canceled.pending);
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Installation upkeep before this tick's commands (EQ-01), so a cancel that
+ * arrives on the completion tick is already too late. Completion spends the
+ * charge once; leaving the pose drops the reservation free of charge.
+ */
+function advanceDueInstallations(ctx: StepContext): void {
+  ctx.state = advanceInstallations(ctx.state, ctx.tick).state;
+}
+
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
   if (ctx.endedThisStep.has(command.actorId)) {
     // The actor's personal result was fixed earlier in this step: cancel, do not reject.
@@ -484,6 +530,10 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleExchangeAccept(ctx, command);
     case 'EXCHANGE_CANCEL':
       return handleExchangeCancel(ctx, command);
+    case 'INSTALL':
+      return handleInstall(ctx, command);
+    case 'INSTALL_CANCEL':
+      return handleInstallCancel(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
@@ -562,6 +612,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }
+  advanceDueInstallations(ctx);
   // Terminal before commands: cancel the rest of this step. The later settle only
   // needs to apply the deadline result; the control loop below always runs because
   // applyConnectionLost/abortMatch check isTerminal themselves.
@@ -687,6 +738,25 @@ export function getVisibleEntities(state: MatchState, playerId: string): readonl
         action: other.action,
         role: other.role,
       });
+    }
+  }
+  // Devices standing in real sight (KN-04). A sensor always carries its wall
+  // face, a trap only its floor cell, and neither carries an owner.
+  for (const id of state.order) {
+    for (const owned of state.players.get(id)!.ownedEquipment) {
+      if (owned.state === 'SPENT') continue;
+      if (!visible.has(`${owned.cell.x},${owned.cell.y}`)) continue;
+      entities.push(
+        owned.kind === 'sensor'
+          ? {
+              id: owned.equipmentId,
+              kind: 'sensor',
+              cell: owned.cell,
+              wall: owned.wall,
+              state: owned.state,
+            }
+          : { id: owned.equipmentId, kind: 'trap', cell: owned.cell, state: owned.state },
+      );
     }
   }
   return entities;

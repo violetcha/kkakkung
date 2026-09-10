@@ -9,6 +9,7 @@ import type {
   AbortReason,
   VisibleSurfaces,
 } from './core-types.js';
+import type { PendingInstallations } from './equipment/types.js';
 import type { ExchangeSessions } from './exchange/session.js';
 import type { PendingTraces } from './exchange/trace.js';
 import type { ExitRegistry } from './exits/registry.js';
@@ -81,6 +82,9 @@ export type MatchState = Readonly<{
   exchangeSeq: number;
   /** Delayed tagger traces waiting for their publish tick (KN-08). */
   traces: PendingTraces;
+  /** Installations in progress keyed by installationId (EQ-01). */
+  installations: PendingInstallations;
+  installationSeq: number;
   eventSeq: number;
 }>;
 

@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import type { CoreCommand } from '../../src/match/core-types.js';
 import { command, player, startedMatch, step } from './match-fixture.js';
+
+/** A command whose type no handler knows, independent of which are implemented. */
+function unsupportedCommand(actorId: string): CoreCommand {
+  return {
+    ...command(actorId, 'TURN', { direction: 'left' }),
+    type: 'NOT_A_COMMAND',
+  } as unknown as CoreCommand;
+}
 
 describe('command outcomes', () => {
   it('returns exactly one outcome per accepted command with the request identifiers', () => {
@@ -54,8 +63,7 @@ describe('command outcomes', () => {
     const result = step(start, 101, [
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }, { matchId: 'other' }),
       command('ghost', 'MOVE_INTENT', { direction: 'forward' }),
-      // EXCHANGE_REQUEST is handled from KN-05 on; INSTALL is still unsupported here.
-      command('r-a', 'INSTALL', { kind: 'trap' }),
+      unsupportedCommand('r-a'),
     ]);
     expect(result.outcomes.map((o) => [o.result, o.code])).toEqual([
       ['rejected', 'WRONG_MATCH'],
