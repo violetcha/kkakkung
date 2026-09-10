@@ -200,9 +200,10 @@ export {
   initialTerrain,
   knownTerrainOf,
   observeTerrain,
+  unionKeys,
   wallKey,
 } from './knowledge/terrain.js';
-export { discoverExits, knownActiveExits } from './knowledge/exits.js';
+export { activeDiscovered, discoverExits, knownActiveExits } from './knowledge/exits.js';
 
 export {
   cancelExchange,
@@ -214,8 +215,9 @@ export {
   type ExchangeSweepResult,
 } from './exchange/cancel.js';
 
+export { mergeKnowledge, type ExchangeMergeResult, type MergedParty } from './exchange/merge.js';
+
 export {
-  activeDiscoveredExits,
   endExchange,
   exchangeViewFor,
   hasNewInformation,

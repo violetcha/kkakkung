@@ -19,6 +19,7 @@ import type {
 import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
+import { mergeKnowledge } from './exchange/merge.js';
 import {
   endExchange,
   openExchange,
@@ -364,9 +365,28 @@ function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_A
     return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
   const verified = verifyAccept(ctx.state, command.actorId, exchangeId, ctx.tick);
-  if (verified.status === 'rejected') return outcome(ctx, command, 'rejected', verified.code);
-  // The verified pair is what KN-07 merges; the id ends here either way.
-  ctx.state = endExchange(ctx.state, verified.session);
+  if (verified.status === 'rejected') {
+    if (verified.close) ctx.state = endExchange(ctx.state, verified.close);
+    return outcome(ctx, command, 'rejected', verified.code);
+  }
+  const merged = mergeKnowledge(ctx.state, verified.session);
+  if (merged.status === 'unchanged') {
+    // Nothing left to merge: the session ends without a knowledge or trace change.
+    ctx.state = endExchange(ctx.state, verified.session);
+    return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+  }
+  ctx.state = endExchange(merged.state, verified.session);
+  // Each side hears its own new map version; the pair's cells at this tick are
+  // the material KN-08 turns into the delayed tagger trace.
+  for (const party of merged.parties) {
+    ctx.events.push({
+      eventId: nextEventId(ctx),
+      tick: ctx.tick,
+      audience: [party.playerId],
+      type: 'EXCHANGE_COMPLETED',
+      payload: { exchangeId: verified.session.exchangeId, mapVersion: party.mapVersion },
+    });
+  }
   return outcome(ctx, command, 'applied', null);
 }
 
