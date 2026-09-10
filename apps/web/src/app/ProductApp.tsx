@@ -7,6 +7,7 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
@@ -230,6 +231,20 @@ export function ProductApp({ invitation }: { invitation: string }) {
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
+          {worldVisible && view && (
+            <ExchangePanel
+              view={view}
+              selected={snapshot.exchangeTarget}
+              tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+              request={
+                view.self?.status === 'ACTIVE' && view.self.exchange?.direction === 'incoming'
+                  ? snapshot.requests.EXCHANGE_ACCEPT
+                  : snapshot.requests.EXCHANGE_REQUEST
+              }
+              onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
+              send={(command) => runtime.current?.send(command)}
+            />
+          )}
           {worldVisible && view && (
             <RestraintHud
               view={view}
