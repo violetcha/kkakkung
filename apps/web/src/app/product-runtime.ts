@@ -55,6 +55,8 @@ export type ProductSnapshot = {
   devices: DeviceStatus;
   media: MediaStatus | null;
   request: RequestDisplay | null;
+  requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
+  interaction: InteractionState;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -82,6 +84,8 @@ export function bindProductRoom(
     devices: INITIAL_DEVICES,
     media: null,
     request: null,
+    requests: {},
+    interaction: { selectedEquipment: 'sensor', mode: 'motion' },
     lost: false,
     error: null,
     quality: 'medium',
@@ -108,7 +112,8 @@ export function bindProductRoom(
     now: deps.now,
     uuid: deps.uuid,
     send,
-    changed: (request) => publish({ request }),
+    changed: (request) =>
+      publish({ request, requests: { ...snapshot.requests, [request.type]: request } }),
   });
   const clock = createClockSync({
     now: deps.now,
@@ -192,6 +197,7 @@ export function bindProductRoom(
         onInteractionState: (state) => {
           if (!live()) return;
           interaction = state;
+          publish({ interaction });
           updateContext();
         },
         onLocalPreview: () => {},
@@ -213,7 +219,7 @@ export function bindProductRoom(
       clear: () => {
         commands.clear();
         loading.clear();
-        publish({ view: null, request: null });
+        publish({ view: null, request: null, requests: {} });
       },
       end: () => owner.runtime.endParticipation(),
       leave: async () => {
@@ -273,6 +279,32 @@ export function bindProductRoom(
     if (!active || snapshot.lost || !snapshot.round) return '';
     const allowedAfterEnd = command.type === 'REMATCH';
     if (!participating && !allowedAfterEnd) return '';
+    const own = snapshot.view?.self;
+    if (
+      command.type === 'INSTALL' &&
+      (own?.status !== 'ACTIVE' || own.role !== 'tagger' || own.installation || own.challenge)
+    )
+      return '';
+    if (
+      command.type === 'INSTALL_CANCEL' &&
+      (own?.status !== 'ACTIVE' ||
+        own.installation?.installationId !== command.payload.installationId)
+    )
+      return '';
+    if (
+      [
+        'INSTALL',
+        'INSTALL_CANCEL',
+        'EXIT_START',
+        'EXIT_PROGRESS',
+        'EXCHANGE_REQUEST',
+        'EXCHANGE_ACCEPT',
+        'REMATCH',
+      ].includes(command.type)
+    ) {
+      const pending = commands.pending(command.type);
+      if (pending) return pending;
+    }
     if (
       ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
       (!pageActive || !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
@@ -396,7 +428,7 @@ export function bindProductRoom(
         .catch(error);
     }
     if (phaseChanged) {
-      publish({ request: null });
+      publish({ request: null, requests: {} });
       commands.clear();
     }
     publish({ round });
@@ -474,6 +506,11 @@ export function bindProductRoom(
     startDevices: (microphone: boolean) => bridge.startDevices(microphone).catch(error),
     ready: (value: boolean) => bridge.ready(value),
     quality: (value: QualityPreset) => quality.select(value),
+    selectEquipment(value: InteractionState['selectedEquipment']) {
+      interaction = { ...interaction, selectedEquipment: value };
+      publish({ interaction });
+      updateContext();
+    },
     serverNow: clock.serverNow,
     renderTick: clock.renderTick,
     getSnapshot: () => snapshot,

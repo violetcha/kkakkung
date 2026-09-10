@@ -7,6 +7,7 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
 
@@ -228,6 +229,16 @@ export function ProductApp({ invitation }: { invitation: string }) {
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
+          {worldVisible && view && (
+            <EquipmentHud
+              view={view}
+              tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+              selected={snapshot.interaction.selectedEquipment}
+              request={snapshot.requests.INSTALL}
+              onSelect={(kind) => runtime.current?.selectEquipment(kind)}
+              send={(command) => runtime.current?.send(command)}
+            />
+          )}
           {worldVisible && view && (
             <section className="product-stage">
               <div className="product-canvas">
