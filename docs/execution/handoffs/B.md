@@ -216,6 +216,18 @@ A가 구현할 `CorePort<State>`(createMatch/createPractice/stepMatch/getPlayerK
 - 검증: `rematch.test.ts`, 통합에서 비방장 NOT_ALLOWED·방장 swap applied(구 matchId outcome)·새 matchId·구 matchId 명령 WRONG_MATCH exit 0.
 - blockedOn: A RL-08, E MC-08 회수 확인(`pendingRetirements` 0이어야 새 라운드).
 
+## 2026-09-10 F 인계 결함 처리
+
+### F-REQ-15 · S15P21C204-172 — `a3136ce` (develop `08a91ad` 병합)
+
+- 사건: QA-10 3차 10방에서 한 방의 `onTick` throw가 `setInterval` 콜백까지 전파되어 프로세스가 종료되고 10방 60명이 동시에 끊겼다(10:43 KST, F 인계 F-REQ-15). 단일 프로세스라 영향 범위가 서비스 전체다.
+- 진입점 `server/src/game/RoomTickCoordinator.ts`: `room.onTick`을 `try/catch/finally`로 감싼다. `catch`는 그 방만 `overloaded`로 표시(재무장 전까지 재생 없음)하고 `run().failed`로 보고하며, 등록명 `tick.overload/count` 계측 → `onTickError` → 선택적 `onTickFailed(error)` 순으로 통지한다. `finally`의 `tick.duration`(F-REQ-10) 측정은 유지된다. `run()`은 예외를 전파하지 않고, `onTickFailed`가 없거나 그 처리기 자체가 던져도 회전은 계속된다.
+- Room `onTickFailed`: `ABORTABLE_PHASES`(TEAM_PRACTICE·MAP_FINALIZING·GAME_LOADING·COUNTDOWN·PLAYING)에서 `SERVER_TICK_OVERLOAD`로 abort하고 `deps.coordinator.rearm`으로 새 라운드를 받는다. 원인은 `blockedReason`의 `TICK_FAILED:<message>`. `bootstrap`이 `onTickError`로 pino error(`roomRef`, `err`)를 남기고 코디네이터는 IO를 하지 않는다.
+- 공개 계약 무변경: 프로토콜 `AbortReason` 값을 늘리지 않았다(F-REQ-15가 예시로 든 `SERVER_ERROR` 계열 사유는 별도 프로토콜 변경으로 분리해야 한다). F `MetricRegistry` 등록명·단위도 추가하지 않고 기존 `tick.overload`를 재사용했다.
+- 검증: `pnpm verify` 통과(212 파일 2064 case, e2e 2), `node scripts/check-role-scope.mjs --role B --base develop` PASS(4 경로, 위반 0), `server/test/room/tick-coordinator.test.ts` +2 case(예외 격리와 재무장, 실패 처리기 예외 생존).
+- blockedOn: Room 레벨 "그 방만 ABORTED" 회귀 시험이 없다(현재는 배선·타입으로만 보장). 실제 10방 재현은 QA-10 재실행이 필요하고, F-07 알림 EVENT 연결은 F 몫이다.
+- F-REQ-14(같은 사건의 stale layout 재사용)는 S15P21C204-171 조립 커밋 `098cabb`의 `layoutRevision`·`invalidateLayout()`이 이미 해결했다. B 추가 작업 없음.
+
 ## 2026-09-08 원격 확인과 develop 병합
 
 `origin/develop`(`48f7efa`)을 `a7a264f`로 병합했다. 겹치는 파일은 없고 병합 후 `pnpm exec vitest run` 59 파일 320 case, `pnpm typecheck` 통과.
