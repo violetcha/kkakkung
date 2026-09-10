@@ -1,8 +1,11 @@
 // 까꿍 CI/CD
 //
 // 서버 한 대. 컨트롤러에서 바로 빌드하고 같은 호스트에 배포합니다.
-// 레지스트리는 두지 않고 커밋 SHA 태그만 유지합니다. 롤백은 이전 태그로 compose up.
+// 레지스트리는 두지 않고 커밋 SHA 태그만 유지합니다.
 // 검증 명령은 저장소의 pnpm 스크립트(CONTRIBUTING.md)를 그대로 씁니다.
+// 배포·롤백은 scripts/deploy-release.mjs 하나가 합니다 (DP-06): 격리 확인 → drain → 교체 → ready/복구
+// → resume → smoke → 공개 재검사 → last-good 기록. 실패는 같은 장벽으로 이전 이미지에 복귀하고,
+// 확인이 안 되면 ROLLBACK_BLOCKED 로 남깁니다. 여기서 compose 를 직접 부르지 않습니다.
 
 pipeline {
   agent any
@@ -19,11 +22,12 @@ pipeline {
   environment {
     IMG_GAME  = 'kkakkung-game'
     IMG_WEB   = 'kkakkung-web'
-    // 개발용 compose.yaml 위에 운영 override 를 덧씌웁니다 (docs/execution/f-infra-qa.md DP-02).
-    COMPOSE   = '-f infra/compose.yaml -f infra/compose.production.yaml'
     STATE_DIR = '/opt/kkakkung'
-    READY_URL = 'http://127.0.0.1:8080/health/ready'   // web-proxy 경유 → game-server
+    PUBLIC_URL = 'https://j15c204.p.ssafy.io'
     DEPLOY_BRANCH = 'develop'
+    // skeleton: E 운영 API(/api/operations, OPS_TOKEN) 미통합 상태. drain/resume 없이 ready + HTTP smoke 까지만.
+    // product: 크리덴셜 kkakkung-ops-token(Secret text) 과 DP-06 preflight 가 필요. 전환은 infra/jenkins/SETUP.md §10.
+    DEPLOY_PROFILE = 'skeleton'
     // 검증 도구체인은 infra/docker/Dockerfile.ci (Node 24.19.0 + pnpm 11.19.0 + Playwright Chromium).
     // 파일 해시로 태그해서 Dockerfile.ci 가 바뀔 때만 다시 빌드합니다.
     CI_IMAGE   = 'kkakkung-ci'
@@ -115,10 +119,6 @@ pipeline {
       when { environment name: 'IS_DEPLOY', value: 'true' }
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
-        script {
-          env.PREV_TAG = sh(script: 'cat "$STATE_DIR/last-good-tag" 2>/dev/null || true', returnStdout: true).trim()
-          echo "직전 정상 태그: ${env.PREV_TAG ?: '없음 (첫 배포)'}"
-        }
 
         // 비밀값 env 파일. Jenkins Secret file 크리덴셜을 600 으로 내려놓고 compose env_file 이 읽습니다.
         // 내용은 어떤 단계에서도 출력하지 않습니다 (set +x 는 Jenkins 기본).
@@ -126,31 +126,26 @@ pipeline {
           sh 'install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"'
         }
 
-        sh 'TAG="$TAG" docker compose $COMPOSE up -d'
-
-        // 컨테이너가 떴다고 앱이 산 건 아닙니다. web-proxy 를 거쳐 game-server 의 ready 를 직접 봅니다.
+        // 1) 매니페스트: 이 빌드가 검증한 커밋(GIT_SHA)과 방금 만든 두 이미지의 digest·revision 라벨, 이전 last-good.
+        //    이미지가 없거나 라벨이 다르면 여기서 멈춥니다 (태그로 커밋을 추정하지 않음).
         sh '''
-          for i in $(seq 1 30); do
-            g=$(docker inspect --format '{{.State.Health.Status}}' kkakkung-game 2>/dev/null || echo none)
-            if [ "$g" = "healthy" ] && curl -fsS "$READY_URL" > /dev/null 2>&1; then
-              echo "헬스체크 통과 ($i)"; exit 0
-            fi
-            echo "대기 중... ($i) game=$g"; sleep 3
-          done
-          echo "헬스체크 실패. 로그:"
-          docker logs --tail 60 kkakkung-game || true
-          docker logs --tail 30 kkakkung-web  || true
-          exit 1
+          mkdir -p "$STATE_DIR/releases"
+          node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA"             --profile "$DEPLOY_PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
         '''
 
-        // 태그와 함께 이미지 digest 도 기록합니다. 롤백 때 태그가 다른 이미지를 가리키면 멈추기 위해서입니다.
-        sh '''
-          echo "$TAG" > "$STATE_DIR/last-good-tag"
-          {
-            echo "game $(docker image inspect --format '{{.Id}}' "$IMG_GAME:$TAG")"
-            echo "web  $(docker image inspect --format '{{.Id}}' "$IMG_WEB:$TAG")"
-          } > "$STATE_DIR/last-good-digest"
-        '''
+        // 2) 장벽 실행. 운영 토큰은 product 프로파일에서만 Secret text 로 바인딩합니다 (로그 마스킹).
+        //    결과·단계는 $STATE_DIR/releases/$TAG/release.json 에 남고, 종료 코드가 빌드 결과입니다.
+        script {
+          def run = 'node scripts/deploy-release.mjs --manifest "$STATE_DIR/releases/$TAG.json" ' +
+                    '--evidence "$STATE_DIR/releases/$TAG" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"'
+          if (env.DEPLOY_PROFILE == 'product') {
+            withCredentials([string(credentialsId: 'kkakkung-ops-token', variable: 'OPS_TOKEN')]) {
+              sh run + ' --preflight "$STATE_DIR/cloud-preflight.json"'
+            }
+          } else {
+            sh run
+          }
+        }
       }
     }
   }
@@ -175,20 +170,13 @@ pipeline {
           echo 'Mattermost 알림 건너뜀 (크리덴셜 mattermost-webhook 없음 또는 작업공간 없음)'
         }
       }
-      script {
-        if (env.PREV_TAG?.trim()) {
-          echo "배포 실패. ${env.PREV_TAG} 로 롤백합니다"
-          // 기록된 digest 와 현재 태그의 이미지가 같을 때만 되돌립니다 (latest 추측 금지).
-          sh '''
-            want=$(awk '$1=="game"{print $2}' "$STATE_DIR/last-good-digest" 2>/dev/null || true)
-            have=$(docker image inspect --format '{{.Id}}' "$IMG_GAME:$PREV_TAG" 2>/dev/null || true)
-            if [ -n "$want" ] && [ "$want" != "$have" ]; then
-              echo "ROLLBACK_BLOCKED: $IMG_GAME:$PREV_TAG 의 digest 가 기록과 다릅니다. 수동 확인 필요."; exit 0
-            fi
-            TAG="$PREV_TAG" docker compose $COMPOSE up -d || true
-          '''
-        }
-      }
+      // 롤백은 deploy-release.mjs 가 이미 시도했습니다. 기록만 보여줍니다 (ROLLBACK_BLOCKED 면 사람이 확인).
+      sh '''
+        f="$STATE_DIR/releases/$TAG/release.json"
+        if [ -f "$f" ]; then
+          echo "release phase/result:"; node -e 'const r=require(process.argv[1]);console.log(r.phase, r.result, r.reason||"", r.detail||"")' "$f" || true
+        fi
+      '''
     }
     success {
       updateGitlabCommitStatus name: 'jenkins', state: 'success'
