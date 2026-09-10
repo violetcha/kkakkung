@@ -46,6 +46,7 @@ import {
   isChallenging,
   startChallenge,
 } from './exits/challenge.js';
+import { verifyProgress } from './exits/complete.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
@@ -660,6 +661,34 @@ function advanceDueChallenges(ctx: StepContext): void {
   }
 }
 
+/**
+ * Exit completion report (EX-03). Core checks the challenge ownership, the 2
+ * second minimum, the 8 second deadline and the pose position; it does not
+ * prove the real body pose or camera integrity behind C's report. A verified
+ * success ends the runner once through RL-07.
+ */
+function handleExitProgress(ctx: StepContext, command: CoreCommand<'EXIT_PROGRESS'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const challengeId = command.payload.challengeId;
+  if (typeof challengeId !== 'string' || challengeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const verdict = verifyProgress(
+    ctx.state,
+    command.actorId,
+    challengeId,
+    command.payload.method,
+    command.payload.completed,
+    ctx.tick,
+  );
+  if (verdict.status === 'rejected') return outcome(ctx, command, 'rejected', verdict.code);
+  // A valid report that is not a completion leaves the attempt running.
+  if (verdict.status === 'incomplete') return outcome(ctx, command, 'applied', null);
+  endRunner(ctx, command.actorId, 'ESCAPED');
+  return outcome(ctx, command, 'applied', null);
+}
+
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
   if (ctx.endedThisStep.has(command.actorId)) {
     // The actor's personal result was fixed earlier in this step: cancel, do not reject.
@@ -684,6 +713,8 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleExitStart(ctx, command);
     case 'EXIT_CANCEL':
       return handleExitCancel(ctx, command);
+    case 'EXIT_PROGRESS':
+      return handleExitProgress(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }

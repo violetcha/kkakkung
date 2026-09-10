@@ -120,6 +120,13 @@ export {
 } from './map/select-with-fallback.js';
 
 export {
+  isProgressMethod,
+  verifyProgress,
+  type ProgressMethod,
+  type ProgressVerdict,
+} from './exits/complete.js';
+
+export {
   advanceChallenges,
   cancelChallenge,
   endChallenge,
