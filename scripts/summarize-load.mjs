@@ -62,6 +62,7 @@ const summary = {
     eventLoopDelayP99: s.distributions.eventLoopDelayP99Ms
       ? pick(s.distributions.eventLoopDelayP99Ms)
       : null,
+    serverCpuRatio: s.distributions.serverCpuRatio ? pick(s.distributions.serverCpuRatio) : null,
     failed: s.checks.filter((c) => c.status === 'FAIL').map((c) => c.name),
     notMeasured: s.checks.filter((c) => c.status === 'NOT_MEASURED').map((c) => c.name),
   })),

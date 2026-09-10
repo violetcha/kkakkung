@@ -77,6 +77,8 @@ export type ServerStageStats = Readonly<{
   lagMs: readonly number[];
   /** Diagnostic process histogram p99 of event-loop delay per 5 s window; informational only. */
   eventLoopDelayP99Ms?: readonly number[];
+  /** Diagnostic server-process CPU ratio (0–1 of wall time) per 5 s window; informational only. */
+  cpuRatio?: readonly number[];
   /** `tick.duration` samples: value ms with the round timestamp; empty until B emits them. */
   tickDuration: readonly Readonly<{ atMs: number; value: number }>[];
   overloads: number;
@@ -115,6 +117,7 @@ export type StageResult = Readonly<{
     tickCombinedMs: Distribution | null;
     rssSlopeBytesPerMinute: number | null;
     eventLoopDelayP99Ms: Distribution | null;
+    serverCpuRatio: Distribution | null;
   }>;
 }>;
 
@@ -250,6 +253,10 @@ export function evaluateStage(input: StageInput, stageEndMs: number): StageResul
       eventLoopDelayP99Ms:
         input.server && input.server.eventLoopDelayP99Ms && input.server.eventLoopDelayP99Ms.length
           ? describe(input.server.eventLoopDelayP99Ms)
+          : null,
+      serverCpuRatio:
+        input.server && input.server.cpuRatio && input.server.cpuRatio.length
+          ? describe(input.server.cpuRatio)
           : null,
     },
   };

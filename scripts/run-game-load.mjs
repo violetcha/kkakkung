@@ -36,6 +36,7 @@ function parseArgs(argv) {
     finalDurationSeconds: null,
     evidence: '.local/qa/QA-10',
     network: null,
+    cpuProf: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -44,6 +45,7 @@ function parseArgs(argv) {
     else if (a === '--final-duration-seconds') opt.finalDurationSeconds = argv[++i];
     else if (a === '--evidence') opt.evidence = argv[++i];
     else if (a === '--network') opt.network = argv[++i];
+    else if (a === '--cpu-prof') opt.cpuProf = true;
     else {
       console.error(`unknown argument ${a}`);
       process.exit(2);
@@ -87,6 +89,7 @@ const opsToken = randomBytes(24).toString('hex');
 const server = spawn(
   process.execPath,
   [
+    ...(opt.cpuProf ? ['--cpu-prof', '--cpu-prof-dir', resolve(evidenceDir, 'cpu-prof')] : []),
     '--import',
     'tsx',
     resolve(root, 'tests/load/diagnostic-server.ts'),
@@ -233,6 +236,7 @@ const driver = setInterval(() => {
 function readServerWindow(fromWallMs, toWallMs) {
   const lagMs = [];
   const eventLoopDelayP99Ms = [];
+  const cpuRatio = [];
   const tickDuration = [];
   const rss = [];
   let overloads = 0;
@@ -249,12 +253,14 @@ function readServerWindow(fromWallMs, toWallMs) {
     if (s.wallMs < fromWallMs || s.wallMs > toWallMs) continue;
     if (s.name === 'eventLoop.lag') lagMs.push(s.value);
     else if (s.name === 'diag.eventLoopDelayP99') eventLoopDelayP99Ms.push(s.value);
+    else if (s.name === 'diag.cpuRatio') cpuRatio.push(s.value);
     else if (s.name === 'tick.duration') tickDuration.push({ atMs: s.atMs, value: s.value });
-    else if (s.name === 'tick.overload') overloads += s.value;
+    // The coordinator emits value 1 per overload; the room repeats the event with the lag as value.
+    else if (s.name === 'tick.overload' && s.value === 1) overloads += 1;
     else if (s.name === 'tick.catchup') catchups += s.value;
     else if (s.name === 'process.memory') rss.push({ atMs: s.wallMs, value: s.value });
   }
-  return { lagMs, eventLoopDelayP99Ms, tickDuration, overloads, catchups, rss };
+  return { lagMs, eventLoopDelayP99Ms, cpuRatio, tickDuration, overloads, catchups, rss };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -291,6 +297,17 @@ try {
       endedAt,
     );
     const record = { ...result, startedAt, endedAt, network: opt.network, sourceCommit };
+    writeFileSync(
+      resolve(evidenceDir, `clients-${rooms}-rooms.json`),
+      JSON.stringify(
+        players.map((p) => {
+          const stats = p.client.stats();
+          return { ...stats, ackLatenciesMs: undefined, ackCount: stats.ackLatenciesMs.length };
+        }),
+        null,
+        2,
+      ) + '\n',
+    );
     stageResults.push(record);
     writeFileSync(
       resolve(evidenceDir, `stage-${rooms}-rooms.json`),

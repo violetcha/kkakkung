@@ -7,7 +7,8 @@
 //   node --import tsx tests/load/diagnostic-server.ts --max-rooms 10 --metrics <ndjson>
 //   env LOAD_OPS_TOKEN=<ephemeral token>   (created by the runner for this process only)
 import { timingSafeEqual } from 'node:crypto';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
@@ -70,16 +71,29 @@ const practiceRaw = JSON.parse(
 mkdirSync(dirname(metricsPath), { recursive: true });
 const startedWallMs = Date.now();
 const startedMonoMs = performance.now();
+// Samples are buffered in memory and flushed once a second with one async append, so the
+// exporter never puts synchronous file IO on the tick path (that would distort the lag it measures).
+let buffer: string[] = [];
+let flushing: Promise<void> = Promise.resolve();
+const flush = () => {
+  if (buffer.length === 0) return flushing;
+  const chunk = buffer.join('');
+  buffer = [];
+  flushing = flushing.then(() => appendFile(metricsPath, chunk)).catch(() => undefined);
+  return flushing;
+};
 const emitMetric = (sample: MetricSample) => {
   try {
-    appendFileSync(
-      metricsPath,
+    buffer.push(
       JSON.stringify({ ...sample, wallMs: startedWallMs + (sample.atMs - startedMonoMs) }) + '\n',
     );
+    if (buffer.length >= 5000) void flush();
   } catch {
     // Observability never breaks the tick path.
   }
 };
+const flusher = setInterval(() => void flush(), 1000);
+flusher.unref();
 
 const layoutConstraints = tuning.template.layout;
 const profile: ProductProfile<ReturnType<typeof matchCore.createMatch>> = {
@@ -135,8 +149,18 @@ const port = await application.listen();
 
 const histogram = monitorEventLoopDelay({ resolution: 10 });
 histogram.enable();
+let lastCpu = process.cpuUsage();
+let lastCpuAtMs = performance.now();
 const sampler = setInterval(() => {
   const atMs = performance.now();
+  // Server process CPU as a 0–1 ratio of wall time since the previous sample (both cores summed).
+  const cpu = process.cpuUsage();
+  const busyMicros = cpu.user - lastCpu.user + (cpu.system - lastCpu.system);
+  const wallMicros = (atMs - lastCpuAtMs) * 1000;
+  lastCpu = cpu;
+  lastCpuAtMs = atMs;
+  if (wallMicros > 0)
+    emitMetric({ name: 'diag.cpuRatio', value: busyMicros / wallMicros, unit: 'ratio', atMs });
   // Diagnostic-only histogram of event-loop delay. Not the judged `eventLoop.lag` (that one is
   // the coordinator's per-tick lag); a 10 ms timer's p99 delay would otherwise pollute it.
   emitMetric({
@@ -157,9 +181,11 @@ const shutdown = () => {
   if (closing) return;
   closing = true;
   clearInterval(sampler);
+  clearInterval(flusher);
   histogram.disable();
   void application
     .close()
+    .then(() => flush())
     .then(() => {
       console.log(JSON.stringify({ event: 'closed' }));
       process.exit(0);
