@@ -78,6 +78,75 @@ describe('RoomTickCoordinator', () => {
     expect(h.coordinator.run().overloaded).toEqual([]);
   });
 
+  it('contains a throwing tick: other rooms keep ticking and the failing room waits for rearm', () => {
+    const clock = fakeClock(0);
+    const reported: string[] = [];
+    const metrics: MetricSample[] = [];
+    const coordinator = new RoomTickCoordinator({
+      now: clock.now,
+      emitMetric: (sample) => metrics.push(sample),
+      onTickError: (id) => reported.push(id),
+    });
+    const failures: unknown[] = [];
+    let aTicks = 0;
+    let boom = true;
+    coordinator.register('a', {
+      onTick: () => {
+        if (boom) throw new RangeError('role mismatch for p1');
+        aTicks += 1;
+      },
+      onOverload: () => undefined,
+      onTickFailed: (error) => failures.push(error),
+    });
+    const bTicks: number[] = [];
+    coordinator.register('b', { onTick: (lag) => bTicks.push(lag), onOverload: () => undefined });
+    clock.set(50);
+    const first = coordinator.run();
+    expect(first.failed).toEqual(['a']);
+    expect(first.overloaded).toEqual([]);
+    expect(bTicks).toEqual([0]);
+    expect((failures[0] as Error).message).toBe('role mismatch for p1');
+    expect(reported).toEqual(['a']);
+    // The failed room is counted under the registered overload name; no new metric name.
+    expect(metrics.filter((m) => m.name === 'tick.overload').map((m) => m.matchRef)).toEqual(['a']);
+    expect([...new Set(metrics.map((m) => m.name))].sort()).toEqual([
+      'eventLoop.lag',
+      'tick.due',
+      'tick.duration',
+      'tick.overload',
+    ]);
+    // 'a' is not replayed even once the fault is gone; only rearm brings it back.
+    boom = false;
+    clock.set(150);
+    expect(coordinator.run().failed).toEqual([]);
+    expect(aTicks).toBe(0);
+    expect(bTicks).toHaveLength(3);
+    coordinator.rearm('a');
+    clock.advance(50);
+    coordinator.run();
+    expect(aTicks).toBe(1);
+    expect(failures).toHaveLength(1);
+  });
+
+  it('survives a failure handler that throws as well', () => {
+    const clock = fakeClock(0);
+    const coordinator = new RoomTickCoordinator({ now: clock.now });
+    coordinator.register('a', {
+      onTick: () => {
+        throw new Error('tick');
+      },
+      onOverload: () => undefined,
+      onTickFailed: () => {
+        throw new Error('handler');
+      },
+    });
+    const bTicks: number[] = [];
+    coordinator.register('b', { onTick: (lag) => bTicks.push(lag), onOverload: () => undefined });
+    clock.set(50);
+    expect(() => coordinator.run()).not.toThrow();
+    expect(bTicks).toEqual([0]);
+  });
+
   it('treats exactly 250ms as late but valid and emits allow-listed metric names', () => {
     const h = setup();
     h.register('a');
