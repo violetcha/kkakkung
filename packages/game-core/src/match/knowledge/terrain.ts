@@ -97,6 +97,16 @@ export function observeTerrain(
   };
 }
 
+/**
+ * Union of two terrain key sets as a new Set. Callers give each side its own
+ * copy so a later observation on one side never appears on the other (KN-07).
+ */
+export function unionKeys(a: ReadonlySet<number>, b: ReadonlySet<number>): Set<number> {
+  const keys = new Set(a);
+  for (const key of b) keys.add(key);
+  return keys;
+}
+
 /** Sorted public terrain list: floors first (y, x), then wall faces (y, x, side). */
 export function knownTerrainOf(topology: Topology, record: KnowledgeRecord): KnownTerrain[] {
   const floors = [...record.floors]

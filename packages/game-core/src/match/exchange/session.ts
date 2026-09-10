@@ -1,5 +1,6 @@
 import type { CommandCode, ExchangeView } from '../core-types.js';
 import type { ExitRegistry } from '../exits/registry.js';
+import { activeDiscovered } from '../knowledge/exits.js';
 import { isWalkable } from '../map/validate-template.js';
 import type { KnowledgeRecord, MatchState, PlayerRecord } from '../state.js';
 import type { Cell } from '../types.js';
@@ -21,7 +22,8 @@ export type ExchangeSessions = ReadonlyMap<string, ExchangeSession>;
 
 export type ExchangeAcceptResult =
   | Readonly<{ status: 'verified'; session: ExchangeSession }>
-  | Readonly<{ status: 'rejected'; code: CommandCode }>;
+  /** `close` is set when the failed accept must also end the session. */
+  | Readonly<{ status: 'rejected'; code: CommandCode; close?: ExchangeSession }>;
 
 /** Same cell or an orthogonally adjacent passage cell; diagonals never qualify. */
 export function inExchangeRange(state: MatchState, a: Cell, b: Cell): boolean {
@@ -38,18 +40,6 @@ function hasExtra<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
   return false;
 }
 
-/** Discovered exit ids narrowed to the exits that are still active. */
-export function activeDiscoveredExits(
-  record: KnowledgeRecord,
-  registry: ExitRegistry,
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  for (const exitId of record.discoveredExits) {
-    if (registry.get(exitId)?.active) ids.add(exitId);
-  }
-  return ids;
-}
-
 /**
  * Whether either side holds terrain or active-exit knowledge the other lacks.
  * Only the union that KN-07 would merge counts: positions, movement history,
@@ -62,8 +52,8 @@ export function hasNewInformation(
 ): boolean {
   if (hasExtra(a.floors, b.floors) || hasExtra(b.floors, a.floors)) return true;
   if (hasExtra(a.walls, b.walls) || hasExtra(b.walls, a.walls)) return true;
-  const exitsA = activeDiscoveredExits(a, registry);
-  const exitsB = activeDiscoveredExits(b, registry);
+  const exitsA = activeDiscovered(a, registry);
+  const exitsB = activeDiscovered(b, registry);
   return hasExtra(exitsA, exitsB) || hasExtra(exitsB, exitsA);
 }
 
@@ -199,7 +189,15 @@ export function verifyAccept(
   const from = state.players.get(session.fromPlayerId);
   const to = state.players.get(session.toPlayerId);
   if (!from || !to) return { status: 'rejected', code: 'NOT_ALLOWED' };
-  const code = pairEligibility(state, from, to, tick);
-  if (code) return { status: 'rejected', code };
+  const presence = pairPresence(state, from, to, tick);
+  if (presence) return { status: 'rejected', code: presence };
+  const knowledgeFrom = state.knowledge.get(from.playerId);
+  const knowledgeTo = state.knowledge.get(to.playerId);
+  if (!knowledgeFrom || !knowledgeTo) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  if (!hasNewInformation(knowledgeFrom, knowledgeTo, state.exits)) {
+    // The pair is fine but there is nothing left to exchange: the request fails
+    // and the session ends here, with no knowledge change and no trace (KN-07).
+    return { status: 'rejected', code: 'NOT_ALLOWED', close: session };
+  }
   return { status: 'verified', session };
 }
