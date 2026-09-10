@@ -53,13 +53,31 @@ LiveKit 키(`LIVEKIT_*`)는 서버 스키마가 아직 읽지 않아 compose 에
 
 ```
 push → Jenkins
-  Prepare       TAG = 커밋 SHA 8자리
+  Prepare       TAG = 커밋 SHA 8자리, GitLab 이 보낸 SHA 와 체크아웃 대조
   Secret scan   gitleaks (실패 시 중단)
   Verify        scripts/ci-verify.mjs: 도구체인 → SHA 대조 → frozen install → Chromium → pnpm verify 1회 (kkakkung-ci 컨테이너, jenkins uid)
-  Build images  kkakkung-game:<TAG>, kkakkung-web:<TAG>
+  Build images  kkakkung-game:<TAG>, kkakkung-web:<TAG> (revision 라벨 = 커밋 SHA)
   Scan images   trivy (기록만)
-  Deploy        develop 만. compose up → /health/ready 확인 → 태그·digest 기록. 실패 시 직전 태그로 롤백 (digest 불일치면 ROLLBACK_BLOCKED)
+  Deploy        develop 만. verify-release.mjs → deploy-release.mjs (아래 장벽). 실패 시 러너가 같은 장벽으로 이전 이미지 복귀
 ```
+
+## 배포 장벽 (DP-06, `scripts/deploy-release.mjs`)
+
+Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 쪽도 `compose up` 을 직접 하지 않고, 현재 체크아웃을 임의 태그로 빌드하지 않는다.
+
+1. **매니페스트** (`scripts/verify-release.mjs`): 검증된 커밋 SHA = 배포 SHA, 웹·서버 두 이미지의 digest 와 `org.opencontainers.image.revision` 라벨, 이전 last-good(태그+digest). 이미지가 없거나 라벨이 다르면 BLOCKED.
+2. **외부 격리 확인**: 쿠키 없는 `/api/config` 가 SSO 로 돌아가는지(302/401/403), `/health/live` 200, 익명 `/api/operations/status` 가 200 이 아닌지. 증거가 없으면 BLOCKED. 격리는 GitLab SSO 게이트(DP-03)로 배포 전·중·후 상시 유지된다.
+3. **drain**: `POST /api/operations/commands {requestId, action:'drain'}` 202 는 접수일 뿐. 같은 requestId 로 `GET /api/operations/commands/:requestId` 를 backoff 조회해 `succeeded` 를 확인하고, `GET /api/operations/status` 가 admission=DRAINING·unresolvedCount=0 인지 본다. pending/failed/기한 초과면 이미지 교체 0.
+4. **교체**: `TAG=<sha8> docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d`. 실행 중 컨테이너의 이미지 id 가 매니페스트 digest 와 같은지 확인.
+5. **ready/복구**: `/health/ready` 200. 503 `recovering` 은 RECOVERING 으로 기다린다. 운영 API 가 있으면 readiness=READY 를 따로 확인(admission 은 아직 DRAINING 이어도 정상).
+6. **resume**: 새 requestId 로 `{action:'resume'}` → terminal succeeded → status 가 admission=OPEN·readiness=READY 인지 **별도로** 확인. LOCKED 면 완료 불일치로 실패.
+7. **smoke**: 운영 API 있음 → `run-cloud-check.mjs --case DP-06`(preflight 필요, 6인 HTTP 경로). 없음(skeleton) → `deployment-smoke.mjs`(DP-03 HTTP smoke).
+8. **공개 재검사**: unresolvedCount 0, READY/OPEN, 공식 잔량 확인 시각이 `officialBudgetMaxAgeMs` 안. 아니면 PUBLISH_BLOCKED(새 이미지는 유지, 롤백 없음, 격리 유지).
+9. **기록**: 위를 모두 통과했을 때만 `/opt/kkakkung/last-good-tag`·`last-good-digest`.
+
+실패(교체 이후): 운영 API 가 있으면 **새 requestId 로 다시 drain** 을 완료한 뒤에만, 이전 태그의 이미지 id 가 last-good-digest 와 같을 때만 복귀하고, 복귀 이미지도 4~8 을 다시 통과해야 한다. 이전 기록 없음·digest 불일치·drain 실패·복귀 이미지 ready 실패는 **ROLLBACK_BLOCKED** 로 남기고 강제 교체하지 않는다.
+
+프로파일: `DEPLOY_PROFILE=skeleton`(현재. E 운영 API 미통합 → drain/resume 은 NOT_RUN 으로 기록, 결과 `DEPLOYED_WITHOUT_OPERATIONS`, DP-06 완료 증거가 아님) · `product`(Jenkins Secret text `kkakkung-ops-token` 과 `/opt/kkakkung/cloud-preflight.json` 필요, 결과 `READY`). 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`.
 
 ## 브랜치와 배포
 
@@ -68,13 +86,10 @@ push → Jenkins
 ## 롤백
 
 ```bash
-docker images kkakkung-game
-TAG=<이전SHA> docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d
+./infra/deploy.sh <이전 커밋 SHA>
 ```
 
-Jenkins 는 성공한 태그를 `/opt/kkakkung/last-good-tag` 에, 이미지 digest 를 `last-good-digest` 에 기록합니다. 헬스체크 실패 시 그 태그로 자동 복귀하되, 태그가 가리키는 이미지의 digest 가 기록과 다르면 멈추고 사람을 부릅니다.
-
-배수(drain) → 배포 → RECOVERING → 6인 smoke → resume 순서(실행계획 DP-06)는 E 의 운영 API(`/api/operations/*`, `OPS_TOKEN`)가 들어온 뒤 D3 에 붙입니다. 지금 파이프라인은 그 전 단계입니다.
+수동 롤백도 같은 러너다: 그 커밋의 이미지가 이미 있어야 하고(없으면 Jenkins 로 그 커밋을 검증·빌드), drain → 교체 → ready → resume → smoke 를 다시 지난다. `docker compose up` 을 손으로 치지 않는다.
 
 ## 비밀값
 

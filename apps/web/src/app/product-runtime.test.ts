@@ -102,6 +102,24 @@ function fixture() {
     },
   };
 }
+it('shares installation pending across D and buttons without optimistic inventory or stale cancel', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  const v = viewFixture();
+  if (v.self?.status !== 'ACTIVE') throw Error();
+  f.messages.get('private-view')!({
+    ...v,
+    self: { ...v.self, role: 'tagger', equipment: { sensor: 2, trap: 1 } },
+  });
+  f.runtime.selectEquipment('trap');
+  expect(f.context.mock.lastCall?.[0].selectedEquipment).toBe('trap');
+  const first = f.runtime.send({ type: 'INSTALL', payload: { kind: 'trap' } });
+  expect(f.callbacks.sendCommand({ type: 'INSTALL', payload: { kind: 'trap' } })).toBe(first);
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
+  expect(f.runtime.send({ type: 'INSTALL_CANCEL', payload: { installationId: 'stale' } })).toBe('');
+  expect(f.runtime.getSnapshot().view?.self).toMatchObject({ equipment: { sensor: 2, trap: 1 } });
+  await f.runtime.leave();
+});
 it('connects heartbeat ACK on the actual product channel with no media calls in lobby/device check', async () => {
   const f = fixture();
   for (let i = 0; i < 5; i++) {
@@ -119,6 +137,78 @@ it('connects heartbeat ACK on the actual product channel with no media calls in 
   expect(f.fetcher).not.toHaveBeenCalled();
   await f.runtime.leave();
   expect(f.dispose).toHaveBeenCalledOnce();
+});
+it('shares EXIT_START with D and waits for challenge projection after an applied outcome', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  expect(f.context.mock.lastCall?.[0].exitId).toBe('exit');
+  const id = f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } });
+  expect(f.callbacks.sendCommand({ type: 'EXIT_START', payload: { exitId: 'exit' } })).toBe(id);
+  f.messages.get('command-outcome')!({
+    matchId: 'm',
+    requestId: id,
+    sequence: 0,
+    tick: 100,
+    stateVersion: 10,
+    result: 'applied',
+    code: null,
+  });
+  expect(f.runtime.getSnapshot().exitStarting).toBe(true);
+  expect(f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).toBe(id);
+  f.time(2001);
+  expect(f.runtime.getSnapshot().exitStarting).toBe(false);
+  expect(f.runtime.getSnapshot().requests.EXIT_START?.status).toBe('unconfirmed');
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
+  await f.runtime.leave();
+});
+it('releases rejected exit start immediately without creating a challenge', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  const id = f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } });
+  f.messages.get('command-result')!({
+    matchId: 'm',
+    requestId: id,
+    sequence: 0,
+    stateVersion: 10,
+    status: 'rejected',
+    code: 'NOT_ALLOWED',
+  });
+  expect(f.runtime.getSnapshot().exitStarting).toBe(false);
+  expect(f.runtime.getSnapshot().view?.self).toMatchObject({ challenge: null });
+  expect(f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).not.toBe(id);
+  await f.runtime.leave();
+});
+it('gates practice readiness on actual devices, withdraws on failure and clears practice knowledge', async () => {
+  const f = fixture();
+  f.state({ phase: 'TEAM_PRACTICE' });
+  const view = viewFixture({
+    gameScope: { kind: 'practice', revision: 1, gameInstanceId: 'practice' },
+  });
+  f.messages.get('private-view')!(view);
+  expect(f.runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } })).toBe('');
+  f.callbacks.onDeviceStatus({
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+    audioPlayback: 'ready',
+  });
+  expect(f.runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } })).not.toBe('');
+  f.callbacks.onDeviceStatus(INITIAL_DEVICES);
+  expect(f.send.mock.calls.filter(([type]) => type === 'command').at(-1)?.[1]).toMatchObject({
+    type: 'PRACTICE_READY',
+    payload: { ready: false },
+  });
+  expect(f.runtime.getSnapshot().practiceReady).toBe(false);
+  f.state({ phase: 'MAP_FINALIZING', stateVersion: 11 });
+  expect(f.runtime.getSnapshot().view).toBeNull();
+  expect(f.runtime.getSnapshot().markers).toEqual([]);
+  expect(f.context.mock.lastCall?.[0].pageActive).toBe(false);
+  f.messages.get('private-view')!(view);
+  expect(f.runtime.getSnapshot().view).toBeNull();
+  await f.runtime.leave();
 });
 it('locks COUNTDOWN, tab hide and socket close synchronously and cleans up once', async () => {
   const f = fixture();
