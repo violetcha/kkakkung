@@ -213,6 +213,7 @@ export {
   isOccupied,
   planInstall,
   reserveInstall,
+  spendEquipment,
   verifyInstallCancel,
   type CompletedInstallation,
   type InstallPlan,
@@ -220,6 +221,8 @@ export {
   type InstallTarget,
   type InstallationUpkeepResult,
 } from './equipment/install.js';
+
+export { sensorTriggers, type SensorTrigger } from './equipment/sensor.js';
 
 export {
   installationViewOf,

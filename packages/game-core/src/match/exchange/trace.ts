@@ -50,10 +50,12 @@ export function scheduleTrace(
     kind: PendingTrace['kind'];
     point: TracePoint;
     occurredTick: number;
+    /** Ticks between the event and its publication; defaults to the 1 second delay. */
+    delayTicks?: number;
   }>,
 ): MatchState {
   if (state.traces.has(entry.markerId)) return state;
-  const publishTick = entry.occurredTick + TRACE_DELAY_TICKS;
+  const publishTick = entry.occurredTick + (entry.delayTicks ?? TRACE_DELAY_TICKS);
   const traces = new Map(state.traces);
   traces.set(
     entry.markerId,
