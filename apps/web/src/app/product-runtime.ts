@@ -14,6 +14,7 @@ import {
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
 import {
   createCommandLifecycle,
   type CommandInput,
@@ -57,6 +58,7 @@ export type ProductSnapshot = {
   request: RequestDisplay | null;
   requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
   interaction: InteractionState;
+  exchangeTarget: string | null;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -86,6 +88,7 @@ export function bindProductRoom(
     request: null,
     requests: {},
     interaction: { selectedEquipment: 'sensor', mode: 'motion' },
+    exchangeTarget: null,
     lost: false,
     error: null,
     quality: 'medium',
@@ -233,6 +236,8 @@ export function bindProductRoom(
     if (!bridge || !round) return;
     const self = snapshot.view?.self;
     const own = self?.status === 'ACTIVE' ? self : null;
+    const target = exchangePresenter(snapshot.view, snapshot.exchangeTarget, 0)?.selected ?? null;
+    if (target !== snapshot.exchangeTarget) publish({ exchangeTarget: target });
     const context: InteractionContext = {
       matchId: round.matchId,
       selfPlayerId: session.playerId,
@@ -240,6 +245,7 @@ export function bindProductRoom(
       phase: round.phase,
       status: self?.status ?? snapshot.endedSelf?.status ?? 'ACTIVE',
       ...interaction,
+      ...(target ? { targetPlayerId: target } : {}),
       pageActive:
         pageActive &&
         participating &&
@@ -279,6 +285,7 @@ export function bindProductRoom(
     if (!active || snapshot.lost || !snapshot.round) return '';
     const allowedAfterEnd = command.type === 'REMATCH';
     if (!participating && !allowedAfterEnd) return '';
+    if (!permitsExchange(snapshot.view, command)) return '';
     const own = snapshot.view?.self;
     if (
       command.type === 'INSTALL' &&
@@ -299,6 +306,7 @@ export function bindProductRoom(
         'EXIT_PROGRESS',
         'EXCHANGE_REQUEST',
         'EXCHANGE_ACCEPT',
+        'EXCHANGE_CANCEL',
         'REMATCH',
       ].includes(command.type)
     ) {
@@ -509,6 +517,10 @@ export function bindProductRoom(
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
       publish({ interaction });
+      updateContext();
+    },
+    selectExchangeTarget(id: string) {
+      publish({ exchangeTarget: exchangePresenter(snapshot.view, id, 0)?.selected ?? null });
       updateContext();
     },
     serverNow: clock.serverNow,
