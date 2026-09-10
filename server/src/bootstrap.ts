@@ -137,6 +137,7 @@ export function createApplication<State = unknown>(
   const coordinator = new RoomTickCoordinator({
     now: monotonicNow,
     emitMetric,
+    onTickError: (id, error) => logger.error({ roomRef: id, err: error }, 'Room tick threw'),
   });
   let media: ProductMediaRuntime | null = null;
   const admission = (): AdmissionState => {

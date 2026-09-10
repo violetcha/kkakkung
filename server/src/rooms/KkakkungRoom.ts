@@ -104,6 +104,14 @@ type PendingLayout =
   | { status: 'unavailable'; diagnostic: string };
 
 const ACTIVE_CORE_PHASES: readonly Phase[] = ['TEAM_PRACTICE', 'PLAYING'];
+/** Phases with a match in progress: a server-side tick fault must abort them, not resume. */
+const ABORTABLE_PHASES: readonly Phase[] = [
+  'TEAM_PRACTICE',
+  'MAP_FINALIZING',
+  'GAME_LOADING',
+  'COUNTDOWN',
+  'PLAYING',
+];
 
 export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
   const random = deps.random ?? Math.random;
@@ -445,6 +453,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.coordinator.register(this.roomId, {
         onTick: () => this.tick(),
         onOverload: (lagMs) => this.overload(lagMs),
+        onTickFailed: (error) => this.tickFailed(error),
       });
       deps.directory.register(this);
     }
@@ -1265,11 +1274,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private overload(lagMs: number) {
-      if (
-        ['TEAM_PRACTICE', 'MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'].includes(
-          this.phase,
-        )
-      )
+      if (ABORTABLE_PHASES.includes(this.phase))
         this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
       deps.coordinator.rearm(this.roomId);
     }
@@ -1299,6 +1304,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const waiters = this.mediaFrameWaiters.get(mediaInstanceId);
       this.mediaFrameWaiters.delete(mediaInstanceId);
       for (const resolve of waiters ?? []) resolve(observed);
+    }
+
+    /**
+     * A tick threw. The coordinator already stopped replaying this room and emitted the
+     * overload metric; the match cannot be trusted after a partial tick, so it aborts with the
+     * existing server-fault reason and the room re-arms for a new round. `AbortReason` is
+     * protocol-owned and gains no new value: the cause is carried in `blockedReason`.
+     */
+    private tickFailed(error: unknown) {
+      const cause = error instanceof Error ? error.message : String(error);
+      if (ABORTABLE_PHASES.includes(this.phase))
+        this.abortMatch('SERVER_TICK_OVERLOAD', `TICK_FAILED:${cause}`);
+      deps.coordinator.rearm(this.roomId);
     }
   }
 
