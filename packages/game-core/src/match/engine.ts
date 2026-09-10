@@ -27,6 +27,7 @@ import {
   verifyInstallCancel,
 } from './equipment/install.js';
 import { sensorTriggers } from './equipment/sensor.js';
+import { activateTraps } from './equipment/trap-activate.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
 import { mergeKnowledge } from './exchange/merge.js';
 import { midpointOf, releaseTraces, scheduleTrace } from './exchange/trace.js';
@@ -56,7 +57,7 @@ import {
   type MatchState,
   type PlayerRecord,
 } from './state.js';
-import type { RosterEntry } from './types.js';
+import type { Cell, RosterEntry } from './types.js';
 
 export type { MatchState, PlayerRecord } from './state.js';
 
@@ -520,31 +521,46 @@ function advanceDueInstallations(ctx: StepContext): void {
 }
 
 /**
- * Equipment activation (EQ-02): after the capture stage and before this tick's
- * commands. A sensor with a new ACTIVE runner on its approach cell is spent
- * once and produces two separate events - a past-position marker for the
- * taggers and a server-only sound - each with its own id.
+ * The two events of one device activation (EQ-02/EQ-04). The tagger marker
+ * shows the past cell at once and lives 40 ticks; the sound is a server-only
+ * input for the audio pipeline. Each carries its own id, and the activation key
+ * - the marker id plus the device's single-shot SPENT - keeps both to one.
+ */
+function deviceActivated(
+  ctx: StepContext,
+  kind: 'sensor' | 'trap',
+  equipmentId: string,
+  cell: Cell,
+): void {
+  ctx.state = scheduleTrace(ctx.state, {
+    markerId: `mk-${equipmentId}`,
+    kind,
+    point: { x: cell.x, y: cell.y },
+    occurredTick: ctx.tick,
+    delayTicks: 0,
+  });
+  ctx.events.push({
+    type: 'SPATIAL_SOUND',
+    sound: { eventId: nextEventId(ctx), tick: ctx.tick, kind, cell },
+  });
+}
+
+/**
+ * Equipment activation (EQ-02/EQ-04): after the capture stage and before this
+ * tick's commands. A sensor with a new ACTIVE runner on its approach cell is
+ * spent once; a trap restrains exactly one candidate of the common tick
+ * priority and is spent in the same state. Neither event names the runner: the
+ * target learns of its own restraint through the self projection.
  */
 function activateEquipment(ctx: StepContext): void {
   for (const trigger of sensorTriggers(ctx.state, ctx.completedMoves)) {
     ctx.state = spendEquipment(ctx.state, trigger.ownerId, trigger.equipmentId);
-    // Published at this same tick: a sensor trace has no delay, only a 40 tick life.
-    ctx.state = scheduleTrace(ctx.state, {
-      markerId: `mk-${trigger.equipmentId}`,
-      kind: 'sensor',
-      point: { x: trigger.cell.x, y: trigger.cell.y },
-      occurredTick: ctx.tick,
-      delayTicks: 0,
-    });
-    ctx.events.push({
-      type: 'SPATIAL_SOUND',
-      sound: {
-        eventId: nextEventId(ctx),
-        tick: ctx.tick,
-        kind: 'sensor',
-        cell: trigger.cell,
-      },
-    });
+    deviceActivated(ctx, 'sensor', trigger.equipmentId, trigger.cell);
+  }
+  const traps = activateTraps(ctx.state, ctx.completedMoves, ctx.tick);
+  ctx.state = traps.state;
+  for (const activation of traps.activations) {
+    deviceActivated(ctx, 'trap', activation.equipmentId, activation.cell);
   }
 }
 

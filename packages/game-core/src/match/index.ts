@@ -225,6 +225,12 @@ export {
 export { sensorTriggers, type SensorTrigger } from './equipment/sensor.js';
 
 export {
+  activateTraps,
+  type TrapActivation,
+  type TrapActivationResult,
+} from './equipment/trap-activate.js';
+
+export {
   isRestraintEligible,
   trapCandidates,
   type TrapCandidates,
