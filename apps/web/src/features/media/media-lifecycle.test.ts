@@ -49,6 +49,32 @@ function harness() {
 }
 
 describe('createMediaLifecycle', () => {
+  it('does not reopen or report closed while asynchronous cleanup is pending', async () => {
+    const base = harness();
+    let resolve!: () => void;
+    base.steps.unpublishAll.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const retiring = base.lifecycle.retireGeneration('phase-change');
+    base.lifecycle.beginGeneration();
+    expect(base.lifecycle.state).toBe('terminal');
+    expect(base.lifecycle.locallyClosed).toBe(false);
+    resolve();
+    await retiring;
+    expect(base.lifecycle.state).toBe('closed');
+  });
+
+  it('still disconnects and stops devices after unpublish fails but never acknowledges closed', async () => {
+    const base = harness();
+    base.steps.unpublishAll.mockRejectedValueOnce(new Error('failed'));
+    await expect(base.lifecycle.endParticipation()).rejects.toThrow('LOCAL_RETIREMENT_UNCONFIRMED');
+    expect(base.steps.disconnect).toHaveBeenCalledOnce();
+    expect(base.participation.stopDevices).toHaveBeenCalledOnce();
+    expect(base.lifecycle.locallyClosed).toBe(false);
+  });
   it('marks the generation terminal before it touches any resource', async () => {
     const base = harness();
 

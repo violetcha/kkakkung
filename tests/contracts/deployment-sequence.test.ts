@@ -14,12 +14,40 @@ import {
   type ReleaseManifest,
 } from '../../scripts/lib/release-sequence.mjs';
 import { buildManifest, readPrevious } from '../../scripts/verify-release.mjs';
+import { createHealthHandlers } from '../../server/src/health/HealthHandlers.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const SHA = 'a'.repeat(40);
 const TAG = SHA.slice(0, 8);
 const PREV_TAG = 'b'.repeat(8);
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
+
+/** Use E's actual public projection; operations-only fields must not leak into health. */
+function readyResponse(state: 'READY' | 'RECOVERING') {
+  let response!: { status: number; json: unknown };
+  const handlers = createHealthHandlers({
+    isInitialized: () => true,
+    getReadiness: () => ({
+      state,
+      reasonCodes: state === 'READY' ? [] : ['RECOVERY_PENDING'],
+      historyComplete: state === 'READY',
+      unresolvedCount: 0,
+    }),
+  });
+  handlers.ready(
+    {} as never,
+    {
+      setHeader: () => undefined,
+      status: (status: number) => ({
+        json: (json: unknown) => {
+          response = { status, json };
+        },
+      }),
+    } as never,
+    () => undefined,
+  );
+  return response;
+}
 
 const manifest = (over: Partial<ReleaseManifest> = {}): ReleaseManifest => ({
   releaseSha: SHA,
@@ -83,7 +111,7 @@ function world(over: Partial<World> = {}): World {
       remainingBytes: 1e9,
       checkedAtEpochMs: 1_000_000,
     },
-    readySequence: [{ status: 200, json: { status: 'ready', mediaEnabled: true } }],
+    readySequence: [readyResponse('READY')],
     running: {
       [TAG]: { game: digest('1'), web: digest('2') },
       [PREV_TAG]: { game: digest('3'), web: digest('4') },
@@ -288,6 +316,20 @@ describe('manifest validation', () => {
 });
 
 describe('barrier before the swap', () => {
+  it.each([null, undefined, 0, Number.NaN])(
+    'rejects a product manifest without a valid official max age before any side effect: %s',
+    async (officialBudgetMaxAgeMs) => {
+      const h = harness(world());
+      const out = await runRelease(
+        h.input({ manifest: manifest({ officialBudgetMaxAgeMs }) }),
+        h.adapters,
+      );
+      expect(out).toMatchObject({ result: 'BLOCKED', reason: 'MANIFEST_INVALID' });
+      expect(h.calls.posts).toEqual([]);
+      expect(h.calls.compose).toEqual([]);
+    },
+  );
+
   it('a release whose verified SHA differs is BLOCKED: no drain, no compose', async () => {
     const h = harness(world());
     const out = await runRelease(
@@ -403,10 +445,7 @@ describe('release, recovery, resume, smoke, publication', () => {
   it('the full product barrier ends READY with last-good written and distinct drain/resume ids', async () => {
     const h = harness(
       world({
-        readySequence: [
-          { status: 503, json: { status: 'recovering' } },
-          { status: 200, json: { status: 'ready', mediaEnabled: true } },
-        ],
+        readySequence: [readyResponse('RECOVERING'), readyResponse('READY')],
       }),
     );
     const out = await runRelease(h.input(), h.adapters);
@@ -432,6 +471,26 @@ describe('release, recovery, resume, smoke, publication', () => {
         'publication re-check',
       ]),
     );
+  });
+
+  it('uses the recovery deadline for E public state RECOVERING without requiring public admission', async () => {
+    const h = harness(
+      world({
+        readySequence: [
+          readyResponse('RECOVERING'),
+          readyResponse('RECOVERING'),
+          readyResponse('RECOVERING'),
+          readyResponse('READY'),
+        ],
+      }),
+    );
+    const out = await runRelease(
+      h.input({ deadlines: { readyMs: 1000, recoverMs: 10_000 } }),
+      h.adapters,
+    );
+    expect(out.result).toBe('READY');
+    expect(h.clock).toBe(1_009_000);
+    expect(readyResponse('READY').json).toEqual({ state: 'READY', reasonCodes: [] });
   });
 
   it('resume succeeded but admission LOCKED is a completion mismatch → new drain, rollback to the recorded digest', async () => {
@@ -554,6 +613,18 @@ describe('release, recovery, resume, smoke, publication', () => {
     const mismatch = await runRelease(wrongImage.input(), wrongImage.adapters);
     expect(mismatch.reason).toMatch(/RELEASE_SWAP_MISMATCH/);
   });
+
+  it.each([undefined, '1000000', Number.NaN, -1, 1_000_001])(
+    'refuses publication with missing, malformed or future official timestamp: %s',
+    async (checkedAtEpochMs) => {
+      const h = harness(
+        world({ statusAfterResume: { ...world().statusAfterResume, checkedAtEpochMs } }),
+      );
+      const out = await runRelease(h.input(), h.adapters);
+      expect(out).toMatchObject({ result: 'PUBLISH_BLOCKED', lastGoodWritten: false });
+      expect(out.detail).toContain('timestamp invalid');
+    },
+  );
 });
 
 describe('skeleton profile (operations not integrated yet)', () => {
@@ -621,6 +692,8 @@ describe('wiring: Jenkinsfile and infra/deploy.sh go through the runner only', (
     for (const text of [jenkinsfile, deploySh]) {
       expect(text).toMatch(/scripts\/verify-release\.mjs/);
       expect(text).toMatch(/scripts\/deploy-release\.mjs/);
+      expect(text).toContain('--official-budget-max-age-ms');
+      expect(text).toContain('OPS_OFFICIAL_BUDGET_MAX_AGE_MS:?');
       expect(text).not.toMatch(/docker compose[^\n]*\bup\b/);
     }
     expect(deploySh).not.toMatch(/docker build/);

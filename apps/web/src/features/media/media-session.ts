@@ -72,8 +72,17 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
   // 회수/폐기가 이 값을 올려 늦게 도착한 연결 성공을 무효로 만든다.
   let connectionEpoch = 0;
   let disposed = false;
+  const teardowns = new WeakMap<MediaRoomPort, Promise<void>>();
 
   const publish = (next: MediaStatus) => {
+    if (
+      status.matchId === next.matchId &&
+      status.mediaInstanceId === next.mediaInstanceId &&
+      status.receiverGeneration === next.receiverGeneration &&
+      status.state === next.state &&
+      status.code === next.code
+    )
+      return;
     status = next;
     if (!disposed) deps.onStatus(next);
   };
@@ -84,8 +93,13 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
 
   const teardown = async (target: MediaRoomPort | null) => {
     if (!target) return;
-    target.removeAllListeners();
-    await target.disconnect().catch(() => undefined);
+    let running = teardowns.get(target);
+    if (!running) {
+      target.removeAllListeners();
+      running = target.disconnect();
+      teardowns.set(target, running);
+    }
+    await running;
   };
 
   const bindEvents = (target: MediaRoomPort, current: MediaScope) => {
@@ -120,6 +134,8 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
   const start = async (grant: MediaGrant, epoch: number): Promise<void> => {
     const current = scopeOf(grant);
     const target = deps.createRoom();
+    room = target;
+    scope = current;
     publishScoped(current, 'connecting', null);
     bindEvents(target, current);
     try {
@@ -127,19 +143,22 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
       await target.connect(grant.url, grant.token, { autoSubscribe: false });
     } catch {
       await teardown(target);
-      if (epoch === connectionEpoch) pendingScope = null;
+      if (epoch !== connectionEpoch || disposed) return;
+      pendingScope = null;
+      room = null;
+      scope = null;
       publishScoped(current, 'failed', 'CONNECT_FAILED');
       throw new MediaConnectionError('CONNECT_FAILED');
     }
     // 연결 중 회수/폐기가 있었으면 늦은 성공을 즉시 정리한다. ready도 게시도 없다.
     if (disposed || epoch !== connectionEpoch) {
       await teardown(target);
-      publishScoped(current, 'closed', 'RETIRED_DURING_CONNECT');
       return;
     }
     pendingScope = null;
     room = target;
     scope = current;
+    publishScoped(current, 'connected', null);
   };
 
   return {
@@ -161,10 +180,12 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
       const epoch = ++connectionEpoch;
       pendingScope = current;
       const previous = room;
+      const previousPending = pending;
       room = null;
       scope = null;
       // 같은 참가자의 전체 Room 연결이 둘 이상 살아 있지 않게 한다.
       const running = teardown(previous)
+        .then(() => previousPending?.catch(() => undefined))
         .then(() => {
           if (disposed || epoch !== connectionEpoch) return;
           return start(grant, epoch);
@@ -177,13 +198,15 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
     },
 
     async retire() {
-      const current = scope;
+      const current = scope ?? pendingScope;
       const target = room;
+      const connecting = pending;
       connectionEpoch += 1;
       room = null;
       scope = null;
       pendingScope = null;
       await teardown(target);
+      await connecting?.catch(() => undefined);
       if (current) publishScoped(current, 'closed', 'RETIRED');
       else publish(IDLE_MEDIA_STATUS);
     },
@@ -197,10 +220,12 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
       disposed = true;
       connectionEpoch += 1;
       const target = room;
+      const connecting = pending;
       room = null;
       scope = null;
       pendingScope = null;
       await teardown(target);
+      await connecting?.catch(() => undefined);
     },
   };
 }

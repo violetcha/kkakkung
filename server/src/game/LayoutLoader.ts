@@ -149,7 +149,11 @@ export class LayoutLoader {
     } catch {
       return null;
     }
-    const candidates = Array.isArray(parsed) ? parsed : [parsed];
+    const candidates = Array.isArray(parsed)
+      ? parsed
+      : isRecord(parsed) && Array.isArray(parsed.fallbacks)
+        ? parsed.fallbacks
+        : [parsed];
     for (const candidate of candidates) {
       if (!isRecord(candidate) || !isRecord(candidate.layout)) continue;
       if (!sameSource(template, candidate)) continue;

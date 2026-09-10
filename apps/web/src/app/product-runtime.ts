@@ -46,6 +46,7 @@ import type {
   InteractionState,
   MediaBindings,
   MediaStatus,
+  MediaScope,
   InteractionContext,
 } from '../features/input/InteractionRuntime';
 
@@ -129,6 +130,38 @@ export function bindProductRoom(
   let participation!: ReturnType<typeof createParticipationLifetime>;
   let attemptedScope: string | null = null;
   let mediaJob: Promise<void> = Promise.resolve();
+  let mediaScope: MediaScope | null = null;
+  // Connection ownership may be empty during an HTTP request. Preserve the latest issued
+  // generation separately so a queued logical phase change can still name its predecessor.
+  let lastIssuedMediaScope: MediaScope | null = null;
+  let mediaViewContext: {
+    matchId: string;
+    gameScope: PrivateView['gameScope'];
+    active: boolean;
+  } | null = null;
+  const retiredScopes = new Map<string, Promise<void>>();
+  const recoveryAttempts = new Set<string>();
+  let recoveryQueued = false;
+  const initialMediaPhases = ['TEAM_PRACTICE', 'GAME_LOADING'];
+  const recoveryMediaPhases = [...initialMediaPhases, 'COUNTDOWN', 'PLAYING'];
+  const sameMediaScope = (scope: MediaScope) =>
+    mediaScope !== null &&
+    scope.matchId === mediaScope.matchId &&
+    scope.mediaInstanceId === mediaScope.mediaInstanceId &&
+    scope.receiverGeneration === mediaScope.receiverGeneration;
+  const currentMediaContext = () => {
+    const phase = snapshot.round?.phase;
+    const kind = mediaViewContext?.gameScope.kind;
+    return mediaViewContext?.active &&
+      mediaViewContext.matchId === snapshot.round?.matchId &&
+      ((kind === 'practice' && phase === 'TEAM_PRACTICE') ||
+        (kind === 'game' &&
+          phase !== undefined &&
+          recoveryMediaPhases.includes(phase) &&
+          phase !== 'TEAM_PRACTICE'))
+      ? mediaViewContext
+      : null;
+  };
   const unsubscribers: (() => void)[] = [];
   const publish = (patch: Partial<ProductSnapshot>) => {
     if (active) {
@@ -221,6 +254,12 @@ export function bindProductRoom(
     now: deps.now,
     resync: (matchId, lastStateVersion) => send('view-resync', { matchId, lastStateVersion }),
     changed: (view) => {
+      if (view)
+        mediaViewContext = {
+          matchId: view.matchId,
+          gameScope: view.gameScope,
+          active: view.self?.status === 'ACTIVE',
+        };
       const oldScope = snapshot.view?.gameScope;
       if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
         publish({ markers: [], exchangeNotice: null });
@@ -260,6 +299,7 @@ export function bindProductRoom(
       redirect: 'error',
     });
     if (!response.ok) throw new Error('MEDIA_UNAVAILABLE');
+    if (response.status === 204) return null;
     return response.json() as Promise<unknown>;
   }
   function makeBridge() {
@@ -269,9 +309,16 @@ export function bindProductRoom(
       {
         sendCommand: (command) => sendCommand(command),
         requestMediaGrant: async (request) => {
+          const mediaContext = currentMediaContext();
+          const replacement =
+            mediaScope !== null &&
+            request.previousReceiverGeneration === mediaScope.receiverGeneration &&
+            mediaContext?.gameScope.kind === request.purpose;
           if (
             !snapshot.round ||
-            !['TEAM_PRACTICE', 'GAME_LOADING'].includes(snapshot.round.phase) ||
+            !(replacement ? recoveryMediaPhases : initialMediaPhases).includes(
+              snapshot.round.phase,
+            ) ||
             request.matchId !== snapshot.round.matchId
           )
             throw new Error('INVALID_PHASE');
@@ -294,6 +341,31 @@ export function bindProductRoom(
         },
         onMediaStatus: (media) => {
           if (!live()) return;
+          if (
+            media.matchId !== null &&
+            media.mediaInstanceId !== null &&
+            media.receiverGeneration !== null
+          ) {
+            const scope = {
+              matchId: media.matchId,
+              mediaInstanceId: media.mediaInstanceId,
+              receiverGeneration: media.receiverGeneration,
+            };
+            if (!sameMediaScope(scope)) return;
+            // SDK disconnected is a failure report, never a local cleanup acknowledgement.
+            if (
+              participating &&
+              !retiredScopes.has(JSON.stringify(scope)) &&
+              ['recovering', 'failed', 'closed'].includes(media.state)
+            ) {
+              const reported = post(MEDIA_ROUTES.report, {
+                ...scope,
+                status: media.state === 'recovering' ? 'recovering' : 'failed',
+              });
+              if (media.state === 'recovering') void reported.catch(error);
+              else queueRecovery(scope, reported);
+            }
+          }
           faces.setScope(
             participating &&
               media.matchId === snapshot.round?.matchId &&
@@ -330,10 +402,29 @@ export function bindProductRoom(
       deps.interactionFactory,
     );
   }
+  function retireAndReport(
+    owner: ReturnType<typeof createInteractionBridge>,
+    scope: MediaScope | null,
+    reason: 'phase-change' | 'reconnect' = 'phase-change',
+  ) {
+    if (!scope) return owner.runtime.retireMediaGeneration(reason);
+    const key = JSON.stringify(scope);
+    let result = retiredScopes.get(key);
+    if (!result) {
+      result = Promise.resolve().then(async () => {
+        await owner.runtime.retireMediaGeneration(reason);
+        await post(MEDIA_ROUTES.report, { ...scope, status: 'closed' });
+      });
+      retiredScopes.set(key, result);
+    }
+    return result;
+  }
   function makeParticipation() {
     const owner = bridge;
+    let endingScope: MediaScope | null = null;
     return createParticipationLifetime({
       lock: () => {
+        endingScope = mediaScope;
         participating = false;
         updateContext();
         bridge.runtime.setAudioOutputLock('locked');
@@ -348,7 +439,13 @@ export function bindProductRoom(
         loading.clear();
         publish({ view: null, request: null, requests: {}, markers: [], exchangeNotice: null });
       },
-      end: () => owner.runtime.endParticipation(),
+      end: async () => {
+        try {
+          if (endingScope) await retireAndReport(owner, endingScope);
+        } finally {
+          await owner.runtime.endParticipation();
+        }
+      },
       leave: async () => {
         stop();
         await room.leave();
@@ -504,63 +601,102 @@ export function bindProductRoom(
     }
     return commands.send(command);
   }
-  async function connectForView() {
-    const view = snapshot.view;
+  function queueRecovery(scope: MediaScope, reported: Promise<unknown>) {
+    const key = JSON.stringify(scope);
+    if (recoveryQueued || recoveryAttempts.has(key)) {
+      void reported.catch(error);
+      return;
+    }
+    recoveryAttempts.add(key);
+    recoveryQueued = true;
+    // The server owns the original 10-second deadline. One failed SDK replacement does not
+    // recursively enqueue another replacement or restart that deadline on this client.
+    void connectForView({ scope, reported }).finally(() => {
+      recoveryQueued = false;
+    });
+  }
+  async function connectForView(recovery?: { scope: MediaScope; reported: Promise<unknown> }) {
+    const view = currentMediaContext();
     const round = snapshot.round;
+    const allowedPhases = recovery ? recoveryMediaPhases : initialMediaPhases;
     if (
       !view ||
-      view.self?.status !== 'ACTIVE' ||
       !round ||
       !participating ||
-      !['TEAM_PRACTICE', 'GAME_LOADING'].includes(round.phase) ||
+      !allowedPhases.includes(round.phase) ||
       view.gameScope.kind === 'none'
-    )
+    ) {
+      if (recovery) void recovery.reported.catch(error);
       return;
+    }
     const key = `${round.matchId}:${view.gameScope.revision}:${view.gameScope.gameInstanceId}`;
-    if (attemptedScope === key) return;
-    attemptedScope = key;
+    if (!recovery) {
+      if (attemptedScope === key) return;
+      attemptedScope = key;
+    }
     const run = generation;
     const owner = bridge;
+    const current = () =>
+      active &&
+      !snapshot.lost &&
+      run === generation &&
+      participating &&
+      attemptedScope === key &&
+      snapshot.round?.matchId === round.matchId &&
+      allowedPhases.includes(snapshot.round.phase) &&
+      currentMediaContext()?.gameScope.gameInstanceId === view.gameScope.gameInstanceId &&
+      currentMediaContext()?.gameScope.revision === view.gameScope.revision;
+    // Attach rejection handling immediately, even when another connect/publish owns mediaJob.
+    const reported = recovery?.reported.then(
+      () => true,
+      () => false,
+    );
     mediaJob = mediaJob.then(async () => {
-      if (!active || run !== generation || !participating) return;
       try {
-        if (snapshot.media?.mediaInstanceId)
-          await owner.runtime.retireMediaGeneration('phase-change');
-        if (!active || run !== generation || !participating) return;
+        if (reported && !(await reported)) throw new Error('MEDIA_UNAVAILABLE');
+        if (!current() || (recovery && !sameMediaScope(recovery.scope))) return;
+        const previous = recovery?.scope ?? lastIssuedMediaScope;
+        if (previous)
+          await retireAndReport(owner, previous, recovery ? 'reconnect' : 'phase-change');
+        if (!current()) return;
+        mediaScope = null;
+        bindings = null;
         const grant = mediaGrantSchema.parse(
           await post(MEDIA_ROUTES.grants, {
             matchId: round.matchId,
             purpose: view.gameScope.kind,
-            ...(snapshot.media?.receiverGeneration !== null &&
-            snapshot.media?.receiverGeneration !== undefined
-              ? { previousReceiverGeneration: snapshot.media.receiverGeneration }
+            ...(previous !== null
+              ? { previousReceiverGeneration: previous.receiverGeneration }
               : {}),
           }),
         );
-        if (
-          !active ||
-          run !== generation ||
-          !participating ||
-          attemptedScope !== key ||
-          snapshot.view?.gameScope.gameInstanceId !== view.gameScope.gameInstanceId ||
-          !snapshot.round ||
-          !['TEAM_PRACTICE', 'GAME_LOADING'].includes(snapshot.round.phase)
-        ) {
-          await post(MEDIA_ROUTES.report, {
-            matchId: grant.matchId,
-            mediaInstanceId: grant.mediaInstanceId,
-            receiverGeneration: grant.receiverGeneration,
-            status: 'closed',
-          });
+        const invalidGrant =
+          grant.matchId !== round.matchId ||
+          (recovery &&
+            (grant.mediaInstanceId !== recovery.scope.mediaInstanceId ||
+              grant.receiverGeneration <= recovery.scope.receiverGeneration));
+        const issuedScope = {
+          matchId: grant.matchId,
+          mediaInstanceId: grant.mediaInstanceId,
+          receiverGeneration: grant.receiverGeneration,
+        };
+        if (!invalidGrant && run === generation && snapshot.round?.matchId === grant.matchId)
+          lastIssuedMediaScope = issuedScope;
+        if (!current() || invalidGrant) {
+          await retireAndReport(owner, issuedScope);
+          if (current() && invalidGrant) throw new Error('WRONG_SCOPE');
           return;
         }
+        mediaScope = issuedScope;
         if (owner.runtime.getGenerationState() !== 'live') owner.runtime.beginMediaGeneration();
         await owner.runtime.connectMedia(grant);
-        if (!active || run !== generation || !participating) return;
+        if (!current() || !sameMediaScope(grant)) return;
         await owner.runtime.publishMedia();
+        if (!current() || !sameMediaScope(grant)) return;
+        send('media-bindings-refresh', { ...mediaScope, lastBindingRevision: 0 });
         updateLoading();
       } catch {
-        if (active && run === generation) error();
+        if (current() && (recovery || !recoveryQueued)) error();
       }
     });
     await mediaJob;
@@ -604,6 +740,10 @@ export function bindProductRoom(
       attemptedScope = null;
       bindings = null;
       const old = bridge;
+      const oldScope = mediaScope;
+      mediaScope = null;
+      lastIssuedMediaScope = null;
+      mediaViewContext = null;
       const run = generation;
       publish({
         view: null,
@@ -613,8 +753,13 @@ export function bindProductRoom(
         media: null,
         request: null,
       });
-      void old
-        .dispose()
+      void (async () => {
+        try {
+          if (oldScope) await retireAndReport(old, oldScope);
+        } finally {
+          await old.dispose();
+        }
+      })()
         .then(() => {
           if (!active || run !== generation) return;
           bridge = makeBridge();
@@ -622,6 +767,7 @@ export function bindProductRoom(
           participating = true;
           participation = makeParticipation();
           updateContext();
+          void connectForView();
         })
         .catch(error);
     }
@@ -635,6 +781,7 @@ export function bindProductRoom(
       commands.clear();
     }
     publish({ round });
+    if (!currentMediaContext()) mediaViewContext = null;
     commands.setMatch(round.matchId);
     heartbeat.setMatch(round.matchId);
     views.round(round);
@@ -671,7 +818,13 @@ export function bindProductRoom(
   });
   on('media-bindings', (value) => {
     const result = mediaBindingsSchema.safeParse(value);
-    if (!result.success || result.data.matchId !== snapshot.round?.matchId || !participating)
+    if (
+      !result.success ||
+      result.data.matchId !== snapshot.round?.matchId ||
+      !participating ||
+      !sameMediaScope(result.data) ||
+      (bindings && result.data.bindingRevision <= bindings.bindingRevision)
+    )
       return;
     bindings = result.data;
     bridge.runtime.applyMediaBindings(bindings);
@@ -679,7 +832,12 @@ export function bindProductRoom(
   });
   on('audio-policy', (value) => {
     const result = audioPolicySchema.safeParse(value);
-    if (result.success && result.data.matchId === snapshot.round?.matchId && participating)
+    if (
+      result.success &&
+      result.data.matchId === snapshot.round?.matchId &&
+      participating &&
+      sameMediaScope(result.data)
+    )
       bridge.runtime.applyAudioPolicy(result.data);
   });
   try {

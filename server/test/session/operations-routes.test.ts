@@ -71,6 +71,15 @@ describe('operations routes', () => {
       body: JSON.stringify(body),
     });
 
+  it('leaves unrelated player endpoints to their own authentication boundary', async () => {
+    const response = await fetch(endpoint + '/api/media/report', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer player-session' },
+      body: '{}',
+    });
+    expect(response.status).toBe(404);
+  });
+
   it('accepts a drain as 202 pending, keeps the same operationId for the same body and 409 for a different one', async () => {
     const first = await post({ requestId: 'req-1', action: 'drain' });
     expect(first.status).toBe(202);

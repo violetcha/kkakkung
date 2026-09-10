@@ -77,7 +77,7 @@ export function validateManifest(manifest) {
   if (m.officialBudgetMaxAgeMs !== undefined && m.officialBudgetMaxAgeMs !== null) {
     if (!Number.isSafeInteger(m.officialBudgetMaxAgeMs) || m.officialBudgetMaxAgeMs <= 0)
       issues.push('officialBudgetMaxAgeMs must be a positive integer when present');
-  }
+  } else if (m.profile === 'product') issues.push('product requires officialBudgetMaxAgeMs');
   return issues;
 }
 
@@ -213,10 +213,14 @@ export async function runRelease(input, adapters) {
         ok(`${label} ready`, sawRecovering ? 'after RECOVERING' : 'http 200');
         return res.json ?? {};
       }
-      if (res.status === 503 && res.json?.status === 'recovering' && !sawRecovering) {
+      if (
+        res.status === 503 &&
+        (res.json?.state === 'RECOVERING' || res.json?.status === 'recovering') &&
+        !sawRecovering
+      ) {
         sawRecovering = true;
         setPhase('RECOVERING');
-        record(`${label} recovering`, 'INFO', 'ready 503 status=recovering');
+        record(`${label} recovering`, 'INFO', 'ready 503 RECOVERING');
       }
       const limit = sawRecovering ? deadlines.recoverMs : deadlines.readyMs;
       if (adapters.now() - started >= limit)
@@ -249,9 +253,17 @@ export async function runRelease(input, adapters) {
     if (status.admission !== 'OPEN') problems.push(`admission=${status.admission}`);
     if (status.unresolvedCount !== 0) problems.push(`unresolvedCount=${status.unresolvedCount}`);
     const maxAge = manifest.officialBudgetMaxAgeMs ?? null;
+    const now = input.nowEpochMs();
     if (maxAge === null) problems.push('officialBudgetMaxAgeMs not provided');
     else if (status.checkedAtEpochMs === null) problems.push('official budget never checked');
-    else if (input.nowEpochMs() - status.checkedAtEpochMs > maxAge)
+    else if (
+      !Number.isSafeInteger(now) ||
+      !Number.isSafeInteger(status.checkedAtEpochMs) ||
+      status.checkedAtEpochMs < 0 ||
+      status.checkedAtEpochMs > now
+    )
+      problems.push('official budget check timestamp invalid');
+    else if (now - status.checkedAtEpochMs > maxAge)
       problems.push(`official budget check older than ${maxAge}ms`);
     if (problems.length) fail('PUBLISH_BLOCKED', 'PUBLICATION_CONDITIONS', problems.join(', '));
     ok('publication re-check', 'READY/OPEN, unresolved 0, official budget fresh');

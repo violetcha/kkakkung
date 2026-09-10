@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { renameCheckpoint } from './CheckpointRename.js';
 
 export type Checkpoint<T> = Readonly<{ lastSeq: number; state: T }>;
 export type CheckpointRead<T> =
@@ -155,7 +156,7 @@ export class CheckpointStore<T> {
         } finally {
           await handle.close();
         }
-        await fs.rename(temporary, this.filePath);
+        await renameCheckpoint(temporary, this.filePath);
         await syncDirectory(this.options.opsDataDir);
       } catch (error) {
         this.failed = true;

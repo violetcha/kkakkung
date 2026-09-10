@@ -25,9 +25,14 @@ fi
 echo "==> 커밋 $SHA (태그 $TAG), 프로파일 $PROFILE"
 
 mkdir -p "$STATE_DIR/releases"
+POLICY_ARGS=()
+if [ "$PROFILE" = product ]; then
+  : "${OPS_OFFICIAL_BUDGET_MAX_AGE_MS:?Set the approved runtime budget max age before product deployment}"
+  POLICY_ARGS=(--official-budget-max-age-ms "$OPS_OFFICIAL_BUDGET_MAX_AGE_MS")
+fi
 # 검증 SHA = 요청 SHA. 수동 경로도 Jenkins 가 만든 이미지만 쓰므로 라벨 대조로 확인됩니다.
 node scripts/verify-release.mjs --sha "$SHA" --tag "$TAG" --verified-sha "$SHA" \
-  --profile "$PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
+  --profile "$PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json" "${POLICY_ARGS[@]}"
 
 PREFLIGHT_ARGS=()
 if [ -n "${DEPLOY_PREFLIGHT:-}" ]; then PREFLIGHT_ARGS=(--preflight "$DEPLOY_PREFLIGHT"); fi

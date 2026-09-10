@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { DEFAULT_DEADLINES, runRelease } from './lib/release-sequence.mjs';
+import { prepareDeploymentSmoke } from './lib/deployment-smoke-preflight.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
@@ -68,6 +69,22 @@ const manifest = JSON.parse(readFileSync(opt.manifest, 'utf8'));
 const evidenceDir = resolve(opt.evidence);
 mkdirSync(evidenceDir, { recursive: true });
 const token = process.env.OPS_TOKEN ?? '';
+let cloudSmoke;
+if (manifest.profile === 'product') {
+  try {
+    cloudSmoke = prepareDeploymentSmoke({
+      root,
+      preflightPath: opt.preflight,
+      sourceCommit: manifest.releaseSha,
+      env: process.env,
+      nowEpochMs: Date.now(),
+    });
+  } catch {
+    // Fixed code only: validation errors must not echo arbitrary operator file contents.
+    console.error('BLOCKED: DP06_PREFLIGHT_OR_CREDENTIALS_INVALID');
+    process.exit(3);
+  }
+}
 const composeFiles = opt.compose.split(/\s+/).filter(Boolean);
 
 const log = (line) => console.log(`[deploy-release ${new Date().toISOString()}] ${line}`);
@@ -158,7 +175,7 @@ const adapters = {
     return { code: result.status ?? 1 };
   },
   runSmoke(mode) {
-    const smokeDir = resolve(evidenceDir, 'smoke');
+    const smokeDir = mode === 'cloud' ? cloudSmoke.evidenceDir : resolve(evidenceDir, 'smoke');
     const cmd =
       mode === 'cloud'
         ? [
@@ -173,7 +190,11 @@ const adapters = {
         : ['scripts/deployment-smoke.mjs', '--base-url', opt.baseUrl, '--evidence', smokeDir];
     return new Promise((resolveCode) => {
       // The child inherits the environment (SMOKE_COOKIE / LiveKit names) but stdout is ours.
-      const child = spawn(process.execPath, cmd, { cwd: root, stdio: 'inherit' });
+      const child = spawn(process.execPath, cmd, {
+        cwd: root,
+        stdio: 'inherit',
+        env: { ...process.env, SMOKE_BASE_URL: opt.baseUrl },
+      });
       child.on('exit', (code) => resolveCode({ code: code ?? 1 }));
       child.on('error', () => resolveCode({ code: 1 }));
     });

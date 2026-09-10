@@ -1,6 +1,28 @@
 # F 공개 인계 기록
 
+전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
+
 수정자: **F만** · [담당 계획](../f-infra-qa.md) · [공통 규칙](../common.md)
+
+## 2026-09-10 전체 연결용 F 인계
+
+추가 기준: 이후 병합된 F-16 `baffe7a`까지 로컬 fast-forward로 반영했다. E 공개 health/운영 상태 소비 계약을 맞췄으며 DP-06은 실제 C 런타임 6명·B 인증 HTTP/WS·E grant/report/정리를 사용하는 합성 브라우저 하네스로 구현했다. 운영 preflight에 게임 방 1개/참가자 6명, 실제 연습 Cloud 2룸→경기 1룸, 준비 포함 300초+정리 30초 및 보수적 수신 예산을 요구한다. 사전 문서/SSO cookie/운영 자격/공식 예산 정책이 없으면 배포 변경 전에 거절한다. 고정 단위 회귀 52개와 strict QA 타입검사는 통과했다. 실제 B/E child를 쓰는 DP-06 6인 통합(66.96초)과 브라우저 초기화 실패 후 부분 가입 정리(3.16초)도 통과했다. 이 통합은 Cloud transport·수신 카운터 fixture와 가속 Tick을 쓰는 `LOCAL_CONTRACT_ONLY`다. 사용자가 F Cloud 사전 승인은 아직 없다고 확정했으므로 실제 Cloud·배포는 BLOCKED다. 상세 계약은 [테스트 가이드](../../testing.md#dp-06-배포-합성-미디어-검사)를 따른다.
+
+최초 기준은 `develop d5816f6`였고 F-16 `baffe7a` 및 F QA 병합까지 반영한 최종 기준은 `develop 4c84d20`과 `codex/integration-20260910`의 로컬 변경이다. 아래 항목은 이번 연결 결과이며 뒤의 기존 날짜별 기록은 당시 범위를 보존한다. 별도 Jira 생성·원격 변경·실제 비밀 `.env` 수정은 하지 않았다. 최종 검사 결과는 [검증 기록](../../verification.md#전체-연결로컬-통합-검증-2026-09-10)에서 확인한다.
+
+- `parseConfig`: `SERVER_PROFILE=development|product`(기본 development), `TRUST_PROXY_HOPS=0|1`(기본 0), `PRODUCT_ASSET_VERSION=c-primitives-1`, `PRODUCT_CONTENT_DIR=server/content`, `PRODUCT_TUNING_PATH=server/config/tuning/mvp-v1.json`를 B에 전달한다. 반환 필드는 `serverProfile`, `trustProxyHops`, `assetVersion`, `contentDir`, `tuningPath`다. 자산 버전은 C의 실제 공개 버전과 일치한다.
+- `loadRuntimeEvidence({opsDataDir,projectAlias,namespace,nowEpochMs,maxAgeMs})`는 운영자가 확인해 배치한 `runtime-evidence.json`을 읽어 E의 namespace/최초 설치/최초 감사/공식 revision 서비스를 제공한다. 권한 조회는 메모리 검사이며 1초 비동기 확인·5초 검증 임대를 사용한다. 이는 정적 파일 감시를 위한 초기 운영 정책이며 검증된 배포 SLA가 아니다. 실제 만료·최대 나이·역행·관측된 변조/누락은 즉시 차단하고 게임 250ms 과부하·미디어 deadline은 유지한다. 최초 두 목적은 별도 내구 marker로 1회만 소비, 공식 revision은 전체 6필드 digest와 일치해야 한다. B는 종료 시 멱등 `close()`를 호출한다. 전용 21시험은 임시 디렉터리에서 통과했으며 실제 증명/marker를 생성하지 않았다. [운영 증거 스키마와 확인 절차](../../testing.md#운영-증거-공급)를 따른다.
+- 제품 선택에는 완전한 admission 정책이 필요하다. `MEDIA_MODE=disabled`가 기본이며 E 미디어/입장은 잠긴다. `livekit`는 제품 선택·완전한 LiveKit/운영 설정·동일 HTTPS/WSS origin을 요구한다. 자격 설정만으로 READY가 되지 않으며 E의 실제 capability·공식 예산·복구 기록이 필요하다. `NODE_ENV=production` 거절은 유지한다.
+- 루트 QA가 A/B 공개 패키지를 직접 소비하도록 game-core/protocol workspace 의존성과 lockfile을 연결했다. `test:maps`는 실제 인증 맵 시험, 웹 `typecheck`는 D Worker 검사까지 실행한다. 외부 패키지 버전 변경은 없다.
+- 관측 등록명에 `eventLoop.delayP99/ms`를 추가했다. F process sampler와 수집기는 Node 히스토그램 p99를 이 이름으로 내보내며, B 코디네이터의 `eventLoop.lag/ms`와 섞지 않는다. 게임 lag p95 20ms 기준은 기존대로다. B 조립의 callback 및 E의 기존 지표 이름은 유지한다.
+- 최신 `baffe7a`의 F-16 소비 계약은 실제 E 공개 health의 `state=RECOVERING/READY`와 인증 operations/status의 `admission`을 사용하도록 보정했다. product manifest는 실제 서버와 같은 `OPS_OFFICIAL_BUDGET_MAX_AGE_MS`를 필수로 전달하고, Cloud smoke의 origin은 배포 러너 `--base-url`에서 전달한다. DP-06 소스와 로컬 공개 API 연결은 검증했으며 실제 배포·Cloud 시험·Jenkins 환경은 바꾸지 않았다. 합성 소스의 물리적 예약과 E 내부 보수 예약/public bucket 여유는 별도 조건으로 유지한다.
+- 초기에는 F의 기존 원격 구현에서 Cloud 없는 파일만 선택했다: G1 `4653e90`, G3/G4 및 게임 진단 `d6884f9`. 이후 F-16과 F QA가 develop에 병합되어 `4c84d20`까지 전체 반영했고, 선택한 파일과 중복된 내용도 대조했다. 새 Cloud 파일이 존재한다는 이유로 실행 완료로 계산하지 않는다.
+- `4c84d20`의 QA-02·03·04·05·06·11·12 Cloud 진입점은 여전히 명시적 BLOCKED다. 승인된 자격만 넣어서 실행할 수 있는 상태가 아니며, F가 각 시나리오의 fault/장치/부하 절차를 실제 probe와 연결한 뒤 검증해야 한다. 이번 DP-06 브라우저 하네스와 로컬 회귀를 이 7개 시나리오의 완료로 계산하지 않는다.
+- QA-08의 빈 관측 성공을 보완했다. `MetadataObservation.ts`는 실제 namespace 방 1개 이상·참가자 1명 이상·조회 완료를 요구하고, `g4-metadata.cloud.test.ts`가 실제 조회 개수와 완료 여부를 연결한다. 요약에는 개수·상태·고정 코드만 추가한다. 새 population 상한은 만들지 않았으며 로컬 판단 회귀 10개가 통과했다. 실제 Cloud 실행은 하지 않았다.
+- 로컬 결과: 선택 QA·설정·부하 도구 **11파일 109시험 통과**, QA 및 Worker 엄격 타입 검사·변경 파일 lint/포맷 통과. G1의 원격 응답은 fixture이며 G3/G4는 실제 A 코어→B 드라이버/projection→wire 스키마 경로다. Cloud 요청은 0회다.
+- 1방·합성 6클라이언트·25초 게임 진단은 연습/로딩을 거쳐 PLAYING에 진입했고 ACK p95 3ms, abort/overload 0, 종료 후 열린 클라이언트 0이었다. 최초 측정은 event-loop lag p95 25.59ms로 20ms 기준을 넘었고 tick.duration 표본이 없어 FAIL/미계측으로 기록했다. B가 duration 계측을 연결했으며 단독 재측정 결과는 이번 통합 검증 보고서에 추가한다. 기준을 완화하지 않는다.
+
+실행 명령과 범위는 [테스트 가이드](../../testing.md#2026-09-10-로컬-통합-검증)를 따른다. 짧은 게임 진단은 공식 10방·30분 부하나 WebRTC G6 인수가 아니다. F-01의 승인된 Cloud 자격·namespace·공식 잔량 예약·preflight, 실제 장치/Cloud/장시간 부하 및 배포 증거는 별도이며 ACCEPTED로 올리지 않는다.
 
 이 파일은 팀원 AI가 F의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 2026-09-08 기준 **부분 검증 인계 3건(F-04·F-06·F-05)**, ACCEPTED 0건이다. 문서·소스 파일이 존재한다는 이유로 아래 상태를 완료로 바꾸지 않는다. 인계가 생길 때 항목을 복사하여 실제 값으로 작성한다.
 

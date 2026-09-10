@@ -27,6 +27,7 @@ export const REGISTERED_METRICS = Object.freeze({
   'process.memory': 'bytes',
   'process.cpu': 'ratio',
   'eventLoop.lag': 'ms',
+  'eventLoop.delayP99': 'ms',
   'media.api.total60s': 'count',
   'media.api.normal60s': 'count',
   'media.api.429': 'count',

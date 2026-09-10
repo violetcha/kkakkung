@@ -22,6 +22,7 @@ import {
   type CommandOutcome,
   type CommandReceipt,
   type MediaBindings,
+  type MediaStatusReport,
 } from '@kkakkung/protocol/game-messages';
 import {
   PublicMatchState,
@@ -47,7 +48,9 @@ import type {
   EmitMetric,
   MatchTuning,
   MediaControl,
-  MediaCoordinator,
+  ProductMediaRuntime,
+  PrepareGenerationRequest,
+  PreparationResult,
   MediaIntent,
   OutcomeResult,
   PracticeLayoutPort,
@@ -87,7 +90,9 @@ export type ProductRoomDeps<State> = Readonly<{
     templateVersion: string;
   } | null;
   /** E's coordinator; null means media disabled (loading barrier checks client reports only). */
-  media: MediaCoordinator | null;
+  media: ProductMediaRuntime | null;
+  canStart?: () => boolean;
+  strictProduct?: boolean;
   assetVersion: string;
   emitMetric?: EmitMetric;
   random?: () => number;
@@ -135,6 +140,18 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly lastBindings = new Map<string, MediaBindings>();
     private readonly refreshAt = new Map<string, number>();
     private readonly pendingRetirements = new Set<string>();
+    private readonly grantRequests = new Map<string, PrepareGenerationRequest>();
+    private readonly pendingPreparations = new Map<string, number>();
+    private readonly retiringScopes = new Map<
+      string,
+      { mediaInstanceId: string; receiverGeneration: number }
+    >();
+    private readonly pendingBindings: { playerId: string; message: MediaBindings }[] = [];
+    private readonly pendingAudio: { playerId: string; message: AudioPolicy }[] = [];
+    private readonly observedMediaInstances = new Set<string>();
+    private readonly mediaFrameWaiters = new Map<string, Set<(observed: boolean) => void>>();
+    private layoutRevision = 0;
+    private disposed = false;
     private finalizing: Promise<void> | null = null;
     private pendingLayout: PendingLayout | null = null;
     private startRequestedTick: number | null = null;
@@ -176,7 +193,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         stateVersionFor: (actorId) => this.dispatcher.applicableVersion(actorId),
         onOutcome: (actorId, outcome) => this.sendOutcome(actorId, outcome),
         onEvent: (event, gameInstanceId) => this.dispatcher.dispatchEvent(event, gameInstanceId),
-        onMediaFrame: (frame) => deps.media?.observeFrame(frame),
+        onMediaFrame: (frame) => {
+          deps.media?.observeFrame(frame);
+          this.observedMediaInstances.add(frame.mediaInstanceId);
+          this.settleMediaFrameWaiters(frame.mediaInstanceId, true);
+        },
         onMediaIntent: (intent, gameInstanceId) => this.handleMediaIntent(intent, gameInstanceId),
         onIntegrityFailure: (gameInstanceId, reason) =>
           this.abortMatch(null, `INTEGRITY:${gameInstanceId}:${reason}`),
@@ -190,17 +211,160 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     mediaScopeFor(playerId: string, purpose: 'practice' | 'game') {
+      if (!this.clientsByPlayer.has(playerId)) return null;
       const instance = this.context.instanceOf(playerId);
       if (!instance || instance.kind !== purpose) return null;
+      const attached = this.driver.instance(instance.gameInstanceId);
+      if (!attached || deps.core?.getPlayerSelf(attached.state, playerId)?.status !== 'ACTIVE')
+        return null;
       const mediaInstanceId = this.mediaInstances.get(instance.gameInstanceId);
       return mediaInstanceId ? { mediaInstanceId, gameInstanceId: instance.gameInstanceId } : null;
     }
 
+    async requestMediaGrant(
+      playerId: string,
+      purpose: 'practice' | 'game',
+      previousGeneration: number | null,
+    ): Promise<PreparationResult | null> {
+      const scope = this.mediaScopeFor(playerId, purpose);
+      if (!scope || !deps.media || (deps.canStart && !deps.canStart())) return null;
+      this.pendingPreparations.set(
+        scope.mediaInstanceId,
+        (this.pendingPreparations.get(scope.mediaInstanceId) ?? 0) + 1,
+      );
+      try {
+        return await this.prepareMediaGrant(playerId, purpose, previousGeneration, scope);
+      } finally {
+        const remaining = (this.pendingPreparations.get(scope.mediaInstanceId) ?? 1) - 1;
+        if (remaining === 0) this.pendingPreparations.delete(scope.mediaInstanceId);
+        else this.pendingPreparations.set(scope.mediaInstanceId, remaining);
+      }
+    }
+
+    private async prepareMediaGrant(
+      playerId: string,
+      purpose: 'practice' | 'game',
+      previousGeneration: number | null,
+      scope: { mediaInstanceId: string },
+    ): Promise<PreparationResult | null> {
+      if (!deps.media) return null;
+      const matchId = this.matchId;
+      if (!(await this.waitForMediaFrame(scope.mediaInstanceId))) return null;
+      if (
+        this.disposed ||
+        matchId !== this.matchId ||
+        this.mediaScopeFor(playerId, purpose)?.mediaInstanceId !== scope.mediaInstanceId
+      )
+        return null;
+      let request = this.grantRequests.get(playerId);
+      const current = this.playerGenerations.get(playerId);
+      if (request?.mediaInstanceId !== scope.mediaInstanceId) request = undefined;
+      if (!request || previousGeneration !== request.expectedPreviousGeneration) {
+        if (previousGeneration !== (current?.receiverGeneration ?? null)) return null;
+        request = {
+          requestId: randomUUID(),
+          matchId: this.context.matchId,
+          mediaInstanceId: scope.mediaInstanceId,
+          playerId,
+          purpose,
+          expectedPreviousGeneration: current?.receiverGeneration ?? null,
+        };
+        this.grantRequests.set(playerId, request);
+      }
+      let result: PreparationResult;
+      try {
+        result = await deps.media.prepareGeneration(request);
+      } catch {
+        // An unclassified producer failure may have allocated a generation. Do not infer a
+        // reusable previous cursor or let the practice transition silently pass this request.
+        result = {
+          ...request,
+          status: 'rejected',
+          receiverGeneration: null,
+          grant: null,
+          code: 'TIMEOUT',
+        };
+      }
+      const active = this.mediaScopeFor(playerId, purpose);
+      if (
+        this.disposed ||
+        request.matchId !== this.matchId ||
+        active?.mediaInstanceId !== request.mediaInstanceId
+      ) {
+        if (result.status === 'ready')
+          await deps.media.retireGeneration({
+            requestId: randomUUID(),
+            matchId: result.matchId,
+            mediaInstanceId: result.mediaInstanceId,
+            playerId,
+            receiverGeneration: result.receiverGeneration,
+            reason:
+              !this.disposed &&
+              request.matchId === this.matchId &&
+              this.phase !== 'ABORTED' &&
+              this.phase !== 'RESULT'
+                ? 'phase-change'
+                : 'shutdown',
+          });
+        return null;
+      }
+      this.driver.enqueueMediaControl({ type: 'MEDIA_PREPARED', result });
+      return result;
+    }
+
+    acceptMediaReport(playerId: string, report: MediaStatusReport): boolean {
+      if (
+        !deps.media?.lifecycle ||
+        report.matchId !== this.matchId ||
+        !this.clientsByPlayer.has(playerId)
+      )
+        return false;
+      const current = this.playerGenerations.get(playerId);
+      const retiring = this.retiringScopes.get(playerId);
+      const instance = this.context.instanceOf(playerId);
+      const activeInstanceId = instance
+        ? this.mediaInstances.get(instance.gameInstanceId)
+        : undefined;
+      const matches = (scope: typeof current) =>
+        scope?.mediaInstanceId === report.mediaInstanceId &&
+        scope.receiverGeneration === report.receiverGeneration;
+      // The HTTP response can reach D before the next B tick applies MEDIA_PREPARED.
+      // E's lifecycle validates the exact issued generation in this trusted current instance.
+      if (
+        activeInstanceId !== report.mediaInstanceId &&
+        !(report.status === 'closed' && (matches(current) || matches(retiring)))
+      )
+        return false;
+      return deps.media.lifecycle.report({ ...report, playerId });
+    }
+
     enqueueMediaControl(control: MediaControl) {
+      if (this.disposed) {
+        if (control.type === 'MEDIA_RETIRED') this.applyMediaControl(control);
+        if (this.pendingRetirements.size === 0) {
+          deps.directory.unregister(this.roomCode, this);
+          deps.slots.closeRoom(this.roomCode);
+        }
+        return;
+      }
       this.driver.enqueueMediaControl(control);
     }
 
     deliverBindings(playerId: string, message: MediaBindings) {
+      this.pendingBindings.push({ playerId, message });
+    }
+
+    private applyBindings(playerId: string, message: MediaBindings) {
+      const current = this.playerGenerations.get(playerId);
+      const instance = this.context.instanceOf(playerId);
+      if (
+        message.matchId !== this.matchId ||
+        !instance ||
+        this.mediaInstances.get(instance.gameInstanceId) !== message.mediaInstanceId ||
+        current?.mediaInstanceId !== message.mediaInstanceId ||
+        current.receiverGeneration !== message.receiverGeneration
+      )
+        return;
       this.lastBindings.set(playerId, message);
       this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.mediaBindings, message);
       const self = message.participants.find((p) => p.playerId === playerId);
@@ -214,12 +378,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     deliverAudioPolicy(playerId: string, message: AudioPolicy) {
-      this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, message);
+      this.pendingAudio.push({ playerId, message });
     }
 
     // ---- Colyseus lifecycle ----
 
     static async onAuth(_token: string, options: unknown, _context: AuthContext) {
+      if (deps.strictProduct && !deps.canStart?.()) throw new ServerError(503, 'NOT_READY');
       const parsed = productJoinOptionsSchema.safeParse(options);
       if (!parsed.success) throw new ServerError(400, 'INVALID_JOIN');
       if (parsed.data.protocolVersion !== PRODUCT_PROTOCOL_VERSION)
@@ -285,6 +450,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     onJoin(client: Client, _options: unknown, auth: SessionAuth) {
+      if (deps.strictProduct && !deps.canStart?.()) throw new ServerError(503, 'NOT_READY');
       const now = deps.monotonicNow();
       if (!auth || auth.roomCode !== this.roomCode) throw new ServerError(403, 'WRONG_ROOM');
       if (this.phase !== 'LOBBY' && this.phase !== 'DEVICE_CHECK')
@@ -302,6 +468,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       this.clientsByPlayer.set(auth.playerId, client);
       this.playersByConnection.set(client.sessionId, auth);
+      deps.media?.lifecycle?.setGameConnection({
+        matchId: this.matchId,
+        playerId: auth.playerId,
+        connected: true,
+      });
       const joinOrder =
         deps.slots.joinOrder(this.roomCode, auth.playerId) ?? this.lobby.list().length;
       this.lobby.add(auth.playerId, auth.nickname, joinOrder);
@@ -336,8 +507,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     onDispose() {
+      this.disposed = true;
+      this.invalidateLayout();
+      for (const mediaInstanceId of this.mediaFrameWaiters.keys())
+        this.settleMediaFrameWaiters(mediaInstanceId, false);
       deps.coordinator.unregister(this.roomId);
-      deps.directory.unregister(this.roomCode, this);
+      // Retiring seats keep a callback target until E confirms the remote boundary.
+      if (this.pendingRetirements.size === 0) deps.directory.unregister(this.roomCode, this);
       deps.sessions.invalidateRoom(this.roomCode);
       for (const member of deps.slots.members(this.roomCode))
         deps.slots.release(this.roomCode, member.playerId, {
@@ -482,6 +658,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Tick ----
 
     tick() {
+      if (this.disposed) return;
       const now = deps.monotonicNow();
       for (const { connectionId, heartbeat } of this.heartbeat.due(
         now,
@@ -497,7 +674,28 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       for (const control of this.heartbeat.sweep(now))
         if (control.type === 'CONNECTION_LOST') this.handleConnectionLost(control.playerId);
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
+      for (const { playerId, message } of this.pendingBindings.splice(0))
+        this.applyBindings(playerId, message);
+      for (const { playerId, message } of this.pendingAudio.splice(0)) {
+        const current = this.playerGenerations.get(playerId);
+        const instance = this.context.instanceOf(playerId);
+        if (
+          message.matchId === this.matchId &&
+          instance &&
+          this.mediaInstances.get(instance.gameInstanceId) === message.mediaInstanceId &&
+          current?.mediaInstanceId === message.mediaInstanceId &&
+          current.receiverGeneration === message.receiverGeneration
+        )
+          this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, message);
+      }
       this.driver.tick();
+      if (this.phase !== 'ABORTED' && this.phase !== 'RESULT' && deps.core) {
+        const aborted = this.driver
+          .attached()
+          .map((instance) => deps.core!.getFrame(instance.state))
+          .find((frame) => frame.abortReason !== null);
+        if (aborted?.abortReason) this.abortMatch(aborted.abortReason, 'CORE_ABORT');
+      }
       this.advancePhase(now);
       this.checkExpiry(now);
       this.syncPublic();
@@ -516,6 +714,25 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             .map((p) => p.playerId);
           const verdict = this.practice.evaluate(now, members);
           if (verdict === 'continue') return;
+          if (deps.media) {
+            const pending = this.hasPendingPreparations();
+            const prepared = members.every((playerId) => {
+              const scope = this.mediaScopeFor(playerId, 'practice');
+              return (
+                scope &&
+                this.playerGenerations.get(playerId)?.mediaInstanceId === scope.mediaInstanceId
+              );
+            });
+            // PRACTICE_READY can precede the first grant HTTP request. In addition to settled
+            // promises, require each current practice generation to be committed by this tick.
+            // Never await inside the tick or extend the original practice deadline.
+            if (pending || !prepared) {
+              if (!this.practice.expired(now)) return;
+              if (pending) this.abortMatch('MEDIA_UNAVAILABLE', 'MEDIA_PREPARE_TIMEOUT');
+              else this.returnToDeviceCheck('PRACTICE_MEDIA_NOT_READY');
+              return;
+            }
+          }
           const next =
             verdict === 'end-all-ready'
               ? 'to-map-finalizing'
@@ -524,6 +741,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           return;
         }
         case 'MAP_FINALIZING':
+          if (this.pendingRetirements.size > 0) return;
           if (!this.finalizing) this.startFinalizing();
           if (this.pendingLayout) {
             const result = this.pendingLayout;
@@ -594,6 +812,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Phase transitions ----
 
     private startPractice() {
+      if (deps.canStart && !deps.canStart()) {
+        this.blockedReason = 'NOT_READY';
+        return;
+      }
       const now = deps.monotonicNow();
       if (!deps.core || !deps.practice || !deps.tuning) {
         this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
@@ -657,15 +879,31 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       const seed = this.context.seed ?? 0;
       const { loader, masterPath, fallbackPath, templateId, templateVersion } = deps.layouts;
+      const revision = ++this.layoutRevision;
+      const matchId = this.matchId;
       this.finalizing = loader
         .prepare({ masterPath, fallbackPath, templateId, templateVersion, players, seed })
         .then((result) => {
+          if (
+            this.disposed ||
+            revision !== this.layoutRevision ||
+            matchId !== this.matchId ||
+            this.phase !== 'MAP_FINALIZING'
+          )
+            return;
           this.pendingLayout =
             result.status === 'selected'
               ? { status: 'selected', layout: result.layout.layout }
               : { status: 'unavailable', diagnostic: result.diagnostic };
         })
         .catch(() => {
+          if (
+            this.disposed ||
+            revision !== this.layoutRevision ||
+            matchId !== this.matchId ||
+            this.phase !== 'MAP_FINALIZING'
+          )
+            return;
           this.pendingLayout = { status: 'unavailable', diagnostic: 'LOADER_THREW' };
         });
     }
@@ -696,47 +934,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       for (const playerId of playerIds) {
         this.context.enterInstance(playerId, instance.gameInstanceId);
         if (!deps.media) this.loading.setReceiverGeneration(playerId, mediaInstanceId, 0);
-        else this.prepareGeneration(playerId, mediaInstanceId, 'game');
+        // The authenticated HTTP request starts or reuses this player's generation request.
       }
       this.setPhase('GAME_LOADING');
     }
 
-    private prepareGeneration(
-      playerId: string,
-      mediaInstanceId: string,
-      purpose: 'practice' | 'game',
-    ) {
-      if (!deps.media) return;
-      const previous = this.playerGenerations.get(playerId);
-      const requestId = randomUUID();
-      deps.media
-        .prepareGeneration({
-          requestId,
-          matchId: this.context.matchId,
-          playerId,
-          mediaInstanceId,
-          purpose,
-          expectedPreviousGeneration: previous?.receiverGeneration ?? null,
-        })
-        .then((result) => this.driver.enqueueMediaControl({ type: 'MEDIA_PREPARED', result }))
-        .catch(() =>
-          this.driver.enqueueMediaControl({
-            type: 'MEDIA_PREPARED',
-            result: {
-              requestId,
-              matchId: this.context.matchId,
-              playerId,
-              mediaInstanceId,
-              status: 'unknown',
-              receiverGeneration: previous?.receiverGeneration ?? 0,
-              grant: null,
-              code: 'TIMEOUT',
-            },
-          }),
-        );
-    }
-
     private startCountdown(now: number) {
+      if (deps.canStart && !deps.canStart()) return;
       const barrier = this.loading.current;
       if (!barrier) return;
       const startAt = this.countdown.arm(barrier.loadId, now);
@@ -751,6 +955,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private abortMatch(reason: PublicMatchState['abortReason'] | null, diagnostic: string) {
+      this.invalidateLayout();
       this.blockedReason = diagnostic;
       this.abortReason = reason;
       this.driver.cancelAllPending('ROUND_ENDED');
@@ -763,7 +968,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private returnToDeviceCheck(diagnostic: string) {
+      // Retiring an instance while an allocation is unresolved can hide E's newest cursor.
+      // A fresh match is required for this exceptional path; ordinary device retries remain.
+      if (this.hasPendingPreparations()) {
+        this.abortMatch('MEDIA_UNAVAILABLE', diagnostic);
+        return;
+      }
+      this.invalidateLayout();
       this.blockedReason = diagnostic;
+      this.lobby.clearReady();
       for (const instance of this.driver.attached())
         this.retireInstance(instance.gameInstanceId, 'phase-change');
       this.loading.invalidate();
@@ -781,6 +994,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const members = this.context.retireInstance(gameInstanceId);
       const mediaInstanceId = this.mediaInstances.get(gameInstanceId);
       this.mediaInstances.delete(gameInstanceId);
+      if (mediaInstanceId) {
+        this.observedMediaInstances.delete(mediaInstanceId);
+        this.settleMediaFrameWaiters(mediaInstanceId, false);
+      }
       for (const playerId of members) {
         this.dispatcher.publishView(playerId, 'scope', this.phase);
         if (mediaInstanceId && deps.media) this.retireGeneration(playerId, mediaInstanceId, reason);
@@ -795,6 +1012,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const generation = this.playerGenerations.get(playerId);
       if (!deps.media || !generation || generation.mediaInstanceId !== mediaInstanceId) return;
       this.pendingRetirements.add(playerId);
+      this.retiringScopes.set(playerId, generation);
       const requestId = randomUUID();
       const request = {
         requestId,
@@ -806,9 +1024,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       };
       deps.media
         .retireGeneration(request)
-        .then((result) => this.driver.enqueueMediaControl({ type: 'MEDIA_RETIRED', result }))
+        .then((result) => this.enqueueMediaControl({ type: 'MEDIA_RETIRED', result }))
         .catch(() =>
-          this.driver.enqueueMediaControl({
+          this.enqueueMediaControl({
             type: 'MEDIA_RETIRED',
             result: { ...request, status: 'unknown', code: 'TIMEOUT' },
           }),
@@ -816,6 +1034,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private startNewRound() {
+      this.invalidateLayout();
       const request = this.rematch.take();
       const now = deps.monotonicNow();
       for (const instance of this.driver.attached())
@@ -837,6 +1056,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.seenMediaRequests.clear();
       this.seenMediaEvents.clear();
       this.playerGenerations.clear();
+      this.grantRequests.clear();
+      this.retiringScopes.clear();
+      this.pendingBindings.length = 0;
+      this.pendingAudio.length = 0;
       this.lastBindings.clear();
       this.phase = 'LOBBY';
       this.context.bumpVersion();
@@ -844,8 +1067,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.coordinator.rearm(this.roomId);
       this.syncPublic();
       this.broadcastRoster();
-      for (const playerId of this.clientsByPlayer.keys())
+      for (const playerId of this.clientsByPlayer.keys()) {
+        deps.media?.lifecycle?.setGameConnection({
+          matchId: this.matchId,
+          playerId,
+          connected: true,
+        });
         this.dispatcher.publishView(playerId, 'initial', this.phase);
+      }
       this.evaluateWaiting();
     }
 
@@ -866,10 +1095,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private applyMediaControl(control: MediaControl) {
       if (control.type === 'MEDIA_PREPARED') {
         const { result } = control;
-        if (this.seenMediaRequests.has(result.requestId) || result.matchId !== this.context.matchId)
+        const request = this.grantRequests.get(result.playerId);
+        if (
+          (this.seenMediaRequests.has(result.requestId) && result.status === 'ready') ||
+          result.matchId !== this.context.matchId ||
+          request?.requestId !== result.requestId
+        )
           return;
-        this.seenMediaRequests.add(result.requestId);
+        const active = this.mediaScopeFor(result.playerId, request.purpose);
+        if (active?.mediaInstanceId !== result.mediaInstanceId) return;
         if (result.status === 'ready') {
+          this.seenMediaRequests.add(result.requestId);
           this.playerGenerations.set(result.playerId, {
             mediaInstanceId: result.mediaInstanceId,
             receiverGeneration: result.receiverGeneration,
@@ -880,17 +1116,41 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             result.receiverGeneration,
           );
           this.dispatcher.publishView(result.playerId, 'change', this.phase);
-        } else if (this.phase === 'GAME_LOADING')
-          this.returnToDeviceCheck(`MEDIA_PREPARE:${result.code}`);
+        } else {
+          // E can reject after allocation/retirement. Preserve any returned metadata for
+          // cleanup, but never turn a failed/unknown preparation into a same-match retry.
+          if (result.receiverGeneration !== null)
+            this.playerGenerations.set(result.playerId, {
+              mediaInstanceId: result.mediaInstanceId,
+              receiverGeneration: result.receiverGeneration,
+            });
+          this.abortMatch('MEDIA_UNAVAILABLE', `MEDIA_PREPARE:${result.code}`);
+        }
       } else if (control.type === 'MEDIA_RETIRED') {
         const { result } = control;
+        const retiring = this.retiringScopes.get(result.playerId);
+        if (
+          result.matchId !== this.matchId ||
+          retiring?.mediaInstanceId !== result.mediaInstanceId ||
+          retiring.receiverGeneration !== result.receiverGeneration
+        )
+          return;
         if (result.status === 'confirmed') {
           this.pendingRetirements.delete(result.playerId);
-          this.playerGenerations.delete(result.playerId);
           if (deps.slots.slotState(this.roomCode, result.playerId) === 'RETIRING')
             deps.slots.release(this.roomCode, result.playerId, { confirmedRetirement: true });
         }
       } else if (control.type === 'MEDIA_FAILED') {
+        const current = this.playerGenerations.get(control.playerId);
+        const instance = this.context.instanceOf(control.playerId);
+        if (
+          control.matchId !== this.matchId ||
+          !instance ||
+          this.mediaInstances.get(instance.gameInstanceId) !== control.mediaInstanceId ||
+          current?.mediaInstanceId !== control.mediaInstanceId ||
+          current.receiverGeneration !== control.receiverGeneration
+        )
+          return;
         if (this.seenMediaEvents.has(control.eventId)) return;
         this.seenMediaEvents.add(control.eventId);
         if (this.phase === 'PLAYING' || this.phase === 'COUNTDOWN') {
@@ -898,10 +1158,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           if (game)
             this.driver.enqueueControl(game.gameInstanceId, {
               type: 'ABORT_MATCH',
-              reason: 'MEDIA_UNAVAILABLE',
+              reason:
+                control.code === 'POLICY_UNKNOWN' ? 'MEDIA_POLICY_UNCERTAIN' : 'MEDIA_UNAVAILABLE',
             });
-        } else if (this.phase === 'GAME_LOADING')
-          this.returnToDeviceCheck(`MEDIA_FAILED:${control.code}`);
+        } else if (this.phase === 'GAME_LOADING' || this.phase === 'TEAM_PRACTICE')
+          this.abortMatch('MEDIA_UNAVAILABLE', `MEDIA_FAILED:${control.code}`);
       }
     }
 
@@ -916,6 +1177,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private handleConnectionLost(playerId: string) {
+      deps.media?.lifecycle?.setGameConnection({
+        matchId: this.matchId,
+        playerId,
+        connected: false,
+      });
       const instance = this.context.instanceOf(playerId);
       if (instance)
         this.driver.enqueueControl(instance.gameInstanceId, { type: 'CONNECTION_LOST', playerId });
@@ -999,13 +1265,6 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private overload(lagMs: number) {
-      deps.emitMetric?.({
-        name: 'tick.overload',
-        value: lagMs,
-        unit: 'ms',
-        atMs: deps.monotonicNow(),
-        matchRef: this.roomId,
-      });
       if (
         ['TEAM_PRACTICE', 'MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'].includes(
           this.phase,
@@ -1013,6 +1272,33 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       )
         this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
       deps.coordinator.rearm(this.roomId);
+    }
+
+    private invalidateLayout() {
+      this.layoutRevision += 1;
+      this.finalizing = null;
+      this.pendingLayout = null;
+    }
+
+    private waitForMediaFrame(mediaInstanceId: string): Promise<boolean> {
+      if (this.observedMediaInstances.has(mediaInstanceId)) return Promise.resolve(true);
+      return new Promise((resolve) => {
+        const waiters = this.mediaFrameWaiters.get(mediaInstanceId) ?? new Set();
+        waiters.add(resolve);
+        this.mediaFrameWaiters.set(mediaInstanceId, waiters);
+      });
+    }
+
+    private hasPendingPreparations() {
+      return [...this.mediaInstances.values()].some(
+        (mediaInstanceId) => (this.pendingPreparations.get(mediaInstanceId) ?? 0) > 0,
+      );
+    }
+
+    private settleMediaFrameWaiters(mediaInstanceId: string, observed: boolean) {
+      const waiters = this.mediaFrameWaiters.get(mediaInstanceId);
+      this.mediaFrameWaiters.delete(mediaInstanceId);
+      for (const resolve of waiters ?? []) resolve(observed);
     }
   }
 

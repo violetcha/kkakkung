@@ -70,6 +70,7 @@ export class RoomTickCoordinator {
    * many ticks executed and whether work remained (the caller should schedule another run).
    */
   run(): { executed: number; yielded: boolean; overloaded: string[] } {
+    const runAt = this.options.now();
     const overloaded: string[] = [];
     let executed = 0;
     let pending = false;
@@ -102,7 +103,12 @@ export class RoomTickCoordinator {
         this.emit('tick.due', 1, 'count', now, id);
         this.emit('eventLoop.lag', lag, 'ms', now, id);
         if (round > 0) this.emit('tick.catchup', 1, 'count', now, id);
-        room.onTick(lag, room.executed);
+        const startedAt = this.options.now();
+        try {
+          room.onTick(lag, room.executed);
+        } finally {
+          this.emit('tick.duration', Math.max(0, this.options.now() - startedAt), 'ms', runAt, id);
+        }
       }
       if (!any) break;
     }

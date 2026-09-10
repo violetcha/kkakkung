@@ -31,9 +31,9 @@ export function createOperationsRoutes(deps: {
   authorize: OperatorAuthorize;
 }): Router {
   const router = Router();
-  router.use(requireOperator(deps.authorize));
+  const authorize = requireOperator(deps.authorize);
   const unavailable = (res: Response) => res.status(503).json({ error: 'OPERATIONS_UNAVAILABLE' });
-  router.post(OPERATIONS_ROUTES.commands, (req: Request, res: Response) => {
+  router.post(OPERATIONS_ROUTES.commands, authorize, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const port = deps.operations();
     if (!port) return void unavailable(res);
@@ -44,7 +44,7 @@ export function createOperationsRoutes(deps: {
       return void res.status(409).json({ error: submission.code });
     res.status(202).json(submission.snapshot);
   });
-  router.get(OPERATIONS_ROUTES.snapshot, (req: Request, res: Response) => {
+  router.get(OPERATIONS_ROUTES.snapshot, authorize, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const port = deps.operations();
     if (!port) return void unavailable(res);
@@ -52,7 +52,7 @@ export function createOperationsRoutes(deps: {
     if (!snapshot) return void res.status(404).json({ error: 'NOT_FOUND' });
     res.status(200).json(snapshot);
   });
-  router.get(OPERATIONS_ROUTES.status, (_req: Request, res: Response) => {
+  router.get(OPERATIONS_ROUTES.status, authorize, (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const port = deps.operations();
     if (!port) return void unavailable(res);

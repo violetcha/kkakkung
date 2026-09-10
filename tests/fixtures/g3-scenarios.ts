@@ -44,7 +44,7 @@ export const PRODUCT_DECISION_PENDING = Object.freeze([
  */
 export const G3_RULES_LANDED = Object.freeze({
   escape: 'A-33 (EX-02/EX-03) EXIT_START/EXIT_CANCEL/EXIT_PROGRESS in matchCore',
-  trap: 'A-21..A-25 (EQ-01..EQ-05) INSTALL/INSTALL_CANCEL, arming, trap activation, restraint',
+  trap: 'A-23..A-27 (EQ-01..EQ-05) INSTALL/INSTALL_CANCEL, arming, trap activation, restraint',
 } as const);
 
 export const G3_TUNING: MatchTuning = Object.freeze({

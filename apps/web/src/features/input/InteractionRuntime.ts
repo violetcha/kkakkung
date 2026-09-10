@@ -504,6 +504,12 @@ export const createInteractionRuntime = (
   const currentPurpose = (): InstancePurpose =>
     context.get()?.phase === 'TEAM_PRACTICE' ? 'practice' : 'game';
   const bindingStore: BindingStore = createBindingStore();
+  let acceptedScope: MediaScope | null = null;
+  const matchesAcceptedScope = (scope: MediaScope) =>
+    acceptedScope !== null &&
+    scope.matchId === acceptedScope.matchId &&
+    scope.mediaInstanceId === acceptedScope.mediaInstanceId &&
+    scope.receiverGeneration === acceptedScope.receiverGeneration;
   const policyStore: PolicyStore = createPolicyStore(bindingStore);
   let audioGraph: AudioGraph | null = null;
 
@@ -671,6 +677,7 @@ export const createInteractionRuntime = (
     media: {
       closeOutput: () => audioGraph?.setOutputLock('locked'),
       stopListeners: () => {
+        acceptedScope = null;
         policyStore.reset();
       },
       unpublishAll: async () => {
@@ -1005,12 +1012,18 @@ export const createInteractionRuntime = (
       // SDK 적재를 먼저 끝낸다. 적재 실패는 연결 실패로 드러난다.
       await ensureLiveKit();
       if (disposed || !lifecycle.canOperate()) return;
+      acceptedScope = {
+        matchId: grant.matchId,
+        mediaInstanceId: grant.mediaInstanceId,
+        receiverGeneration: grant.receiverGeneration,
+      };
+      bindingStore.beginScope(acceptedScope);
       await media.connect(grant);
     },
 
     /** 별도 채널의 정책. 참조 bindingRevision과 검증 SID가 맞아야 소리가 난다. */
     applyAudioPolicy(policy: AudioPolicy) {
-      if (disposed || !lifecycle.canOperate()) return;
+      if (disposed || !lifecycle.canOperate() || !matchesAcceptedScope(policy)) return;
       const result = policyStore.apply(policy);
       if (result.status === 'ignored') return;
       reconcileAudio();
@@ -1026,7 +1039,7 @@ export const createInteractionRuntime = (
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */
     applyMediaBindings(bindings) {
-      if (disposed || !lifecycle.canOperate()) return;
+      if (disposed || !lifecycle.canOperate() || !matchesAcceptedScope(bindings)) return;
       const selfPlayerId = context.get()?.selfPlayerId ?? '';
       const result = bindingStore.apply(bindings, selfPlayerId);
       if (result.status !== 'applied') return;
@@ -1063,8 +1076,10 @@ export const createInteractionRuntime = (
       const handle = compositor?.getHandle() ?? null;
       if (!handle) return null;
       const faceSid = await target.publishFace(handle, scope, qualityPreset);
+      if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
       const microphone = devices?.getMicrophoneTrack() ?? null;
       if (microphone) await target.publishMicrophone(microphone, scope);
+      if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
       return faceSid;
     },
 

@@ -16,7 +16,9 @@ pnpm dev:server
 - 테스트 화면: http://localhost:2567/playground — 방 접속 · 메시지 전송 · 상태 확인
 - 관리 화면: http://localhost:2567/monitor
 
-`main.ts`는 아직 **개발 profile**로 기동한다. 개발 profile은 진단 `sandbox`(0.1.0)와 개발 `kkakkung`(`DevKkakkungRoom`, 0.1 wire, 전체 maze 공개)을 등록하며 웹 e2e·Playground 회귀용이다. 제품 `kkakkung` Room은 `createApplication(config, product)`에 `ProductProfile`을 주입할 때만 등록된다. F의 설정 export가 도착하면 `main.ts`가 profile을 조립한다.
+`main.ts`는 `SERVER_PROFILE=development`(기본값)와 `product`를 명시적으로 구분한다. 개발 profile은 진단 `sandbox`(0.1.0)와 개발 `kkakkung`(`DevKkakkungRoom`, 0.1 wire, 전체 maze 공개)을 등록하며 웹 e2e·Playground 회귀용이다. 제품 profile은 `ProductProfileLoader`로 실제 A 코어·맵·튜닝과 F 설정·E coordinator/운영 인증을 조립한다. 제품에서는 개발 세션·Playground·monitor·sandbox를 제공하지 않는다.
+
+제품 profile에는 F의 admission 설정 묶음이 필요하다. `MEDIA_MODE=disabled`는 제품 공개 계약과 실제 게임 모듈을 로드하지만 readiness/admission은 `LOCKED`로 유지한다. `MEDIA_MODE=livekit`에는 전체 Cloud 설정·운영 정책이 필요하며, 설정만으로 공식 자격·예산·감사 증거를 대체하지 않는다. `NODE_ENV=production`은 배포 검증 전까지 거절한다. 환경 변수 목록과 설명은 [환경 설정 예시](.env.example)를 따른다.
 
 ## 제품 조립 (`ProductProfile`)
 
@@ -29,7 +31,11 @@ pnpm dev:server
 | `maxRooms`, `inviteMaxTtlMs`, `publicWindow`, `sessionAttempts`, `roomIdleTtlMs`, `trustProxy`, `opsToken`, 콘텐츠 경로 | F                | 초대 발급 NOT_READY, admission LOCKED     |
 | `developmentAdmission`                                                                                                  | 개발/테스트 전용 | production은 parseConfig가 거절           |
 
-기동 순서: E `initialize()` → fatal이면 listen 없이 close → `server.listen` → `installHttpBoundary`(SDK 매칭·OPTIONS 이전 Origin/2KB) → `RoomTickCoordinator` 10ms 타이머.
+기동 순서: 실제 콘텐츠/튜닝 검증 → E `initialize()` → fatal이면 listen 없이 close → `server.listen` → `installHttpBoundary`(SDK 매칭·OPTIONS 이전 Origin/2KB) → `RoomTickCoordinator` 10ms 타이머. F의 metric registry·alert policy·구조화 로그에 tick duration과 process 측정값을 전달한다.
+
+미디어 발급은 인증된 `POST /api/media/grants`가 서버 requestId를 생성·재사용한다. 새 인스턴스의 첫 실제 프레임을 E가 관측할 때까지 발급을 대기시키며, 재시도도 E의 현재 권한·예산·토큰 만료 검사에 들어간다. B는 E의 control/bindings/audio 결과를 다음 tick에서 현재 인스턴스에만 적용하고, `/api/media/report`는 현재 인스턴스 및 정확한 발급 세대를 E lifecycle에 확인한다. 이전 인스턴스의 `closed` 보고와 원격 회수 확인은 단계 전환·재경기 장벽에 연결한다. 연습→경기 발급에는 이전 receiverGeneration이 필요하다. 모든 현재 연습 세대의 준비 결과를 tick에 적용하고 진행 중 발급이 끝나야 연습을 종료한다. 발급 결과가 불명인 상태로 기존 60초 기한을 넘거나 미디어 준비가 실패하면 `ABORTED/MEDIA_UNAVAILABLE`로 종료하며 같은 match의 세대를 추측해 재발급하지 않는다. 일반 장치 미준비·맵 준비 실패로 DEVICE_CHECK에 돌아가면 기존 READY를 지우고 다시 신고받는다.
+
+운영 증거는 F의 `RuntimeEvidence`가 `OPS_DATA_DIR/runtime-evidence.json`에서 검증해 E에 공급한다. 증거 없음·만료·변경·불일치는 잠금을 유지하며, 앱 종료나 기동 실패 시 증거 감시 자원도 종료한다. 준비·예산·감사 파일에 값을 임의로 채워 성공으로 만들지 않는다.
 
 ## 구조
 
@@ -56,7 +62,10 @@ src/
 - [x] 0.2.0 공개 계약·개인 뷰 allowlist·명령 접수/종결 원장·단일 Tick 경로
 - [x] 초대·세션·좌석·heartbeat·clock·재동기화·6인 준비·연습·맵 로더·로딩 장벽·카운트다운·재경기 (FakeCore 통합 시험)
 - [x] SDK 매칭 이전 HTTP Origin/2KB 경계와 WS Origin
-- [ ] A core/맵 포트, E 미디어·운영 인증, F 설정의 실제 결합 (blockedOn, [B 인계](../docs/execution/handoffs/B.md))
+- [x] A core/맵·튜닝, E coordinator·lifecycle·운영/health, F 설정·관측의 제품 조립 경로
+- [x] 실제 A 8개 fallback 변형·양팀 연습 맵과 strict 제품 HTTP 잠금 검증 (`product-profile.test.ts`)
+- [x] 실제 A/B/C/E 6인 연습→경기→한 명 세대 교체→종료/회수→재경기 검증 (`product-integration.test.ts`, D 장치·Cloud 경계는 synthetic)
+- [ ] 공식 Cloud 자격·예산·namespace/최초 감사 증거를 갖춘 실제 운영 검증 ([B 인계](../docs/execution/handoffs/B.md))
 - [ ] G4 정보 은폐·G5 6대·10방 부하의 실제 검증
 
 기본 loopback 설정을 유지하고 인증 없는 개발 관리 화면을 외부에 공개하지 않는다.

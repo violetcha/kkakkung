@@ -184,9 +184,15 @@ describe('createMediaSession', () => {
     const connecting = session.connect(grant());
     // 실제로 SDK connect가 시작된 뒤에 회수한다.
     await vi.waitFor(() => expect(rooms).toHaveLength(1));
-    await session.retire();
+    let closed = false;
+    const retiring = session.retire().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(closed).toBe(false);
     release();
     await connecting;
+    await retiring;
 
     expect(rooms[0]!.connect).toHaveBeenCalledTimes(1);
     expect(rooms[0]!.disconnect).toHaveBeenCalled();

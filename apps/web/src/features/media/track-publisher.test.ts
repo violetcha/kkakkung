@@ -104,6 +104,60 @@ function harness(options: { withReplace?: boolean; bytes?: number[] } = {}) {
 }
 
 describe('createTrackPublisher', () => {
+  it.each(['face', 'microphone'] as const)(
+    'waits and compensates an in-flight %s publish before retirement',
+    async (source) => {
+      const base = harness();
+      let resolve!: (value: { trackSid: string }) => void;
+      vi.mocked(base.participant.publishTrack).mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      const input = source === 'face' ? processedHandle() : track('audio');
+      const publishing =
+        source === 'face'
+          ? base.publisher.publishFace(input, scope)
+          : base.publisher.publishMicrophone(input as MediaStreamTrack, scope);
+      const rejected = expect(publishing).rejects.toMatchObject({ code: 'RETIRED' });
+      await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+      let completed = false;
+      const retiring = base.publisher.unpublishAll().then(() => {
+        completed = true;
+      });
+      await Promise.resolve();
+      expect(completed).toBe(false);
+      resolve({ trackSid: 'late' });
+      await rejected;
+      await retiring;
+      expect(base.participant.unpublishTrack).toHaveBeenCalledTimes(1);
+      expect(base.publisher.getPublications()).toEqual([]);
+      await expect(base.publisher.publishMicrophone(track('audio'), scope)).rejects.toMatchObject({
+        code: 'RETIRED',
+      });
+    },
+  );
+
+  it('does not claim cleanup when compensating an in-flight publication fails', async () => {
+    const base = harness();
+    let resolve!: (value: { trackSid: string }) => void;
+    vi.mocked(base.participant.publishTrack).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    vi.mocked(base.participant.unpublishTrack).mockRejectedValue(new Error('fixture SDK failure'));
+    const publishing = base.publisher.publishMicrophone(track('audio'), scope);
+    const failed = expect(publishing).rejects.toThrow('LOCAL_RETIREMENT_UNCONFIRMED');
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    const retiring = base.publisher.unpublishAll();
+    const cleanupFailed = expect(retiring).rejects.toThrow('LOCAL_RETIREMENT_UNCONFIRMED');
+    resolve({ trackSid: 'late' });
+    await failed;
+    await cleanupFailed;
+  });
   it('publishes the processed face with the 100kbps target and no simulcast', async () => {
     const base = harness();
     const handle = processedHandle();

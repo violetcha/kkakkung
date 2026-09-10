@@ -11,10 +11,11 @@
 // Exit codes: 0 all stages PASS, 1 a stage FAIL or INCOMPLETE, 2 usage, 3 BLOCKED (server did not
 // start / clients could not join). Never contacts LiveKit or any external service.
 
-import { spawn } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { clearInterval, setInterval, setTimeout } from 'node:timers';
 import { fileURLToPath } from 'node:url';
 import { register } from 'tsx/esm/api';
@@ -24,7 +25,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const { buildPlan, evaluateStage, stageDuration } =
   await import('../tests/load/GameLoadScenario.ts');
 const { GameLoadClient } = await import('../tests/load/GameLoadClient.ts');
-const { Client } = await import('@colyseus/sdk');
+// Reuse the server workspace's declared SDK instead of relying on root hoisting.
+const serverRequire = createRequire(new URL('../server/package.json', import.meta.url));
+const { Client } = serverRequire('@colyseus/sdk');
 const { PRODUCT_CLIENT_MESSAGES, PRODUCT_SERVER_MESSAGES } =
   await import('@kkakkung/protocol/game-messages');
 const { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } = await import('@kkakkung/protocol/version');
@@ -74,11 +77,23 @@ const metricsPath = resolve(evidenceDir, 'metrics.ndjson');
 if (existsSync(metricsPath)) writeFileSync(metricsPath, '');
 const sourceCommit = (() => {
   try {
-    return readFileSync(resolve(root, '.git/HEAD'), 'utf8').trim();
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   } catch {
     return 'unknown';
   }
 })();
+const sourceWorkingTreeDirty =
+  execFileSync('git', ['status', '--porcelain'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim().length > 0;
+const lockfileHash = createHash('sha256')
+  .update(readFileSync(resolve(root, 'pnpm-lock.yaml')))
+  .digest('hex');
+const evidenceScope =
+  plan.finalDurationSeconds < 1800 || !plan.stages.includes(10)
+    ? 'SHORT_GAME_DIAGNOSTIC'
+    : 'GAME_LOAD_DIAGNOSTIC';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (message) => console.log(`[run-game-load ${new Date().toISOString()}] ${message}`);
 
@@ -100,7 +115,25 @@ const server = spawn(
   ],
   {
     cwd: root,
-    env: { ...process.env, LOAD_OPS_TOKEN: opsToken },
+    // Only local process support variables are inherited, never LiveKit or operator credentials.
+    env: Object.assign(
+      Object.fromEntries(
+        Object.entries(process.env).filter(([key]) =>
+          [
+            'path',
+            'systemroot',
+            'windir',
+            'temp',
+            'tmp',
+            'home',
+            'userprofile',
+            'appdata',
+            'localappdata',
+          ].includes(key.toLowerCase()),
+        ),
+      ),
+      { LOAD_OPS_TOKEN: opsToken },
+    ),
     stdio: ['pipe', 'pipe', 'inherit'],
   },
 );
@@ -125,6 +158,7 @@ const serverPort = await new Promise((resolvePort, reject) => {
   server.once('exit', (code) => reject(new Error(`server exited early (${code})`)));
 }).catch((error) => {
   console.error(`BLOCKED: ${error.message}`);
+  server.kill('SIGKILL');
   process.exit(3);
 });
 const endpoint = `http://127.0.0.1:${serverPort}`;
@@ -310,7 +344,16 @@ try {
       },
       endedAt,
     );
-    const record = { ...result, startedAt, endedAt, network: opt.network, sourceCommit };
+    const record = {
+      ...result,
+      startedAt,
+      endedAt,
+      network: opt.network,
+      sourceCommit,
+      sourceWorkingTreeDirty,
+      lockfileHash,
+      evidenceScope,
+    };
     writeFileSync(
       resolve(evidenceDir, `clients-${rooms}-rooms.json`),
       JSON.stringify(
@@ -354,6 +397,10 @@ try {
       {
         generatedAt: new Date().toISOString(),
         sourceCommit,
+        sourceWorkingTreeDirty,
+        lockfileHash,
+        protocolVersion: PRODUCT_PROTOCOL_VERSION,
+        evidenceScope,
         network: opt.network,
         plan,
         stages: stageResults.map((s) => ({

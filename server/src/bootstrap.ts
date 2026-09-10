@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Server, ServerError, type Client } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import express, { type ErrorRequestHandler, type Request, type Response } from 'express';
@@ -24,14 +24,14 @@ import { createServerEpoch } from './game/MatchContext.js';
 import { RoomTickCoordinator } from './game/RoomTickCoordinator.js';
 import type {
   CorePort,
-  CreateMediaCoordinator,
   CreateOperatorAuth,
   EmitMetric,
   LayoutSelectionPort,
   MapPreparationPort,
   MatchTuning,
   MediaConfiguration,
-  MediaCoordinator,
+  MediaCoordinatorDeps,
+  ProductMediaRuntime,
   PracticeLayoutPort,
 } from './game/ports.js';
 import { createGameRoom } from './rooms/GameRoom.js';
@@ -43,6 +43,11 @@ import { checkOrigin, installHttpBoundary } from './session/HttpBoundary.js';
 import { InviteStore } from './session/InviteStore.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
+import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
+import { createHealthHandlers } from './health/HealthHandlers.js';
+import { createMetricRegistry, createProcessSampler } from './observability/MetricRegistry.js';
+import { createLogOptions, createStructuredEventLogger } from './observability/StructuredEvents.js';
+import { createAlertPolicy } from './observability/AlertPolicy.js';
 import { ProductSessionStore } from './session/ProductSessionStore.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
 import { createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
@@ -56,6 +61,8 @@ import { readFile } from 'node:fs/promises';
  * producers keep the matching capability disabled and reported, never faked.
  */
 export type ProductProfile<State = unknown> = Readonly<{
+  /** Real product entrypoint: no development endpoints or admission override. */
+  strictProduct?: boolean;
   serverEpoch?: string;
   monotonicNow?: () => number;
   epochNow?: () => number;
@@ -68,7 +75,7 @@ export type ProductProfile<State = unknown> = Readonly<{
   trustProxy: boolean;
   opsToken: string | null;
   createOperatorAuth: CreateOperatorAuth | null;
-  createMediaCoordinator: CreateMediaCoordinator | null;
+  createMediaCoordinator: ((deps: MediaCoordinatorDeps) => ProductMediaRuntime) | null;
   mediaConfig: Omit<MediaConfiguration, 'productSecurityReady'> | null;
   core: CorePort<State> | null;
   tuning: MatchTuning | null;
@@ -82,6 +89,8 @@ export type ProductProfile<State = unknown> = Readonly<{
     templateVersion: string;
   } | null;
   emitMetric?: EmitMetric;
+  /** Releases product configuration watchers/resources after coordinator shutdown. */
+  closeResources?: () => Promise<void>;
   assetVersion?: string;
   /**
    * Development/test only (parseConfig already forbids production): admission source when no
@@ -95,7 +104,7 @@ export function createApplication<State = unknown>(
   product?: ProductProfile<State>,
 ) {
   const sessions = new SessionStore();
-  const logger = pino({ level: config.logLevel, base: { service: config.namespace } });
+  const logger = pino(createLogOptions({ level: config.logLevel, service: config.namespace }));
   let ready = false;
   const allowedOrigin = (origin: string | null | undefined) =>
     checkOrigin(origin === null ? undefined : origin, config.allowedOrigins) !== 'rejected';
@@ -107,6 +116,19 @@ export function createApplication<State = unknown>(
   });
 
   const monotonicNow = product?.monotonicNow ?? (() => performance.now());
+  const metrics = createMetricRegistry({ now: monotonicNow });
+  const eventLogger = createStructuredEventLogger(logger);
+  const alerts = createAlertPolicy({ now: monotonicNow, onEvent: eventLogger.emit });
+  const histogram = monitorEventLoopDelay({ resolution: 20 });
+  const emitMetric: EmitMetric = (sample) => {
+    metrics.emitMetric(sample);
+    product?.emitMetric?.(sample);
+  };
+  const sampleProcess = createProcessSampler({
+    emit: emitMetric,
+    now: monotonicNow,
+    eventLoopDelay: histogram,
+  });
   const epochNow = product?.epochNow ?? (() => Date.now());
   const serverEpoch = product?.serverEpoch ?? createServerEpoch();
   const productSessions = new ProductSessionStore({ now: epochNow });
@@ -114,18 +136,25 @@ export function createApplication<State = unknown>(
   const directory = new RoomDirectory();
   const coordinator = new RoomTickCoordinator({
     now: monotonicNow,
-    emitMetric: product?.emitMetric,
+    emitMetric,
   });
-  let media: MediaCoordinator | null = null;
+  let media: ProductMediaRuntime | null = null;
   const admission = (): AdmissionState => {
     if (media) return media.getOperations().getStatus().admission;
-    return product?.developmentAdmission?.() ?? 'LOCKED';
+    return product?.strictProduct ? 'LOCKED' : (product?.developmentAdmission?.() ?? 'LOCKED');
   };
   // Without E's coordinator, readiness is unknown and stays LOCKED unless the explicit
   // development admission hook is present (development/test profile only).
   const readinessState = (): 'READY' | 'RECOVERING' | 'LOCKED' =>
-    media ? media.getReadiness().state : product?.developmentAdmission ? 'READY' : 'LOCKED';
-  const operationsReady = () => readinessState() === 'READY' && admission() === 'OPEN';
+    media
+      ? media.getReadiness().state
+      : !product?.strictProduct && product?.developmentAdmission
+        ? 'READY'
+        : 'LOCKED';
+  const operationsReady = () =>
+    readinessState() === 'READY' &&
+    admission() === 'OPEN' &&
+    (!product?.strictProduct || media?.canIssue?.() === true);
   const productSecurityReady = Boolean(
     product &&
     product.opsToken &&
@@ -154,7 +183,7 @@ export function createApplication<State = unknown>(
   if (product?.createMediaCoordinator && product.mediaConfig) {
     media = product.createMediaCoordinator({
       config: { ...product.mediaConfig, productSecurityReady },
-      emitMetric: product.emitMetric ?? (() => undefined),
+      emitMetric,
       enqueueControl: (control) => {
         const matchId = control.type === 'MEDIA_FAILED' ? control.matchId : control.result.matchId;
         directory.byMatch(matchId)?.enqueueMediaControl(control);
@@ -164,7 +193,7 @@ export function createApplication<State = unknown>(
       enqueueAudioPolicy: (playerId, message) =>
         directory.byMatch(message.matchId)?.deliverAudioPolicy(playerId, message),
       monotonicNow,
-      epochNowSeconds: () => Math.floor(epochNow() / 1000),
+      epochNowSeconds: () => epochNow() / 1000,
       getGameActivity: () =>
         slots?.activity() ?? { activeMatches: 0, activePractices: 0, pendingAdmissions: 0 },
     });
@@ -201,13 +230,23 @@ export function createApplication<State = unknown>(
         },
       );
       app.use(express.json({ limit: '2kb' }));
-      app.get('/health/live', (_req, res) => res.json({ status: 'alive' }));
+      if (product?.trustProxy) app.set('trust proxy', 1);
+      const mediaHealth = media?.isInitialized
+        ? createHealthHandlers({
+            getReadiness: () => media!.getReadiness(),
+            isInitialized: media.isInitialized,
+          })
+        : null;
+      app.get('/health/live', mediaHealth?.live ?? ((_req, res) => res.json({ status: 'alive' })));
       app.get('/health', (_req, res) =>
         res.json({ ok: true, stage: product ? 'product-assembly' : 'skeleton' }),
       );
       // This bootstrap is restricted to development/test by parseConfig.
-      app.use('/monitor', monitor());
-      app.use('/playground', playground());
+      if (!product?.strictProduct) {
+        app.use('/monitor', monitor());
+        app.use('/playground', playground());
+      }
+      if (mediaHealth) app.get('/health/ready', mediaHealth.ready);
       app.get('/health/ready', (_req, res) => {
         const readiness = readinessState();
         const healthy = ready && (!product || readiness === 'READY');
@@ -232,6 +271,7 @@ export function createApplication<State = unknown>(
         }),
       );
       app.post('/api/dev-sessions', (req, res) => {
+        if (product?.strictProduct) return void res.sendStatus(404);
         res.setHeader('Cache-Control', 'no-store');
         const result = devSessionRequestSchema.safeParse(req.body);
         if (!result.success) {
@@ -258,9 +298,18 @@ export function createApplication<State = unknown>(
         );
         if (authorize) {
           app.use(createInvitationRoutes({ invites, authorize }));
-          app.use(
-            createOperationsRoutes({ operations: () => media?.getOperations() ?? null, authorize }),
-          );
+          if (media?.createOperationsHandlers) {
+            const handlers = media.createOperationsHandlers(authorize);
+            app.post(OPERATIONS_ROUTES.commands, handlers.command);
+            app.get(OPERATIONS_ROUTES.snapshot, handlers.snapshot);
+            app.get(OPERATIONS_ROUTES.status, handlers.status);
+          } else
+            app.use(
+              createOperationsRoutes({
+                operations: () => media?.getOperations() ?? null,
+                authorize,
+              }),
+            );
         } else {
           app.use('/api/operations', (_req, res) =>
             res.status(503).json({ error: 'OPERATOR_AUTH_UNAVAILABLE' }),
@@ -284,15 +333,12 @@ export function createApplication<State = unknown>(
           if (!scope) return void res.status(409).json({ error: 'NOT_READY' });
           if (!media) return void res.status(503).json({ error: 'MEDIA_UNAVAILABLE' });
           if (!operationsReady()) return void res.status(409).json({ error: 'NOT_READY' });
-          const result = await media.prepareGeneration({
-            requestId: randomUUID(),
-            matchId: room.matchId,
-            playerId: auth.playerId,
-            mediaInstanceId: scope.mediaInstanceId,
-            purpose: parsed.data.purpose,
-            expectedPreviousGeneration: parsed.data.previousReceiverGeneration ?? null,
-          });
-          room.enqueueMediaControl({ type: 'MEDIA_PREPARED', result });
+          const result = await room.requestMediaGrant(
+            auth.playerId,
+            parsed.data.purpose,
+            parsed.data.previousReceiverGeneration ?? null,
+          );
+          if (!result) return void res.status(409).json({ error: 'WRONG_SCOPE' });
           if (result.status === 'ready') return void res.status(200).json(result.grant);
           res.status(result.status === 'unknown' ? 503 : 409).json({ error: result.code });
         });
@@ -305,6 +351,8 @@ export function createApplication<State = unknown>(
           const room = directory.get(auth.roomCode);
           if (!room || room.matchId !== parsed.data.matchId)
             return void res.status(409).json({ error: 'WRONG_SCOPE' });
+          if (!room.acceptMediaReport(auth.playerId, parsed.data))
+            return void res.status(409).json({ error: 'WRONG_SCOPE' });
           res.status(204).end();
         });
       }
@@ -315,7 +363,7 @@ export function createApplication<State = unknown>(
     },
   });
 
-  server.define(ROOM_NAME, createGameRoom(sessions));
+  if (!product?.strictProduct) server.define(ROOM_NAME, createGameRoom(sessions));
   if (product && slots) {
     const RoomClass = createKkakkungRoom<State>({
       serverEpoch,
@@ -344,7 +392,9 @@ export function createApplication<State = unknown>(
         : null,
       media,
       assetVersion: product.assetVersion ?? 'assets-unversioned',
-      emitMetric: product.emitMetric,
+      emitMetric,
+      canStart: operationsReady,
+      strictProduct: product.strictProduct,
       random: product.random,
       onInvalidateRoom: (roomCode) => invites?.forgetRoom(roomCode),
     });
@@ -371,30 +421,41 @@ export function createApplication<State = unknown>(
   }
 
   let tickTimer: NodeJS.Timeout | null = null;
+  let metricsTimer: NodeJS.Timeout | null = null;
   return {
     server,
     serverEpoch,
     directory,
     slots,
     coordinator,
+    metrics,
+    alerts,
     invites,
     productSessions,
     get media() {
       return media;
     },
     async listen() {
-      if (media) {
-        const init = await media.initialize();
-        if (init.status === 'fatal') {
-          await media.close();
-          throw new Error(`MEDIA_INITIALIZATION_${init.code}`);
+      try {
+        if (media) {
+          const init = await media.initialize();
+          if (init.status === 'fatal') {
+            throw new Error(`MEDIA_INITIALIZATION_${init.code}`);
+          }
+          logger.info(
+            { readiness: init.readiness.state, admission: init.admission },
+            'Media coordinator initialized',
+          );
         }
-        logger.info(
-          { readiness: init.readiness.state, admission: init.admission },
-          'Media coordinator initialized',
-        );
+        await server.listen(config.port, config.host);
+      } catch (error) {
+        try {
+          await media?.close();
+        } finally {
+          await product?.closeResources?.();
+        }
+        throw error;
       }
-      await server.listen(config.port, config.host);
       const httpServer = transport.server;
       if (httpServer)
         installHttpBoundary(httpServer, {
@@ -404,6 +465,16 @@ export function createApplication<State = unknown>(
         });
       tickTimer = setInterval(() => coordinator.run(), 10);
       tickTimer.unref();
+      histogram.enable();
+      metricsTimer = setInterval(() => {
+        sampleProcess();
+        for (const sample of metrics.drain()) {
+          alerts.observe(sample);
+          logger.info({ metric: sample }, 'metric');
+        }
+        alerts.observeReadiness(readinessState());
+      }, 1000);
+      metricsTimer.unref();
       ready = true;
       const address = httpServer?.address();
       const port = typeof address === 'object' && address ? address.port : config.port;
@@ -417,8 +488,18 @@ export function createApplication<State = unknown>(
       ready = false;
       if (tickTimer) clearInterval(tickTimer);
       tickTimer = null;
-      await server.gracefullyShutdown(false);
-      if (media) await media.close();
+      if (metricsTimer) clearInterval(metricsTimer);
+      metricsTimer = null;
+      histogram.disable();
+      try {
+        await server.gracefullyShutdown(false);
+      } finally {
+        try {
+          await media?.close();
+        } finally {
+          await product?.closeResources?.();
+        }
+      }
     },
   };
 }

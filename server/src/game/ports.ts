@@ -433,3 +433,12 @@ export interface MediaCoordinator {
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
 /** E implements; B mounts before every operator route. Server-internal, never a client claim. */
 export type CreateOperatorAuth = (token: string) => (authorization: string | undefined) => boolean;
+
+/** E's runtime extension is consumed by B without changing the base execution contract. */
+export type ProductMediaRuntime = MediaCoordinator &
+  Partial<
+    Pick<
+      import('../media/MediaCoordinator.js').MediaCoordinatorRuntime,
+      'lifecycle' | 'canIssue' | 'isInitialized' | 'createOperationsHandlers'
+    >
+  >;
