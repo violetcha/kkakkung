@@ -95,8 +95,9 @@ describe('runtime images', () => {
     expect(jenkinsfile).toMatch(
       /-t "\$IMG_WEB:\$TAG"\s+--label "org\.opencontainers\.image\.revision=\$GIT_SHA"/,
     );
-    expect(jenkinsfile).toContain(
-      "COMPOSE   = '-f infra/compose.yaml -f infra/compose.production.yaml'",
-    );
+    // The two-file compose is applied by the release runner, not by the pipeline itself (DP-06).
+    const runner = readFileSync(resolve(root, 'scripts/deploy-release.mjs'), 'utf8');
+    expect(runner).toContain("compose: 'infra/compose.yaml infra/compose.production.yaml'");
+    expect(jenkinsfile).not.toMatch(/docker compose[^\n]*\bup\b/);
   });
 });
