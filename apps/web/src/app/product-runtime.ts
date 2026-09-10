@@ -14,6 +14,8 @@ import {
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import { createPrivateEvents } from '../features/room/private-events';
+import type { HunterMarker } from '../features/game/map/past-event-markers';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
 import {
   createCommandLifecycle,
@@ -59,6 +61,8 @@ export type ProductSnapshot = {
   requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
   interaction: InteractionState;
   exchangeTarget: string | null;
+  markers: HunterMarker[];
+  exchangeNotice: string | null;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -89,6 +93,8 @@ export function bindProductRoom(
     requests: {},
     interaction: { selectedEquipment: 'sensor', mode: 'motion' },
     exchangeTarget: null,
+    markers: [],
+    exchangeNotice: null,
     lost: false,
     error: null,
     quality: 'medium',
@@ -108,7 +114,12 @@ export function bindProductRoom(
       deps.changed(snapshot);
     }
   };
+  let lastViewResync = -Infinity;
   const send = (type: string, value: unknown) => {
+    if (type === 'view-resync') {
+      if (deps.now() - lastViewResync < 1000) return;
+      lastViewResync = deps.now();
+    }
     if (active && !snapshot.lost) room.send(type, value);
   };
   const commands = createCommandLifecycle({
@@ -141,11 +152,43 @@ export function bindProductRoom(
     lost: lose,
     onAnchor: (value) => clock.anchor(value),
   });
+  const events = createPrivateEvents({
+    now: deps.now,
+    resync: () =>
+      snapshot.round &&
+      send('view-resync', {
+        matchId: snapshot.round.matchId,
+        lastStateVersion: snapshot.view?.stateVersion ?? 0,
+      }),
+    apply: (event) => {
+      if (!participating) return;
+      if (event.type === 'HUNTER_MARKER' && snapshot.view?.self?.role === 'tagger') {
+        const tick = clock.renderTick() ?? snapshot.round?.serverTick ?? 0;
+        if (event.payload.expiresTick > tick)
+          publish({
+            markers: [
+              ...snapshot.markers.filter(
+                (m) => m.expiresTick > tick && m.markerId !== event.payload.markerId,
+              ),
+              event.payload,
+            ].slice(-64),
+          });
+      }
+      if (event.type === 'EXCHANGE_COMPLETED')
+        publish({ exchangeNotice: '지도 교환이 완료되었습니다.' });
+      if (event.type === 'EXCHANGE_CANCELED')
+        publish({ exchangeNotice: `교환이 종료되었습니다. (${event.payload.reason})` });
+    },
+  });
   const views = createProductView({
     now: deps.now,
     resync: (matchId, lastStateVersion) => send('view-resync', { matchId, lastStateVersion }),
     changed: (view) => {
+      const oldScope = snapshot.view?.gameScope;
+      if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
+        publish({ markers: [], exchangeNotice: null });
       publish({ view });
+      events.update(view, snapshot.round?.matchId ?? '');
       if (view) commands.view(view.stateVersion);
       if (view?.self && view.self.status !== 'ACTIVE') {
         publish({ endedSelf: view.self });
@@ -220,9 +263,10 @@ export function bindProductRoom(
         bridge.runtime.setAudioOutputLock('locked');
       },
       clear: () => {
+        events.clear();
         commands.clear();
         loading.clear();
-        publish({ view: null, request: null, requests: {} });
+        publish({ view: null, request: null, requests: {}, markers: [], exchangeNotice: null });
       },
       end: () => owner.runtime.endParticipation(),
       leave: async () => {
@@ -390,6 +434,7 @@ export function bindProductRoom(
     commands.clear();
     loading.clear();
     views.clear();
+    events.clear();
     unsubscribers.splice(0).forEach((off) => off());
   }
   bridge = makeBridge();
@@ -461,6 +506,7 @@ export function bindProductRoom(
   on('command-result', commands.receipt);
   on('command-outcome', commands.outcome);
   on('request-status-result', commands.lookup);
+  on('private-event', events.receive);
   on('room-roster', (value) => {
     const result = roomRosterSchema.safeParse(value);
     if (
@@ -501,6 +547,7 @@ export function bindProductRoom(
       commands.poll();
       clock.poll();
       views.poll();
+      events.poll();
     },
     send: sendCommand,
     setPageActive(value: boolean) {
