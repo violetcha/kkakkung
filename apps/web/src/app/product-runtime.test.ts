@@ -180,6 +180,36 @@ it('releases rejected exit start immediately without creating a challenge', asyn
   expect(f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).not.toBe(id);
   await f.runtime.leave();
 });
+it('gates practice readiness on actual devices, withdraws on failure and clears practice knowledge', async () => {
+  const f = fixture();
+  f.state({ phase: 'TEAM_PRACTICE' });
+  const view = viewFixture({
+    gameScope: { kind: 'practice', revision: 1, gameInstanceId: 'practice' },
+  });
+  f.messages.get('private-view')!(view);
+  expect(f.runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } })).toBe('');
+  f.callbacks.onDeviceStatus({
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+    audioPlayback: 'ready',
+  });
+  expect(f.runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } })).not.toBe('');
+  f.callbacks.onDeviceStatus(INITIAL_DEVICES);
+  expect(f.send.mock.calls.filter(([type]) => type === 'command').at(-1)?.[1]).toMatchObject({
+    type: 'PRACTICE_READY',
+    payload: { ready: false },
+  });
+  expect(f.runtime.getSnapshot().practiceReady).toBe(false);
+  f.state({ phase: 'MAP_FINALIZING', stateVersion: 11 });
+  expect(f.runtime.getSnapshot().view).toBeNull();
+  expect(f.runtime.getSnapshot().markers).toEqual([]);
+  expect(f.context.mock.lastCall?.[0].pageActive).toBe(false);
+  f.messages.get('private-view')!(view);
+  expect(f.runtime.getSnapshot().view).toBeNull();
+  await f.runtime.leave();
+});
 it('locks COUNTDOWN, tab hide and socket close synchronously and cleans up once', async () => {
   const f = fixture();
   f.state({ phase: 'COUNTDOWN', stateVersion: 11 });

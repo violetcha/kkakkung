@@ -32,7 +32,8 @@ import { createClockSync } from '../features/room/clock-sync';
 import { createProductView } from '../features/room/product-view';
 import { createInteractionBridge } from './interaction-bridge';
 import { createParticipationLifetime } from './SessionRuntime';
-import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
+import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
+import { practicePresenter } from '../features/game/flow/practice-presenter';
 import {
   createLoadingController,
   SCENE_ASSET_VERSION,
@@ -73,6 +74,7 @@ export type ProductSnapshot = {
   poseProgress: number;
   exitStarting: boolean;
   keyIndex: number;
+  practiceReady: boolean;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -109,6 +111,7 @@ export function bindProductRoom(
     poseProgress: 0,
     exitStarting: false,
     keyIndex: 0,
+    practiceReady: false,
     lost: false,
     error: null,
     quality: 'medium',
@@ -117,6 +120,7 @@ export function bindProductRoom(
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   const faces = createFaceTextures(videoFaceTexture);
   let sensorGeneration = -1;
+  let practiceReadyReported = false;
   let startPending: { exitId: string; requestId: string; until: number | null } | null = null;
   const challenge = createChallengeController((command) => sendCommand(command));
   let bindings: MediaBindings | null = null;
@@ -145,6 +149,13 @@ export function bindProductRoom(
     uuid: deps.uuid,
     send,
     changed: (request) => {
+      if (
+        request.type === 'PRACTICE_READY' &&
+        ['rejected', 'canceled', 'unconfirmed'].includes(request.status)
+      ) {
+        practiceReadyReported = false;
+        publish({ practiceReady: false });
+      }
       if (request.type === 'EXIT_START' && startPending) {
         startPending.requestId = request.requestId;
         if (['rejected', 'canceled', 'unconfirmed'].includes(request.status)) {
@@ -271,7 +282,15 @@ export function bindProductRoom(
         },
         requestBindingsRefresh: (request) => send('media-bindings-refresh', request),
         onDeviceStatus: (devices) => {
-          if (live()) publish({ devices });
+          if (!live()) return;
+          publish({ devices });
+          if (
+            practiceReadyReported &&
+            !deviceReady(devices) &&
+            snapshot.round?.phase === 'TEAM_PRACTICE'
+          )
+            sendCommand({ type: 'PRACTICE_READY', payload: { ready: false } });
+          updateLoading();
         },
         onMediaStatus: (media) => {
           if (!live()) return;
@@ -387,7 +406,7 @@ export function bindProductRoom(
     const key = loading.update(snapshot.round, snapshot.view);
     // Only this locally compiled primitive asset version is known. Unknown server versions stay blocked.
     loading.assetsLoaded(key, SCENE_ASSET_VERSION);
-    loading.check(snapshot.view, bindings, snapshot.media);
+    if (deviceReady(snapshot.devices)) loading.check(snapshot.view, bindings, snapshot.media);
   }
   function updateChallenge() {
     if (!bridge) return;
@@ -410,6 +429,18 @@ export function bindProductRoom(
     if (!participating && !allowedAfterEnd) return '';
     if (!permitsExchange(snapshot.view, command)) return '';
     const own = snapshot.view?.self;
+    if (command.type === 'PRACTICE_READY') {
+      if (
+        snapshot.round.phase !== 'TEAM_PRACTICE' ||
+        (command.payload.ready &&
+          !practicePresenter(snapshot.round, snapshot.view, snapshot.devices)?.canReady)
+      )
+        return '';
+      if (command.payload.ready && practiceReadyReported)
+        return commands.pending('PRACTICE_READY') ?? '';
+      practiceReadyReported = command.payload.ready;
+      publish({ practiceReady: practiceReadyReported });
+    }
     if (command.type === 'EXIT_START') {
       if (startPending) return startPending.requestId;
       const exit = exitCandidate(snapshot.view);
@@ -595,6 +626,8 @@ export function bindProductRoom(
         .catch(error);
     }
     if (phaseChanged) {
+      practiceReadyReported = false;
+      publish({ practiceReady: false });
       challenge.clear();
       startPending = null;
       publish({ poseProgress: 0, exitStarting: false });
@@ -658,6 +691,9 @@ export function bindProductRoom(
   }
   return {
     faces,
+    get sensors() {
+      return bridge.sensors;
+    },
     challengeMetrics: () => challenge.metrics(),
     challengeKey(key: ChallengeKey, repeat = false) {
       if (!participating || !pageActive || interaction.mode !== 'keyboard') return;
