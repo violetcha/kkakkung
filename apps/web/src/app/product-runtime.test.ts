@@ -102,6 +102,24 @@ function fixture() {
     },
   };
 }
+it('shares installation pending across D and buttons without optimistic inventory or stale cancel', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  const v = viewFixture();
+  if (v.self?.status !== 'ACTIVE') throw Error();
+  f.messages.get('private-view')!({
+    ...v,
+    self: { ...v.self, role: 'tagger', equipment: { sensor: 2, trap: 1 } },
+  });
+  f.runtime.selectEquipment('trap');
+  expect(f.context.mock.lastCall?.[0].selectedEquipment).toBe('trap');
+  const first = f.runtime.send({ type: 'INSTALL', payload: { kind: 'trap' } });
+  expect(f.callbacks.sendCommand({ type: 'INSTALL', payload: { kind: 'trap' } })).toBe(first);
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
+  expect(f.runtime.send({ type: 'INSTALL_CANCEL', payload: { installationId: 'stale' } })).toBe('');
+  expect(f.runtime.getSnapshot().view?.self).toMatchObject({ equipment: { sensor: 2, trap: 1 } });
+  await f.runtime.leave();
+});
 it('connects heartbeat ACK on the actual product channel with no media calls in lobby/device check', async () => {
   const f = fixture();
   for (let i = 0; i < 5; i++) {
