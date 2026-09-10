@@ -224,7 +224,18 @@ describe('run-cloud-check runner', () => {
     expect(r.stderr).toMatch(/allowlist/);
   });
   it('blocks a registered case whose test file has not been handed over', () => {
-    const r = run(['--case', 'QA-11', '--preflight', 'x.json', '--evidence', '.local/qa/QA-11']);
+    // Every case has a file in this tree, so point the runner at an empty root.
+    const emptyRoot = mkdtempSync(join(tmpdir(), 'kkakkung-empty-root-'));
+    const r = spawnSync(
+      process.execPath,
+      [script, '--case', 'QA-11', '--preflight', 'x.json', '--evidence', '.local/qa/QA-11'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 60_000,
+        env: { ...process.env, KKAKKUNG_QA_ROOT: emptyRoot },
+      },
+    );
     expect(r.status).toBe(3);
     expect(r.stderr).toMatch(/not been handed over/);
   });

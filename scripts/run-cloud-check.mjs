@@ -20,7 +20,11 @@ import {
   PreflightError,
 } from '../tests/cloud/CloudPreflight.ts';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+// KKAKKUNG_QA_ROOT is a test seam only: the contract tests point it at an empty directory to
+// exercise the "file not handed over" branch now that every registered case has a file.
+const root = process.env.KKAKKUNG_QA_ROOT
+  ? resolve(process.env.KKAKKUNG_QA_ROOT)
+  : fileURLToPath(new URL('../', import.meta.url));
 
 function usage(message) {
   console.error(message);
