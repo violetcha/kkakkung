@@ -7,6 +7,7 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { PoseChallenge } from '../features/game/pose/PoseChallenge';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
@@ -231,6 +232,15 @@ export function ProductApp({ invitation }: { invitation: string }) {
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
+          {worldVisible && view && (
+            <PoseChallenge
+              view={view}
+              tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+              progress={snapshot.poseProgress}
+              starting={snapshot.exitStarting}
+              send={(command) => runtime.current?.send(command)}
+            />
+          )}
           {worldVisible && view && (
             <ExchangePanel
               view={view}
