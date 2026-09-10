@@ -13,7 +13,7 @@ const jenkinsfile = readFileSync(resolve(root, 'Jenkinsfile'), 'utf8');
 const map = loadMap();
 
 describe('notify-map.json', () => {
-  it('maps the six team emails to Mattermost usernames', () => {
+  it('maps the six team emails and GitLab usernames to the same Mattermost usernames', () => {
     const entries = Object.entries(map.byEmail);
     expect(entries).toHaveLength(6);
     for (const [email, user] of entries) {
@@ -21,6 +21,13 @@ describe('notify-map.json', () => {
       expect(user).toMatch(/^[a-z0-9._-]+$/);
     }
     expect(new Set(Object.values(map.byEmail)).size).toBe(6);
+    expect(Object.keys(map.byGitlabUsername)).toHaveLength(6);
+    expect(new Set(Object.values(map.byGitlabUsername))).toEqual(
+      new Set(Object.values(map.byEmail)),
+    );
+    // GitLab usernames seen in webhook records must resolve even when the account email differs.
+    expect(map.byGitlabUsername.jhsfw0506).toBe('jhsfw0506');
+    expect(map.byGitlabUsername.a4651001).toBe('ljh12160569');
     expect(map.mergeRequestBaseUrl).toMatch(/^https:\/\/lab\.ssafy\.com\/.+\/merge_requests\/$/);
   });
 
@@ -59,11 +66,24 @@ describe('notifier payload', () => {
     gitlabMergeRequestIid: '64',
   };
 
-  it('resolves the recipient from the GitLab webhook email first, then the commit author', () => {
+  it('resolves the recipient by webhook email, then GitLab username, then commit author', () => {
     const [email, user] = Object.entries(map.byEmail)[0]!;
     expect(resolveRecipient(map, email.toUpperCase())).toBe(user);
     expect(resolveRecipient(map, undefined, 'nobody@example.com', email)).toBe(user);
     expect(resolveRecipient(map, 'nobody@example.com')).toBeNull();
+    expect(resolveRecipient(map, { email: 'other@example.com' }, { username: 'a4651001' })).toBe(
+      'ljh12160569',
+    );
+    expect(resolveRecipient(map, { username: 'unknown-user' })).toBeNull();
+  });
+
+  it('a GitLab account email that differs from the map still reaches the right person via username', () => {
+    const { payload, recipient } = buildPayload(
+      { ...baseEnv, gitlabUserEmail: 'private@example.com', gitlabMergedByUser: 'a4651001' },
+      map,
+    );
+    expect(recipient).toBe('ljh12160569');
+    expect(payload.channel).toBe('@ljh12160569');
   });
 
   it('sends a direct message with job, branch, commit, stage, MR and console links', () => {

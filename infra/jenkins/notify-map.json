@@ -1,5 +1,13 @@
 {
-  "$comment": "Jenkins 실패 알림 수신자. 키는 GitLab 계정/커밋 이메일(웹훅 payload 의 username 은 비어 오므로 이메일로 대조), 값은 Mattermost @사용자명. 웹훅 URL 은 여기 두지 않고 Jenkins Secret text 'mattermost-webhook' 에만 있다.",
+  "$comment": "Jenkins 실패 알림 수신자. byGitlabUsername 은 GitLab 사용자명(웹훅의 gitlabMergedByUser/gitlabUserUsername), byEmail 은 GitLab 계정/커밋 이메일. 값은 Mattermost @사용자명. 웹훅 URL 은 여기 두지 않고 Jenkins Secret text 'mattermost-webhook' 에만 있다.",
+  "byGitlabUsername": {
+    "handjy2828": "handjy2828",
+    "dbfan98": "dbfan98",
+    "sanikani": "sanikani",
+    "axm0219": "axm0219",
+    "a4651001": "ljh12160569",
+    "jhsfw0506": "jhsfw0506"
+  },
   "byEmail": {
     "handjy2828@naver.com": "handjy2828",
     "dbfan98@naver.com": "dbfan98",
