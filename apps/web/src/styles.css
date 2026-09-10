@@ -87,6 +87,74 @@
 .product-shell .notice {
   color: #b6c9cf;
 }
+.game-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px 24px;
+  margin-top: 24px;
+  align-items: start;
+}
+.game-workspace > * {
+  grid-column: 2;
+  min-width: 0;
+}
+.product-shell .game-workspace > section {
+  margin-top: 0;
+}
+.game-workspace > .product-stage {
+  grid-column: 1;
+  grid-row: 1 / span 8;
+  grid-template-columns: minmax(0, 1fr);
+}
+.game-workspace .mini-map {
+  width: min(240px, 100%);
+}
+.product-shell .game-panel {
+  border-top: 1px solid #385059;
+  padding-top: 16px;
+}
+.product-shell .game-panel h2 {
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+}
+.game-panel label {
+  display: block;
+  margin-bottom: 8px;
+}
+.game-panel button {
+  margin: 8px 8px 0 0;
+}
+.game-panel button[aria-pressed='true'] {
+  outline: 2px solid #dfbb79;
+  outline-offset: 3px;
+}
+.game-panel progress {
+  width: 100%;
+  height: 18px;
+  margin-top: 12px;
+  accent-color: #b8ebca;
+}
+.key-sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-left: 24px;
+}
+.key-sequence [aria-current='step'] {
+  color: #dfbb79;
+  text-decoration: underline;
+}
+@media (max-width: 850px) {
+  .game-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game-workspace > * {
+    grid-column: 1;
+  }
+  .game-workspace > .product-stage {
+    grid-row: 1;
+  }
+}
 .product-shell .actions {
   display: flex;
   flex-wrap: wrap;

@@ -2,7 +2,7 @@
 // preflight/runner rules without touching Cloud, devices or the network.
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -223,8 +223,23 @@ describe('run-cloud-check runner', () => {
     expect(r.status).toBe(3);
     expect(r.stderr).toMatch(/allowlist/);
   });
+  it('ships a test file for every registered Cloud case', () => {
+    for (const file of Object.values(CLOUD_CASES))
+      expect(existsSync(resolve(root, file))).toBe(true);
+  });
   it('blocks a registered case whose test file has not been handed over', () => {
-    const r = run(['--case', 'DP-06', '--preflight', 'x.json', '--evidence', '.local/qa/DP-06']);
+    // Every case has a file in this tree, so point the runner at an empty root.
+    const emptyRoot = mkdtempSync(join(tmpdir(), 'kkakkung-empty-root-'));
+    const r = spawnSync(
+      process.execPath,
+      [script, '--case', 'QA-11', '--preflight', 'x.json', '--evidence', '.local/qa/QA-11'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 60_000,
+        env: { ...process.env, KKAKKUNG_QA_ROOT: emptyRoot },
+      },
+    );
     expect(r.status).toBe(3);
     expect(r.stderr).toMatch(/not been handed over/);
   });
