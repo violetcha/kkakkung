@@ -20,6 +20,7 @@ import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
 import { mergeKnowledge } from './exchange/merge.js';
+import { midpointOf, releaseTraces, scheduleTrace } from './exchange/trace.js';
 import {
   endExchange,
   openExchange,
@@ -146,6 +147,7 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     visibility: new Map(),
     exchanges: new Map(),
     exchangeSeq: 0,
+    traces: new Map(),
     eventSeq: 0,
   };
   // First real sight from the spawn pose is part of the initial knowledge.
@@ -376,6 +378,13 @@ function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_A
     return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
   }
   ctx.state = endExchange(merged.state, verified.session);
+  // The pair's cells at this tick become one delayed tagger trace (KN-08).
+  ctx.state = scheduleTrace(ctx.state, {
+    markerId: `mk-${verified.session.exchangeId}`,
+    kind: 'exchange',
+    point: midpointOf(merged.cells[0], merged.cells[1]),
+    occurredTick: ctx.tick,
+  });
   // Each side hears its own new map version; the pair's cells at this tick are
   // the material KN-08 turns into the delayed tagger trace.
   for (const party of merged.parties) {
@@ -425,6 +434,38 @@ function sweepExchangeSessions(ctx: StepContext): void {
   if (swept.ended.length === 0) return;
   ctx.state = swept.state;
   for (const entry of swept.ended) exchangeCanceled(ctx, entry.session, entry.reason);
+}
+
+/**
+ * Publishes the traces due at this tick (KN-08) to the active taggers. The
+ * payload carries the past point and its ticks only: no identity, no heading,
+ * no current position, no surrounding terrain.
+ */
+function publishDueTraces(ctx: StepContext): void {
+  const released = releaseTraces(ctx.state, ctx.tick);
+  ctx.state = released.state;
+  if (released.due.length === 0) return;
+  const audience = ctx.state.order.filter((id) => {
+    const player = ctx.state.players.get(id)!;
+    return player.role === 'tagger' && player.status === 'ACTIVE';
+  });
+  if (audience.length === 0) return;
+  for (const trace of released.due) {
+    ctx.events.push({
+      eventId: nextEventId(ctx),
+      tick: ctx.tick,
+      audience,
+      type: 'HUNTER_MARKER',
+      payload: {
+        markerId: trace.markerId,
+        kind: trace.kind,
+        point: trace.point,
+        occurredTick: trace.occurredTick,
+        showAtTick: trace.publishTick,
+        expiresTick: trace.expiresTick,
+      },
+    });
+  }
 }
 
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
@@ -532,6 +573,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     // After the commands of this tick: an accept at the deadline still reports
     // EXPIRED before the session is swept away.
     sweepExchangeSessions(ctx);
+    publishDueTraces(ctx);
     settleResult(ctx, { includeTimeout: true });
   }
   for (const control of input.controls) {
