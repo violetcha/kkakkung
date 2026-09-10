@@ -33,6 +33,7 @@ pipeline {
 
     stage('Prepare') {
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         updateGitlabCommitStatus name: 'jenkins', state: 'running'
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
@@ -65,6 +66,7 @@ pipeline {
 
     stage('Secret scan') {
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         sh '''
           docker run --rm -v "$WORKSPACE:/repo" zricethezav/gitleaks:latest \
             detect --source=/repo --no-banner --redact --exit-code 1
@@ -74,6 +76,7 @@ pipeline {
 
     stage('Verify') {
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         // 단일 진입점 scripts/ci-verify.mjs: 도구체인 확인 → EXPECTED_SOURCE_SHA 대조 → frozen install
         // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·check:execution·lint·typecheck·test·build·e2e).
         // 개별 pnpm 검사 목록을 여기 다시 나열하지 않습니다 (DP-04).
@@ -86,6 +89,7 @@ pipeline {
 
     stage('Build images') {
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         // 컨텍스트는 저장소 루트 (workspace 패키지 의존). 루트 .dockerignore 가 node_modules/dist 를 걸러줍니다.
         sh '''
           docker build -f infra/docker/Dockerfile.game-server -t "$IMG_GAME:$TAG" --label "org.opencontainers.image.revision=$GIT_SHA" .
@@ -96,6 +100,7 @@ pipeline {
 
     stage('Scan images') {
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         // HIGH/CRITICAL 이 있어도 중단하지 않고 기록만 합니다. 발표까지 시간이 짧아서요.
         sh '''
           for img in "$IMG_GAME:$TAG" "$IMG_WEB:$TAG"; do
@@ -109,6 +114,7 @@ pipeline {
     stage('Deploy') {
       when { environment name: 'IS_DEPLOY', value: 'true' }
       steps {
+        script { env.FAILED_STAGE = env.STAGE_NAME }
         script {
           env.PREV_TAG = sh(script: 'cat "$STATE_DIR/last-good-tag" 2>/dev/null || true', returnStdout: true).trim()
           echo "직전 정상 태그: ${env.PREV_TAG ?: '없음 (첫 배포)'}"
@@ -152,6 +158,23 @@ pipeline {
   post {
     failure {
       updateGitlabCommitStatus name: 'jenkins', state: 'failed'
+      // 실패한 사람에게 Mattermost DM. 웹훅 URL 은 Secret text 크리덴셜 mattermost-webhook 에만 있고
+      // 로그에 마스킹됩니다. 수신자는 infra/jenkins/notify-map.json (이메일 → MM 사용자명).
+      // 알림이 실패해도 빌드 결과는 바뀌지 않습니다.
+      script {
+        try {
+          env.CULPRIT_EMAIL = sh(script: 'git log -1 --format=%ae 2>/dev/null || true', returnStdout: true).trim()
+        } catch (ignored) {
+          env.CULPRIT_EMAIL = ''
+        }
+        try {
+          withCredentials([string(credentialsId: 'mattermost-webhook', variable: 'MM_WEBHOOK')]) {
+            sh 'node scripts/notify-build-failure.mjs || true'
+          }
+        } catch (ignored) {
+          echo 'Mattermost 알림 건너뜀 (크리덴셜 mattermost-webhook 없음 또는 작업공간 없음)'
+        }
+      }
       script {
         if (env.PREV_TAG?.trim()) {
           echo "배포 실패. ${env.PREV_TAG} 로 롤백합니다"

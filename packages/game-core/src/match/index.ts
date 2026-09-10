@@ -120,6 +120,26 @@ export {
 } from './map/select-with-fallback.js';
 
 export {
+  isProgressMethod,
+  verifyProgress,
+  type ProgressMethod,
+  type ProgressVerdict,
+} from './exits/complete.js';
+
+export {
+  advanceChallenges,
+  cancelChallenge,
+  endChallenge,
+  facesExit,
+  isChallenging,
+  startChallenge,
+  type ChallengeCancelResult,
+  type ChallengeEnd,
+  type ChallengeStartResult,
+  type ChallengeUpkeepResult,
+} from './exits/challenge.js';
+
+export {
   activeExitAtFace,
   activeExits,
   closeExit,
@@ -200,18 +220,90 @@ export {
   initialTerrain,
   knownTerrainOf,
   observeTerrain,
+  unionKeys,
   wallKey,
 } from './knowledge/terrain.js';
-export { discoverExits, knownActiveExits } from './knowledge/exits.js';
+export { activeDiscovered, discoverExits, knownActiveExits } from './knowledge/exits.js';
 
 export {
-  activeDiscoveredExits,
+  advanceInstallations,
+  armDueEquipment,
+  dropInstall,
+  frontWallFace,
+  isOccupied,
+  planInstall,
+  reserveInstall,
+  spendEquipment,
+  verifyInstallCancel,
+  type CompletedInstallation,
+  type InstallPlan,
+  type InstallReservation,
+  type InstallTarget,
+  type InstallationUpkeepResult,
+} from './equipment/install.js';
+
+export {
+  expireRestraints,
+  isRestrained,
+  lockRestrainedActions,
+  restraintRemaining,
+  type RestraintExpiryResult,
+  type RestraintLockResult,
+  type RestraintRelease,
+} from './equipment/restraint.js';
+
+export { sensorTriggers, type SensorTrigger } from './equipment/sensor.js';
+
+export {
+  activateTraps,
+  type TrapActivation,
+  type TrapActivationResult,
+} from './equipment/trap-activate.js';
+
+export {
+  isRestraintEligible,
+  trapCandidates,
+  type TrapCandidates,
+} from './equipment/trap-candidates.js';
+
+export {
+  installationViewOf,
+  type InstallationTiming,
+  type PendingInstallation,
+  type PendingInstallations,
+} from './equipment/types.js';
+
+export {
+  cancelExchange,
+  endReasonOf,
+  sweepExchanges,
+  type EndedExchange,
+  type ExchangeCancelResult,
+  type ExchangeEndReason,
+  type ExchangeSweepResult,
+} from './exchange/cancel.js';
+
+export { mergeKnowledge, type ExchangeMergeResult, type MergedParty } from './exchange/merge.js';
+
+export {
+  TRACE_DELAY_TICKS,
+  TRACE_VISIBLE_TICKS,
+  midpointOf,
+  releaseTraces,
+  scheduleTrace,
+  type PendingTrace,
+  type PendingTraces,
+  type TraceReleaseResult,
+} from './exchange/trace.js';
+
+export {
   endExchange,
   exchangeViewFor,
   hasNewInformation,
   inExchangeRange,
   openExchange,
   pairEligibility,
+  pairPresence,
   requestEligibility,
   verifyAccept,
   type ExchangeAcceptResult,

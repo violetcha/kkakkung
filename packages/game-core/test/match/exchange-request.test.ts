@@ -231,7 +231,13 @@ describe('map exchange request and accept', () => {
     expect(expired.state.exchanges.size).toBe(0);
     expect(player(expired.state, 'r-a').exchange).toBeNull();
     expect(player(expired.state, 'r-b').exchange).toBeNull();
-    expect(expired.events).toEqual([]);
+    // The KN-06 sweep of the same tick reports the deadline to both parties only.
+    expect(expired.events).toHaveLength(1);
+    expect(expired.events[0]).toMatchObject({
+      type: 'EXCHANGE_CANCELED',
+      audience: ['r-a', 'r-b'],
+      payload: { exchangeId: 'xch-1', reason: 'EXPIRED' },
+    });
     expect(['r-a', 'r-b'].map((id) => knowledgeSnapshot(expired.state, id))).toEqual(before);
   });
 

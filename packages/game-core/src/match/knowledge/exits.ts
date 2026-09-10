@@ -28,6 +28,19 @@ export function discoverExits(
 }
 
 /**
+ * Discovered ids narrowed to the exits that are still active, as a new Set.
+ * Closed exits are never restored by an exchange, so the exchange union is
+ * filtered through this (KN-07).
+ */
+export function activeDiscovered(record: KnowledgeRecord, registry: ExitRegistry): Set<string> {
+  const ids = new Set<string>();
+  for (const exitId of record.discoveredExits) {
+    if (registry.get(exitId)?.active) ids.add(exitId);
+  }
+  return ids;
+}
+
+/**
  * Public active exits for a player: the intersection of discovered ids and the
  * currently active registry, without poseKind. Taggers always get an empty list
  * so exit existence and position never leak to them.

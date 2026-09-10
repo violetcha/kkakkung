@@ -5,6 +5,7 @@ import type {
   CoreOutcome,
   CoreReadFrame,
   CorePort,
+  ChallengeView,
   CreateMatchInput,
   CreatePracticeInput,
   DomainEvent,
@@ -18,12 +19,39 @@ import type {
 } from './core-types.js';
 import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
-import { endExchange, openExchange, requestEligibility, verifyAccept } from './exchange/session.js';
+import {
+  advanceInstallations,
+  dropInstall,
+  planInstall,
+  reserveInstall,
+  spendEquipment,
+  verifyInstallCancel,
+} from './equipment/install.js';
+import { expireRestraints, isRestrained, lockRestrainedActions } from './equipment/restraint.js';
+import { sensorTriggers } from './equipment/sensor.js';
+import { activateTraps } from './equipment/trap-activate.js';
+import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
+import { mergeKnowledge } from './exchange/merge.js';
+import { midpointOf, releaseTraces, scheduleTrace } from './exchange/trace.js';
+import {
+  endExchange,
+  openExchange,
+  requestEligibility,
+  verifyAccept,
+  type ExchangeSession,
+} from './exchange/session.js';
+import {
+  advanceChallenges,
+  cancelChallenge,
+  isChallenging,
+  startChallenge,
+} from './exits/challenge.js';
+import { verifyProgress } from './exits/complete.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
 import { initialTerrain, knownTerrainOf, observeTerrain } from './knowledge/terrain.js';
-import { completeActions, reserveMove } from './movement.js';
+import { completeActions, reserveMove, type CompletedMove } from './movement.js';
 import { visibilityOf } from './vision/visibility.js';
 import { terminateRunner, type TerminationOutcome } from './participation.js';
 import { createPriorityOrder } from './priority.js';
@@ -38,7 +66,7 @@ import {
   type MatchState,
   type PlayerRecord,
 } from './state.js';
-import type { RosterEntry } from './types.js';
+import type { Cell, RosterEntry } from './types.js';
 
 export type { MatchState, PlayerRecord } from './state.js';
 
@@ -62,11 +90,16 @@ function initialPlayer(entry: RosterEntry, input: CreateMatchInput): PlayerRecor
     connected: true,
     restraintUntilTick: null,
     restraintImmuneUntilTick: null,
-    equipment: Object.freeze({ sensor: 0, trap: 0 }),
+    // Runner items stay at zero until the product decision (D-2026-09-08-01).
+    equipment:
+      entry.role === 'tagger'
+        ? Object.freeze({ sensor: 1, trap: 1 })
+        : Object.freeze({ sensor: 0, trap: 0 }),
     ownedEquipment: Object.freeze([]),
     installation: null,
     exchange: null,
     challenge: null,
+    nextAttemptTick: null,
   });
 }
 
@@ -138,6 +171,10 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     visibility: new Map(),
     exchanges: new Map(),
     exchangeSeq: 0,
+    traces: new Map(),
+    installations: new Map(),
+    installationSeq: 0,
+    challengeSeq: 0,
     eventSeq: 0,
   };
   // First real sight from the spawn pose is part of the initial knowledge.
@@ -200,6 +237,8 @@ type StepContext = {
   media: MediaIntent[];
   /** Players whose personal result was fixed during this step. */
   endedThisStep: Set<string>;
+  /** Moves that completed at this tick, the input of equipment activation. */
+  completedMoves: readonly CompletedMove[];
 };
 
 function outcome(
@@ -243,6 +282,7 @@ function completeDueActions(ctx: StepContext): void {
   const completion = completeActions(ctx.state.players.values(), ctx.tick);
   if (completion.players.length === 0) return;
   ctx.state = withPlayers(ctx.state, completion.players);
+  ctx.completedMoves = completion.completedMoves;
   for (const move of completion.completedMoves) {
     ctx.events.push({
       type: 'SPATIAL_SOUND',
@@ -280,7 +320,7 @@ function handleMoveIntent(ctx: StepContext, command: CoreCommand<'MOVE_INTENT'>)
     return outcome(ctx, command, 'applied', null);
   }
   if (player.action === null) {
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
+    if (isRestrained(player, ctx.tick) || isChallenging(player)) {
       return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
     }
     const reserved = reserveMove(
@@ -307,9 +347,9 @@ function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
     return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
   if (player.action === null) {
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
-      return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-    }
+    // An exit challenge locks the pose; a restraint stops moving, not looking
+    // around (EQ-05).
+    if (isChallenging(player)) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
     ctx.state = withPlayers(ctx.state, [
       reserveTurn(player, direction, ctx.tick, ctx.state.tuning.turnTicks),
     ]);
@@ -330,7 +370,7 @@ function handleExchangeRequest(ctx: StepContext, command: CoreCommand<'EXCHANGE_
   const actor = ctx.state.players.get(command.actorId)!;
   const target = ctx.state.players.get(targetId);
   if (!target) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-  const reason = requestEligibility(ctx.state, actor, target);
+  const reason = requestEligibility(ctx.state, actor, target, ctx.tick);
   if (reason) return outcome(ctx, command, 'rejected', reason);
   const opened = openExchange(ctx.state, actor, target, ctx.tick);
   ctx.state = opened.state;
@@ -358,12 +398,294 @@ function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_A
   }
   const verified = verifyAccept(ctx.state, command.actorId, exchangeId, ctx.tick);
   if (verified.status === 'rejected') {
-    // A passed deadline ends the session so the UI can close on the outcome alone.
-    if (verified.expired) ctx.state = endExchange(ctx.state, verified.expired);
+    if (verified.close) ctx.state = endExchange(ctx.state, verified.close);
     return outcome(ctx, command, 'rejected', verified.code);
   }
-  // The verified pair is what KN-07 merges; the id ends here either way.
-  ctx.state = endExchange(ctx.state, verified.session);
+  const merged = mergeKnowledge(ctx.state, verified.session);
+  if (merged.status === 'unchanged') {
+    // Nothing left to merge: the session ends without a knowledge or trace change.
+    ctx.state = endExchange(ctx.state, verified.session);
+    return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+  }
+  ctx.state = endExchange(merged.state, verified.session);
+  // The pair's cells at this tick become one delayed tagger trace (KN-08).
+  ctx.state = scheduleTrace(ctx.state, {
+    markerId: `mk-${verified.session.exchangeId}`,
+    kind: 'exchange',
+    point: midpointOf(merged.cells[0], merged.cells[1]),
+    occurredTick: ctx.tick,
+  });
+  // Each side hears its own new map version; the pair's cells at this tick are
+  // the material KN-08 turns into the delayed tagger trace.
+  for (const party of merged.parties) {
+    ctx.events.push({
+      eventId: nextEventId(ctx),
+      tick: ctx.tick,
+      audience: [party.playerId],
+      type: 'EXCHANGE_COMPLETED',
+      payload: { exchangeId: verified.session.exchangeId, mapVersion: party.mapVersion },
+    });
+  }
+  return outcome(ctx, command, 'applied', null);
+}
+
+/** Notifies both parties, and only them, that a session ended. */
+function exchangeCanceled(ctx: StepContext, session: ExchangeSession, reason: CommandCode): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [session.fromPlayerId, session.toPlayerId],
+    type: 'EXCHANGE_CANCELED',
+    payload: { exchangeId: session.exchangeId, reason },
+  });
+}
+
+function handleExchangeCancel(ctx: StepContext, command: CoreCommand<'EXCHANGE_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const exchangeId = command.payload.exchangeId;
+  if (typeof exchangeId !== 'string' || exchangeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = cancelExchange(ctx.state, command.actorId, exchangeId, ctx.tick);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = endExchange(ctx.state, canceled.session);
+  exchangeCanceled(ctx, canceled.session, 'CANCELED');
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Per-tick session upkeep (KN-06): distance, personal end, locks and the
+ * deadline end a session quietly for its two parties. No tagger notification
+ * and no position event is produced.
+ */
+function sweepExchangeSessions(ctx: StepContext): void {
+  const swept = sweepExchanges(ctx.state, ctx.tick);
+  if (swept.ended.length === 0) return;
+  ctx.state = swept.state;
+  for (const entry of swept.ended) exchangeCanceled(ctx, entry.session, entry.reason);
+}
+
+/**
+ * Publishes the traces due at this tick (KN-08) to the active taggers. The
+ * payload carries the past point and its ticks only: no identity, no heading,
+ * no current position, no surrounding terrain.
+ */
+function publishDueTraces(ctx: StepContext): void {
+  const released = releaseTraces(ctx.state, ctx.tick);
+  ctx.state = released.state;
+  if (released.due.length === 0) return;
+  const audience = ctx.state.order.filter((id) => {
+    const player = ctx.state.players.get(id)!;
+    return player.role === 'tagger' && player.status === 'ACTIVE';
+  });
+  if (audience.length === 0) return;
+  for (const trace of released.due) {
+    ctx.events.push({
+      eventId: nextEventId(ctx),
+      tick: ctx.tick,
+      audience,
+      type: 'HUNTER_MARKER',
+      payload: {
+        markerId: trace.markerId,
+        kind: trace.kind,
+        point: trace.point,
+        occurredTick: trace.occurredTick,
+        showAtTick: trace.publishTick,
+        expiresTick: trace.expiresTick,
+      },
+    });
+  }
+}
+
+function handleInstall(ctx: StepContext, command: CoreCommand<'INSTALL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const actor = ctx.state.players.get(command.actorId)!;
+  const plan = planInstall(ctx.state, actor, command.payload.kind);
+  if (plan.status === 'rejected') return outcome(ctx, command, 'rejected', plan.code);
+  // Reserving spends no charge: only a finished placement does.
+  ctx.state = reserveInstall(ctx.state, actor, plan.target, ctx.tick).state;
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleInstallCancel(ctx: StepContext, command: CoreCommand<'INSTALL_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const installationId = command.payload.installationId;
+  if (typeof installationId !== 'string' || installationId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = verifyInstallCancel(ctx.state, command.actorId, installationId);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = dropInstall(ctx.state, canceled.pending);
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Installation upkeep before this tick's commands (EQ-01), so a cancel that
+ * arrives on the completion tick is already too late. Completion spends the
+ * charge once; leaving the pose drops the reservation free of charge.
+ */
+function advanceDueInstallations(ctx: StepContext): void {
+  ctx.state = advanceInstallations(ctx.state, ctx.tick).state;
+}
+
+/**
+ * The two events of one device activation (EQ-02/EQ-04). The tagger marker
+ * shows the past cell at once and lives 40 ticks; the sound is a server-only
+ * input for the audio pipeline. Each carries its own id, and the activation key
+ * - the marker id plus the device's single-shot SPENT - keeps both to one.
+ */
+function deviceActivated(
+  ctx: StepContext,
+  kind: 'sensor' | 'trap',
+  equipmentId: string,
+  cell: Cell,
+): void {
+  ctx.state = scheduleTrace(ctx.state, {
+    markerId: `mk-${equipmentId}`,
+    kind,
+    point: { x: cell.x, y: cell.y },
+    occurredTick: ctx.tick,
+    delayTicks: 0,
+  });
+  ctx.events.push({
+    type: 'SPATIAL_SOUND',
+    sound: { eventId: nextEventId(ctx), tick: ctx.tick, kind, cell },
+  });
+}
+
+/**
+ * Equipment activation (EQ-02/EQ-04): after the capture stage and before this
+ * tick's commands. A sensor with a new ACTIVE runner on its approach cell is
+ * spent once; a trap restrains exactly one candidate of the common tick
+ * priority and is spent in the same state. Neither event names the runner: the
+ * target learns of its own restraint through the self projection.
+ */
+function activateEquipment(ctx: StepContext): void {
+  for (const trigger of sensorTriggers(ctx.state, ctx.completedMoves)) {
+    ctx.state = spendEquipment(ctx.state, trigger.ownerId, trigger.equipmentId);
+    deviceActivated(ctx, 'sensor', trigger.equipmentId, trigger.cell);
+  }
+  const traps = activateTraps(ctx.state, ctx.completedMoves, ctx.tick);
+  ctx.state = traps.state;
+  for (const activation of traps.activations) {
+    // The new restraint ends the target's exit challenge; its map exchange is
+    // ended by the session upkeep later in this same tick (KN-06).
+    const locked = lockRestrainedActions(ctx.state, activation.targetId);
+    ctx.state = locked.state;
+    if (locked.endedChallenge) {
+      ctx.events.push({
+        eventId: nextEventId(ctx),
+        tick: ctx.tick,
+        audience: [activation.targetId],
+        type: 'EXIT_CHALLENGE_ENDED',
+        payload: {
+          challengeId: locked.endedChallenge.challengeId,
+          result: 'canceled',
+          reason: 'NOT_ALLOWED',
+        },
+      });
+    }
+    deviceActivated(ctx, 'trap', activation.equipmentId, activation.cell);
+  }
+}
+
+/** Personal event for every start and end of an exit challenge (EX-02). */
+function challengeStarted(ctx: StepContext, playerId: string, challenge: ChallengeView): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [playerId],
+    type: 'EXIT_CHALLENGE',
+    payload: challenge,
+  });
+}
+
+function challengeEnded(
+  ctx: StepContext,
+  playerId: string,
+  challengeId: string,
+  result: 'canceled' | 'failed' | 'escaped',
+  reason: CommandCode | null,
+): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [playerId],
+    type: 'EXIT_CHALLENGE_ENDED',
+    payload: { challengeId, result, reason },
+  });
+}
+
+function handleExitStart(ctx: StepContext, command: CoreCommand<'EXIT_START'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const exitId = command.payload.exitId;
+  if (typeof exitId !== 'string' || exitId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const actor = ctx.state.players.get(command.actorId)!;
+  const started = startChallenge(ctx.state, actor, exitId, ctx.tick);
+  if (started.status === 'rejected') return outcome(ctx, command, 'rejected', started.code);
+  ctx.state = started.state;
+  challengeStarted(ctx, command.actorId, started.challenge);
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleExitCancel(ctx: StepContext, command: CoreCommand<'EXIT_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const challengeId = command.payload.challengeId;
+  if (typeof challengeId !== 'string' || challengeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = cancelChallenge(ctx.state, command.actorId, challengeId, ctx.tick);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = canceled.state;
+  challengeEnded(ctx, command.actorId, challengeId, 'canceled', 'CANCELED');
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Per-tick challenge upkeep, before this tick's commands: the deadline, a new
+ * restraint, a personal end and the pose conditions end a challenge on their
+ * own. Automatic ends never create a second outcome for the original request.
+ */
+function advanceDueChallenges(ctx: StepContext): void {
+  const upkeep = advanceChallenges(ctx.state, ctx.tick);
+  ctx.state = upkeep.state;
+  for (const end of upkeep.ended) {
+    challengeEnded(ctx, end.playerId, end.challenge.challengeId, end.result, end.reason);
+  }
+}
+
+/**
+ * Exit completion report (EX-03). Core checks the challenge ownership, the 2
+ * second minimum, the 8 second deadline and the pose position; it does not
+ * prove the real body pose or camera integrity behind C's report. A verified
+ * success ends the runner once through RL-07.
+ */
+function handleExitProgress(ctx: StepContext, command: CoreCommand<'EXIT_PROGRESS'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const challengeId = command.payload.challengeId;
+  if (typeof challengeId !== 'string' || challengeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const verdict = verifyProgress(
+    ctx.state,
+    command.actorId,
+    challengeId,
+    command.payload.method,
+    command.payload.completed,
+    ctx.tick,
+  );
+  if (verdict.status === 'rejected') return outcome(ctx, command, 'rejected', verdict.code);
+  // A valid report that is not a completion leaves the attempt running.
+  if (verdict.status === 'incomplete') return outcome(ctx, command, 'applied', null);
+  endRunner(ctx, command.actorId, 'ESCAPED');
   return outcome(ctx, command, 'applied', null);
 }
 
@@ -381,6 +703,18 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleExchangeRequest(ctx, command);
     case 'EXCHANGE_ACCEPT':
       return handleExchangeAccept(ctx, command);
+    case 'EXCHANGE_CANCEL':
+      return handleExchangeCancel(ctx, command);
+    case 'INSTALL':
+      return handleInstall(ctx, command);
+    case 'INSTALL_CANCEL':
+      return handleInstallCancel(ctx, command);
+    case 'EXIT_START':
+      return handleExitStart(ctx, command);
+    case 'EXIT_CANCEL':
+      return handleExitCancel(ctx, command);
+    case 'EXIT_PROGRESS':
+      return handleExitProgress(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
@@ -400,7 +734,8 @@ function startQueuedActions(ctx: StepContext): void {
   for (const id of ctx.state.order) {
     const player = ctx.state.players.get(id)!;
     if (player.status !== 'ACTIVE' || player.action !== null) continue;
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) continue;
+    if (isChallenging(player)) continue;
+    const restrained = isRestrained(player, ctx.tick);
     if (player.nextAction) {
       // The single-shot turn is consumed before any held move resumes.
       updated.push(
@@ -410,7 +745,7 @@ function startQueuedActions(ctx: StepContext): void {
       );
       continue;
     }
-    if (player.heldMove) {
+    if (player.heldMove && !restrained) {
       const reserved = reserveMove(
         ctx.state.layout.topology,
         player,
@@ -441,6 +776,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     events: [],
     media: [],
     endedThisStep: new Set(),
+    completedMoves: [],
   };
   if (isTerminal(ctx.state)) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
@@ -451,6 +787,9 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     // TTL expiry is decided on the server's monotonic clock before the tick; core only applies it.
     if (control.type === 'EXPIRE_MOVE') applyExpireMove(ctx, control.playerId, control.sequence);
   }
+  // First rule stage: restraints that reached their end tick are released and
+  // the re-restraint immunity starts (EQ-05).
+  ctx.state = expireRestraints(ctx.state, ctx.tick).state;
   const before = ctx.state.players;
   completeDueActions(ctx);
   if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
@@ -459,14 +798,21 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }
+  advanceDueInstallations(ctx);
   // Terminal before commands: cancel the rest of this step. The later settle only
   // needs to apply the deadline result; the control loop below always runs because
   // applyConnectionLost/abortMatch check isTerminal themselves.
   if (settleResult(ctx, { includeTimeout: false })) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
   } else {
+    activateEquipment(ctx);
+    advanceDueChallenges(ctx);
     for (const command of input.commands) handleCommand(ctx, command);
     startQueuedActions(ctx);
+    // After the commands of this tick: an accept at the deadline still reports
+    // EXPIRED before the session is swept away.
+    sweepExchangeSessions(ctx);
+    publishDueTraces(ctx);
     settleResult(ctx, { includeTimeout: true });
   }
   for (const control of input.controls) {
@@ -580,6 +926,25 @@ export function getVisibleEntities(state: MatchState, playerId: string): readonl
         action: other.action,
         role: other.role,
       });
+    }
+  }
+  // Devices standing in real sight (KN-04). A sensor always carries its wall
+  // face, a trap only its floor cell, and neither carries an owner.
+  for (const id of state.order) {
+    for (const owned of state.players.get(id)!.ownedEquipment) {
+      if (owned.state === 'SPENT') continue;
+      if (!visible.has(`${owned.cell.x},${owned.cell.y}`)) continue;
+      entities.push(
+        owned.kind === 'sensor'
+          ? {
+              id: owned.equipmentId,
+              kind: 'sensor',
+              cell: owned.cell,
+              wall: owned.wall,
+              state: owned.state,
+            }
+          : { id: owned.equipmentId, kind: 'trap', cell: owned.cell, state: owned.state },
+      );
     }
   }
   return entities;

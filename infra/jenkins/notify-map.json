@@ -1,0 +1,20 @@
+{
+  "$comment": "Jenkins 실패 알림 수신자. byGitlabUsername 은 GitLab 사용자명(웹훅의 gitlabMergedByUser/gitlabUserUsername), byEmail 은 GitLab 계정/커밋 이메일. 값은 Mattermost @사용자명. 웹훅 URL 은 여기 두지 않고 Jenkins Secret text 'mattermost-webhook' 에만 있다.",
+  "byGitlabUsername": {
+    "handjy2828": "handjy2828",
+    "dbfan98": "dbfan98",
+    "sanikani": "sanikani",
+    "axm0219": "axm0219",
+    "a4651001": "ljh12160569",
+    "jhsfw0506": "jhsfw0506"
+  },
+  "byEmail": {
+    "handjy2828@naver.com": "handjy2828",
+    "dbfan98@naver.com": "dbfan98",
+    "sanikani@naver.com": "sanikani",
+    "axm0219@naver.com": "axm0219",
+    "a4651001@naver.com": "ljh12160569",
+    "jhsfw0506@gmail.com": "jhsfw0506"
+  },
+  "mergeRequestBaseUrl": "https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/"
+}

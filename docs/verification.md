@@ -111,6 +111,25 @@ Jira [S15P21C204-156](https://ssafy.atlassian.net/browse/S15P21C204-156). 브랜
 
 미완·인계: 인증서 dry-run 재시도, 로그인 쿠키로 smoke 전체 실행(담당자), D 모델 도착 후 wasm MIME·CSP, `/api/dev-sessions` 차단(C-02 이후), B 의 초대 운영 라우트 허용/거절 검증(B 구현 후). DP-06 에는 "배포 검증 중 외부 격리" 대신 SSO 게이트가 상시 적용된다는 점과 심사 시 해제 절차를 인계.
 
+## F-07 / DP-05 게임·미디어·복구 지표와 경보 (2026-09-09)
+
+Jira [S15P21C204-157](https://ssafy.atlassian.net/browse/S15P21C204-157). 브랜치 `feat/S15P21C204-157-observability`.
+
+| 항목      | 결과                                                                                                                                                                                                                                                                                                                                    |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 중앙 계약 | `server/src/observability/MetricRegistry.ts` 의 `MetricSample` 은 B(`server/src/game/ports.ts`)·E(`server/src/media/types.ts`) 기존 타입과 구조 동일. 등록 이름/단위 20개는 실행계획 F-07 표와 1:1(계약 시험이 대조)                                                                                                                    |
+| 수집      | `createMetricRegistry()` → `registry.emitMetric` 동기 void, 예외 비전파. 미등록명·단위 불일치·비유한 값·금지 필드(token/jwt/secret/sdp/nickname/identity/map/seed/exit/position/x·y·z/frame/audio)·허용 외 label 은 사유·필드명만 집계하고 값은 보관하지 않음                                                                           |
+| 유계 큐   | 기본 10,000. 포화 시 drop 계수, `drain()` 이 `observability.dropped` 표본을 덧붙여 누락을 0 으로 숨기지 않음. `stats().incomplete` 로 관측 불완전 노출                                                                                                                                                                                  |
+| 단위      | `nsToMs(20_000_000) = 20`. `createProcessSampler` 가 eventLoop.lag(ms)·process.memory(bytes, rss)·process.cpu(0–1 ratio, 벽시계 대비) 를 주입된 perf_hooks/process 소스로 계산                                                                                                                                                          |
+| 합산 Tick | `summarizeTickRounds`: 같은 `atMs`(코디네이터의 한 run 회차) 의 방별 `tick.duration` 을 합산한 `combined` 분포와 방별 `perRoom`/`byRoom` 분포를 분리. 10방×2ms → 회차 20ms, 방별 평균 2ms 로 대체 금지 확인                                                                                                                             |
+| 경보      | `AlertPolicy`: 예산 810(900 의 90%)·429≥1·응답 1초 초과·UNRESOLVED·저널 writable=0·readiness LOCKED·tick overload·관측 누락. UNRESOLVED/overload/dropped 는 `acknowledgeResolved(id, evidence)` 로만 해소(시간 경과 무효). `isLocked()` = UNRESOLVED·저널·LOCKED 활성. 외부 알림 채널 없음, 로컬 상태 + `alert.raised/cleared` 이벤트만 |
+| 로그 가드 | `createLogOptions()` 의 Pino `formatters.log` + `redact`: 비밀·identity·SDP 키 redact, 512자 절단, 깊이 3·키 32 상한. `createStructuredEventLogger` 는 이벤트 16종·필드 키 allowlist 외 거절(사유·필드명만 warn)                                                                                                                        |
+| 수집기    | `node scripts/collect-observability.mjs --input <ndjson> --output <json>`: 표본 0/입력 없음 exit 3(BLOCKED), 누락·거절 있음 exit 1, 정상 0. allowlist 는 TS 원본과 동기(계약 시험이 대조)                                                                                                                                               |
+| 계약 시험 | `tests/contracts/observability.test.ts` 39개 통과(2026-09-09 17:36 KST). server `tsc --noEmit`, `tsc -p tsconfig.qa.json`, eslint, check-boundaries, prettier 통과                                                                                                                                                                      |
+| compose   | 로그 회전 json-file 10m×3 은 F-05 에서 적용됨. 변경 없음                                                                                                                                                                                                                                                                                |
+
+미완·인계: B bootstrap 조립(F-REQ-06), E emit 계약 확인(F-REQ-07). 실제 서버 export 로 수집기 실행과 slow tick·디스크 오류·응답 timeout 주입은 registry 가 실제 경로에 연결된 뒤 F-12/F-14 격리 시험에서 수행. 로컬 통과를 실제 장애 재현 증거로 합산하지 않음.
+
 ## F-12 / QA-07 G3 실제 Room 조합 회귀 (2026-09-10)
 
 Jira [S15P21C204-162](https://ssafy.atlassian.net/browse/S15P21C204-162). 브랜치 `test/S15P21C204-162-g3-room`.

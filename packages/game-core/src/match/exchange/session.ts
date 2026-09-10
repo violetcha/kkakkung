@@ -1,5 +1,6 @@
 import type { CommandCode, ExchangeView } from '../core-types.js';
 import type { ExitRegistry } from '../exits/registry.js';
+import { activeDiscovered } from '../knowledge/exits.js';
 import { isWalkable } from '../map/validate-template.js';
 import type { KnowledgeRecord, MatchState, PlayerRecord } from '../state.js';
 import type { Cell } from '../types.js';
@@ -21,8 +22,8 @@ export type ExchangeSessions = ReadonlyMap<string, ExchangeSession>;
 
 export type ExchangeAcceptResult =
   | Readonly<{ status: 'verified'; session: ExchangeSession }>
-  /** `expired` carries the session the caller must close, if any. */
-  | Readonly<{ status: 'rejected'; code: CommandCode; expired: ExchangeSession | null }>;
+  /** `close` is set when the failed accept must also end the session. */
+  | Readonly<{ status: 'rejected'; code: CommandCode; close?: ExchangeSession }>;
 
 /** Same cell or an orthogonally adjacent passage cell; diagonals never qualify. */
 export function inExchangeRange(state: MatchState, a: Cell, b: Cell): boolean {
@@ -39,18 +40,6 @@ function hasExtra<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
   return false;
 }
 
-/** Discovered exit ids narrowed to the exits that are still active. */
-export function activeDiscoveredExits(
-  record: KnowledgeRecord,
-  registry: ExitRegistry,
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  for (const exitId of record.discoveredExits) {
-    if (registry.get(exitId)?.active) ids.add(exitId);
-  }
-  return ids;
-}
-
 /**
  * Whether either side holds terrain or active-exit knowledge the other lacks.
  * Only the union that KN-07 would merge counts: positions, movement history,
@@ -63,23 +52,48 @@ export function hasNewInformation(
 ): boolean {
   if (hasExtra(a.floors, b.floors) || hasExtra(b.floors, a.floors)) return true;
   if (hasExtra(a.walls, b.walls) || hasExtra(b.walls, a.walls)) return true;
-  const exitsA = activeDiscoveredExits(a, registry);
-  const exitsB = activeDiscoveredExits(b, registry);
+  const exitsA = activeDiscovered(a, registry);
+  const exitsB = activeDiscovered(b, registry);
   return hasExtra(exitsA, exitsB) || hasExtra(exitsB, exitsA);
+}
+
+/** A restrained runner or one inside an exit challenge cannot exchange maps. */
+function isLocked(player: PlayerRecord, tick: number): boolean {
+  if (player.restraintUntilTick !== null && tick < player.restraintUntilTick) return true;
+  return player.challenge !== null;
+}
+
+/**
+ * Conditions that must hold while a session lives: ACTIVE runners, in range,
+ * neither restrained nor challenging an exit. Knowledge is deliberately not
+ * part of this: a pair whose knowledge became equal keeps the session until an
+ * accept decides it (KN-07), it is not swept away silently.
+ */
+export function pairPresence(
+  state: MatchState,
+  from: PlayerRecord,
+  to: PlayerRecord,
+  tick: number,
+): CommandCode | null {
+  if (from.role !== 'runner' || to.role !== 'runner') return 'NOT_ALLOWED';
+  if (from.status !== 'ACTIVE' || to.status !== 'ACTIVE') return 'NOT_ACTIVE';
+  if (!inExchangeRange(state, from.cell, to.cell)) return 'NOT_ALLOWED';
+  if (isLocked(from, tick) || isLocked(to, tick)) return 'NOT_ALLOWED';
+  return null;
 }
 
 /**
  * Conditions both parties must satisfy when a request is approved and again
- * when it is accepted: ACTIVE runners, within range, with knowledge to gain.
+ * when it is accepted: the presence conditions plus knowledge to gain.
  */
 export function pairEligibility(
   state: MatchState,
   from: PlayerRecord,
   to: PlayerRecord,
+  tick: number,
 ): CommandCode | null {
-  if (from.role !== 'runner' || to.role !== 'runner') return 'NOT_ALLOWED';
-  if (from.status !== 'ACTIVE' || to.status !== 'ACTIVE') return 'NOT_ACTIVE';
-  if (!inExchangeRange(state, from.cell, to.cell)) return 'NOT_ALLOWED';
+  const presence = pairPresence(state, from, to, tick);
+  if (presence) return presence;
   const knowledgeFrom = state.knowledge.get(from.playerId);
   const knowledgeTo = state.knowledge.get(to.playerId);
   if (!knowledgeFrom || !knowledgeTo) return 'NOT_ALLOWED';
@@ -92,11 +106,13 @@ export function requestEligibility(
   state: MatchState,
   actor: PlayerRecord,
   target: PlayerRecord,
+  tick: number,
 ): CommandCode | null {
   if (actor.playerId === target.playerId) return 'NOT_ALLOWED';
-  // A single slot per player: the pair approved first keeps it (KN-06).
+  // A single slot per player: the pair approved first keeps it, and a third
+  // request ends as NOT_ALLOWED instead of waiting in a queue (KN-06).
   if (actor.exchange !== null || target.exchange !== null) return 'NOT_ALLOWED';
-  return pairEligibility(state, actor, target);
+  return pairEligibility(state, actor, target, tick);
 }
 
 export function exchangeViewFor(session: ExchangeSession, playerId: string): ExchangeView {
@@ -166,15 +182,22 @@ export function verifyAccept(
   tick: number,
 ): ExchangeAcceptResult {
   const session = state.exchanges.get(exchangeId);
-  if (!session) return { status: 'rejected', code: 'STALE_REQUEST', expired: null };
-  if (session.toPlayerId !== actorId)
-    return { status: 'rejected', code: 'NOT_ALLOWED', expired: null };
-  if (tick >= session.expiresAtTick)
-    return { status: 'rejected', code: 'EXPIRED', expired: session };
+  if (!session) return { status: 'rejected', code: 'STALE_REQUEST' };
+  if (session.toPlayerId !== actorId) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  // The session itself is removed by the per-tick sweep (KN-06), not here.
+  if (tick >= session.expiresAtTick) return { status: 'rejected', code: 'EXPIRED' };
   const from = state.players.get(session.fromPlayerId);
   const to = state.players.get(session.toPlayerId);
-  if (!from || !to) return { status: 'rejected', code: 'NOT_ALLOWED', expired: session };
-  const code = pairEligibility(state, from, to);
-  if (code) return { status: 'rejected', code, expired: null };
+  if (!from || !to) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  const presence = pairPresence(state, from, to, tick);
+  if (presence) return { status: 'rejected', code: presence };
+  const knowledgeFrom = state.knowledge.get(from.playerId);
+  const knowledgeTo = state.knowledge.get(to.playerId);
+  if (!knowledgeFrom || !knowledgeTo) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  if (!hasNewInformation(knowledgeFrom, knowledgeTo, state.exits)) {
+    // The pair is fine but there is nothing left to exchange: the request fails
+    // and the session ends here, with no knowledge change and no trace (KN-07).
+    return { status: 'rejected', code: 'NOT_ALLOWED', close: session };
+  }
   return { status: 'verified', session };
 }

@@ -9,7 +9,9 @@ import type {
   AbortReason,
   VisibleSurfaces,
 } from './core-types.js';
+import type { PendingInstallations } from './equipment/types.js';
 import type { ExchangeSessions } from './exchange/session.js';
+import type { PendingTraces } from './exchange/trace.js';
 import type { ExitRegistry } from './exits/registry.js';
 import type { PriorityOrder } from './priority.js';
 import type { Cell, Dir, MatchLayout, Phase, PlayerStatus, MatchTuning, Role } from './types.js';
@@ -37,6 +39,8 @@ export type PlayerRecord = Readonly<{
   installation: InstallationView | null;
   exchange: ExchangeView | null;
   challenge: ChallengeView | null;
+  /** Earliest tick a new exit challenge may start (EX-02 retry gate). */
+  nextAttemptTick: number | null;
 }>;
 
 /** Per-player terrain memory. Keys: floors = y*width+x, walls = (y*width+x)*4+side. */
@@ -78,6 +82,12 @@ export type MatchState = Readonly<{
   /** Open map exchange sessions keyed by exchangeId (KN-05). */
   exchanges: ExchangeSessions;
   exchangeSeq: number;
+  /** Delayed tagger traces waiting for their publish tick (KN-08). */
+  traces: PendingTraces;
+  /** Installations in progress keyed by installationId (EQ-01). */
+  installations: PendingInstallations;
+  installationSeq: number;
+  challengeSeq: number;
   eventSeq: number;
 }>;
 
