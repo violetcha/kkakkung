@@ -88,6 +88,9 @@ export function createCommandLifecycle(deps: {
       }
       return command.requestId;
     },
+    pending(type: CommandInput['type']) {
+      return [...requests.values()].find((item) => item.command.type === type)?.command.requestId;
+    },
     receipt(value: unknown) {
       const result = commandReceiptSchema.safeParse(value);
       if (!result.success || result.data.matchId !== matchId) return;

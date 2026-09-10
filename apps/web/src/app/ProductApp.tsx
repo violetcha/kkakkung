@@ -7,6 +7,12 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { PoseChallenge } from '../features/game/pose/PoseChallenge';
+import { KeyChallenge } from '../features/game/pose/KeyChallenge';
+import { PracticeScreen } from '../features/game/flow/PracticeScreen';
+import { ExchangePanel } from '../features/game/map/ExchangePanel';
+import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
+import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
 
@@ -21,6 +27,7 @@ export function ProductApp({ invitation }: { invitation: string }) {
   const [code, setCode] = useState('');
   const [clockTime, setClockTime] = useState<number | null>(null);
   const runtime = useRef<ReturnType<typeof bindProductRoom> | null>(null);
+  const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
   const generation = useRef(0);
   const preview = useCallback(
     (element: HTMLDivElement | null) => runtime.current?.setPreviewHost(element),
@@ -228,27 +235,110 @@ export function ProductApp({ invitation }: { invitation: string }) {
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
-          {worldVisible && view && (
-            <section className="product-stage">
-              <div className="product-canvas">
-                <WorldCanvas
+          <div className="game-workspace">
+            {worldVisible && view && round?.phase === 'TEAM_PRACTICE' && (
+              <PracticeScreen
+                round={round}
+                view={view}
+                devices={snapshot.devices}
+                request={snapshot.requests.PRACTICE_READY}
+                readyReported={snapshot.practiceReady}
+                readSensors={readSensors}
+                onReady={() =>
+                  runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
+                }
+              />
+            )}
+            {worldVisible &&
+            round?.phase === 'PLAYING' &&
+            view?.self?.status === 'ACTIVE' &&
+            view.self.challenge &&
+            snapshot.interaction.mode === 'keyboard' ? (
+              <KeyChallenge
+                challenge={view.self.challenge}
+                index={snapshot.keyIndex}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
+                onCancel={() =>
+                  view.self?.status === 'ACTIVE' &&
+                  view.self.challenge &&
+                  runtime.current?.send({
+                    type: 'EXIT_CANCEL',
+                    payload: { challengeId: view.self.challenge.challengeId },
+                  })
+                }
+              />
+            ) : (
+              worldVisible &&
+              round?.phase === 'PLAYING' &&
+              view && (
+                <PoseChallenge
                   view={view}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  progress={snapshot.poseProgress}
+                  starting={snapshot.exitStarting}
+                  send={(command) => runtime.current?.send(command)}
+                />
+              )
+            )}
+            {worldVisible && view && (
+              <ExchangePanel
+                view={view}
+                selected={snapshot.exchangeTarget}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                request={
+                  view.self?.status === 'ACTIVE' && view.self.exchange?.direction === 'incoming'
+                    ? snapshot.requests.EXCHANGE_ACCEPT
+                    : snapshot.requests.EXCHANGE_REQUEST
+                }
+                onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
+                send={(command) => runtime.current?.send(command)}
+              />
+            )}
+            {worldVisible && snapshot.exchangeNotice && (
+              <p role="status">{snapshot.exchangeNotice}</p>
+            )}
+            {worldVisible && view && (
+              <RestraintHud
+                view={view}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+              />
+            )}
+            {worldVisible && view && (
+              <EquipmentHud
+                view={view}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                selected={snapshot.interaction.selectedEquipment}
+                request={snapshot.requests.INSTALL}
+                onSelect={(kind) => runtime.current?.selectEquipment(kind)}
+                send={(command) => runtime.current?.send(command)}
+              />
+            )}
+            {worldVisible && view && (
+              <section className="product-stage">
+                <div className="product-canvas">
+                  <WorldCanvas
+                    view={view}
+                    faces={runtime.current?.faces}
+                    ownerNames={Object.fromEntries(
+                      snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
+                    )}
+                    quality={snapshot.quality}
+                    renderTick={() => runtime.current?.renderTick() ?? null}
+                  />
+                </div>
+                <MiniMap
+                  view={view}
+                  markers={snapshot.markers}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
                   ownerNames={Object.fromEntries(
                     snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
                   )}
-                  quality={snapshot.quality}
-                  renderTick={() => runtime.current?.renderTick() ?? null}
                 />
-              </div>
-              <MiniMap
-                view={view}
-                ownerNames={Object.fromEntries(
-                  snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
-                )}
-              />
-            </section>
-          )}
-          {worldVisible && round && (
+              </section>
+            )}
+          </div>
+          {worldVisible && round?.phase === 'PLAYING' && (
             <p className="game-counts">
               남은 시간{' '}
               {round.deadlineTick === null

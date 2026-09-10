@@ -1,31 +1,35 @@
 #!/usr/bin/env bash
-# 비상용 수동 배포. 평소엔 Jenkins 가 합니다.
+# 비상용 수동 배포·롤백. 평소엔 Jenkins 가 같은 러너를 호출합니다 (DP-06).
 #
-#   ./infra/deploy.sh            현재 커밋으로 빌드 + 배포
-#   ./infra/deploy.sh a1b2c3d4   이미 빌드된 태그로 재배포 (롤백)
+#   ./infra/deploy.sh <커밋SHA>            Jenkins 가 검증·빌드한 그 커밋의 이미지로 배포
+#   ./infra/deploy.sh <이전SHA>            이전 태그로 복귀 (같은 장벽을 다시 통과)
+#
+# 현재 체크아웃을 빌드하지 않습니다. 이미지가 없으면 그 커밋을 Jenkins 로 검증·빌드해야 합니다.
+# 운영 API 토큰은 OPS_TOKEN 환경변수로만 받고 출력하지 않습니다 (product 프로파일에서 필수).
+# 프로파일: DEPLOY_PROFILE=skeleton(기본, E 운영 API 미통합) | product(drain→resume→smoke→공개 재검사).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TAG="${1:-$(git rev-parse --short=8 HEAD)}"
-ENV_FILE=/opt/kkakkung/production.env
+if [ $# -lt 1 ]; then
+  echo "사용법: ./infra/deploy.sh <커밋SHA(전체 또는 8자리)>"; exit 2
+fi
+SHA="$(git rev-parse --verify "$1^{commit}")"
+TAG="${SHA:0:8}"
+STATE_DIR=/opt/kkakkung
+PROFILE="${DEPLOY_PROFILE:-skeleton}"
+BASE_URL="${DEPLOY_BASE_URL:-https://j15c204.p.ssafy.io}"
+ENV_FILE="$STATE_DIR/production.env"
 if [ ! -s "$ENV_FILE" ]; then
   echo "비밀값 파일이 없습니다: $ENV_FILE  (infra/production.env.example 참고, Jenkins 크리덴셜 kkakkung-production-env 에서 내려받음)"; exit 1
 fi
-echo "==> 태그: $TAG"
+echo "==> 커밋 $SHA (태그 $TAG), 프로파일 $PROFILE"
 
-if ! docker image inspect "kkakkung-game:$TAG" >/dev/null 2>&1; then
-  docker build -f infra/docker/Dockerfile.game-server -t "kkakkung-game:$TAG" .
-  docker build -f infra/docker/Dockerfile.web         -t "kkakkung-web:$TAG"  .
-fi
-TAG="$TAG" docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d
+mkdir -p "$STATE_DIR/releases"
+# 검증 SHA = 요청 SHA. 수동 경로도 Jenkins 가 만든 이미지만 쓰므로 라벨 대조로 확인됩니다.
+node scripts/verify-release.mjs --sha "$SHA" --tag "$TAG" --verified-sha "$SHA" \
+  --profile "$PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
 
-echo "==> 헬스체크"
-for i in $(seq 1 30); do
-  g=$(docker inspect --format '{{.State.Health.Status}}' kkakkung-game 2>/dev/null || echo none)
-  if [ "$g" = "healthy" ] && curl -fsS http://127.0.0.1:8080/health/ready >/dev/null 2>&1; then
-    echo "OK ($TAG)"; echo "$TAG" > /opt/kkakkung/last-good-tag; exit 0
-  fi
-  sleep 3
-done
-echo "실패. 롤백: ./infra/deploy.sh $(cat /opt/kkakkung/last-good-tag 2>/dev/null || echo '<이전SHA>')"
-exit 1
+PREFLIGHT_ARGS=()
+if [ -n "${DEPLOY_PREFLIGHT:-}" ]; then PREFLIGHT_ARGS=(--preflight "$DEPLOY_PREFLIGHT"); fi
+node scripts/deploy-release.mjs --manifest "$STATE_DIR/releases/$TAG.json" \
+  --evidence "$STATE_DIR/releases/$TAG" --base-url "$BASE_URL" --state-dir "$STATE_DIR" "${PREFLIGHT_ARGS[@]}"

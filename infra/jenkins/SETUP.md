@@ -122,3 +122,18 @@ oauth2-proxy 가 먼저 떠 있어야 nginx 의 `auth_request` 가 502 를 내�
 | 점검        | `NOTIFY_DRY_RUN=1 node scripts/notify-build-failure.mjs` 는 payload 만 출력하고 보내지 않는다. 계약 시험 `tests/contracts/notify-contract.test.ts`                                                                              |
 
 DM 발신자는 웹훅을 만든 계정으로 표시된다(팀 봇 계정 없음). 새 팀원은 `notify-map.json` 에 이메일과 MM 아이디를 추가한다.
+
+## 10. 배포 러너 (DP-06, 2026-09-10)
+
+Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` 만 호출한다(`infra/README.md` "배포 장벽"). 호스트 Node 24 로 실행되며 compose 를 직접 부르는 줄은 Jenkinsfile 에 없다.
+
+| 항목      | 값                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 프로파일  | Jenkinsfile `DEPLOY_PROFILE`. 지금은 `skeleton`(E 운영 API 미통합). B/E 가 production 프로파일과 `/api/operations` 를 켠 뒤 `product` 로 바꾼다                                                        |
+| 운영 토큰 | product 에서만 Secret text `kkakkung-ops-token` 을 `OPS_TOKEN` 으로 바인딩(로그 마스킹). 값은 `production.env` 의 OPS_TOKEN 과 같아야 한다. skeleton 에서는 바인딩하지 않으므로 크리덴셜이 없어도 된다 |
+| preflight | product 에서 `/opt/kkakkung/cloud-preflight.json`(DP-06 허용, 1방 6명) 이 있어야 smoke 가 돈다. 없으면 BLOCKED                                                                                         |
+| 기록      | `/opt/kkakkung/releases/<tag>.json`(매니페스트), `/opt/kkakkung/releases/<tag>/release.json`(단계·결과), `last-good-tag`·`last-good-digest`(통과 시에만)                                               |
+| 실패      | 러너가 이전 이미지로 복귀를 시도한다. `ROLLBACK_BLOCKED` 면 사람이 확인: `release.json` 의 reason(NO_PREVIOUS_RELEASE, PREVIOUS_DIGEST_MISMATCH, ROLLBACK_DRAIN_TIMEOUT, ROLLBACK_READY_TIMEOUT …)     |
+| 수동      | `./infra/deploy.sh <SHA>` 가 같은 두 스크립트를 부른다. `OPS_TOKEN`·`DEPLOY_PROFILE`·`DEPLOY_PREFLIGHT` 는 환경변수                                                                                    |
+
+첫 실제 실행(develop 머지 → Jenkins Deploy)은 이 MR 이 머지된 뒤다. 그 결과를 docs/verification.md F-16 에 기록한다.
