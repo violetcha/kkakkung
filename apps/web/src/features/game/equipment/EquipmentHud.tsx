@@ -26,6 +26,7 @@ export function EquipmentHud({
         {(['sensor', 'trap'] as const).map((kind, i) => (
           <button key={kind} aria-pressed={selected === kind} onClick={() => onSelect(kind)}>
             {i + 1} · {kind === 'sensor' ? '감지기' : '덫'} {model.remaining[kind]}개
+            {selected === kind ? ' · 선택됨' : ''}
           </button>
         ))}
       </div>
@@ -49,7 +50,7 @@ export function EquipmentHud({
           disabled={pending || model.locked || model.remaining[selected] === 0}
           onClick={() => send({ type: 'INSTALL', payload: { kind: selected } })}
         >
-          {pending ? '서버 확인 중…' : '선택 장비 설치'}
+          {pending ? '서버 확인 중…' : `${selected === 'sensor' ? '감지기' : '덫'} 설치`}
         </button>
       )}
       {model.owned.length > 0 && (
