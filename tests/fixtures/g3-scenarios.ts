@@ -38,10 +38,13 @@ export const PRODUCT_DECISION_PENDING = Object.freeze([
   'G3-C',
 ] as const);
 
-/** Rules the G3 scenarios need that have not reached develop yet. Tests name them, they do not mock them. */
-export const G3_BLOCKED_ON = Object.freeze({
-  escape: 'A-33 (EX-03) EXIT_START/EXIT_PROGRESS not handled by matchCore yet',
-  trap: 'A-21..A-25 (EQ) INSTALL/arm/trap/restraint not handled by matchCore yet',
+/**
+ * Rules that reached develop on 2026-09-10 and replaced the former tripwires: the G3-A escape and
+ * G3-B trap scenarios now run against A's real handlers, nothing is mocked.
+ */
+export const G3_RULES_LANDED = Object.freeze({
+  escape: 'A-33 (EX-02/EX-03) EXIT_START/EXIT_CANCEL/EXIT_PROGRESS in matchCore',
+  trap: 'A-21..A-25 (EQ-01..EQ-05) INSTALL/INSTALL_CANCEL, arming, trap activation, restraint',
 } as const);
 
 export const G3_TUNING: MatchTuning = Object.freeze({
@@ -243,6 +246,45 @@ export function createG3Harness(options: HarnessOptions = {}) {
       accept(actorId, envelope(actorId, 'MOVE_INTENT', { direction })),
     turn: (actorId: string, direction: 'left' | 'right') =>
       accept(actorId, envelope(actorId, 'TURN', { direction })),
+    /** Stop intent: drops the held move so a finished step does not resume on its own. */
+    stop: (actorId: string) =>
+      accept(actorId, envelope(actorId, 'MOVE_INTENT', { direction: null })),
+    /**
+     * Walks `steps` cells in the facing direction, exactly one move per step. The stop intent is
+     * processed on the completion tick, so the held move does not resume into a further cell
+     * (real clients refresh the intent at 10 Hz and release it; here one envelope stands in).
+     */
+    walk(actorId: string, steps: number, direction: 'forward' | 'back' = 'forward') {
+      for (let i = 0; i < steps; i++) this.step(actorId, direction);
+    },
+    /** One cell: MOVE_INTENT, the move's ticks, and a stop landing on the completion tick. */
+    step(actorId: string, direction: 'forward' | 'back' = 'forward') {
+      this.move(actorId, direction);
+      this.ticks(G3_TUNING.moveTicks);
+      this.stop(actorId);
+      this.tick();
+    },
+    /** Turns once and waits for the turn to finish. */
+    face(actorId: string, direction: 'left' | 'right') {
+      this.turn(actorId, direction);
+      this.ticks(G3_TUNING.turnTicks + 1);
+    },
+    /** Sends any protocol command and steps one tick; returns that actor's latest outcome. */
+    send<T extends CommandEnvelope['type']>(
+      actorId: string,
+      type: T,
+      payload: Extract<CommandEnvelope, { type: T }>['payload'],
+    ) {
+      // The pairing is checked on this method's signature; `envelope` cannot re-derive it from a
+      // generic T, so the forwarded values are widened here.
+      accept(actorId, envelope(actorId, type as never, payload as never));
+      this.tick();
+      return this.lastOutcome(actorId);
+    },
+    /** Advances until the authoritative tick reaches `tick` (no-op when already there). */
+    until(tick: number) {
+      while ((state().tick ?? 0) < tick) this.tick();
+    },
     /** Opens play the way the room does: START_PLAYING control applied on the next tick. */
     start() {
       driver.enqueueControl(instance.gameInstanceId, {
