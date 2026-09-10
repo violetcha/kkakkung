@@ -74,6 +74,10 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOUR
 
 브랜치에 Jenkinsfile 이 없으면(develop 미머지) MR 빌드가 "Jenkinsfile not found" 로 실패한다. 브랜치에 develop 을 한 번 merge 하면 해결된다.
 
+**동시 실행 (2026-09-10 변경)**: 컨트롤러 `numExecutors` 는 **1** 이다(`/var/lib/jenkins/config.xml`, 백업 `config.xml.bak-2026-09-10`). 잡 안의 겹침은 Jenkinsfile 의 `disableConcurrentBuilds()`, 잡 사이(`kkakkung` ↔ `kkakkung-mr`)의 겹침은 executor 1개로 막는다. 두 빌드가 겹치면 4 vCPU 가 모자라 서버 tick 이 250ms 를 넘어 6인 통합 시험이 깨졌다(kkakkung-mr #70). 대기열은 그대로 순서대로 돈다. 잠금 플러그인(lockable-resources)은 설치돼 있지 않다.
+
+**파이프라인 끝나기 전 머지 막기**: Jenkins 가 `updateGitlabCommitStatus name: 'jenkins'` 로 MR 커밋 상태를 게시하므로 GitLab 은 이를 외부 파이프라인으로 본다. GitLab 프로젝트 **Settings → Merge requests → Merge checks → "Pipelines must succeed"** 를 켜면 jenkins 상태가 success 가 되기 전엔 Merge 버튼이 잠긴다("Skipped pipelines are considered successful" 은 끔). Maintainer 권한이 필요해 UI 에서 사람이 켠다. 켠 뒤 웹훅을 놓친 MR 은 댓글 `Jenkins please retry a build` 로 다시 돌린다.
+
 두 잡과 크리덴셜(Secret file, GitLab API token)은 UI 로그인 없이 `jobs/<잡>/config.xml` 배치 + `init.groovy.d` 부트스트랩(실행 후 자기 삭제) + Jenkins 재시작으로 만들었다. 같은 방법으로 재현 가능.
 
 ## 7. 첫 빌드 전 확인 (완료, 2026-09-08)
@@ -112,14 +116,15 @@ oauth2-proxy 가 먼저 떠 있어야 nginx 의 `auth_request` 가 502 를 내�
 
 빌드가 실패하면 `post { failure }` 가 `scripts/notify-build-failure.mjs` 를 호스트 Node 로 실행해 실패한 사람에게 Mattermost DM 을 보낸다.
 
-| 항목        | 값                                                                                                                                                                                                                              |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 웹훅 URL    | Jenkins 크리덴셜 **Secret text**, ID `mattermost-webhook` (Manage Jenkins → Credentials → Global). 저장소·문서·로그에 URL 을 두지 않는다                                                                                        |
-| 수신자 매핑 | `infra/jenkins/notify-map.json`: `byGitlabUsername`(GitLab 사용자명 → MM `@사용자명`)과 `byEmail`(GitLab 계정/커밋 이메일 → MM). GitLab 계정 이메일은 비공개라 확인할 수 없으므로 사용자명 매핑이 있으면 이메일이 달라도 닿는다 |
-| 수신자 결정 | `gitlabUserEmail` → `gitlabMergedByUser`/`gitlabUserUsername`(GitLab 사용자명) → 실패 커밋 author 이메일(develop 잡) → 모두 없으면 웹훅 기본 채널                                                                               |
-| 메시지      | 잡·빌드 번호, 브랜치, 커밋, 실패 단계(`FAILED_STAGE`), MR 링크, 콘솔 링크                                                                                                                                                       |
-| 실패 처리   | 크리덴셜 없음·전송 실패·작업공간 없음 모두 echo 후 계속. 빌드 결과는 바뀌지 않는다                                                                                                                                              |
-| 점검        | `NOTIFY_DRY_RUN=1 node scripts/notify-build-failure.mjs` 는 payload 만 출력하고 보내지 않는다. 계약 시험 `tests/contracts/notify-contract.test.ts`                                                                              |
+| 항목        | 값                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 웹훅 URL    | Jenkins 크리덴셜 **Secret text**, ID `mattermost-webhook` (Manage Jenkins → Credentials → Global). 저장소·문서·로그에 URL 을 두지 않는다                                                                                                                                                                                                                                                               |
+| 수신자 매핑 | `infra/jenkins/notify-map.json`: `byGitlabUsername`(GitLab 사용자명 → MM `@사용자명`)과 `byEmail`(GitLab 계정/커밋 이메일 → MM). GitLab 계정 이메일은 비공개라 확인할 수 없으므로 사용자명 매핑이 있으면 이메일이 달라도 닿는다                                                                                                                                                                        |
+| 수신자 결정 | `gitlabUserEmail` → `gitlabMergedByUser`/`gitlabUserUsername`(GitLab 사용자명) → 실패 커밋 author 이메일(develop 잡) → 모두 없으면 웹훅 기본 채널                                                                                                                                                                                                                                                      |
+| 메시지      | 잡·빌드 번호, 브랜치, 커밋, 실패 단계(`FAILED_STAGE`), MR 링크, 콘솔 링크, **실패 시험 이름과 로그 발췌**(2026-09-10)                                                                                                                                                                                                                                                                                  |
+| 로그 발췌   | post 단계가 컨트롤러와 같은 호스트라 `$JENKINS_HOME/jobs/<잡>/builds/<n>/log` 를 직접 읽는다(API 토큰 불필요). vitest "Failed Tests" 블록부터 40줄·3500자 상한, 마지막 요약(Test Files·exit code)은 항상 포함. ANSI·타임스탬프·[Pipeline]·✓ 줄 제거, `Bearer …`·`token=…`·`hooks/…` URL 은 `[redacted]`. 로그를 못 읽으면 발췌 없이 이전 메시지 그대로. `BUILD_LOG_FILE` 로 파일을 지정해 dry-run 가능 |
+| 실패 처리   | 크리덴셜 없음·전송 실패·작업공간 없음 모두 echo 후 계속. 빌드 결과는 바뀌지 않는다                                                                                                                                                                                                                                                                                                                     |
+| 점검        | `NOTIFY_DRY_RUN=1 node scripts/notify-build-failure.mjs` 는 payload 만 출력하고 보내지 않는다. 계약 시험 `tests/contracts/notify-contract.test.ts`                                                                                                                                                                                                                                                     |
 
 DM 발신자는 웹훅을 만든 계정으로 표시된다(팀 봇 계정 없음). 새 팀원은 `notify-map.json` 에 이메일과 MM 아이디를 추가한다.
 
