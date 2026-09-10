@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { WorkflowPreview } from './WorkflowPreview';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { LobbyScreen } from '../features/room/LobbyScreen';
@@ -10,7 +11,19 @@ import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
-const views = ['로비', '장치 점검', '미로', '로딩', '결과', '연결 상실'] as const;
+const views = [
+  '로비',
+  '장치 점검',
+  '미로',
+  '장비',
+  '교환',
+  '포즈',
+  '키 도전',
+  '연습',
+  '로딩',
+  '결과',
+  '연결 상실',
+] as const;
 export default function PreviewApp() {
   const [screen, setScreen] = useState<(typeof views)[number]>('로비');
   const [mounted, setMounted] = useState(true);
@@ -38,6 +51,9 @@ export default function PreviewApp() {
         ))}
       </nav>
       <QualityControl value={quality} onChange={setQuality} />
+      {['장비', '교환', '포즈', '키 도전', '연습'].includes(screen) && (
+        <WorkflowPreview key={screen} screen={screen} />
+      )}
       {screen === '로비' && (
         <LobbyScreen
           roster={{

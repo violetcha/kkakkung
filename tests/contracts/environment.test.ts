@@ -224,7 +224,7 @@ describe('run-cloud-check runner', () => {
     expect(r.stderr).toMatch(/allowlist/);
   });
   it('blocks a registered case whose test file has not been handed over', () => {
-    const r = run(['--case', 'DP-06', '--preflight', 'x.json', '--evidence', '.local/qa/DP-06']);
+    const r = run(['--case', 'QA-11', '--preflight', 'x.json', '--evidence', '.local/qa/QA-11']);
     expect(r.status).toBe(3);
     expect(r.stderr).toMatch(/not been handed over/);
   });
