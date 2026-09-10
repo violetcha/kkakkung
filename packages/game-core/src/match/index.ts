@@ -225,6 +225,12 @@ export {
 export { sensorTriggers, type SensorTrigger } from './equipment/sensor.js';
 
 export {
+  isRestraintEligible,
+  trapCandidates,
+  type TrapCandidates,
+} from './equipment/trap-candidates.js';
+
+export {
   installationViewOf,
   type InstallationTiming,
   type PendingInstallation,
