@@ -14,6 +14,7 @@ import {
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import {
   createChallengeController,
   exitCandidate,
@@ -71,6 +72,7 @@ export type ProductSnapshot = {
   faceRevision: number;
   poseProgress: number;
   exitStarting: boolean;
+  keyIndex: number;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -106,6 +108,7 @@ export function bindProductRoom(
     faceRevision: 0,
     poseProgress: 0,
     exitStarting: false,
+    keyIndex: 0,
     lost: false,
     error: null,
     quality: 'medium',
@@ -319,7 +322,7 @@ export function bindProductRoom(
       clear: () => {
         challenge.clear();
         startPending = null;
-        publish({ poseProgress: 0, exitStarting: false });
+        publish({ poseProgress: 0, exitStarting: false, keyIndex: 0 });
         faces.clear();
         events.clear();
         commands.clear();
@@ -395,12 +398,11 @@ export function bindProductRoom(
       bridge.sensors,
       sensorGeneration,
       snapshot.requests.EXIT_PROGRESS,
-      participating &&
-        pageActive &&
-        snapshot.round?.phase === 'PLAYING' &&
-        interaction.mode === 'motion',
+      participating && pageActive && snapshot.round?.phase === 'PLAYING',
+      interaction.mode === 'keyboard' ? 'keys' : 'pose',
     );
-    if (progress !== snapshot.poseProgress) publish({ poseProgress: progress });
+    if (progress !== snapshot.poseProgress || challenge.keyIndex !== snapshot.keyIndex)
+      publish({ poseProgress: progress, keyIndex: challenge.keyIndex });
   }
   function sendCommand(command: CommandInput) {
     if (!active || snapshot.lost || !snapshot.round) return '';
@@ -656,6 +658,13 @@ export function bindProductRoom(
   }
   return {
     faces,
+    challengeMetrics: () => challenge.metrics(),
+    challengeKey(key: ChallengeKey, repeat = false) {
+      if (!participating || !pageActive || interaction.mode !== 'keyboard') return;
+      updateChallenge();
+      challenge.key(key, repeat);
+      updateChallenge();
+    },
     poll() {
       if (!active) return;
       heartbeat.poll();

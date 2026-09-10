@@ -8,6 +8,7 @@ import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
+import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
@@ -232,14 +233,35 @@ export function ProductApp({ invitation }: { invitation: string }) {
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
-          {worldVisible && view && (
-            <PoseChallenge
-              view={view}
+          {worldVisible &&
+          view?.self?.status === 'ACTIVE' &&
+          view.self.challenge &&
+          snapshot.interaction.mode === 'keyboard' ? (
+            <KeyChallenge
+              challenge={view.self.challenge}
+              index={snapshot.keyIndex}
               tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-              progress={snapshot.poseProgress}
-              starting={snapshot.exitStarting}
-              send={(command) => runtime.current?.send(command)}
+              onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
+              onCancel={() =>
+                view.self?.status === 'ACTIVE' &&
+                view.self.challenge &&
+                runtime.current?.send({
+                  type: 'EXIT_CANCEL',
+                  payload: { challengeId: view.self.challenge.challengeId },
+                })
+              }
             />
+          ) : (
+            worldVisible &&
+            view && (
+              <PoseChallenge
+                view={view}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                progress={snapshot.poseProgress}
+                starting={snapshot.exitStarting}
+                send={(command) => runtime.current?.send(command)}
+              />
+            )
           )}
           {worldVisible && view && (
             <ExchangePanel
