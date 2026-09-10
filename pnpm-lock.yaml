@@ -11,6 +11,12 @@ importers:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.10.0)
+      '@kkakkung/game-core':
+        specifier: workspace:*
+        version: link:packages/game-core
+      '@kkakkung/protocol':
+        specifier: workspace:*
+        version: link:packages/protocol
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
