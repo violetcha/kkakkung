@@ -1,0 +1,27 @@
+# Product overlay, appended by the release runner only for a product manifest.
+# Approved evidence is read-only; journal/checkpoint/consumption markers stay on the durable volume.
+services:
+  game-server:
+    environment:
+      SERVER_PROFILE: product
+      MEDIA_MODE: livekit
+      TRUST_PROXY_HOPS: 1
+    volumes:
+      - type: bind
+        source: ${OPS_EVIDENCE_DIR:?Set the approved evidence directory}/runtime-evidence.json
+        target: /var/lib/kkakkung/runtime-evidence.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OPS_EVIDENCE_DIR:?Set the approved evidence directory}/capability-report.json
+        target: /var/lib/kkakkung/capability-report.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OPS_EVIDENCE_DIR:?Set the approved evidence directory}/official-usage-input.json
+        target: /var/lib/kkakkung/official-usage-input.json
+        read_only: true
+        bind:
+          create_host_path: false

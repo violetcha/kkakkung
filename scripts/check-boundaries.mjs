@@ -60,7 +60,25 @@ async function walk(directory, owner) {
           (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
             (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
         ) {
-          const argument = node.arguments[0];
+          let argument = node.arguments[0];
+          // A literal URL resolved against this module is statically checkable too. This
+          // supports pinned public assets without allowing arbitrary runtime import paths.
+          if (
+            argument &&
+            ts.isPropertyAccessExpression(argument) &&
+            argument.name.text === 'href' &&
+            ts.isNewExpression(argument.expression) &&
+            ts.isIdentifier(argument.expression.expression) &&
+            argument.expression.expression.text === 'URL'
+          ) {
+            const args = argument.expression.arguments;
+            if (
+              args?.length === 2 &&
+              ts.isStringLiteral(args[0]) &&
+              args[1].getText(source) === 'import.meta.url'
+            )
+              argument = args[0];
+          }
           if (argument && ts.isStringLiteral(argument)) boundary(owner, argument.text, file);
           else errors.push(file + ': nonliteral module loading cannot be boundary checked');
         }

@@ -68,6 +68,7 @@ const manifest = (over: Partial<ReleaseManifest> = {}): ReleaseManifest => ({
 
 type Snapshot = { status: 'pending' | 'succeeded' | 'failed'; code?: string | null };
 type World = {
+  previousIsSkeleton?: boolean;
   ops: 'available' | 'unavailable' | 'rejected';
   gateStatus: number;
   liveStatus: number;
@@ -133,6 +134,7 @@ function harness(w: World) {
   let clock = 1_000_000;
   const calls = {
     compose: [] as string[],
+    profiles: [] as string[],
     posts: [] as { requestId: string; action: string }[],
     smoke: [] as string[],
     state: {} as Record<string, string>,
@@ -162,6 +164,7 @@ function harness(w: World) {
         return { status: entry.status, json: entry.json ?? null };
       }
       if (u.pathname.startsWith('/api/operations')) {
+        if (w.previousIsSkeleton && currentTag === PREV_TAG) return { status: 404, json: null };
         if (!options.bearer) return { status: w.anonymousOpsStatus, json: null };
         if (w.ops === 'unavailable')
           return { status: 503, json: { error: 'OPERATIONS_UNAVAILABLE' } };
@@ -224,8 +227,9 @@ function harness(w: World) {
     async runningImage(service) {
       return currentTag ? (w.running[currentTag]?.[service] ?? null) : null;
     },
-    async compose(tag) {
+    async compose(tag, profile) {
       calls.compose.push(tag);
+      calls.profiles.push(profile);
       const code = w.composeCodes[tag] ?? 0;
       if (code === 0) {
         currentTag = tag;
@@ -655,14 +659,16 @@ describe('skeleton profile (operations not integrated yet)', () => {
     expect(out.result).not.toBe('READY');
   });
 
-  it('uses the full barrier when operations turn out to be available, and rolls back on an HTTP smoke failure otherwise', async () => {
+  it('refuses an implicit product downgrade, and rolls back a skeleton HTTP smoke failure', async () => {
     const withOps = harness(world());
     expect(
       await runRelease(
         withOps.input({ manifest: manifest({ profile: 'skeleton' }) }),
         withOps.adapters,
       ),
-    ).toMatchObject({ result: 'READY' });
+    ).toMatchObject({ result: 'BLOCKED', reason: 'PRODUCT_PROFILE_REQUIRED' });
+    expect(withOps.calls.compose).toEqual([]);
+    expect(withOps.calls.smoke).toEqual([]);
     const smokeFail = harness(
       world({
         ops: 'unavailable',
@@ -692,23 +698,72 @@ describe('wiring: Jenkinsfile and infra/deploy.sh go through the runner only', (
     for (const text of [jenkinsfile, deploySh]) {
       expect(text).toMatch(/scripts\/verify-release\.mjs/);
       expect(text).toMatch(/scripts\/deploy-release\.mjs/);
-      expect(text).toContain('--official-budget-max-age-ms');
-      expect(text).toContain('OPS_OFFICIAL_BUDGET_MAX_AGE_MS:?');
+      expect(text).toContain('scripts/product-release.mjs');
       expect(text).not.toMatch(/docker compose[^\n]*\bup\b/);
     }
     expect(deploySh).not.toMatch(/docker build/);
   });
 
-  it('the operator token is bound only from the Secret text credential and never echoed', () => {
+  it('the operator policy comes from the secret file and the SSO cookie is separately bound', () => {
     expect(jenkinsfile).toContain(
-      "string(credentialsId: 'kkakkung-ops-token', variable: 'OPS_TOKEN')",
+      "string(credentialsId: 'kkakkung-smoke-cookie', variable: 'SMOKE_COOKIE')",
     );
+    expect(jenkinsfile).toContain("credentialsId: 'kkakkung-production-env'");
+    expect(jenkinsfile).toContain('--check-only');
     expect(jenkinsfile).not.toMatch(/echo[^\n]*OPS_TOKEN/);
     expect(deploySh).not.toMatch(/echo[^\n]*OPS_TOKEN/);
   });
 
   it('defaults are explicit: deadlines are bounded and the skeleton profile is a named choice', () => {
     expect(DEFAULT_DEADLINES.drainMs).toBeGreaterThan(0);
-    expect(jenkinsfile).toMatch(/DEPLOY_PROFILE\s*=\s*'skeleton'/);
+    expect(jenkinsfile).toContain("choices: ['skeleton', 'product']");
+  });
+});
+
+describe('first skeleton to product migration', () => {
+  const skeleton = {
+    status: 200,
+    json: { stage: 'skeleton', mvpReady: false, mediaEnabled: false, productSecurityReady: false },
+  };
+  const migrationManifest = () =>
+    manifest({ previous: { ...manifest().previous!, profile: 'skeleton' } });
+  const migrationWorld = () =>
+    world({ previousIsSkeleton: true, readyByTag: { [PREV_TAG]: [skeleton] } });
+  it('requires the full new product barrier without calling nonexistent old drain', async () => {
+    const h = harness(migrationWorld());
+    expect(await runRelease(h.input({ manifest: migrationManifest() }), h.adapters)).toMatchObject({
+      result: 'READY',
+    });
+    expect(h.calls.profiles).toEqual(['product']);
+    expect(h.calls.posts.map((p) => p.action)).toEqual(['resume']);
+    expect(h.calls.smoke).toEqual(['cloud']);
+    expect(h.calls.state['last-good-profile']).toBe('product\n');
+  });
+  it.each(['missing-profile', 'media-enabled', 'wrong-image', 'product-unavailable'])(
+    'refuses migration before any image change: %s',
+    async (defect) => {
+      const w = migrationWorld();
+      const m = defect === 'missing-profile' ? manifest() : migrationManifest();
+      if (defect === 'media-enabled')
+        w.readyByTag = {
+          [PREV_TAG]: [{ ...skeleton, json: { ...skeleton.json, mediaEnabled: true } }],
+        };
+      if (defect === 'wrong-image') w.running[PREV_TAG]!.game = digest('9');
+      if (defect === 'product-unavailable') {
+        w.previousIsSkeleton = false;
+        w.ops = 'unavailable';
+      }
+      const h = harness(w);
+      expect((await runRelease(h.input({ manifest: m }), h.adapters)).exitCode).not.toBe(0);
+      expect(h.calls.compose).toEqual([]);
+    },
+  );
+  it('restores the recorded skeleton profile after a new product smoke failure', async () => {
+    const h = harness({ ...migrationWorld(), smokeCodes: { [TAG]: 1 } });
+    expect(await runRelease(h.input({ manifest: migrationManifest() }), h.adapters)).toMatchObject({
+      result: 'ROLLED_BACK',
+    });
+    expect(h.calls.profiles).toEqual(['product', 'skeleton']);
+    expect(h.calls.smoke).toEqual(['cloud', 'http']);
   });
 });

@@ -11,6 +11,12 @@ import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
 import type { Room } from '@colyseus/sdk';
 import type { ProductRoomPort } from '../../app/product-runtime';
 
+/** Non-secret navigation hint only. Server invitation scope still authorizes the actual room. */
+export function invitationRoom(hash: string): string {
+  const room = new URLSearchParams(hash.replace(/^#/, '')).get('room') ?? '';
+  return /^[A-HJ-NP-Z2-9]{6}$/.test(room) ? room : '';
+}
+
 export function consumeInvitation(
   location: { hash: string; pathname: string; search: string },
   history: { replaceState(data: unknown, unused: string, url: string): void },

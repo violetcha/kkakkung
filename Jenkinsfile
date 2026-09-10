@@ -10,6 +10,10 @@
 pipeline {
   agent any
 
+  parameters {
+    choice(name: 'RELEASE_PROFILE', choices: ['skeleton', 'product'], description: 'product: 승인된 Cloud/운영 증거와 6인 smoke를 검사한 뒤 배포')
+  }
+
   options {
     // GitLab 커밋 상태 게시 (Jenkins 관리 → System → GitLab connection 'ssafy-gitlab', 크리덴셜 gitlab-api-token)
     gitLabConnection('ssafy-gitlab')
@@ -25,9 +29,8 @@ pipeline {
     STATE_DIR = '/opt/kkakkung'
     PUBLIC_URL = 'https://j15c204.p.ssafy.io'
     DEPLOY_BRANCH = 'develop'
-    // skeleton: E 운영 API(/api/operations, OPS_TOKEN) 미통합 상태. drain/resume 없이 ready + HTTP smoke 까지만.
-    // product: 크리덴셜 kkakkung-ops-token(Secret text) 과 DP-06 preflight 가 필요. 전환은 infra/jenkins/SETUP.md §10.
-    DEPLOY_PROFILE = 'skeleton'
+    // product: private environment, approved runtime evidence and DP-06 preflight are required.
+    DEPLOY_PROFILE = "${params.RELEASE_PROFILE ?: 'skeleton'}"
     // 검증 도구체인은 infra/docker/Dockerfile.ci (Node 24.19.0 + pnpm 11.19.0 + Playwright Chromium).
     // 파일 해시로 태그해서 Dockerfile.ci 가 바뀔 때만 다시 빌드합니다.
     CI_IMAGE   = 'kkakkung-ci'
@@ -120,36 +123,31 @@ pipeline {
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
 
-        // 비밀값 env 파일. Jenkins Secret file 크리덴셜을 600 으로 내려놓고 compose env_file 이 읽습니다.
-        // 내용은 어떤 단계에서도 출력하지 않습니다 (set +x 는 Jenkins 기본).
-        withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {
-          sh 'install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"'
-        }
-
-        // 1) 매니페스트: 이 빌드가 검증한 커밋(GIT_SHA)과 방금 만든 두 이미지의 digest·revision 라벨, 이전 last-good.
-        //    이미지가 없거나 라벨이 다르면 여기서 멈춥니다 (태그로 커밋을 추정하지 않음).
-        sh '''
-          mkdir -p "$STATE_DIR/releases"
-          set --
-          if [ "$DEPLOY_PROFILE" = product ]; then
-            : "${OPS_OFFICIAL_BUDGET_MAX_AGE_MS:?Set the approved runtime budget max age before product deployment}"
-            set -- --official-budget-max-age-ms "$OPS_OFFICIAL_BUDGET_MAX_AGE_MS"
-          fi
-          node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA" \
-            --profile "$DEPLOY_PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json" "$@"
-        '''
-
-        // 2) 장벽 실행. 운영 토큰은 product 프로파일에서만 Secret text 로 바인딩합니다 (로그 마스킹).
-        //    결과·단계는 $STATE_DIR/releases/$TAG/release.json 에 남고, 종료 코드가 빌드 결과입니다.
+        // Check all inputs before replacing the runtime env or touching containers.
         script {
-          def run = 'node scripts/deploy-release.mjs --manifest "$STATE_DIR/releases/$TAG.json" ' +
-                    '--evidence "$STATE_DIR/releases/$TAG" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"'
-          if (env.DEPLOY_PROFILE == 'product') {
-            withCredentials([string(credentialsId: 'kkakkung-ops-token', variable: 'OPS_TOKEN')]) {
-              sh run + ' --preflight "$STATE_DIR/cloud-preflight.json"'
+          withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {
+            if (env.DEPLOY_PROFILE == 'product') {
+              withCredentials([string(credentialsId: 'kkakkung-smoke-cookie', variable: 'SMOKE_COOKIE')]) {
+                sh '''
+                  set +x
+                  node --import tsx scripts/product-release.mjs --check-only --env-file "$PROD_ENV_FILE" \
+                    --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
+                    --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
+                  install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"
+                  node --import tsx scripts/product-release.mjs --env-file "$STATE_DIR/production.env" \
+                    --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
+                    --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
+                '''
+              }
+            } else {
+              sh '''
+                install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"
+                node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA" \
+                  --profile skeleton --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
+                node --import tsx scripts/deploy-release.mjs --manifest "$STATE_DIR/releases/$TAG.json" \
+                  --evidence "$STATE_DIR/releases/$TAG" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
+              '''
             }
-          } else {
-            sh run
           }
         }
       }
