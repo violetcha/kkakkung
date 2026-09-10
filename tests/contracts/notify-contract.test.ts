@@ -3,10 +3,20 @@
 // exposes the webhook URL. Nothing here contacts Mattermost.
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildPayload, loadMap, resolveRecipient } from '../../scripts/notify-build-failure.mjs';
+import {
+  EXCERPT_LIMITS,
+  buildPayload,
+  excerptLog,
+  failedTests,
+  loadMap,
+  readBuildLog,
+  redact,
+  resolveRecipient,
+} from '../../scripts/notify-build-failure.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const jenkinsfile = readFileSync(resolve(root, 'Jenkinsfile'), 'utf8');
@@ -146,5 +156,104 @@ describe('notifier payload', () => {
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('건너뜁니다');
+  });
+});
+
+describe('failure log excerpt', () => {
+  const esc = String.fromCharCode(27);
+  const sampleLog = [
+    '[2026-09-10T07:44:01.000Z] [Pipeline] sh',
+    `[2026-09-10T07:44:02.000Z] ${esc}[8mha:////AAAA${esc}[0m[Pipeline] updateGitlabCommitStatus`,
+    '[2026-09-10T07:45:03.000Z]  ✓ tests/contracts/ci-contract.test.ts (11 tests) 2998ms',
+    `[2026-09-10T07:45:04.000Z]      ${esc}[31m×${esc}[39m connects six runtimes 19350ms`,
+    '[2026-09-10T07:45:05.000Z]  ✓ server/test/health/readiness.test.ts (25 tests)',
+    `[2026-09-10T07:46:32.000Z] ${esc}[31m⎯⎯⎯${esc}[39m${esc}[1m Failed Tests 1 ${esc}[22m`,
+    `[2026-09-10T07:46:32.000Z] ${esc}[41m FAIL ${esc}[49m server/test/media/product-integration.test.ts${esc}[2m > ${esc}[22msuite${esc}[2m > ${esc}[22mconnects six runtimes`,
+    '[2026-09-10T07:46:32.000Z] Error: {"abortReason":"SERVER_TICK_OVERLOAD"}',
+    '[2026-09-10T07:46:32.000Z] authorization: Bearer abc.def.ghi token=sekrit https://mm.example/hooks/XYZ123',
+    ...Array.from({ length: 60 }, (_, i) => `[2026-09-10T07:46:32.000Z]   detail line ${i}`),
+    '[2026-09-10T07:46:32.000Z]  Test Files  1 failed | 211 passed (212)',
+    '[2026-09-10T07:46:32.000Z]       Tests  1 failed | 2063 passed (2064)',
+    '[2026-09-10T07:46:33.000Z] ci-verify: verify FAILED: exit 1',
+    'ERROR: script returned exit code 1',
+  ].join('\n');
+
+  it('starts at the vitest failure block, drops pipeline plumbing and passing ticks, keeps the summary', () => {
+    const excerpt = excerptLog(sampleLog)!;
+    const lines = excerpt.split('\n');
+    expect(lines[0]).toMatch(/^⎯⎯⎯ Failed Tests 1/);
+    expect(excerpt).not.toContain('[Pipeline]');
+    expect(excerpt).not.toContain('ha:////');
+    expect(excerpt).not.toContain('2026-09-10T07');
+    expect(excerpt).not.toMatch(/✓/);
+    expect(excerpt).not.toContain(esc);
+    expect(excerpt).toContain(
+      'FAIL  server/test/media/product-integration.test.ts > suite > connects six runtimes',
+    );
+    expect(excerpt).toContain('SERVER_TICK_OVERLOAD');
+    expect(lines.length).toBeLessThanOrEqual(EXCERPT_LIMITS.maxLines + 7);
+    expect(excerpt).toMatch(/… \(\d+줄 생략\)/);
+    expect(excerpt).toContain('Test Files  1 failed | 211 passed (212)');
+    expect(excerpt).toContain('ERROR: script returned exit code 1');
+    expect(excerpt.length).toBeLessThanOrEqual(EXCERPT_LIMITS.maxChars + 20);
+  });
+
+  it('redacts bearer tokens, token=values and webhook URLs before the text leaves the host', () => {
+    const excerpt = excerptLog(sampleLog)!;
+    expect(excerpt).not.toContain('abc.def.ghi');
+    expect(excerpt).not.toContain('sekrit');
+    expect(excerpt).not.toContain('hooks/XYZ123');
+    expect(excerpt).toContain('Bearer [redacted]');
+    expect(excerpt).toContain('token=[redacted]');
+    expect(excerpt).toContain('[redacted-url]');
+    expect(redact('cookie: session=abc')).toBe('cookie: [redacted]');
+  });
+
+  it('falls back to the tail of the log when no failure marker exists, and to null for an empty log', () => {
+    const plain = Array.from({ length: 100 }, (_, i) => `line ${i}`).join('\n');
+    const excerpt = excerptLog(plain)!;
+    expect(excerpt.split('\n')).toHaveLength(EXCERPT_LIMITS.maxLines);
+    expect(excerpt.endsWith('line 99')).toBe(true);
+    expect(excerptLog('')).toBeNull();
+    expect(excerptLog(undefined)).toBeNull();
+  });
+
+  it('lists failed vitest cases once each and puts them in the message', () => {
+    expect(failedTests(sampleLog)).toEqual([
+      'server/test/media/product-integration.test.ts > suite > connects six runtimes',
+    ]);
+    const { payload } = buildPayload(
+      { JOB_NAME: 'kkakkung-mr', BUILD_NUMBER: '70', FAILED_STAGE: 'Verify' },
+      map,
+      sampleLog,
+    );
+    expect(payload.text).toContain(
+      '- 실패 시험: `server/test/media/product-integration.test.ts > suite > connects six runtimes`',
+    );
+    expect(payload.text).toContain('**실패 로그 발췌** (전체는 콘솔 링크)');
+    expect(payload.text).toContain('```\n⎯⎯⎯ Failed Tests 1');
+    expect(payload.text.length).toBeLessThan(6000);
+  });
+
+  it('reads the controller log by JENKINS_HOME/JOB_NAME/BUILD_NUMBER and tolerates a missing file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'kkakkung-jenkins-home-'));
+    const dir = join(home, 'jobs', 'kkakkung-mr', 'builds', '70');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'log'), sampleLog);
+    expect(readBuildLog({ JENKINS_HOME: home, JOB_NAME: 'kkakkung-mr', BUILD_NUMBER: '70' })).toBe(
+      sampleLog,
+    );
+    expect(
+      readBuildLog({ JENKINS_HOME: home, JOB_NAME: 'kkakkung-mr', BUILD_NUMBER: '71' }),
+    ).toBeNull();
+    expect(readBuildLog({})).toBeNull();
+    // Without a log the message is the same as before: no excerpt section, no failure.
+    const { payload } = buildPayload(
+      { JOB_NAME: 'kkakkung', BUILD_NUMBER: '1', FAILED_STAGE: 'Verify' },
+      map,
+      null,
+    );
+    expect(payload.text).not.toContain('실패 로그 발췌');
+    expect(payload.text).not.toContain('실패 시험');
   });
 });

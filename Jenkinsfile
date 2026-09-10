@@ -18,6 +18,9 @@ pipeline {
     // GitLab 커밋 상태 게시 (Jenkins 관리 → System → GitLab connection 'ssafy-gitlab', 크리덴셜 gitlab-api-token)
     gitLabConnection('ssafy-gitlab')
     timestamps()
+    // 같은 잡 안의 동시 실행 금지. 잡 사이(kkakkung ↔ kkakkung-mr)의 겹침은 컨트롤러 executor 1개로
+    // 막는다 (infra/jenkins/SETUP.md §6). 2026-09-10 두 빌드가 겹쳐 4 vCPU 가 모자라 tick 250ms 초과로
+    // product-integration 시험이 깨진 뒤 정한 규칙.
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '20'))
     timeout(time: 40, unit: 'MINUTES')
