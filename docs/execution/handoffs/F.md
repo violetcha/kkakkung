@@ -160,6 +160,19 @@
 | blockedOn           | F-02, QA-11/QA-12 preflight(운영자 발급·잔량), B F-REQ-12~15(10방 게임 포화)                                                                                                                                                                                                                                                                                                                                                                  |
 | 다음 단계           | 머지 → F-02 도착 → QA-11 실측 → 5방 통과 시 QA-12                                                                                                                                                                                                                                                                                                                                                                                             |
 
+## F-15 / QA-09 인계 → 팀 전원 (6대 5판 실행), A~E (실패 단계), DP-06/QA-11
+
+| 항목                | 내용                                                                                                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 고정 번호 / 원본 ID | F-15 / QA-09 · Jira S15P21C204-165                                                                                                                                                                                                                 |
+| localStage          | LOCAL_VERIFIED(기록 양식·수집기)·**실제 5판 미실시**                                                                                                                                                                                               |
+| 구현 branch         | `test/S15P21C204-165-six-device`                                                                                                                                                                                                                   |
+| 공개 진입점         | `tests/fixtures/manual-six-device.md`(양식·판정 규칙), `scripts/collect-six-device-results.mjs`(`validateSixDeviceRecords`·`REQUIRED_COVERAGE`·`PRODUCT_DECISION_PENDING`·`FPS_TARGET`), `tests/cloud/mvp-flow.cloud.test.ts`(QA-09 case, BLOCKED) |
+| 소비자와 조립 담당  | 팀 전원: 시험 당일 `.local/qa/six-device/devices.json`·`matches.json` 을 양식대로 채운다(촬영·녹음 저장 없음). F: 수집기 실행·결과를 verification 에 기록. A~E: 실패 단계별 재현 로그 수신                                                         |
+| 검증                | six-device-report 6 pass(2026-09-10 13:45 KST); 수집기 파일 없음 → BLOCKED exit 3                                                                                                                                                                  |
+| blockedOn           | 장치 6대·사용자 6명·시간, LiveKit 잔량 확인, C 화면(27679ba) 포함 빌드 배포, F-02(보조 자동 흐름)                                                                                                                                                  |
+| 다음 단계           | 일정 확정 → 5판 → 수집기 → QA-13                                                                                                                                                                                                                   |
+
 ## 인계 항목 (2026-09-08)
 
 | 항목               | F-04 / DP-04                                                                                 | F-05 / DP-02                                                                                                                           | F-06 / DP-03                                                                                                   |
