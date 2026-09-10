@@ -32,6 +32,7 @@
     "deploy:smoke": "node scripts/deployment-smoke.mjs"
   },
   "devDependencies": {
+    "@colyseus/sdk": "0.18.2",
     "@eslint/js": "10.0.1",
     "@kkakkung/game-core": "workspace:*",
     "@kkakkung/protocol": "workspace:*",
