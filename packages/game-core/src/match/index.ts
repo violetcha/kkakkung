@@ -222,6 +222,16 @@ export {
   type InstallationUpkeepResult,
 } from './equipment/install.js';
 
+export {
+  expireRestraints,
+  isRestrained,
+  lockRestrainedActions,
+  restraintRemaining,
+  type RestraintExpiryResult,
+  type RestraintLockResult,
+  type RestraintRelease,
+} from './equipment/restraint.js';
+
 export { sensorTriggers, type SensorTrigger } from './equipment/sensor.js';
 
 export {
