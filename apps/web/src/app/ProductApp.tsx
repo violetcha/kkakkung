@@ -269,6 +269,7 @@ export function ProductApp({ invitation }: { invitation: string }) {
               <div className="product-canvas">
                 <WorldCanvas
                   view={view}
+                  faces={runtime.current?.faces}
                   ownerNames={Object.fromEntries(
                     snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
                   )}

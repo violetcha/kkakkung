@@ -7,17 +7,20 @@ import { FirstPersonCamera } from './FirstPersonCamera';
 import { VisibleTerrain } from './VisibleTerrain';
 import { QUALITY_PRESETS, type QualityPreset } from './quality-presets';
 import type { OwnerNames } from './ExitOwnerLabel';
+import type { FaceTextures } from './face-textures';
 
 export function WorldCanvas({
   scene,
   view,
   ownerNames,
+  faces,
   quality = 'medium',
   renderTick = () => null,
 }: {
   scene?: ComponentProps<typeof ScenePrimitives>;
   view?: PrivateView;
   ownerNames?: OwnerNames;
+  faces?: FaceTextures;
   quality?: QualityPreset;
   renderTick?(): number | null;
 } = {}) {
@@ -37,7 +40,7 @@ export function WorldCanvas({
         {view.self?.status === 'ACTIVE' && (
           <FirstPersonCamera self={view.self} renderTick={renderTick} />
         )}
-        <VisibleTerrain view={view} ownerNames={ownerNames} />
+        <VisibleTerrain view={view} ownerNames={ownerNames} faces={faces} />
       </Canvas>
     );
   if (scene)

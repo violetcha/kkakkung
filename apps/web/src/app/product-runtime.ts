@@ -14,6 +14,7 @@ import {
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
 import { createPrivateEvents } from '../features/room/private-events';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
@@ -63,6 +64,7 @@ export type ProductSnapshot = {
   exchangeTarget: string | null;
   markers: HunterMarker[];
   exchangeNotice: string | null;
+  faceRevision: number;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -95,12 +97,14 @@ export function bindProductRoom(
     exchangeTarget: null,
     markers: [],
     exchangeNotice: null,
+    faceRevision: 0,
     lost: false,
     error: null,
     quality: 'medium',
     endedSelf: null,
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
+  const faces = createFaceTextures(videoFaceTexture);
   let bindings: MediaBindings | null = null;
   let previewHost: HTMLElement | null = null;
   let bridge!: ReturnType<typeof createInteractionBridge>;
@@ -188,6 +192,13 @@ export function bindProductRoom(
       if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
         publish({ markers: [], exchangeNotice: null });
       publish({ view });
+      faces.visible(
+        view?.self?.status === 'ACTIVE'
+          ? view.visibleEntities
+              .filter((p) => p.kind === 'player' && p.id !== session.playerId)
+              .map((p) => p.id)
+          : [],
+      );
       events.update(view, snapshot.round?.matchId ?? '');
       if (view) commands.view(view.stateVersion);
       if (view?.self && view.self.status !== 'ACTIVE') {
@@ -237,6 +248,19 @@ export function bindProductRoom(
         },
         onMediaStatus: (media) => {
           if (!live()) return;
+          faces.setScope(
+            participating &&
+              media.matchId === snapshot.round?.matchId &&
+              media.mediaInstanceId &&
+              media.receiverGeneration !== null &&
+              !['closed', 'failed', 'idle'].includes(media.state)
+              ? {
+                  matchId: media.matchId,
+                  mediaInstanceId: media.mediaInstanceId,
+                  receiverGeneration: media.receiverGeneration,
+                }
+              : null,
+          );
           publish({ media });
           updateLoading();
         },
@@ -248,8 +272,10 @@ export function bindProductRoom(
         },
         onLocalPreview: () => {},
         onSensors: () => {},
-        // C-13 consumes remote texture events in the next scheduled batch; raw video is never attached here.
-        onFaceTrack: () => {},
+        onFaceTrack: (event) => {
+          if (live() && participating && faces.receive(event))
+            publish({ faceRevision: snapshot.faceRevision + 1 });
+        },
       },
       deps.interactionFactory,
     );
@@ -263,6 +289,7 @@ export function bindProductRoom(
         bridge.runtime.setAudioOutputLock('locked');
       },
       clear: () => {
+        faces.clear();
         events.clear();
         commands.clear();
         loading.clear();
@@ -435,6 +462,7 @@ export function bindProductRoom(
     loading.clear();
     views.clear();
     events.clear();
+    faces.clear();
     unsubscribers.splice(0).forEach((off) => off());
   }
   bridge = makeBridge();
@@ -454,6 +482,7 @@ export function bindProductRoom(
     const rematch = snapshot.round !== null && snapshot.round.matchId !== round.matchId;
     const phaseChanged = snapshot.round?.phase !== round.phase;
     if (rematch) {
+      faces.clear();
       generation++;
       participating = false;
       attemptedScope = null;
@@ -540,6 +569,7 @@ export function bindProductRoom(
     throw new Error('CONNECTION_FAILED');
   }
   return {
+    faces,
     poll() {
       if (!active) return;
       heartbeat.poll();
