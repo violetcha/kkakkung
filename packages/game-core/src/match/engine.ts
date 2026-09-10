@@ -23,8 +23,10 @@ import {
   dropInstall,
   planInstall,
   reserveInstall,
+  spendEquipment,
   verifyInstallCancel,
 } from './equipment/install.js';
+import { sensorTriggers } from './equipment/sensor.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
 import { mergeKnowledge } from './exchange/merge.js';
 import { midpointOf, releaseTraces, scheduleTrace } from './exchange/trace.js';
@@ -39,7 +41,7 @@ import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
 import { initialTerrain, knownTerrainOf, observeTerrain } from './knowledge/terrain.js';
-import { completeActions, reserveMove } from './movement.js';
+import { completeActions, reserveMove, type CompletedMove } from './movement.js';
 import { visibilityOf } from './vision/visibility.js';
 import { terminateRunner, type TerminationOutcome } from './participation.js';
 import { createPriorityOrder } from './priority.js';
@@ -223,6 +225,8 @@ type StepContext = {
   media: MediaIntent[];
   /** Players whose personal result was fixed during this step. */
   endedThisStep: Set<string>;
+  /** Moves that completed at this tick, the input of equipment activation. */
+  completedMoves: readonly CompletedMove[];
 };
 
 function outcome(
@@ -266,6 +270,7 @@ function completeDueActions(ctx: StepContext): void {
   const completion = completeActions(ctx.state.players.values(), ctx.tick);
   if (completion.players.length === 0) return;
   ctx.state = withPlayers(ctx.state, completion.players);
+  ctx.completedMoves = completion.completedMoves;
   for (const move of completion.completedMoves) {
     ctx.events.push({
       type: 'SPATIAL_SOUND',
@@ -514,6 +519,35 @@ function advanceDueInstallations(ctx: StepContext): void {
   ctx.state = advanceInstallations(ctx.state, ctx.tick).state;
 }
 
+/**
+ * Equipment activation (EQ-02): after the capture stage and before this tick's
+ * commands. A sensor with a new ACTIVE runner on its approach cell is spent
+ * once and produces two separate events - a past-position marker for the
+ * taggers and a server-only sound - each with its own id.
+ */
+function activateEquipment(ctx: StepContext): void {
+  for (const trigger of sensorTriggers(ctx.state, ctx.completedMoves)) {
+    ctx.state = spendEquipment(ctx.state, trigger.ownerId, trigger.equipmentId);
+    // Published at this same tick: a sensor trace has no delay, only a 40 tick life.
+    ctx.state = scheduleTrace(ctx.state, {
+      markerId: `mk-${trigger.equipmentId}`,
+      kind: 'sensor',
+      point: { x: trigger.cell.x, y: trigger.cell.y },
+      occurredTick: ctx.tick,
+      delayTicks: 0,
+    });
+    ctx.events.push({
+      type: 'SPATIAL_SOUND',
+      sound: {
+        eventId: nextEventId(ctx),
+        tick: ctx.tick,
+        kind: 'sensor',
+        cell: trigger.cell,
+      },
+    });
+  }
+}
+
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
   if (ctx.endedThisStep.has(command.actorId)) {
     // The actor's personal result was fixed earlier in this step: cancel, do not reject.
@@ -594,6 +628,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     events: [],
     media: [],
     endedThisStep: new Set(),
+    completedMoves: [],
   };
   if (isTerminal(ctx.state)) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
@@ -619,6 +654,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   if (settleResult(ctx, { includeTimeout: false })) {
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
   } else {
+    activateEquipment(ctx);
     for (const command of input.commands) handleCommand(ctx, command);
     startQueuedActions(ctx);
     // After the commands of this tick: an accept at the deadline still reports

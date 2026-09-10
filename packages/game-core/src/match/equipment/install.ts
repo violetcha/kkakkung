@@ -219,6 +219,31 @@ export function advanceInstallations(state: MatchState, tick: number): Installat
   return { state: armDueEquipment(next, tick), finished };
 }
 
+/**
+ * Spends one ARMED device (EQ-02/EQ-04). ARMED to SPENT happens once: a device
+ * that is UNARMED, already SPENT, or missing leaves the state untouched.
+ */
+export function spendEquipment(
+  state: MatchState,
+  ownerId: string,
+  equipmentId: string,
+): MatchState {
+  const owner = state.players.get(ownerId);
+  if (!owner) return state;
+  const target = owner.ownedEquipment.find((e) => e.equipmentId === equipmentId);
+  if (!target || target.state !== 'ARMED') return state;
+  const players = new Map(state.players);
+  players.set(ownerId, {
+    ...owner,
+    ownedEquipment: Object.freeze(
+      owner.ownedEquipment.map((e) =>
+        e.equipmentId === equipmentId ? Object.freeze({ ...e, state: 'SPENT' as const }) : e,
+      ),
+    ),
+  });
+  return { ...state, players };
+}
+
 /** Flips every UNARMED device whose arming tick has come; SPENT never returns. */
 export function armDueEquipment(state: MatchState, tick: number): MatchState {
   let players: Map<string, PlayerRecord> | null = null;
