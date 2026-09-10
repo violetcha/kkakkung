@@ -68,6 +68,8 @@ export function validateManifest(manifest) {
   }
   if (m.previous !== null && m.previous !== undefined) {
     const p = m.previous;
+    if (p.profile !== undefined && !['skeleton', 'product'].includes(p.profile))
+      issues.push('previous.profile invalid');
     if (!TAG8.test(p.tag ?? '')) issues.push('previous.tag must be 8-hex');
     for (const key of IMAGE_KEYS) {
       if (!DIGEST.test(p.images?.[key]?.digest ?? ''))
@@ -272,7 +274,7 @@ export async function runRelease(input, adapters) {
   /** Post-swap barrier shared by the release and by a rollback. */
   const barrier = async (label, tag, images, useOperations) => {
     setPhase('DEPLOYING');
-    const composed = await adapters.compose(tag);
+    const composed = await adapters.compose(tag, useOperations ? 'product' : 'skeleton');
     if (composed.code !== 0) fail('FAILED', `${label}_COMPOSE_FAILED`, `exit ${composed.code}`);
     ok(`${label} compose up`, `tag=${tag}`);
     const ready = await waitReady(label);
@@ -330,7 +332,10 @@ export async function runRelease(input, adapters) {
       const images = Object.fromEntries(
         IMAGE_KEYS.map((key) => [key, { digest: previous.images[key].digest }]),
       );
-      await barrier('ROLLBACK', previous.tag, images, useOperations);
+      const previousUsesOperations = previous.profile
+        ? previous.profile === 'product'
+        : useOperations;
+      await barrier('ROLLBACK', previous.tag, images, previousUsesOperations);
       setPhase('READY');
       return finish('ROLLED_BACK', cause, `previous ${previous.tag} passed the barrier again`);
     } catch (error) {
@@ -377,10 +382,39 @@ export async function runRelease(input, adapters) {
 
     // 3. Operations availability decides the barrier depth.
     const status = await http('GET', `${input.localUrl}/api/operations/status`, { bearer: true });
+    if (
+      manifest.profile === 'skeleton' &&
+      (status.status === 200 || manifest.previous?.profile === 'product')
+    )
+      fail(
+        'BLOCKED',
+        'PRODUCT_PROFILE_REQUIRED',
+        'existing product requires an explicit product release and Cloud preflight',
+      );
     if (status.status === 200) useOperations = true;
     else if (status.status === 401 || status.status === 403) fail('BLOCKED', 'OPS_TOKEN_REJECTED');
-    else if (manifest.profile === 'product')
-      fail('BLOCKED', 'OPERATIONS_UNAVAILABLE', `status route ${status.status}`);
+    else if (manifest.profile === 'product') {
+      // First product deployment: only a positively identified, media-free skeleton may
+      // have no operations API. A failed/unreachable product API is never a migration signal.
+      const oldReady = await http('GET', `${input.localUrl}/health/ready`);
+      const body = oldReady.json;
+      if (
+        status.status !== 404 ||
+        anonymous.status !== 404 ||
+        manifest.previous?.profile !== 'skeleton' ||
+        oldReady.status !== 200 ||
+        body?.stage !== 'skeleton' ||
+        body?.mvpReady !== false ||
+        body?.mediaEnabled !== false ||
+        body?.productSecurityReady !== false
+      )
+        fail('BLOCKED', 'OPERATIONS_UNAVAILABLE', `status route ${status.status}`);
+      await checkRunningImages('MIGRATION_SOURCE', manifest.previous.images);
+      ok(
+        'skeleton migration',
+        'verified previous skeleton; new product must pass the full barrier',
+      );
+    }
     ok(
       'operations',
       useOperations
@@ -399,7 +433,12 @@ export async function runRelease(input, adapters) {
 
     // 5–8. Swap, ready/recovery, resume, smoke, publication re-check.
     try {
-      await barrier('RELEASE', manifest.tag, manifest.images, useOperations);
+      await barrier(
+        'RELEASE',
+        manifest.tag,
+        manifest.images,
+        manifest.profile === 'product' || useOperations,
+      );
     } catch (error) {
       if (!(error instanceof ReleaseStop)) throw error;
       if (error.result === 'PUBLISH_BLOCKED') {
@@ -408,17 +447,18 @@ export async function runRelease(input, adapters) {
       }
       return await rollback(
         `${error.reason}${error.detail ? ` (${error.detail})` : ''}`,
-        useOperations,
+        manifest.profile === 'product' || useOperations,
       );
     }
     await adapters.writeState('last-good-tag', `${manifest.tag}\n`);
+    await adapters.writeState('last-good-profile', `${manifest.profile}\n`);
     await adapters.writeState(
       'last-good-digest',
       `game ${manifest.images.game.digest}\nweb  ${manifest.images.web.digest}\n`,
     );
     state.lastGoodWritten = true;
     ok('last-good', `tag and digests recorded for ${manifest.tag}`);
-    if (useOperations) {
+    if (manifest.profile === 'product' || useOperations) {
       setPhase('READY');
       record('isolation', 'INFO', 'SSO gate retained (DP-03 decision); no public release step');
       return finish('READY');

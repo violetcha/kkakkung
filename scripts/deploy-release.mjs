@@ -165,8 +165,10 @@ const adapters = {
     });
     return result.status === 0 ? result.stdout.trim() : null;
   },
-  async compose(tag) {
-    const composeArgs = ['compose', ...composeFiles.flatMap((f) => ['-f', f]), 'up', '-d'];
+  async compose(tag, profile) {
+    const selectedFiles = composeFiles.filter((file) => file !== 'infra/compose.product.yaml');
+    if (profile === 'product') selectedFiles.push('infra/compose.product.yaml');
+    const composeArgs = ['compose', ...selectedFiles.flatMap((f) => ['-f', f]), 'up', '-d'];
     const result = spawnSync('docker', composeArgs, {
       cwd: root,
       env: { ...process.env, TAG: tag },

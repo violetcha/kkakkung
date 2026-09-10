@@ -31,9 +31,10 @@ services:
       # server/src/config/env.ts 가 development | test 만 허용합니다 (NFR-05).
       # production 프로파일은 B 초대 인증·E 운영 통합 뒤(D2) 켭니다. 그때 이 한 줄만 바꿉니다.
       NODE_ENV: development
+      SERVER_PROFILE: development
       # 서버가 이 목록에 없는 Origin 은 HTTP 403 / WS 업그레이드 거절합니다. 도메인 바뀌면 여기.
       ALLOWED_ORIGINS: https://j15c204.p.ssafy.io
-      SERVICE_NAMESPACE: kkakkung-ec2
+      SERVICE_NAMESPACE: ${SERVICE_NAMESPACE:-kkakkung-ec2}
       LOG_LEVEL: info
     # 비밀값·운영 정책값. Jenkins 가 Secret file 크리덴셜(kkakkung-production-env)을
     # 배포 직전 이 경로로 내려줍니다 (600, jenkins). 토대는 infra/production.env.example.

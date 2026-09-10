@@ -16,10 +16,16 @@ import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
 
-export function ProductApp({ invitation }: { invitation: string }) {
+export function ProductApp({
+  invitation,
+  initialRoom = '',
+}: {
+  invitation: string;
+  initialRoom?: string;
+}) {
   const [nickname, setNickname] = useState('');
-  const [roomCode, setRoomCode] = useState('');
-  const [createRoom, setCreateRoom] = useState(true);
+  const [roomCode, setRoomCode] = useState(initialRoom);
+  const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);

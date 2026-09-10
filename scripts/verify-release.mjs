@@ -47,7 +47,24 @@ export function readPrevious(readState) {
       digests[name] = { digest };
   }
   if (!digests.game || !digests.web) return null;
-  return { tag, images: digests };
+  const recordedProfile = (readState('last-good-profile') ?? '').trim();
+  let profile = ['product', 'skeleton'].includes(recordedProfile) ? recordedProfile : undefined;
+  // Compatibility with last-good records written before profile was recorded separately.
+  if (!profile) {
+    try {
+      const old = JSON.parse(readState(`releases/${tag}.json`) ?? 'null');
+      if (
+        old?.tag === tag &&
+        ['product', 'skeleton'].includes(old.profile) &&
+        old.images?.game?.digest === digests.game.digest &&
+        old.images?.web?.digest === digests.web.digest
+      )
+        profile = old.profile;
+    } catch {
+      /* Missing/invalid history never grants migration permission. */
+    }
+  }
+  return { tag, images: digests, ...(profile ? { profile } : {}) };
 }
 
 /**

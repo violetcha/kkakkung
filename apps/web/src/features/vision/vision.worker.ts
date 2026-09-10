@@ -67,29 +67,42 @@ function closeModels(): void {
 }
 
 async function loadModels(paths: ModelPaths): Promise<readonly VisionModelKind[]> {
-  const fileset = await FilesetResolver.forVisionTasks(paths.wasmBasePath);
+  const fileset = await FilesetResolver.forVisionTasks(paths.wasmBasePath, true);
+  // SDK 1.0.1 clears ModuleFactory after each task. ES module imports are cached, so
+  // restore its exported factory for each of the three independent task runtimes.
+  const loader = await import(
+    /* @vite-ignore */ new URL(
+      '/models/mediapipe/1.0.1/wasm/vision_wasm_module_internal.js',
+      import.meta.url,
+    ).href
+  );
+  if (typeof loader.default !== 'function') throw new Error('VISION_LOADER_INVALID');
+  const sdkGlobal = self as unknown as { ModuleFactory: unknown };
   // 경로가 아니라 hash를 검증한 바이트로 모델을 만든다.
   const [faceBytes, poseBytes, gestureBytes] = await Promise.all([
     loadVerifiedModel('face', paths.face),
     loadVerifiedModel('pose', paths.pose),
     loadVerifiedModel('gesture', paths.gesture),
   ]);
-  const face = await FaceLandmarker.createFromOptions(fileset, {
+  sdkGlobal.ModuleFactory = loader.default;
+  const face = (models.face = await FaceLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetBuffer: faceBytes },
     runningMode: 'VIDEO',
     numFaces: 1,
     outputFacialTransformationMatrixes: true,
-  });
-  const pose = await PoseLandmarker.createFromOptions(fileset, {
+  }));
+  sdkGlobal.ModuleFactory = loader.default;
+  const pose = (models.pose = await PoseLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetBuffer: poseBytes },
     runningMode: 'VIDEO',
     numPoses: 1,
-  });
-  const gesture = await GestureRecognizer.createFromOptions(fileset, {
+  }));
+  sdkGlobal.ModuleFactory = loader.default;
+  const gesture = (models.gesture = await GestureRecognizer.createFromOptions(fileset, {
     baseOptions: { modelAssetBuffer: gestureBytes },
     runningMode: 'VIDEO',
     numHands: 2,
-  });
+  }));
   // 로딩 중 종료 요청이 왔으면 만들어진 모델을 즉시 닫고 준비하지 않는다.
   if (closing) {
     face.close();
@@ -139,6 +152,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
         post({ type: 'ready', runtimeGeneration, loaded });
       })
       .catch((error: unknown) => {
+        closeModels();
         closeModels();
         // 로딩 실패는 한 번 보고하고 무한 재시도하지 않는다.
         const code =

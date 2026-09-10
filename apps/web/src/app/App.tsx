@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { consumeInvitation } from '../features/room/product-session';
+import { consumeInvitation, invitationRoom } from '../features/room/product-session';
 import { ProductApp } from './ProductApp';
 import '../styles.css';
 
@@ -7,6 +7,7 @@ const isDiagnostic =
   import.meta.env.DEV && window.location.pathname !== '/play' && !window.location.hash;
 const DevelopmentApp = import.meta.env.DEV ? lazy(() => import('./DevelopmentApp')) : null;
 const PreviewApp = import.meta.env.DEV ? lazy(() => import('./PreviewApp')) : null;
+const initialRoom = invitationRoom(window.location.hash);
 const invitation = consumeInvitation(window.location, window.history);
 export default function App() {
   if (import.meta.env.DEV && window.location.pathname === '/preview' && PreviewApp)
@@ -20,6 +21,6 @@ export default function App() {
       <DevelopmentApp />
     </Suspense>
   ) : (
-    <ProductApp invitation={invitation} />
+    <ProductApp invitation={invitation} initialRoom={initialRoom} />
   );
 }
