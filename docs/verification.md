@@ -342,3 +342,32 @@ Jira [S15P21C204-165](https://ssafy.atlassian.net/browse/S15P21C204-165). 브랜
 | **실제 5판**   | **미실시**. 장치 6대·사용자 6명·시간·LiveKit 잔량 확인이 필요. `.local/qa/six-device` 없음 → 수집기 BLOCKED(exit 3) 확인. 실행 시 산이님 화면(27679ba) 이 develop 에 있는 빌드로 진행                                                                                                                                                                                       |
 
 미완·인계: 6명 일정 확정 → 시작 전 확인 4항목 → 5판 기록 → 수집기 PASS/FAIL → DP-06/QA-11 에 완주 commit·G5 증거 인계. 실패 단계는 A~E 작업 ID 별 비민감 step 로그로 반환.
+<!-- mvp-gate-report:start -->
+
+## QA-13 MVP 관문 보고 (F-19)
+
+생성 2026-09-10T06:00:46.326Z · 보고 기준 checkout `c69241c` · 기능 상태: **통합 중간본: A 규칙(탈출·덫·교환) 도착, B Room/tick 경로 동작, C 제품 화면 조립 머지, E 미디어/운영 모듈 존재하나 production 프로파일·운영 API 미활성(EC2 skeleton). 핵심 기능 미완 항목: 10방 abort 뒤 stale layout 크래시(F-REQ-14/15), tick.duration 미emit(F-REQ-10)** · MVP 완료: **false**
+
+필수 관문 11개 중 PASS 3 · FAIL 0 · BLOCKED 5 · NOT_RUN 3 · UNVERIFIED 0. BLOCKED/NOT_RUN/PRODUCT_DECISION_PENDING 은 PASS 에 합산하지 않는다. 결정 대기: G3-C.
+
+검증된 상한: 게임 단독 **5방**, 미디어 포함 **0방** (1→3→5→10 중 실제 통과분만; 나머지는 운영 상한으로 열지 않음).
+
+| 관문 | 상태                         | 환경                                           | 증거                                                                         | 실측 상한                                                 | 잔여 결함 / 사유                                                         |
+| ---- | ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------ |
+| G1-A | **BLOCKED**                  | local-fixture                                  | `tests/contracts/g1-a.test.ts`                                               | -                                                         | Cloud 절반 미실시: F-02 ProbeHarness 첫 실행·QA-03 preflight 필요        |
+| G1-B | **BLOCKED**                  | local-fixture                                  | `tests/contracts/recovery-fixtures.test.ts`                                  | -                                                         | SIGKILL·토큰 3종 Cloud 거절 미실시                                       |
+| G1-C | **BLOCKED**                  | local-fixture                                  | `tests/contracts/g1-c.test.ts`                                               | -                                                         | 실제 SDK 이벤트·SID 관측 미실시                                          |
+| G1-D | **BLOCKED**                  | local-fixture                                  | `tests/contracts/g1-d.test.ts`                                               | -                                                         | 옛 JWT 재접속·setSubscribed 거절 미실시                                  |
+| G2   | **NOT_RUN**                  | cloud-poc                                      | -                                                                            | -                                                         | 관리 API 600/60s·429·실효 지연은 QA-11/12 실측 뒤                        |
+| G3-A | **PASS**                     | local-fixture (A matchCore + B driver, MR !70) | `tests/contracts/g3-room.test.ts`                                            | tests=20                                                  | -                                                                        |
+| G3-B | **PASS**                     | local-fixture (MR !70)                         | `tests/contracts/g3-room.test.ts`                                            | trapScenarios=3                                           | -                                                                        |
+| G3-C | **PRODUCT_DECISION_PENDING** | -                                              | -                                                                            | -                                                         | MP-06·EQ-06~09·EQ-12 결정 대기                                           |
+| G3-D | **PASS**                     | local-fixture + child process stall (MR !70)   | `tests/contracts/g3-overload.test.ts`, `scripts/isolated-server-process.mjs` | overloadAfterMs=250                                       | 10방 60명 실부하에서 overload 150/12분·서버 크래시(F-REQ-12~15)          |
+| G4   | **BLOCKED**                  | local-fixture + real dist scan (MR !90)        | `tests/contracts/g4-packets.test.ts`, `.local/qa/QA-08/public-bundle.json`   | bundleFiles=9, sentinels=48, leaks=0                      | Cloud metadata(identity/attributes) 미실시                               |
+| G5   | **NOT_RUN**                  | representative devices                         | -                                                                            | -                                                         | 6대 5판 미실시: 일정·장치·잔량 필요(tests/fixtures/manual-six-device.md) |
+| G6   | **NOT_RUN**                  | cloud-poc                                      | `.local/qa/QA-10/stage-10-rooms.json`                                        | gameOnly10RoomsOverloads=150, gameOnly5RoomsLagP95Ms=18.4 | 미디어 포함 10방 60세션 미실시; 게임 단독 10방은 포화·크래시             |
+
+공개 재개 조건: **미충족** — official budget not confirmed; smoke session/media cleanup not confirmed; resume → OPEN not confirmed; public window not open. 공개창 오픈·Jira 완료·원격 배포는 이 보고서 작성으로 실행되지 않는다.
+
+운영 인계 순서: 외부 격리 확인(SSO 게이트) → drain terminal succeeded·회수 확인 → 검증 commit 이미지 교체 → initialize/RECOVERING 관찰 → READY → 격리 중 resume·OPEN 별도 확인 → 6인 smoke → 시험 세션·미디어 정리 → 공개창·공식 잔량 재검사 → (격리는 SSO 로 상시 유지). 실패 시 격리 유지·재 drain·회수 확인 뒤 이전 digest 로 롤백, 확인 불가는 ROLLBACK_BLOCKED 로 남김. UNRESOLVED 는 `retry-retirement` 명시 재시도, 저널 손상은 LOCKED(사람 확인), 시계 오차·예산 미확인은 재개 차단. 한계: DB 없음·진행 매치 복원 없음·호스트 전체 상실 중 변조 단말 즉시 회수 불가.
+<!-- mvp-gate-report:end -->
