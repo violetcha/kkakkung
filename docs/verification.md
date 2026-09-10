@@ -162,6 +162,17 @@ GitLab 커밋 상태 게시: Jenkins 에 `gitlab-api-token`(GitLab API token 종
 
 남은 것: `EXPECTED_SOURCE_SHA` 는 GitLab 웹훅 빌드에서만 채워지므로 폴링 빌드에서는 대조를 생략했다(로그에 명시). 정식 잡 전환 후 웹훅 빌드에서 실측한다.
 
+### F-04 추가 (2026-09-10) CI 동시 실행 겹침 flake 와 실패 알림 로그 발췌
+
+| 항목      | 확인 결과                                                                                                                                                                                                                                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 사건      | `kkakkung-mr` #70(문서만 바뀐 c5151e3) 이 `server/test/media/product-integration.test.ts` 에서 여섯 runtime 모두 `SERVER_TICK_OVERLOAD`(`OVERLOAD:267`) 로 실패. 같은 코드가 develop 잡 #58·#59 에서는 통과                                                                                                                                          |
+| 원인      | executor 2개라 잡 사이 겹침 허용: #58(16:41:07~~16:44:59)·#70(16:43:12~~16:46:35)·#59(16:45:07~) 이 4 vCPU 한 대에서 동시 실행. 서버 프로세스 최악 구간 loopActive 268ms 중 CPU 사용 163ms → 나머지는 CPU 대기. GC 1.8ms 무관. tick 지연 267ms > `RoomTickCoordinator` 기본 250ms                                                                    |
+| 조치      | 컨트롤러 `numExecutors` 2 → 1(config.xml 백업 후 재시작, 빌드 없는 시각). 잡 안 동시 실행은 기존 `disableConcurrentBuilds()` 유지. 이후 두 잡은 순차                                                                                                                                                                                                 |
+| 실패 알림 | `scripts/notify-build-failure.mjs` 가 컨트롤러 로그 파일(`$JENKINS_HOME/jobs/<잡>/builds/<n>/log`)을 읽어 실패 시험 이름과 실패 블록 발췌(40줄·3500자 상한, ANSI·타임스탬프·[Pipeline] 제거, Bearer·token=·hooks URL 가림)를 DM 에 포함. 로그 없으면 이전과 같은 메시지. 계약 시험 15개(notify-contract) 통과, #70 실제 로그로 dry-run 확인(2,492자) |
+| 머지 규칙 | 파이프라인 결과 전 머지를 막는 건 GitLab 프로젝트 설정(Merge checks → Pipelines must succeed) 이라 Maintainer 가 UI 에서 켜야 함. Jenkins 는 이미 `updateGitlabCommitStatus` 로 커밋 상태를 게시하므로 외부 파이프라인으로 인식됨(infra/jenkins/SETUP.md §6)                                                                                         |
+| 남은 위험 | 6인 GAME_LOADING tick 이 CPU 만 ~160ms 를 써 경합 없이도 250ms 여유가 얇음 → F-REQ-17(E·B)                                                                                                                                                                                                                                                           |
+
 ## F-05 / DP-02 단일 서버 운영 컨테이너 (2026-09-09)
 
 Jira [S15P21C204-155](https://ssafy.atlassian.net/browse/S15P21C204-155). 운영 compose 는 `infra/compose.yaml`(기본) + `infra/compose.production.yaml`(override) 두 파일이며 web-proxy 와 game-server 두 서비스, 복제본 1개다. 시작 의존성은 `/health/live` 기준으로 바꿔 복구 중(ready 503)에도 프록시가 뜨고, 배포 승인은 Jenkins 가 `/health/ready` 로 따로 본다. 비밀값은 Jenkins Secret file 크리덴셜 → `/opt/kkakkung/production.env`(600) → `env_file` 로 game-server 에만 들어가고 이미지·compose 에는 이름만 있다. 이미지는 커밋 SHA 8자리 태그와 전체 SHA 라벨을 가진다.
