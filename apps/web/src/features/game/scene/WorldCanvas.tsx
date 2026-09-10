@@ -2,10 +2,44 @@ import { Canvas } from '@react-three/fiber';
 import { useAppStore } from '../../room/store';
 import type { ComponentProps } from 'react';
 import { ScenePrimitives } from './primitives';
+import type { PrivateView } from '@kkakkung/protocol/game-schema';
+import { FirstPersonCamera } from './FirstPersonCamera';
+import { VisibleTerrain } from './VisibleTerrain';
+import { QUALITY_PRESETS, type QualityPreset } from './quality-presets';
+import type { OwnerNames } from './ExitOwnerLabel';
 
-export function WorldCanvas({ scene }: { scene?: ComponentProps<typeof ScenePrimitives> } = {}) {
+export function WorldCanvas({
+  scene,
+  view,
+  ownerNames,
+  quality = 'medium',
+  renderTick = () => null,
+}: {
+  scene?: ComponentProps<typeof ScenePrimitives>;
+  view?: PrivateView;
+  ownerNames?: OwnerNames;
+  quality?: QualityPreset;
+  renderTick?(): number | null;
+} = {}) {
   const players = useAppStore((state) => state.players);
   const sessionId = useAppStore((state) => state.sessionId);
+  if (view)
+    return (
+      <Canvas
+        dpr={QUALITY_PRESETS[quality].dpr}
+        gl={{ antialias: false }}
+        camera={{ position: [0, 0.8, 0], near: 0.03, far: 3.5 }}
+        aria-label="까꿍 미로"
+      >
+        <color attach="background" args={['#141413']} />
+        <fog attach="fog" args={['#141413', 2.2, 3]} />
+        <ambientLight intensity={1.5} />
+        {view.self?.status === 'ACTIVE' && (
+          <FirstPersonCamera self={view.self} renderTick={renderTick} />
+        )}
+        <VisibleTerrain view={view} ownerNames={ownerNames} />
+      </Canvas>
+    );
   if (scene)
     return (
       <Canvas camera={{ position: [0, 0.8, 2], fov: 60 }} aria-label="까꿍 미로">

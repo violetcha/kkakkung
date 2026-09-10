@@ -4,6 +4,206 @@
   background: #050c13;
   font-synthesis: none;
 }
+
+.product-shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: auto;
+  padding: 28px 0 56px;
+  color: #f3f2e9;
+}
+.product-shell h1 {
+  letter-spacing: -0.03em;
+}
+.product-shell h2 {
+  margin: 0 0 20px;
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+  letter-spacing: -0.02em;
+}
+.product-shell p {
+  line-height: 1.75;
+  max-width: 68ch;
+}
+.product-shell section {
+  margin-top: 36px;
+}
+.product-shell .admission {
+  max-width: 540px;
+  margin: 80px auto 0;
+}
+.product-shell form {
+  display: grid;
+  gap: 14px;
+  margin-top: 32px;
+}
+.product-shell input:not([type='checkbox'], [type='radio']),
+.product-shell select {
+  min-height: 44px;
+  color: #f3f2e9;
+  background: #17252b;
+  border: 1px solid #779097;
+  border-radius: 6px;
+  padding: 10px;
+  width: 100%;
+}
+.product-shell fieldset {
+  display: flex;
+  gap: 24px;
+  border: 0;
+  padding: 12px 0;
+  margin: 0;
+}
+.product-shell input[type='radio'],
+.product-shell input[type='checkbox'] {
+  width: auto;
+  min-height: auto;
+  accent-color: #b8ebca;
+}
+.product-shell button {
+  min-height: 44px;
+  border-radius: 6px;
+  background: #b8ebca;
+  color: #10251c;
+}
+.product-shell button.quiet {
+  background: transparent;
+  color: #eee;
+  border: 1px solid #779097;
+}
+.product-shell button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.product-shell button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.product-shell :focus-visible {
+  outline: 3px solid #dfbb79;
+  outline-offset: 4px;
+}
+.product-shell ::selection {
+  background: #dfbb79;
+  color: #17211e;
+}
+.product-shell .notice {
+  color: #b6c9cf;
+}
+.product-shell .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.product-shell .lobby ol {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 32px;
+}
+.product-shell .lobby li {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 18px 0;
+  border-bottom: 1px solid #385059;
+}
+.product-shell .lobby li span:last-child {
+  color: #b6c9cf;
+}
+.device-check {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+}
+.device-check dl > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #385059;
+}
+.preview-host {
+  min-height: 260px;
+  background: #141413;
+  align-self: start;
+}
+.preview-host video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+.quality-control {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.product-shell .quality-control select {
+  width: auto;
+}
+.product-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 20px;
+}
+.product-canvas {
+  height: min(65vh, 640px);
+  min-height: 300px;
+  background: #141413;
+}
+.mini-map {
+  margin: 0;
+  width: 240px;
+}
+.mini-map canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
+}
+.mini-map figcaption {
+  font-size: 0.85rem;
+  margin-top: 8px;
+  color: #b6c9cf;
+}
+.loading-cover {
+  min-height: 380px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: #141413;
+}
+.loading-cover .countdown {
+  font-size: 3.5rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.result-screen {
+  padding: 48px 0;
+}
+.game-counts {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .product-shell .admission {
+    margin-top: 40px;
+  }
+  .device-check,
+  .product-stage {
+    grid-template-columns: 1fr;
+  }
+  .product-shell .lobby ol {
+    grid-template-columns: 1fr;
+  }
+  .mini-map {
+    width: min(240px, 100%);
+  }
+  .product-shell fieldset {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+}
 * {
   box-sizing: border-box;
 }

@@ -71,3 +71,36 @@ export function createSessionRuntime(dependencies: {
     getSnapshot: () => snapshot,
   };
 }
+
+/** Locks synchronously before either asynchronous cleanup starts. Room stays for personal results. */
+export function createParticipationLifetime(deps: {
+  lock(): void;
+  clear(): void;
+  end(): Promise<void>;
+  leave(): Promise<void>;
+}) {
+  let ended: Promise<void> | null = null;
+  let left: Promise<void> | null = null;
+  const end = () => {
+    if (!ended) {
+      deps.lock();
+      deps.clear();
+      ended = Promise.resolve().then(deps.end);
+    }
+    return ended;
+  };
+  return {
+    end,
+    leave() {
+      if (!left)
+        left = end().then(
+          () => deps.leave(),
+          async (error: unknown) => {
+            await deps.leave();
+            throw error;
+          },
+        );
+      return left;
+    },
+  };
+}
