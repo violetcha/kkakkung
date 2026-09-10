@@ -26,6 +26,7 @@ import {
   spendEquipment,
   verifyInstallCancel,
 } from './equipment/install.js';
+import { expireRestraints, isRestrained, lockRestrainedActions } from './equipment/restraint.js';
 import { sensorTriggers } from './equipment/sensor.js';
 import { activateTraps } from './equipment/trap-activate.js';
 import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
@@ -309,9 +310,7 @@ function handleMoveIntent(ctx: StepContext, command: CoreCommand<'MOVE_INTENT'>)
     return outcome(ctx, command, 'applied', null);
   }
   if (player.action === null) {
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
-      return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-    }
+    if (isRestrained(player, ctx.tick)) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
     const reserved = reserveMove(
       ctx.state.layout.topology,
       player,
@@ -336,9 +335,7 @@ function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
     return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
   if (player.action === null) {
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) {
-      return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-    }
+    // A restraint stops moving, not looking around (EQ-05).
     ctx.state = withPlayers(ctx.state, [
       reserveTurn(player, direction, ctx.tick, ctx.state.tuning.turnTicks),
     ]);
@@ -560,6 +557,23 @@ function activateEquipment(ctx: StepContext): void {
   const traps = activateTraps(ctx.state, ctx.completedMoves, ctx.tick);
   ctx.state = traps.state;
   for (const activation of traps.activations) {
+    // The new restraint ends the target's exit challenge; its map exchange is
+    // ended by the session upkeep later in this same tick (KN-06).
+    const locked = lockRestrainedActions(ctx.state, activation.targetId);
+    ctx.state = locked.state;
+    if (locked.endedChallenge) {
+      ctx.events.push({
+        eventId: nextEventId(ctx),
+        tick: ctx.tick,
+        audience: [activation.targetId],
+        type: 'EXIT_CHALLENGE_ENDED',
+        payload: {
+          challengeId: locked.endedChallenge.challengeId,
+          result: 'canceled',
+          reason: 'NOT_ALLOWED',
+        },
+      });
+    }
     deviceActivated(ctx, 'trap', activation.equipmentId, activation.cell);
   }
 }
@@ -603,7 +617,7 @@ function startQueuedActions(ctx: StepContext): void {
   for (const id of ctx.state.order) {
     const player = ctx.state.players.get(id)!;
     if (player.status !== 'ACTIVE' || player.action !== null) continue;
-    if (player.restraintUntilTick !== null && ctx.tick < player.restraintUntilTick) continue;
+    const restrained = isRestrained(player, ctx.tick);
     if (player.nextAction) {
       // The single-shot turn is consumed before any held move resumes.
       updated.push(
@@ -613,7 +627,7 @@ function startQueuedActions(ctx: StepContext): void {
       );
       continue;
     }
-    if (player.heldMove) {
+    if (player.heldMove && !restrained) {
       const reserved = reserveMove(
         ctx.state.layout.topology,
         player,
@@ -655,6 +669,9 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     // TTL expiry is decided on the server's monotonic clock before the tick; core only applies it.
     if (control.type === 'EXPIRE_MOVE') applyExpireMove(ctx, control.playerId, control.sequence);
   }
+  // First rule stage: restraints that reached their end tick are released and
+  // the re-restraint immunity starts (EQ-05).
+  ctx.state = expireRestraints(ctx.state, ctx.tick).state;
   const before = ctx.state.players;
   completeDueActions(ctx);
   if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
