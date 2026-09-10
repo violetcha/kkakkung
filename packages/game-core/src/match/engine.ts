@@ -18,7 +18,14 @@ import type {
 } from './core-types.js';
 import { detectCaptures } from './capture.js';
 import { abortMatch, applyConnectionLost } from './disconnection.js';
-import { endExchange, openExchange, requestEligibility, verifyAccept } from './exchange/session.js';
+import { cancelExchange, sweepExchanges } from './exchange/cancel.js';
+import {
+  endExchange,
+  openExchange,
+  requestEligibility,
+  verifyAccept,
+  type ExchangeSession,
+} from './exchange/session.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
@@ -330,7 +337,7 @@ function handleExchangeRequest(ctx: StepContext, command: CoreCommand<'EXCHANGE_
   const actor = ctx.state.players.get(command.actorId)!;
   const target = ctx.state.players.get(targetId);
   if (!target) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
-  const reason = requestEligibility(ctx.state, actor, target);
+  const reason = requestEligibility(ctx.state, actor, target, ctx.tick);
   if (reason) return outcome(ctx, command, 'rejected', reason);
   const opened = openExchange(ctx.state, actor, target, ctx.tick);
   ctx.state = opened.state;
@@ -357,14 +364,47 @@ function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_A
     return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
   const verified = verifyAccept(ctx.state, command.actorId, exchangeId, ctx.tick);
-  if (verified.status === 'rejected') {
-    // A passed deadline ends the session so the UI can close on the outcome alone.
-    if (verified.expired) ctx.state = endExchange(ctx.state, verified.expired);
-    return outcome(ctx, command, 'rejected', verified.code);
-  }
+  if (verified.status === 'rejected') return outcome(ctx, command, 'rejected', verified.code);
   // The verified pair is what KN-07 merges; the id ends here either way.
   ctx.state = endExchange(ctx.state, verified.session);
   return outcome(ctx, command, 'applied', null);
+}
+
+/** Notifies both parties, and only them, that a session ended. */
+function exchangeCanceled(ctx: StepContext, session: ExchangeSession, reason: CommandCode): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [session.fromPlayerId, session.toPlayerId],
+    type: 'EXCHANGE_CANCELED',
+    payload: { exchangeId: session.exchangeId, reason },
+  });
+}
+
+function handleExchangeCancel(ctx: StepContext, command: CoreCommand<'EXCHANGE_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const exchangeId = command.payload.exchangeId;
+  if (typeof exchangeId !== 'string' || exchangeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = cancelExchange(ctx.state, command.actorId, exchangeId, ctx.tick);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = endExchange(ctx.state, canceled.session);
+  exchangeCanceled(ctx, canceled.session, 'CANCELED');
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Per-tick session upkeep (KN-06): distance, personal end, locks and the
+ * deadline end a session quietly for its two parties. No tagger notification
+ * and no position event is produced.
+ */
+function sweepExchangeSessions(ctx: StepContext): void {
+  const swept = sweepExchanges(ctx.state, ctx.tick);
+  if (swept.ended.length === 0) return;
+  ctx.state = swept.state;
+  for (const entry of swept.ended) exchangeCanceled(ctx, entry.session, entry.reason);
 }
 
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
@@ -381,6 +421,8 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleExchangeRequest(ctx, command);
     case 'EXCHANGE_ACCEPT':
       return handleExchangeAccept(ctx, command);
+    case 'EXCHANGE_CANCEL':
+      return handleExchangeCancel(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
@@ -467,6 +509,9 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   } else {
     for (const command of input.commands) handleCommand(ctx, command);
     startQueuedActions(ctx);
+    // After the commands of this tick: an accept at the deadline still reports
+    // EXPIRED before the session is swept away.
+    sweepExchangeSessions(ctx);
     settleResult(ctx, { includeTimeout: true });
   }
   for (const control of input.controls) {
