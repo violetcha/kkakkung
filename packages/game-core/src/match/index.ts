@@ -205,6 +205,16 @@ export {
 export { discoverExits, knownActiveExits } from './knowledge/exits.js';
 
 export {
+  cancelExchange,
+  endReasonOf,
+  sweepExchanges,
+  type EndedExchange,
+  type ExchangeCancelResult,
+  type ExchangeEndReason,
+  type ExchangeSweepResult,
+} from './exchange/cancel.js';
+
+export {
   activeDiscoveredExits,
   endExchange,
   exchangeViewFor,
@@ -212,6 +222,7 @@ export {
   inExchangeRange,
   openExchange,
   pairEligibility,
+  pairPresence,
   requestEligibility,
   verifyAccept,
   type ExchangeAcceptResult,

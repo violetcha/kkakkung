@@ -21,8 +21,7 @@ export type ExchangeSessions = ReadonlyMap<string, ExchangeSession>;
 
 export type ExchangeAcceptResult =
   | Readonly<{ status: 'verified'; session: ExchangeSession }>
-  /** `expired` carries the session the caller must close, if any. */
-  | Readonly<{ status: 'rejected'; code: CommandCode; expired: ExchangeSession | null }>;
+  | Readonly<{ status: 'rejected'; code: CommandCode }>;
 
 /** Same cell or an orthogonally adjacent passage cell; diagonals never qualify. */
 export function inExchangeRange(state: MatchState, a: Cell, b: Cell): boolean {
@@ -68,18 +67,43 @@ export function hasNewInformation(
   return hasExtra(exitsA, exitsB) || hasExtra(exitsB, exitsA);
 }
 
+/** A restrained runner or one inside an exit challenge cannot exchange maps. */
+function isLocked(player: PlayerRecord, tick: number): boolean {
+  if (player.restraintUntilTick !== null && tick < player.restraintUntilTick) return true;
+  return player.challenge !== null;
+}
+
+/**
+ * Conditions that must hold while a session lives: ACTIVE runners, in range,
+ * neither restrained nor challenging an exit. Knowledge is deliberately not
+ * part of this: a pair whose knowledge became equal keeps the session until an
+ * accept decides it (KN-07), it is not swept away silently.
+ */
+export function pairPresence(
+  state: MatchState,
+  from: PlayerRecord,
+  to: PlayerRecord,
+  tick: number,
+): CommandCode | null {
+  if (from.role !== 'runner' || to.role !== 'runner') return 'NOT_ALLOWED';
+  if (from.status !== 'ACTIVE' || to.status !== 'ACTIVE') return 'NOT_ACTIVE';
+  if (!inExchangeRange(state, from.cell, to.cell)) return 'NOT_ALLOWED';
+  if (isLocked(from, tick) || isLocked(to, tick)) return 'NOT_ALLOWED';
+  return null;
+}
+
 /**
  * Conditions both parties must satisfy when a request is approved and again
- * when it is accepted: ACTIVE runners, within range, with knowledge to gain.
+ * when it is accepted: the presence conditions plus knowledge to gain.
  */
 export function pairEligibility(
   state: MatchState,
   from: PlayerRecord,
   to: PlayerRecord,
+  tick: number,
 ): CommandCode | null {
-  if (from.role !== 'runner' || to.role !== 'runner') return 'NOT_ALLOWED';
-  if (from.status !== 'ACTIVE' || to.status !== 'ACTIVE') return 'NOT_ACTIVE';
-  if (!inExchangeRange(state, from.cell, to.cell)) return 'NOT_ALLOWED';
+  const presence = pairPresence(state, from, to, tick);
+  if (presence) return presence;
   const knowledgeFrom = state.knowledge.get(from.playerId);
   const knowledgeTo = state.knowledge.get(to.playerId);
   if (!knowledgeFrom || !knowledgeTo) return 'NOT_ALLOWED';
@@ -92,11 +116,13 @@ export function requestEligibility(
   state: MatchState,
   actor: PlayerRecord,
   target: PlayerRecord,
+  tick: number,
 ): CommandCode | null {
   if (actor.playerId === target.playerId) return 'NOT_ALLOWED';
-  // A single slot per player: the pair approved first keeps it (KN-06).
+  // A single slot per player: the pair approved first keeps it, and a third
+  // request ends as NOT_ALLOWED instead of waiting in a queue (KN-06).
   if (actor.exchange !== null || target.exchange !== null) return 'NOT_ALLOWED';
-  return pairEligibility(state, actor, target);
+  return pairEligibility(state, actor, target, tick);
 }
 
 export function exchangeViewFor(session: ExchangeSession, playerId: string): ExchangeView {
@@ -166,15 +192,14 @@ export function verifyAccept(
   tick: number,
 ): ExchangeAcceptResult {
   const session = state.exchanges.get(exchangeId);
-  if (!session) return { status: 'rejected', code: 'STALE_REQUEST', expired: null };
-  if (session.toPlayerId !== actorId)
-    return { status: 'rejected', code: 'NOT_ALLOWED', expired: null };
-  if (tick >= session.expiresAtTick)
-    return { status: 'rejected', code: 'EXPIRED', expired: session };
+  if (!session) return { status: 'rejected', code: 'STALE_REQUEST' };
+  if (session.toPlayerId !== actorId) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  // The session itself is removed by the per-tick sweep (KN-06), not here.
+  if (tick >= session.expiresAtTick) return { status: 'rejected', code: 'EXPIRED' };
   const from = state.players.get(session.fromPlayerId);
   const to = state.players.get(session.toPlayerId);
-  if (!from || !to) return { status: 'rejected', code: 'NOT_ALLOWED', expired: session };
-  const code = pairEligibility(state, from, to);
-  if (code) return { status: 'rejected', code, expired: null };
+  if (!from || !to) return { status: 'rejected', code: 'NOT_ALLOWED' };
+  const code = pairEligibility(state, from, to, tick);
+  if (code) return { status: 'rejected', code };
   return { status: 'verified', session };
 }
