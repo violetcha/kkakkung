@@ -5,6 +5,7 @@ import type {
   CoreOutcome,
   CoreReadFrame,
   CorePort,
+  ChallengeView,
   CreateMatchInput,
   CreatePracticeInput,
   DomainEvent,
@@ -39,6 +40,12 @@ import {
   verifyAccept,
   type ExchangeSession,
 } from './exchange/session.js';
+import {
+  advanceChallenges,
+  cancelChallenge,
+  isChallenging,
+  startChallenge,
+} from './exits/challenge.js';
 import { createExitRegistry } from './exits/registry.js';
 import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
@@ -91,6 +98,7 @@ function initialPlayer(entry: RosterEntry, input: CreateMatchInput): PlayerRecor
     installation: null,
     exchange: null,
     challenge: null,
+    nextAttemptTick: null,
   });
 }
 
@@ -165,6 +173,7 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     traces: new Map(),
     installations: new Map(),
     installationSeq: 0,
+    challengeSeq: 0,
     eventSeq: 0,
   };
   // First real sight from the spawn pose is part of the initial knowledge.
@@ -310,7 +319,9 @@ function handleMoveIntent(ctx: StepContext, command: CoreCommand<'MOVE_INTENT'>)
     return outcome(ctx, command, 'applied', null);
   }
   if (player.action === null) {
-    if (isRestrained(player, ctx.tick)) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+    if (isRestrained(player, ctx.tick) || isChallenging(player)) {
+      return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+    }
     const reserved = reserveMove(
       ctx.state.layout.topology,
       player,
@@ -335,7 +346,9 @@ function handleTurn(ctx: StepContext, command: CoreCommand<'TURN'>): void {
     return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
   if (player.action === null) {
-    // A restraint stops moving, not looking around (EQ-05).
+    // An exit challenge locks the pose; a restraint stops moving, not looking
+    // around (EQ-05).
+    if (isChallenging(player)) return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
     ctx.state = withPlayers(ctx.state, [
       reserveTurn(player, direction, ctx.tick, ctx.state.tuning.turnTicks),
     ]);
@@ -578,6 +591,75 @@ function activateEquipment(ctx: StepContext): void {
   }
 }
 
+/** Personal event for every start and end of an exit challenge (EX-02). */
+function challengeStarted(ctx: StepContext, playerId: string, challenge: ChallengeView): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [playerId],
+    type: 'EXIT_CHALLENGE',
+    payload: challenge,
+  });
+}
+
+function challengeEnded(
+  ctx: StepContext,
+  playerId: string,
+  challengeId: string,
+  result: 'canceled' | 'failed' | 'escaped',
+  reason: CommandCode | null,
+): void {
+  ctx.events.push({
+    eventId: nextEventId(ctx),
+    tick: ctx.tick,
+    audience: [playerId],
+    type: 'EXIT_CHALLENGE_ENDED',
+    payload: { challengeId, result, reason },
+  });
+}
+
+function handleExitStart(ctx: StepContext, command: CoreCommand<'EXIT_START'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const exitId = command.payload.exitId;
+  if (typeof exitId !== 'string' || exitId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const actor = ctx.state.players.get(command.actorId)!;
+  const started = startChallenge(ctx.state, actor, exitId, ctx.tick);
+  if (started.status === 'rejected') return outcome(ctx, command, 'rejected', started.code);
+  ctx.state = started.state;
+  challengeStarted(ctx, command.actorId, started.challenge);
+  return outcome(ctx, command, 'applied', null);
+}
+
+function handleExitCancel(ctx: StepContext, command: CoreCommand<'EXIT_CANCEL'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  const challengeId = command.payload.challengeId;
+  if (typeof challengeId !== 'string' || challengeId.length === 0) {
+    return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
+  }
+  const canceled = cancelChallenge(ctx.state, command.actorId, challengeId, ctx.tick);
+  if (canceled.status === 'rejected') return outcome(ctx, command, 'rejected', canceled.code);
+  ctx.state = canceled.state;
+  challengeEnded(ctx, command.actorId, challengeId, 'canceled', 'CANCELED');
+  return outcome(ctx, command, 'applied', null);
+}
+
+/**
+ * Per-tick challenge upkeep, before this tick's commands: the deadline, a new
+ * restraint, a personal end and the pose conditions end a challenge on their
+ * own. Automatic ends never create a second outcome for the original request.
+ */
+function advanceDueChallenges(ctx: StepContext): void {
+  const upkeep = advanceChallenges(ctx.state, ctx.tick);
+  ctx.state = upkeep.state;
+  for (const end of upkeep.ended) {
+    challengeEnded(ctx, end.playerId, end.challenge.challengeId, end.result, end.reason);
+  }
+}
+
 function handleCommand(ctx: StepContext, command: CoreCommand): void {
   if (ctx.endedThisStep.has(command.actorId)) {
     // The actor's personal result was fixed earlier in this step: cancel, do not reject.
@@ -598,6 +680,10 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleInstall(ctx, command);
     case 'INSTALL_CANCEL':
       return handleInstallCancel(ctx, command);
+    case 'EXIT_START':
+      return handleExitStart(ctx, command);
+    case 'EXIT_CANCEL':
+      return handleExitCancel(ctx, command);
     default:
       return outcome(ctx, command, 'rejected', 'INVALID_COMMAND');
   }
@@ -617,6 +703,7 @@ function startQueuedActions(ctx: StepContext): void {
   for (const id of ctx.state.order) {
     const player = ctx.state.players.get(id)!;
     if (player.status !== 'ACTIVE' || player.action !== null) continue;
+    if (isChallenging(player)) continue;
     const restrained = isRestrained(player, ctx.tick);
     if (player.nextAction) {
       // The single-shot turn is consumed before any held move resumes.
@@ -688,6 +775,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
     for (const command of input.commands) outcome(ctx, command, 'canceled', 'ROUND_ENDED');
   } else {
     activateEquipment(ctx);
+    advanceDueChallenges(ctx);
     for (const command of input.commands) handleCommand(ctx, command);
     startQueuedActions(ctx);
     // After the commands of this tick: an accept at the deadline still reports

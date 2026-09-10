@@ -120,6 +120,19 @@ export {
 } from './map/select-with-fallback.js';
 
 export {
+  advanceChallenges,
+  cancelChallenge,
+  endChallenge,
+  facesExit,
+  isChallenging,
+  startChallenge,
+  type ChallengeCancelResult,
+  type ChallengeEnd,
+  type ChallengeStartResult,
+  type ChallengeUpkeepResult,
+} from './exits/challenge.js';
+
+export {
   activeExitAtFace,
   activeExits,
   closeExit,

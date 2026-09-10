@@ -39,6 +39,8 @@ export type PlayerRecord = Readonly<{
   installation: InstallationView | null;
   exchange: ExchangeView | null;
   challenge: ChallengeView | null;
+  /** Earliest tick a new exit challenge may start (EX-02 retry gate). */
+  nextAttemptTick: number | null;
 }>;
 
 /** Per-player terrain memory. Keys: floors = y*width+x, walls = (y*width+x)*4+side. */
@@ -85,6 +87,7 @@ export type MatchState = Readonly<{
   /** Installations in progress keyed by installationId (EQ-01). */
   installations: PendingInstallations;
   installationSeq: number;
+  challengeSeq: number;
   eventSeq: number;
 }>;
 

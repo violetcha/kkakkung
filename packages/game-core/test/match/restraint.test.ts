@@ -6,6 +6,7 @@ import { getPlayerSelf } from '../../src/match/engine.js';
 import {
   expireRestraints,
   isRestrained,
+  lockRestrainedActions,
   restraintRemaining,
 } from '../../src/match/equipment/restraint.js';
 import { trapCandidates } from '../../src/match/equipment/trap-candidates.js';
@@ -150,7 +151,7 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
     expect(player(held, 'r-a').action).toBeNull();
   });
 
-  it('ends a running exchange and exit challenge when the trap restrains its target', () => {
+  it('ends a running exchange when the trap restrains its target', () => {
     // An armed trap on (5,4) with the installer moved away.
     const installed = step(place(startedMatch(1), { 't-a': { x: 5, y: 4, dir: 1 } }), 10, [
       command('t-a', 'INSTALL', { kind: 'trap' }),
@@ -161,36 +162,19 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
       'r-b': { x: 4, y: 5, dir: 0 },
     });
     const armed = idleUntil(ready, 21, 40);
-    // r-a and r-b open an exchange, and r-a is inside an exit challenge.
+    // r-a and r-b open an exchange, then r-a steps onto the trap.
     const opened = step(armed, 41, [
       command('r-a', 'EXCHANGE_REQUEST', { targetPlayerId: 'r-b' }),
     ]).state;
     expect(opened.exchanges.size).toBe(1);
-    const challenging = patch(opened, 'r-a', {
-      challenge: {
-        challengeId: 'ch-1',
-        exitId: 'exit-1',
-        poseKind: 'left',
-        startedAtTick: 41,
-        minSuccessTick: 81,
-        expiresAtTick: 201,
-      },
-    });
-    // r-a steps onto the trap and is restrained at tick 51.
-    const walking = step(challenging, 42, [
+    const walking = step(opened, 42, [
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
     const fired = step(idleUntil(walking, 43, 50), 51);
     expect(player(fired.state, 'r-a').restraintUntilTick).toBe(81);
-    // The challenge ends with one event to its owner only.
-    expect(player(fired.state, 'r-a').challenge).toBeNull();
-    expect(challengeEnded(fired.events)).toEqual([
-      expect.objectContaining({
-        audience: ['r-a'],
-        payload: { challengeId: 'ch-1', result: 'canceled', reason: 'NOT_ALLOWED' },
-      }),
-    ]);
-    // The exchange session is gone as well, and both slots are clear.
+    // No challenge existed, so no personal challenge event is produced.
+    expect(challengeEnded(fired.events)).toEqual([]);
+    // The exchange session is gone and both slots are clear.
     expect(fired.state.exchanges.size).toBe(0);
     expect(player(fired.state, 'r-a').exchange).toBeNull();
     expect(player(fired.state, 'r-b').exchange).toBeNull();
@@ -202,6 +186,28 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
     ]);
     expect(refused.outcomes.map((o) => o.code)).toEqual(['NOT_ALLOWED', 'NOT_ALLOWED']);
     expect(refused.state.exchanges.size).toBe(0);
+  });
+
+  it('ends the exit challenge of a player the restraint locks', () => {
+    // A challenging runner cannot walk onto a device, so this lock is the
+    // defensive half of EQ-05: applied wherever a restraint starts.
+    const bound = patch(restrainedAt10(), 'r-a', {
+      challenge: {
+        challengeId: 'ch-1',
+        exitId: 'exit-1',
+        poseKind: 'left',
+        startedAtTick: 5,
+        minSuccessTick: 45,
+        expiresAtTick: 165,
+      },
+    });
+    const locked = lockRestrainedActions(bound, 'r-a');
+    expect(locked.endedChallenge).toMatchObject({ challengeId: 'ch-1' });
+    expect(player(locked.state, 'r-a').challenge).toBeNull();
+    // Idempotent: a player without a challenge is left untouched.
+    const again = lockRestrainedActions(locked.state, 'r-a');
+    expect(again.endedChallenge).toBeNull();
+    expect(again.state).toBe(locked.state);
   });
 
   it('captures a restrained runner: neither restraint nor immunity blocks it', () => {
