@@ -32,13 +32,16 @@ const run = existsSync(resolve(input, 'run.json'))
   : null;
 const stages = stageFiles.map((f) => JSON.parse(readFileSync(resolve(input, f), 'utf8')));
 const finalStage = stages.at(-1);
-const thirtyMinuteRun = finalStage.rooms === 10 && finalStage.durationSeconds >= 1800;
+const serverDied = (s) => s.checks.some((c) => c.name === 'server.alive' && c.status === 'FAIL');
+const thirtyMinuteRun =
+  finalStage.rooms === 10 && finalStage.durationSeconds >= 1800 && !serverDied(finalStage);
 const summary = {
   generatedAt: new Date().toISOString(),
   sourceCommit: run?.sourceCommit ?? finalStage.sourceCommit ?? 'unknown',
   network: run?.network ?? finalStage.network ?? null,
   cloudRequests: run?.cloudRequests ?? 0,
   serverExitCode: run?.serverExitCode ?? null,
+  serverExit: run?.serverExit ?? null,
   clientsLeftOpen: run?.clientsLeftOpen ?? null,
   thirtyMinuteRun,
   verdict: stages.every((s) => s.status === 'PASS')

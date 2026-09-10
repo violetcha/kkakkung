@@ -227,6 +227,25 @@ describe('stage plan and gating', () => {
     expect(result.checks.find((c) => c.name === 'tick.overloads')?.status).toBe('FAIL');
   });
 
+  it('a server process exit during the stage fails server.alive and stops escalation', () => {
+    const clients = Array.from({ length: 6 }, (_, i) => clientStats({ playerId: `p${i}` }));
+    const result = evaluateStage(
+      {
+        rooms: 10,
+        durationSeconds: 732,
+        clients,
+        server: server(),
+        serverExit: { code: 1, afterSeconds: 732 },
+      },
+      732_000,
+    );
+    expect(result.status).toBe('FAIL');
+    expect(result.stopEscalation).toBe(true);
+    const alive = result.checks.find((c) => c.name === 'server.alive');
+    expect(alive?.status).toBe('FAIL');
+    expect(alive?.detail).toContain('code=1');
+  });
+
   it('a lag threshold miss fails the stage but does not stop escalation', () => {
     const clients = Array.from({ length: 6 }, (_, i) => clientStats({ playerId: `p${i}` }));
     const result = evaluateStage(

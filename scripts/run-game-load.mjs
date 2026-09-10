@@ -129,6 +129,12 @@ const serverPort = await new Promise((resolvePort, reject) => {
 });
 const endpoint = `http://127.0.0.1:${serverPort}`;
 log(`diagnostic server pid=${server.pid} port=${serverPort}`);
+/** Set the moment the server process exits; a stage in progress then ends at once as FAIL. */
+let serverExit = null;
+server.on('exit', (code, signal) => {
+  serverExit = { code, signal: signal ?? null, atMs: Date.now() };
+  log(`server process exited code=${code} signal=${signal ?? '-'}`);
+});
 
 async function stopServer() {
   if (server.exitCode !== null) return server.exitCode;
@@ -278,7 +284,7 @@ try {
     );
     const startedAt = Date.now();
     const deadline = startedAt + seconds * 1000;
-    while (Date.now() < deadline) {
+    while (Date.now() < deadline && !serverExit) {
       await sleep(Math.min(5000, deadline - Date.now()));
       const pending = players.reduce((sum, p) => sum + p.client.pendingCount(), 0);
       const phases = new Set(players.map((p) => p.room.state?.phase));
@@ -287,10 +293,18 @@ try {
       );
     }
     const endedAt = Date.now();
+    const elapsedSeconds = (endedAt - startedAt) / 1000;
+    if (serverExit)
+      log(
+        `  server exited at t+${Math.round((serverExit.atMs - startedAt) / 1000)}s; stage ends early (${Math.round(elapsedSeconds)}s of ${seconds}s)`,
+      );
     const result = evaluateStage(
       {
         rooms,
-        durationSeconds: seconds,
+        durationSeconds: serverExit ? elapsedSeconds : seconds,
+        serverExit: serverExit
+          ? { code: serverExit.code, afterSeconds: (serverExit.atMs - startedAt) / 1000 }
+          : null,
         clients: players.map((p) => p.client.stats()),
         server: readServerWindow(startedAt, endedAt),
       },
@@ -329,8 +343,11 @@ try {
   exitCode = 3;
 } finally {
   clearInterval(driver);
-  await Promise.allSettled(players.map((p) => p.room.leave()));
-  const serverExit = await stopServer();
+  const serverExitCode = await stopServer();
+  // Leaving rooms once the server is gone would wait on SDK reconnection forever, and a hung
+  // leave used to keep run.json from ever being written; cap it and skip it after a server exit.
+  if (!serverExit)
+    await Promise.race([Promise.allSettled(players.map((p) => p.room.leave())), sleep(5000)]);
   writeFileSync(
     resolve(evidenceDir, 'run.json'),
     JSON.stringify(
@@ -345,7 +362,8 @@ try {
           durationSeconds: s.durationSeconds,
         })),
         cloudRequests: 0,
-        serverExitCode: serverExit,
+        serverExitCode,
+        serverExit,
         clientsLeftOpen: players.filter((p) => p.room.connection?.isOpen).length,
         note: 'game-only diagnosis; not G6 media integration evidence',
       },
@@ -353,6 +371,6 @@ try {
       2,
     ) + '\n',
   );
-  log(`done: exit=${exitCode} serverExit=${serverExit} evidence=${evidenceDir}`);
+  log(`done: exit=${exitCode} serverExit=${serverExitCode} evidence=${evidenceDir}`);
 }
 process.exit(exitCode);

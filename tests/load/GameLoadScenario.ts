@@ -91,6 +91,8 @@ export type StageInput = Readonly<{
   durationSeconds: number;
   clients: readonly ClientStageStats[];
   server: ServerStageStats | null;
+  /** Set when the diagnostic server process exited during the stage; the stage is then FAIL. */
+  serverExit?: Readonly<{ code: number | null; afterSeconds: number }> | null;
 }>;
 
 export type CheckStatus = 'PASS' | 'FAIL' | 'NOT_MEASURED';
@@ -167,6 +169,15 @@ export function evaluateStage(input: StageInput, stageEndMs: number): StageResul
     input.server && input.server.rss.length >= 2 ? slopePerMinute(input.server.rss) : null;
 
   const checks: StageCheck[] = [
+    check(
+      'server.alive',
+      input.serverExit ? 0 : 1,
+      1,
+      (v) => v === 1,
+      input.serverExit
+        ? `server process exited code=${input.serverExit.code} after ${input.serverExit.afterSeconds.toFixed(0)}s`
+        : undefined,
+    ),
     check('clients.connected', input.clients.length, expectedClients, (v) => v === expectedClients),
     check(
       'input.commandsPerClientPerMinute.min',
@@ -226,15 +237,16 @@ export function evaluateStage(input: StageInput, stageEndMs: number): StageResul
   const failed = checks.some((c) => c.status === 'FAIL');
   const unmeasured = checks.some((c) => c.status === 'NOT_MEASURED');
   const status = failed ? 'FAIL' : unmeasured ? 'INCOMPLETE' : 'PASS';
-  // Only structural failures stop the escalation: an overload, an aborted match or missing
-  // clients would make larger stages meaningless. Threshold misses (lag, ack) fail the stage
+  // Only structural failures stop the escalation: a dead server, an overload, an aborted match
+  // or missing clients would make larger stages meaningless. Threshold misses (lag, ack) fail the stage
   // but the run continues so 3/5/10-room measurements still exist for the report.
   const stopEscalation =
     failed &&
     checks.some(
       (c) =>
         c.status === 'FAIL' &&
-        (c.name === 'tick.overloads' ||
+        (c.name === 'server.alive' ||
+          c.name === 'tick.overloads' ||
           c.name === 'match.aborts' ||
           c.name === 'clients.connected'),
     );
