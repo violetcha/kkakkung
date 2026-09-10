@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { DomainEvent } from '../../src/match/core-types.js';
 import type { MatchState } from '../../src/match/engine.js';
 import { getPlayerKnowledge } from '../../src/match/engine.js';
+import { exitOfOwner } from '../../src/match/exits/registry.js';
 import { command, player, startedMatch, step } from './match-fixture.js';
 
 /** Places players on chosen cells/dirs without moving through the maze. */
@@ -215,20 +216,19 @@ describe('map exchange cancel and concurrent requests', () => {
       expect.objectContaining({ payload: { exchangeId: 'xch-1', reason: 'NOT_ALLOWED' } }),
     ]);
 
-    const second = openSession(threeRunners());
-    const challenging = new Map(second.players);
-    challenging.set('r-a', {
-      ...player(second, 'r-a'),
-      challenge: {
-        challengeId: 'ch-1',
-        exitId: 'exit-r-a',
-        poseKind: 'y',
-        startedAtTick: 102,
-        minSuccessTick: 142,
-        expiresAtTick: 262,
-      },
+    // r-a stands on its own exit approach cell (11,22) facing the wall (12,22)
+    // and r-b next to it, so a real exit challenge can start on top of a session.
+    const atExit = place(startedMatch(100), {
+      'r-a': { x: 11, y: 22, dir: 1 },
+      'r-b': { x: 11, y: 21, dir: 2 },
     });
-    const locked = step({ ...second, players: challenging }, 103);
+    const exit = exitOfOwner(atExit.exits, 'r-a')!;
+    expect(exit.approach).toEqual({ x: 11, y: 22 });
+    const second = openSession(atExit);
+    expect(second.exchanges.size).toBe(1);
+    const locked = step(second, 102, [command('r-a', 'EXIT_START', { exitId: exit.exitId })]);
+    expect(locked.outcomes[0]).toMatchObject({ result: 'applied' });
+    // The challenge locks map exchange: the open session ends in the same tick.
     expect(locked.state.exchanges.size).toBe(0);
     expect(canceledEvents(locked.events)).toEqual([
       expect.objectContaining({ payload: { exchangeId: 'xch-1', reason: 'NOT_ALLOWED' } }),
