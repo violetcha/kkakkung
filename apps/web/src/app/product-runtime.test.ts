@@ -138,6 +138,48 @@ it('connects heartbeat ACK on the actual product channel with no media calls in 
   await f.runtime.leave();
   expect(f.dispose).toHaveBeenCalledOnce();
 });
+it('shares EXIT_START with D and waits for challenge projection after an applied outcome', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  expect(f.context.mock.lastCall?.[0].exitId).toBe('exit');
+  const id = f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } });
+  expect(f.callbacks.sendCommand({ type: 'EXIT_START', payload: { exitId: 'exit' } })).toBe(id);
+  f.messages.get('command-outcome')!({
+    matchId: 'm',
+    requestId: id,
+    sequence: 0,
+    tick: 100,
+    stateVersion: 10,
+    result: 'applied',
+    code: null,
+  });
+  expect(f.runtime.getSnapshot().exitStarting).toBe(true);
+  expect(f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).toBe(id);
+  f.time(2001);
+  expect(f.runtime.getSnapshot().exitStarting).toBe(false);
+  expect(f.runtime.getSnapshot().requests.EXIT_START?.status).toBe('unconfirmed');
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
+  await f.runtime.leave();
+});
+it('releases rejected exit start immediately without creating a challenge', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  const id = f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } });
+  f.messages.get('command-result')!({
+    matchId: 'm',
+    requestId: id,
+    sequence: 0,
+    stateVersion: 10,
+    status: 'rejected',
+    code: 'NOT_ALLOWED',
+  });
+  expect(f.runtime.getSnapshot().exitStarting).toBe(false);
+  expect(f.runtime.getSnapshot().view?.self).toMatchObject({ challenge: null });
+  expect(f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).not.toBe(id);
+  await f.runtime.leave();
+});
 it('locks COUNTDOWN, tab hide and socket close synchronously and cleans up once', async () => {
   const f = fixture();
   f.state({ phase: 'COUNTDOWN', stateVersion: 11 });

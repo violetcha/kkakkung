@@ -14,6 +14,10 @@ import {
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import {
+  createChallengeController,
+  exitCandidate,
+} from '../features/game/pose/challenge-controller';
 import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
 import { createPrivateEvents } from '../features/room/private-events';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
@@ -65,6 +69,8 @@ export type ProductSnapshot = {
   markers: HunterMarker[];
   exchangeNotice: string | null;
   faceRevision: number;
+  poseProgress: number;
+  exitStarting: boolean;
   lost: boolean;
   error: string | null;
   quality: QualityPreset;
@@ -98,6 +104,8 @@ export function bindProductRoom(
     markers: [],
     exchangeNotice: null,
     faceRevision: 0,
+    poseProgress: 0,
+    exitStarting: false,
     lost: false,
     error: null,
     quality: 'medium',
@@ -105,6 +113,9 @@ export function bindProductRoom(
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   const faces = createFaceTextures(videoFaceTexture);
+  let sensorGeneration = -1;
+  let startPending: { exitId: string; requestId: string; until: number | null } | null = null;
+  const challenge = createChallengeController((command) => sendCommand(command));
   let bindings: MediaBindings | null = null;
   let previewHost: HTMLElement | null = null;
   let bridge!: ReturnType<typeof createInteractionBridge>;
@@ -130,8 +141,16 @@ export function bindProductRoom(
     now: deps.now,
     uuid: deps.uuid,
     send,
-    changed: (request) =>
-      publish({ request, requests: { ...snapshot.requests, [request.type]: request } }),
+    changed: (request) => {
+      if (request.type === 'EXIT_START' && startPending) {
+        startPending.requestId = request.requestId;
+        if (['rejected', 'canceled', 'unconfirmed'].includes(request.status)) {
+          startPending = null;
+          publish({ exitStarting: false });
+        } else if (request.status === 'applied') startPending.until = deps.now() + 2000;
+      }
+      publish({ request, requests: { ...snapshot.requests, [request.type]: request } });
+    },
   });
   const clock = createClockSync({
     now: deps.now,
@@ -201,6 +220,11 @@ export function bindProductRoom(
       );
       events.update(view, snapshot.round?.matchId ?? '');
       if (view) commands.view(view.stateVersion);
+      if (view?.self?.status === 'ACTIVE' && view.self.challenge?.exitId === startPending?.exitId) {
+        startPending = null;
+        publish({ exitStarting: false });
+      }
+      updateChallenge();
       if (view?.self && view.self.status !== 'ACTIVE') {
         publish({ endedSelf: view.self });
         void participation.end().catch(error);
@@ -271,7 +295,11 @@ export function bindProductRoom(
           updateContext();
         },
         onLocalPreview: () => {},
-        onSensors: () => {},
+        onSensors: (value) => {
+          if (!live() || !participating || value.runtimeGeneration < sensorGeneration) return;
+          sensorGeneration = value.runtimeGeneration;
+          updateChallenge();
+        },
         onFaceTrack: (event) => {
           if (live() && participating && faces.receive(event))
             publish({ faceRevision: snapshot.faceRevision + 1 });
@@ -289,6 +317,9 @@ export function bindProductRoom(
         bridge.runtime.setAudioOutputLock('locked');
       },
       clear: () => {
+        challenge.clear();
+        startPending = null;
+        publish({ poseProgress: 0, exitStarting: false });
         faces.clear();
         events.clear();
         commands.clear();
@@ -307,6 +338,7 @@ export function bindProductRoom(
     if (!bridge || !round) return;
     const self = snapshot.view?.self;
     const own = self?.status === 'ACTIVE' ? self : null;
+    const exit = exitCandidate(snapshot.view);
     const target = exchangePresenter(snapshot.view, snapshot.exchangeTarget, 0)?.selected ?? null;
     if (target !== snapshot.exchangeTarget) publish({ exchangeTarget: target });
     const context: InteractionContext = {
@@ -335,7 +367,9 @@ export function bindProductRoom(
             exitId: own.challenge.exitId,
             poseKind: own.challenge.poseKind,
           }
-        : {}),
+        : exit && own?.dir === exit.wall.side
+          ? { exitId: exit.exitId }
+          : {}),
       ...(own?.installation ? { installationId: own.installation.installationId } : {}),
     };
     bridge.setContext(context);
@@ -352,12 +386,53 @@ export function bindProductRoom(
     loading.assetsLoaded(key, SCENE_ASSET_VERSION);
     loading.check(snapshot.view, bindings, snapshot.media);
   }
+  function updateChallenge() {
+    if (!bridge) return;
+    const progress = challenge.update(
+      snapshot.view,
+      clock.renderTick() ?? snapshot.round?.serverTick ?? 0,
+      deps.now(),
+      bridge.sensors,
+      sensorGeneration,
+      snapshot.requests.EXIT_PROGRESS,
+      participating &&
+        pageActive &&
+        snapshot.round?.phase === 'PLAYING' &&
+        interaction.mode === 'motion',
+    );
+    if (progress !== snapshot.poseProgress) publish({ poseProgress: progress });
+  }
   function sendCommand(command: CommandInput) {
     if (!active || snapshot.lost || !snapshot.round) return '';
     const allowedAfterEnd = command.type === 'REMATCH';
     if (!participating && !allowedAfterEnd) return '';
     if (!permitsExchange(snapshot.view, command)) return '';
     const own = snapshot.view?.self;
+    if (command.type === 'EXIT_START') {
+      if (startPending) return startPending.requestId;
+      const exit = exitCandidate(snapshot.view);
+      if (
+        own?.status !== 'ACTIVE' ||
+        own.challenge ||
+        own.action ||
+        own.exchange ||
+        own.restraintUntilTick !== null ||
+        !exit ||
+        exit.exitId !== command.payload.exitId ||
+        own.dir !== exit.wall.side ||
+        snapshot.round.phase !== 'PLAYING'
+      )
+        return '';
+    }
+    if (command.type === 'EXIT_CANCEL' || command.type === 'EXIT_PROGRESS') {
+      if (
+        own?.status !== 'ACTIVE' ||
+        own.challenge?.challengeId !== command.payload.challengeId ||
+        snapshot.round.phase !== 'PLAYING'
+      )
+        return '';
+      if (command.type === 'EXIT_CANCEL') challenge.suspend();
+    }
     if (
       command.type === 'INSTALL' &&
       (own?.status !== 'ACTIVE' || own.role !== 'tagger' || own.installation || own.challenge)
@@ -375,6 +450,7 @@ export function bindProductRoom(
         'INSTALL_CANCEL',
         'EXIT_START',
         'EXIT_PROGRESS',
+        'EXIT_CANCEL',
         'EXCHANGE_REQUEST',
         'EXCHANGE_ACCEPT',
         'EXCHANGE_CANCEL',
@@ -389,6 +465,10 @@ export function bindProductRoom(
       (!pageActive || !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
     )
       return '';
+    if (command.type === 'EXIT_START') {
+      startPending = { exitId: command.payload.exitId, requestId: '', until: null };
+      publish({ exitStarting: true });
+    }
     return commands.send(command);
   }
   async function connectForView() {
@@ -463,6 +543,8 @@ export function bindProductRoom(
     views.clear();
     events.clear();
     faces.clear();
+    challenge.clear();
+    startPending = null;
     unsubscribers.splice(0).forEach((off) => off());
   }
   bridge = makeBridge();
@@ -482,6 +564,7 @@ export function bindProductRoom(
     const rematch = snapshot.round !== null && snapshot.round.matchId !== round.matchId;
     const phaseChanged = snapshot.round?.phase !== round.phase;
     if (rematch) {
+      sensorGeneration = -1;
       faces.clear();
       generation++;
       participating = false;
@@ -510,6 +593,9 @@ export function bindProductRoom(
         .catch(error);
     }
     if (phaseChanged) {
+      challenge.clear();
+      startPending = null;
+      publish({ poseProgress: 0, exitStarting: false });
       publish({ request: null, requests: {} });
       commands.clear();
     }
@@ -578,6 +664,28 @@ export function bindProductRoom(
       clock.poll();
       views.poll();
       events.poll();
+      updateChallenge();
+      if (startPending?.until !== null && startPending && deps.now() >= startPending.until) {
+        startPending = null;
+        const request = snapshot.requests.EXIT_START;
+        publish({
+          exitStarting: false,
+          error: '도전 상태를 확인하지 못했습니다. 현재 출구 상태를 확인한 뒤 다시 시도해 주세요.',
+          ...(request
+            ? {
+                request: { ...request, status: 'unconfirmed' },
+                requests: {
+                  ...snapshot.requests,
+                  EXIT_START: { ...request, status: 'unconfirmed' },
+                },
+              }
+            : {}),
+        });
+        send('view-resync', {
+          matchId: snapshot.round?.matchId,
+          lastStateVersion: snapshot.view?.stateVersion ?? 0,
+        });
+      }
     },
     send: sendCommand,
     setPageActive(value: boolean) {
