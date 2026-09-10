@@ -245,6 +245,9 @@ export function ProductApp({ invitation }: { invitation: string }) {
               send={(command) => runtime.current?.send(command)}
             />
           )}
+          {worldVisible && snapshot.exchangeNotice && (
+            <p role="status">{snapshot.exchangeNotice}</p>
+          )}
           {worldVisible && view && (
             <RestraintHud
               view={view}
@@ -275,6 +278,8 @@ export function ProductApp({ invitation }: { invitation: string }) {
               </div>
               <MiniMap
                 view={view}
+                markers={snapshot.markers}
+                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
                 ownerNames={Object.fromEntries(
                   snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
                 )}
