@@ -10,6 +10,7 @@ import { afterAll, expect, it } from 'vitest';
 import { ApiBudget } from '../../server/src/operations/ApiBudget.ts';
 import { LiveKitGateway } from '../../server/src/media/LiveKitGateway.ts';
 import { caseTimeoutMs, requireCloudPreflight } from './CloudPreflight.ts';
+import { evaluateMetadataObservation } from './MetadataObservation.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const preflight = requireCloudPreflight('QA-08', process.env, Date.now(), root);
@@ -21,6 +22,9 @@ const evidenceDir = resolve(root, preflight.evidenceDir);
 /** Field names that would mean a leak inside participant metadata/attributes. */
 const FORBIDDEN_KEYS = /^(x|y|cell|dir|exit|exitId|approach|wall|nickname|seed|layout|role)$/i;
 const findings: { room: string; identity: string; code: string; field: string }[] = [];
+let observedRooms = 0;
+let observedParticipants = 0;
+let observationCompleted = false;
 
 function inspect(room: string, identity: string, label: string, value: unknown) {
   if (!value) return;
@@ -39,6 +43,11 @@ function inspect(room: string, identity: string, label: string, value: unknown) 
 }
 
 afterAll(() => {
+  const observation = evaluateMetadataObservation(
+    observedRooms,
+    observedParticipants,
+    observationCompleted,
+  );
   mkdirSync(evidenceDir, { recursive: true });
   writeFileSync(
     resolve(evidenceDir, 'g4-metadata.json'),
@@ -47,6 +56,8 @@ afterAll(() => {
         generatedAt: new Date().toISOString(),
         case: 'QA-08',
         namespace: preflight.namespace,
+        status: observation.status === 'PASS' && findings.length === 0 ? 'PASS' : 'FAIL',
+        observation,
         findings,
         note: 'Field names and codes only; no metadata values, tokens or identities beyond the namespace prefix check.',
       },
@@ -77,6 +88,7 @@ it(
       metadata?: string;
     }[];
     const scoped = rooms.filter((r) => r.name.startsWith(`${preflight.namespace}--`));
+    observedRooms = scoped.length;
     for (const room of scoped) {
       inspect(room.name, '-', 'room.metadata', room.metadata);
       const participants = (await gateway.listParticipants(room.name)) as unknown as {
@@ -85,6 +97,7 @@ it(
         metadata?: string;
         attributes?: Record<string, string>;
       }[];
+      observedParticipants += participants.length;
       for (const p of participants) {
         // Identities are opaque generation ids, never nicknames.
         if (!/^[A-Za-z0-9._:-]{8,}$/.test(p.identity) || /\s/.test(p.identity))
@@ -105,6 +118,9 @@ it(
         inspect(room.name, '(redacted)', 'participant.attributes', p.attributes);
       }
     }
+    observationCompleted = true;
+    const observation = evaluateMetadataObservation(observedRooms, observedParticipants, true);
+    expect(observation.status, observation.code).toBe('PASS');
     expect(findings).toEqual([]);
   },
   caseTimeoutMs(preflight),

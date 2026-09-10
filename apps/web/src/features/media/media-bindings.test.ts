@@ -34,6 +34,20 @@ const bindings = (over: Partial<MediaBindings> = {}): MediaBindings => ({
 });
 
 describe('createBindingStore', () => {
+  it('keeps the granted generation when an older or unrelated binding arrives late', () => {
+    const store = createBindingStore();
+    const approved = bindings({ receiverGeneration: 2, bindingRevision: 5 });
+    store.beginScope(approved);
+    expect(store.apply(approved, SELF).status).toBe('applied');
+    for (const stale of [
+      bindings(),
+      bindings({ mediaInstanceId: 'other' }),
+      bindings({ receiverGeneration: 3 }),
+    ])
+      expect(store.apply(stale, SELF)).toEqual({ status: 'ignored', reason: 'WRONG_SCOPE' });
+    expect(store.getScope()?.receiverGeneration).toBe(2);
+    expect(store.getRevision()).toBe(5);
+  });
   it('applies a well formed list and separates self from remote', () => {
     const store = createBindingStore();
 
@@ -72,7 +86,8 @@ describe('createBindingStore', () => {
     const store = createBindingStore();
     store.apply(bindings({ bindingRevision: 9 }), SELF);
 
-    // 세대가 바뀌면 revision을 새로 센다.
+    // 승인된 grant로 세대를 연 뒤에만 revision을 새로 센다.
+    store.beginScope({ matchId: 'match-1', mediaInstanceId: 'instance-1', receiverGeneration: 2 });
     const result = store.apply(bindings({ receiverGeneration: 2, bindingRevision: 1 }), SELF);
 
     expect(result.status).toBe('applied');

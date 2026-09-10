@@ -3,8 +3,8 @@ import { z } from 'zod';
 // Owned by F (docs/execution/f-infra-qa.md, F-01/DP-01). B maps the parsed values into
 // MediaConfiguration / admission policy; E never reads process.env directly.
 //
-// Rules kept from the skeleton: NODE_ENV production is rejected until B authentication and
-// E readiness are integrated (NFR-05), MEDIA_MODE only accepts 'disabled', origins are exact.
+// NODE_ENV production stays blocked until the deployment gate is accepted. The explicit
+// product profile can run locally with real game modules; disabled media never implies readiness.
 // New optional groups are additive. A group is either fully present or absent; a partial
 // group is a configuration error, never a silent default.
 
@@ -35,6 +35,11 @@ const wsUrl = z
 
 const environment = z.object({
   NODE_ENV: z.enum(['development', 'test']).default('development'),
+  SERVER_PROFILE: z.enum(['development', 'product']).default('development'),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(1).default(0),
+  PRODUCT_ASSET_VERSION: z.string().min(1).default('c-primitives-1'),
+  PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
+  PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(2567),
   ALLOWED_ORIGINS: z
@@ -46,7 +51,7 @@ const environment = z.object({
     .string()
     .regex(/^[a-z0-9-]+$/)
     .default('kkakkung-local'),
-  MEDIA_MODE: z.literal('disabled').default('disabled'),
+  MEDIA_MODE: z.enum(['disabled', 'livekit']).default('disabled'),
   // Capacity: one room is six seats. The service cap is rooms * 6 and only rooms that were
   // actually load-tested may be opened (QA-10/QA-11 raise this step by step).
   MAX_ROOMS: z.coerce.number().int().min(1).max(10).default(1),
@@ -106,7 +111,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
   if (!parsed.success) {
     // Report names only; never echo environment values or secrets.
     throw new Error(
-      `Unsupported skeleton configuration: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}. Production authentication and media readiness are not implemented.`,
+      `Unsupported server configuration: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}. NODE_ENV production remains gated on deployment verification.`,
     );
   }
   const raw = parsed.data;
@@ -164,7 +169,46 @@ export function parseConfig(input: Record<string, string | undefined>) {
     'admission policy',
   );
 
+  if (raw.SERVER_PROFILE === 'development' && raw.MEDIA_MODE !== 'disabled') {
+    throw new Error('MEDIA_MODE livekit requires SERVER_PROFILE product');
+  }
+  if (raw.SERVER_PROFILE === 'product' && !admission) {
+    throw new Error('SERVER_PROFILE product requires an explicit admission policy');
+  }
+  if (raw.MEDIA_MODE === 'livekit') {
+    const required = [
+      ['LiveKit', livekit],
+      ['LIVEKIT_PROJECT_ALIAS', raw.LIVEKIT_PROJECT_ALIAS],
+      ['OPS_TOKEN', raw.OPS_TOKEN],
+      ['public window', publicWindow],
+      ['OPS_OFFICIAL_BUDGET_MAX_AGE_MS', raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS],
+      ['OPS_OPERATION_TIMEOUT_MS', raw.OPS_OPERATION_TIMEOUT_MS],
+      ['media API limits', apiLimits],
+    ] as const;
+    const missing = required.filter(([, value]) => !value).map(([name]) => name);
+    if (missing.length)
+      throw new Error(`Incomplete product media configuration: ${missing.join(', ')}`);
+    const http = new URL(livekit!.LIVEKIT_HTTP_URL);
+    const ws = new URL(livekit!.LIVEKIT_WS_URL);
+    if (
+      http.protocol !== 'https:' ||
+      ws.protocol !== 'wss:' ||
+      http.host !== ws.host ||
+      [http, ws].some(
+        (url) => url.username || url.password || url.search || url.hash || url.pathname !== '/',
+      )
+    ) {
+      throw new Error('Product LiveKit endpoints must be matching HTTPS/WSS origins');
+    }
+    // Complete configuration is not Cloud proof: E still verifies durable readiness evidence.
+  }
+
   return {
+    serverProfile: raw.SERVER_PROFILE,
+    trustProxyHops: raw.TRUST_PROXY_HOPS,
+    assetVersion: raw.PRODUCT_ASSET_VERSION,
+    contentDir: raw.PRODUCT_CONTENT_DIR,
+    tuningPath: raw.PRODUCT_TUNING_PATH,
     host: raw.HOST,
     port: raw.PORT,
     allowedOrigins,

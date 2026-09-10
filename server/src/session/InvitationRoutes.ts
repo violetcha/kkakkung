@@ -34,8 +34,8 @@ export function createInvitationRoutes(deps: {
   authorize: OperatorAuthorize;
 }): Router {
   const router = Router();
-  router.use(requireOperator(deps.authorize));
-  router.post(INVITATION_ROUTES.issue, (req: Request, res: Response) => {
+  const authorize = requireOperator(deps.authorize);
+  router.post(INVITATION_ROUTES.issue, authorize, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const parsed = issueSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -49,7 +49,7 @@ export function createInvitationRoutes(deps: {
     }
     res.status(result.code === 'INVALID_INVITATION' ? 400 : 409).json({ error: result.code });
   });
-  router.post(INVITATION_ROUTES.revoke, (req: Request, res: Response) => {
+  router.post(INVITATION_ROUTES.revoke, authorize, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const inviteId = String(req.params.inviteId ?? '');
     if (!/^[0-9a-f-]{36}$/.test(inviteId)) {

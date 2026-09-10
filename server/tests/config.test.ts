@@ -8,6 +8,88 @@ const livekit = {
   LIVEKIT_API_SECRET: 'secret',
 };
 
+const admission = {
+  INVITE_MAX_TTL_MS: '600000',
+  SESSION_ATTEMPT_WINDOW_MS: '60000',
+  SESSION_ATTEMPTS_PER_INVITE: '3',
+  SESSION_ATTEMPTS_PER_IP: '20',
+  ROOM_IDLE_TTL_MS: '600000',
+};
+
+const productMedia = {
+  ...livekit,
+  ...admission,
+  SERVER_PROFILE: 'product',
+  MEDIA_MODE: 'livekit',
+  LIVEKIT_PROJECT_ALIAS: 'integration-test',
+  OPS_TOKEN: 'test-operator-token',
+  OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: '1000',
+  OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: '2000',
+  OPS_OFFICIAL_BUDGET_MAX_AGE_MS: '60000',
+  OPS_OPERATION_TIMEOUT_MS: '1000',
+  MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '40',
+  MEDIA_MAX_TOTAL_API_CALLS_PER_60S: '60',
+};
+
+describe('explicit local product configuration', () => {
+  it('preserves development defaults and requires a complete admission policy for product', () => {
+    expect(parseConfig({}).serverProfile).toBe('development');
+    expect(() => parseConfig({ SERVER_PROFILE: 'product' })).toThrow(/admission/);
+    const config = parseConfig({ ...admission, SERVER_PROFILE: 'product' });
+    expect(config.serverProfile).toBe('product');
+    expect(config.mediaMode).toBe('disabled');
+    expect(config.assetVersion).toBe('c-primitives-1');
+    expect(config.contentDir).toBe('server/content');
+    expect(config.tuningPath).toBe('server/config/tuning/mvp-v1.json');
+    expect(config.trustProxyHops).toBe(0);
+  });
+
+  it('permits only the explicit zero or one trusted proxy hop', () => {
+    expect(parseConfig({ TRUST_PROXY_HOPS: '1' }).trustProxyHops).toBe(1);
+    expect(() => parseConfig({ TRUST_PROXY_HOPS: '2' })).toThrow(/TRUST_PROXY_HOPS/);
+    expect(() => parseConfig({ TRUST_PROXY_HOPS: '-1' })).toThrow(/TRUST_PROXY_HOPS/);
+  });
+
+  it('maps a complete product media policy without treating it as readiness evidence', () => {
+    const config = parseConfig(productMedia);
+    expect(config.mediaMode).toBe('livekit');
+    expect(config.livekit?.projectAlias).toBe('integration-test');
+    expect(config.officialBudgetMaxAgeMs).toBe(60000);
+    expect(config.mediaApiLimits).toEqual({
+      maxNormalApiCallsPer60s: 40,
+      maxTotalApiCallsPer60s: 60,
+    });
+    expect(config).not.toHaveProperty('ready');
+    expect(() => parseConfig({ ...productMedia, NODE_ENV: 'production' })).toThrow(/NODE_ENV/);
+  });
+
+  it.each([
+    'LIVEKIT_PROJECT_ALIAS',
+    'OPS_TOKEN',
+    'OPS_OFFICIAL_BUDGET_MAX_AGE_MS',
+    'OPS_OPERATION_TIMEOUT_MS',
+    'OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS',
+    'MEDIA_MAX_TOTAL_API_CALLS_PER_60S',
+  ])('refuses incomplete product media prerequisites: %s', (missing) => {
+    expect(() => parseConfig({ ...productMedia, [missing]: undefined })).toThrow();
+  });
+
+  it.each([
+    { LIVEKIT_HTTP_URL: 'http://example.livekit.cloud' },
+    { LIVEKIT_WS_URL: 'ws://example.livekit.cloud' },
+    { LIVEKIT_WS_URL: 'wss://other.livekit.cloud' },
+    { LIVEKIT_HTTP_URL: 'https://embedded-secret@example.livekit.cloud' },
+    { LIVEKIT_WS_URL: 'wss://example.livekit.cloud?token=embedded-secret' },
+  ])('rejects unsafe or mismatched product media origins without echoing them', (override) => {
+    expect(() => parseConfig({ ...productMedia, ...override })).toThrow(/HTTPS\/WSS origins/);
+    try {
+      parseConfig({ ...productMedia, ...override });
+    } catch (error) {
+      expect((error as Error).message).not.toContain('embedded-secret');
+    }
+  });
+});
+
 describe('skeleton readiness configuration', () => {
   it('permits the bounded local development profile', () => {
     const config = parseConfig({ NODE_ENV: 'test' });

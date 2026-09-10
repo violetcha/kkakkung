@@ -1,4 +1,64 @@
-# 스켈레톤 검증 결과
+# 검증 결과
+
+전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
+
+## 전체 연결·로컬 통합 검증 (2026-09-10)
+
+제품 통합의 `pnpm verify`는 **통과**했다. 209파일 2,038시험, 포맷·실행 계약·lint·전체 타입 검사(Worker/QA 포함), 서버·웹·공유 패키지 빌드, 기존 Playwright 2개가 모두 통과했다. 이후 제품 실행에 영향이 없는 QA-08 빈 관측 거절을 추가했고 해당 회귀 10개를 별도 검증했다. 6인 제품 통합은 연습→경기→한 명의 미디어 세대 교체→종료→재경기와 최종 READY/원격 fixture 참가자 0명을 확인한다. 실제 Cloud·장치 인수는 별도 미검증이다.
+
+최초 기준은 `develop d5816f6db20efa1340d229ca18313d53fb017143`이며, 작업 중 원격에 병합된 F-16 `baffe7a`와 F QA 변경을 로컬 fast-forward로 반영해 최종 검증 기준을 `4c84d207f08b9a9bc3fd4497d0e078cd8723176d`로 갱신했다. 통합 변경은 `codex/integration-20260910`의 미커밋 작업으로 보존했다. 이번 통합은 사용자 요청으로 진행했으며 새 Jira를 생성하지 않았다. 커밋·푸시·MR·원격 병합·Jira 변경·배포·실제 Cloud 호출은 수행하지 않았고 실제 비밀 `.env`도 변경하지 않았다. 아래의 이전 날짜별 배포 기록은 당시 결과이며 이번 변경의 배포 증거로 계산하지 않는다.
+
+제품 프로필에서 실제 A 코어·맵·튜닝, B 방/입장/운영 경로, E 미디어·복구 coordinator, F 설정·관측·운영 증거 공급기를 연결했다. C/D의 제품 입력·미디어 수명·세대 갱신 경로도 로컬 연결 검증을 마쳤다. 개발 프로필과 제품 프로필을 명시적으로 구분하며, 기본 `MEDIA_MODE=disabled`와 production 기동 거절을 유지한다. 공식 capability·잔여 예산·소유권/복구 증거가 없으면 제품 READY/입장을 허용하지 않는다.
+
+| 검사                                 | 확인 결과                                                                                         | 범위와 제한                                                                                                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 첫 `pnpm verify`                     | Vitest 1,908개 중 1,903개 통과, 5개 실패                                                          | `.local/integration/verify.log`에 실패를 보존. 전체 통과로 보고하지 않음                                                                                                                                                                                   |
+| E 관련 독립 재검사                   | 3파일 62개 통과                                                                                   | 기대 오류 문구 2건 정정, 타이밍 실패 2건은 독립 실행에서 미재현. 최종 전체 회귀 필요                                                                                                                                                                       |
+| 실제 F 공급기를 포함한 6인 제품 통합 | 80.195초 실행 통과                                                                                | 실제 A/B/E/F 연결, Cloud transport와 운영 증거는 시험 fixture. `.local/integration/product-evidence-final.log`                                                                                                                                             |
+| 선정 G1/G3/G4·설정·진단 도구 회귀    | 11파일 109개 통과                                                                                 | 원격 응답은 fixture, G3/G4는 실제 코어·드라이버·projection·wire 연결                                                                                                                                                                                       |
+| 운영 증거 공급기                     | 21개 통과                                                                                         | 임시 디렉터리에서만 scope·digest·만료·변조·단일 소비·lease·종료 검증                                                                                                                                                                                       |
+| 관측 분리·부하 도구 회귀             | 2파일 54개 통과                                                                                   | Node 지연 히스토그램과 Tick 지연을 다른 지표로 수집/집계                                                                                                                                                                                                   |
+| 서버·웹·공유 패키지 빌드             | 통과                                                                                              | `.local/integration/build-e2e-final.log`; 큰 청크 경고는 유지                                                                                                                                                                                              |
+| 기존 Playwright                      | 2개 시나리오 통과, 14.0초                                                                         | 기존 team-room/sandbox 개발 브라우저 회귀이며 실제 카메라·마이크·Cloud 시험 아님                                                                                                                                                                           |
+| 실제 공개 웹 번들                    | 9파일·48개 sentinel, 발견 0개                                                                     | `.local/qa/integration-20260910/bundle/public-bundle.json`; 실제 `apps/web/dist` 검사                                                                                                                                                                      |
+| 중간 전체 `pnpm verify`              | 195파일·1,913개 중 1,912개 통과, IPC 오류 1개                                                     | `.local/integration/verify-final.log` 보존. IPC 수정 후 관련 3개 시험 통과                                                                                                                                                                                 |
+| 분리된 제품 서버 진단                | 최초 324ms `SERVER_TICK_OVERLOAD` 실패 보존; E accounting 검증 재사용 수정 후 child 통합 1회 통과 | `.local/integration/product-child-accounting-cache.log`; 최악 GAME_LOADING 관측 lag 123.32ms. 실제 250ms 기준 유지. 가속 기능 시험 관측값이며 G6 성능 합격 아님                                                                                            |
+| E accounting 변경 후 광범위 회귀     | 최초 44파일 843개 중 841개 통과, 2개 실패; 유효한 재진단 843개 전부 통과                          | `.local/integration/e-accounting-regression.log` 실패 보존. 별도 진단에서 native rename EPERM 관측. 기존 2실패와 동일 원인인지는 미확정. Windows EPERM/EACCES/EBUSY의 원자 rename만 최대4회/10·20·40ms 재시도로 보완했고, 6파일133시험 및 strict/lint 통과 |
+| F-16 공개 소비 계약·DP06 사전 검증   | 3파일 52개 통과, strict QA 타입검사 통과                                                          | 실제 E health body·운영 상태 분리, 공식 예산 입력, 정확한 QA 증거 경로, 6인·시간·합성 미디어 예약 거절 경계. Cloud 호출 없음                                                                                                                               |
+| DP-06 실제 공개 API 6인 로컬 통합    | 1개 통과, 66.96초                                                                                 | `.local/integration/dp06-local-integration.log`; 실제 A/B/C/E/F, 연습2룸→경기1룸, 허용 바인딩/가청 정책, 게임 입력 적용, 3,600틱 RESULT, 6클라이언트·drain 정리 및 resume 검증. transport/수신 카운터는 fixture이며 `LOCAL_CONTRACT_ONLY`                  |
+| 최종 전체 `pnpm verify`              | **209파일 2,038시험 전부 통과, exit 0**                                                           | `.local/integration/verify-complete.log`; Vitest 190.61초, 전체 정적 검사·빌드·기존 Playwright 2개(12.5초) 포함. 실제 Cloud 시험은 기본 suite에서 제외                                                                                                     |
+
+최종 빌드의 공개 번들은 `.local/qa/integration-20260910/bundle-final/public-bundle.json`에서 9파일·48 sentinel·발견 0개로 통과했다. 번들 크기 경고(주 청크 약 1.43MB, LiveKit 약 514KB)와 기존 Three.Clock 사용 중단 예정 경고는 남는다. DP-06 브리지·browser pool 정리·실제 Chromium 빈 페이지 회귀 3파일 10개와 부분 초기화 실패 시 정리 회귀도 최종 전체 suite에 포함됐다. 실제 카메라·마이크·Cloud 연결은 호출하지 않았다.
+
+의존성은 기존 설치를 공유하는 로컬 worktree에서 실행했다. `pnpm install --lockfile-only --frozen-lockfile --offline --ignore-scripts`로 manifest/lockfile 정합성은 통과했지만 clean install·Docker 검증은 수행하지 않았다. pnpm의 node_modules 메타데이터 불일치 경고는 이 설치 공유 방식의 제한으로 남겼다. `.local/` 증거는 이 worktree에만 있으며 다른 팀원의 checkout에 자동 전달되지 않는다. 사용자가 승인된 Cloud preflight는 아직 없다고 답했으므로 공식 Cloud 권한/회수·장치·장시간 부하·배포 관문은 BLOCKED다.
+
+QA-08은 namespace 방이나 참가자가 없어도 findings가 비었다는 이유로 성공하던 경계를 보완했다. 실제 방 최소 1개·참가자 최소 1명·모든 조회 완료가 필요하며, 빈 관측과 부분 조회 실패는 고정 코드로 실패한다. 관측 요약에는 개수·상태·고정 코드만 추가했다. 새 인구 상한이나 방 수 계약은 만들지 않았다. 로컬 회귀 10개는 판단 함수와 출력 제한을 검증하며 실제 Cloud 실행 증거는 아니다.
+
+추가로 최신 F의 QA-02·03·04·05·06·11·12 Cloud 파일은 시나리오 실행 하네스가 연결되지 않은 명시적 BLOCKED 상태다. F의 해당 시나리오 구현 연결과 승인된 preflight가 모두 필요하다. 이번 DP-06 구현·로컬 통과를 다른 7개 Cloud 시나리오의 구현 완료나 인수로 계산하지 않는다.
+
+운영 증거 파일의 확인 주기 1초와 마지막 성공 확인의 5초 임대는 이번에 정한 초기 운영 정책이다. 배포 SLA 또는 Cloud 성공 증거가 아니다. 실제 만료·최대 나이·시계 역행·확인된 변조/누락·종료는 즉시 잠그며, 최초 설치·감사 증명은 목적별 내구 marker로 한 번만 소비한다. 이번 작업에서 실제 운영 증명 파일이나 marker를 만들지 않았다. 스키마와 운영자 확인 범위는 [테스트 가이드](testing.md#운영-증거-공급)에 있다.
+
+### 짧은 게임 진단과 관측 분리
+
+최종 `4c84d20`과 로컬 변경의 Windows loopback 별도 서버에서 1방·합성 6클라이언트·25초 게임 진단을 수행했다. 명령은 `node scripts/run-game-load.mjs --stages 1 --final-duration-seconds 25 --stage-duration-seconds 25 --network "Windows loopback, isolated server and six synthetic clients" --evidence .local/qa/integration-20260910/load-4c84d20-final`이다.
+
+| 지표                                  | 최종 측정                                      | 유지한 기준                     |
+| ------------------------------------- | ---------------------------------------------- | ------------------------------- |
+| 연결/입력                             | 6명, ACK 1,182개, 참가자당 최소 분당 472.8명령 | 6명, 최소 분당 60명령           |
+| 명령 ACK p95                          | 4ms                                            | 200ms 이하                      |
+| Tick 예정 시각 대비 지연 p95          | 17.9871ms                                      | 20ms 이하                       |
+| 동일 회차 합산 Tick 실행 시간 p95/p99 | 5.0829ms / 6.6911ms                            | 20ms / 40ms 이하                |
+| abort / overload                      | 0 / 0                                          | 0 / 0                           |
+| 정리                                  | 열린 클라이언트 0, 서버 종료 코드 0            | 모두 정상 정리                  |
+| 실제 Cloud 요청                       | 0                                              | 이 진단은 Cloud를 사용하지 않음 |
+
+Node `monitorEventLoopDelay`의 구간 p99를 `eventLoop.delayP99/ms`로 분리하고, 게임의 `eventLoop.lag`에는 코디네이터의 개별 Tick 지연만 넣도록 수정했다. 최종 판정 보고서는 Tick 지연과 Tick 실행 시간 각각 497표본을 사용했으며 Node 히스토그램 표본은 별도 이름으로 원본에 보존했다. 지연 기준은 완화하지 않았다.
+
+최초 진단의 event-loop lag p95 25.59ms 실패와 Tick 실행 시간 미계측은 `load-short`에 남겼다. 이후 `load-short-final`은 실행기 PASS였지만 Node/Tick 지연이 섞인 표본이므로 최종 지연 증거로 사용하지 않는다. 분리 수정 직후 `load-separated-metrics-final`의 lag p95 14.9795ms 통과도 당시 결과로 보존한다. 위 표는 모든 코드 수정과 최신 F QA 반영 뒤 `load-4c84d20-final`에서 한 번 수행한 최종 결과다. sourceCommit은 `4c84d207f08b9a9bc3fd4497d0e078cd8723176d`, sourceWorkingTreeDirty는 true, protocolVersion은 `0.2.0`, lockfile SHA-256은 `469b418cc3a6d656d9f5ea61292d3e7801b5b7bcfc89af3bec29580342944fdf`다.
+
+25초 진단은 실제 A 코어·B Room과 진단 전용 admission을 사용한다. 3분 정상 경기 종료·재경기·장기 메모리 안정성을 증명하지 않으며 10방·30분 게임 부하, 실제 WebRTC 60세션, 대표 장치 6대와 Cloud 권한·회수·예산 관문의 G6 인수가 아니다. 실제 연습→경기→종료→재경기 연결은 위 최종 전체 검사에 포함된 별도 제품 통합 시험으로 확인했다. Cloud 자격·공식 잔여 예산·승인된 preflight·실장치·배포 증거가 필요한 항목은 계속 별도 미검증으로 남긴다.
+
+## 스켈레톤 통합 (2026-09-07)
 
 검증일: 2026-09-07. 대상: `S15P21C204`의 스켈레톤 통합, 불필요 파일 정리 및 기획서 추가. 관련 스토리는 [S15P21C204-40](https://ssafy.atlassian.net/browse/S15P21C204-40), 작업 브랜치는 `chore/S15P21C204-40-monorepo-skeleton-conventions`다. 이 보고서는 해당 작업의 로컬 커밋에 포함하며 Push·MR·배포 완료를 의미하지 않는다.
 

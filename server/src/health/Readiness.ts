@@ -8,7 +8,7 @@ import type { RecoveryBootstrap } from '../operations/RecoveryBootstrap.js';
 import type { RevocationRetries } from '../operations/RevocationRetries.js';
 import type { UsageBudget } from '../operations/UsageBudget.js';
 import { validateOfficialBudget, validateUsageState } from '../operations/UsageCheckpoint.js';
-import { inspectReservationReadiness } from './ReservationReadiness.js';
+import { ReservationReadinessInspector } from './ReservationReadiness.js';
 
 const reasonCodes = new Set([
   'READINESS_UNCONFIRMED',
@@ -133,6 +133,7 @@ export type ReadinessGateOptions = Readonly<{
 export class ReadinessGate {
   private readonly config: MediaConfiguration;
   private readonly locked = new Set<string>();
+  private readonly accounting = new ReservationReadinessInspector();
 
   constructor(private readonly options: ReadinessGateOptions) {
     this.config = structuredClone(options.config);
@@ -217,7 +218,7 @@ export class ReadinessGate {
         official: usage.official,
         reservations: usage.reservations,
       });
-      accounting = inspectReservationReadiness({
+      accounting = this.accounting.inspect({
         namespace: this.config.namespace,
         serverEpoch: o.registry.serverEpoch,
         records: journal.records,

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Generation } from '../media/MediaGenerationRegistry.js';
 import { checksum, safeIdentifier, strictObject } from '../operations/CheckpointStore.js';
 import {
@@ -23,6 +24,38 @@ export type ReservationReadinessInput = Readonly<{
 
 const key = (value: { roomName: string; identity: string; generation: number }) =>
   JSON.stringify([value.roomName, value.identity, value.generation]);
+
+/** Reuse only identical accounting inputs, never a time-limited permission or READY result. */
+export class ReservationReadinessInspector {
+  private previous: ReservationReadinessInput | null = null;
+  private result: ReturnType<typeof inspectReservationReadiness> | null = null;
+
+  inspect(input: ReservationReadinessInput): ReturnType<typeof inspectReservationReadiness> {
+    try {
+      // Deep value equality does not prove alias identity. Exemptions must still refer to the
+      // exact current registry objects on EVERY call, including an otherwise identical input.
+      const objects = new Set(input.generations);
+      if (
+        objects.size !== input.generations.length ||
+        new Set(input.pendingPreparations).size !== input.pendingPreparations.length ||
+        input.pendingPreparations.some((g) => !objects.has(g)) ||
+        (input.pendingRetirements ?? []).some((g) => !objects.has(g))
+      )
+        return { consistent: false, unresolvedCount: 1 };
+      if (this.result && isDeepStrictEqual(input, this.previous)) return this.result;
+      const result = inspectReservationReadiness(input);
+      // Own the previous values: registry state mutates in place and snapshots can be replaced
+      // without advancing the journal sequence (for example, compaction or reservation changes).
+      this.previous = structuredClone(input);
+      this.result = Object.freeze(result);
+      return this.result;
+    } catch {
+      this.previous = null;
+      this.result = null;
+      return { consistent: false, unresolvedCount: 1 };
+    }
+  }
+}
 
 function belongsToRoot(id: string, root: string): boolean {
   return id === root || (id.startsWith(`${root}:`) && /^\d+$/.test(id.slice(root.length + 1)));

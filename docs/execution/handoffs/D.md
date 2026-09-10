@@ -1,5 +1,23 @@
 # D 공개 인계 기록
 
+전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
+
+## 2026-09-10 통합 작업 · 게시 완료와 로컬 종료 장벽
+
+최초 기준 develop `d5816f6`, 이후 F-16 `baffe7a`와 F QA `4c84d20` 병합을 반영한 로컬 통합 브랜치 `codex/integration-20260910`이다. 아래 실행 시간과 시험 수는 당시 기록이며 최신 최종 결과는 [공통 검증 기록](../../verification.md)을 확인한다. 변경은 로컬 검증이며 실제 Cloud/장치 인수와 구분한다.
+
+- `track-publisher.ts`는 SDK 게시/교체 작업을 직렬화하고 `unpublishAll()` 호출 시 즉시 terminal로 잠근다. 진행 중 게시가 늦게 성공하면 해당 트랙을 보상 unpublish하며, 이 정리까지 기다린 뒤 종료한다. 정리 실패를 성공으로 삼지 않는다. 원본 장치를 SDK가 stop하지 않도록 기존 소유권을 유지한다.
+- `media-session.ts`는 연결 중 Room도 추적하여 종료하고, 진행 중 SDK connect가 정리될 때까지 retire Promise를 완료하지 않는다. 늦은 연결 성공이 새 scope 상태를 덮어쓰지 않으며 connect 성공은 실제 scoped connected 상태로 전달한다.
+- `media-lifecycle.ts`는 정리 중 `beginGeneration()`을 거절하고 게시/SDK 정리가 실패하면 `closed`를 표시하지 않는다. 참가 종료는 실패하더라도 원본 장치 정리를 시도한다.
+- 바인딩 store의 새 `beginScope(scope)`는 승인 grant를 받은 `InteractionRuntime.connectMedia`만 사용한다. 바인딩 메시지 자체가 수신자 세대를 바꾸지 못한다. D runtime은 현재 grant와 다른 바인딩/음향 정책을 거절한다.
+- C가 await retire 완료 뒤 B에 exact old-scope `closed`를 보낸다. 로컬 closed와 E의 Cloud 회수 확인은 별도 장벽이다. 공개 HTTP/미디어 타입 변경은 없다.
+- C의 전체 복구 호출자가 추가되어 SDK 영구 종료에서는 `retireMediaGeneration('reconnect')`의 완료 뒤 새 grant로 연결한다. 같은 SDK의 짧은 reconnect는 현재 세대를 유지한다. 게임 Room·원본 장치·논리 게임 지식은 보존하며 의도적 정리 callback은 다시 복구를 시작하지 않는다. 최종 C 복구 회귀 29시험과 직전 웹 전체 57파일 436시험을 통과했다. 실제 SDK/Cloud 재연결 성공으로 계산하지 않는다.
+- 최종 C 검토에서 발급 대기 중 논리 phase 변경의 이전 세대 기록 손실과, 같은 경기 phase 전환의 일시적 개인 뷰 공백에 의한 복구 취소를 고쳤다. 늦은 미연결 grant도 정확한 scope로 정리·신고하며 새 경기 요청이 그 마지막 발급 세대를 이어받는다. SDK 게시 직렬화·보상 정리·종료 장벽·바인딩 변경 diff도 읽기 검토했고 추가 미해결 D 결함은 확인하지 않았다. 실제 장치/Cloud 검증을 대체하지 않는다.
+
+검증: 웹 전체 **57파일 422시험**, 미디어/D runtime/C 연결 대상 **14파일 204시험**, 웹 타입 검사 통과. 새 시험은 진행 중 얼굴/마이크 게시의 보상 회수, 보상 실패 시 closed 금지, 실제 D runtime의 늦은 SDK 게시와 종료 경쟁, connect 완료 대기, 구세대 바인딩 거절을 포함한다. SDK·장치 port는 합성 입력이며 Cloud 검증으로 집계하지 않는다.
+
+루트 `server/test/media/product-integration.test.ts`의 실제 제품 profile·A/B/C/E와 HTTP/Colyseus 6클라이언트 통합 **1시험(64.087초)**이 통과했다. 연습 → 로컬 서명 webhook → 경기 로딩/카운트다운/PLAYING → 한 명의 전체 세대 복구·다른 다섯 명 유지 → 3600 Tick 후 RESULT → 13개 closed 신고 204·transport 참가자 부재 → 재경기 DEVICE_CHECK를 확인했다. 이 시험에서 D는 `product-integration-fixture.ts` 합성 facade이며 실제 D SDK/장치 경로가 아니다. Cloud API·운영 증거도 fixture이므로 실제 Cloud/장치 ACCEPTED 조건은 유지한다.
+
 수정자: **D만** · [담당 계획](../d-vision-media.md) · [공통 규칙](../common.md)
 
 이 파일은 팀원 AI가 D의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다.

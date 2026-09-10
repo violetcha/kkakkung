@@ -45,6 +45,7 @@ const REQUIRED_METRICS: Record<string, string> = {
   'process.memory': 'bytes',
   'process.cpu': 'ratio',
   'eventLoop.lag': 'ms',
+  'eventLoop.delayP99': 'ms',
   'media.api.total60s': 'count',
   'media.api.normal60s': 'count',
   'media.api.429': 'count',
@@ -59,7 +60,7 @@ const REQUIRED_METRICS: Record<string, string> = {
 };
 
 describe('metric registry allowlist', () => {
-  it('registers exactly the names and units from docs/execution/f-infra-qa.md F-07', () => {
+  it('registers F-07 names and units plus the separate process histogram', () => {
     expect({ ...REGISTERED_METRICS }).toEqual(REQUIRED_METRICS);
     expect([...REGISTERED_METRIC_NAMES].sort()).toEqual(Object.keys(REQUIRED_METRICS).sort());
   });
@@ -200,26 +201,32 @@ describe('unit conversion and aggregation', () => {
     expect(nsToMs(1_500_000)).toBe(1.5);
   });
 
-  it('process sampler reports lag in ms, memory in bytes and cpu as a 0–1 ratio', () => {
+  it('keeps the process histogram p99 separate from tick lag, with memory bytes and cpu ratio', () => {
     const out: MetricSample[] = [];
     let now = 1000;
     let cpu = { user: 0, system: 0 };
     const sample = createProcessSampler({
       emit: (s) => out.push(s),
       now: () => now,
-      eventLoopDelay: { percentile: () => 20_000_000 },
+      eventLoopDelay: {
+        percentile: (p) => {
+          expect(p).toBe(99);
+          return 20_000_000;
+        },
+      },
       memoryUsage: () => ({ rss: 123_456_789 }),
       cpuUsage: () => cpu,
     });
     sample();
     expect(out).toEqual([
-      { name: 'eventLoop.lag', value: 20, unit: 'ms', atMs: 1000 },
+      { name: 'eventLoop.delayP99', value: 20, unit: 'ms', atMs: 1000 },
       { name: 'process.memory', value: 123_456_789, unit: 'bytes', atMs: 1000 },
     ]);
     now = 2000;
     cpu = { user: 300_000, system: 200_000 }; // 0.5 s busy over 1 s wall
     sample();
     expect(out.at(-1)).toEqual({ name: 'process.cpu', value: 0.5, unit: 'ratio', atMs: 2000 });
+    expect(out.filter((s) => s.name === 'eventLoop.lag')).toEqual([]);
     for (const s of out) expect(validateSample(s).ok).toBe(true);
   });
 
@@ -449,6 +456,7 @@ describe('collect-observability script', () => {
           }),
         );
     lines.push(JSON.stringify({ name: 'eventLoop.lag', value: 20, unit: 'ms', atMs: 100 }));
+    lines.push(JSON.stringify({ name: 'eventLoop.delayP99', value: 880, unit: 'ms', atMs: 100 }));
     lines.push(JSON.stringify({ name: 'media.api.429', value: 1, unit: 'count', atMs: 101 }));
     lines.push(
       JSON.stringify({ name: 'observability.dropped', value: 3, unit: 'count', atMs: 101 }),
@@ -469,7 +477,7 @@ describe('collect-observability script', () => {
     writeFileSync(input, lines.join('\n') + '\n');
     const result = run(['--input', input, '--output', output]);
     expect(result.status).toBe(1); // incomplete → nonzero
-    expect(result.stdout).toContain('samples=23');
+    expect(result.stdout).toContain('samples=24');
     expect(result.stdout + result.stderr).not.toContain('SECRET-VALUE');
     const report = JSON.parse(readFileSync(output, 'utf8')) as {
       samples: number;
@@ -482,7 +490,7 @@ describe('collect-observability script', () => {
       events: Record<string, number>;
       alerts: Record<string, boolean>;
     };
-    expect(report.samples).toBe(23);
+    expect(report.samples).toBe(24);
     expect(report.incomplete).toBe(true);
     expect(report.dropped).toBe(3);
     expect(report.unparsable).toBe(1);
@@ -495,6 +503,7 @@ describe('collect-observability script', () => {
     expect(report.tickRounds.combined.p99).toBe(20);
     expect(report.tickRounds.perRoom.mean).toBe(2);
     expect(report.metrics['eventLoop.lag']).toMatchObject({ unit: 'ms', count: 1, p99: 20 });
+    expect(report.metrics['eventLoop.delayP99']).toMatchObject({ unit: 'ms', count: 1, p99: 880 });
     expect(report.events).toEqual({ 'alert.raised': 1 });
     expect(report.alerts.MEDIA_API_RATE_LIMITED).toBe(true);
     expect(report.alerts.OBSERVABILITY_DROPPED).toBe(true);

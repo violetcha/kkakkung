@@ -227,7 +227,7 @@ describe('E-15 preserves the current F configuration boundary', () => {
     'does not enable production using the %s media profile',
     (mediaMode) => {
       expect(() => parseConfig({ NODE_ENV: 'production', MEDIA_MODE: mediaMode })).toThrow(
-        'Unsupported skeleton configuration',
+        'NODE_ENV production remains gated on deployment verification',
       );
     },
   );

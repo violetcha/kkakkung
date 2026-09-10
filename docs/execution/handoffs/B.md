@@ -1,12 +1,29 @@
 # B 공개 인계 기록
 
+전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
+
 수정자: **B만** · [담당 계획](../b-game-server.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 B의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 아래 상태는 2026-09-09 로컬 스토리별 스택 브랜치(아래 브랜치 표)의 실제 커밋 기준이며, **모든 항목은 LOCAL_VERIFIED이고 ACCEPTED는 0건**이다. 시험은 B 소유 harness의 FakeCore·가짜 맵/연습 포트·E test double로 실행했고 실제 A 엔진, E 미디어/운영, F 설정과의 결합은 아직 없다. 커밋은 담당자가 푸시·MR 생성 전이므로 원격에 없다.
+이 파일은 팀원 AI가 B의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. **현재 상태는 바로 아래 2026-09-10 통합 갱신을 기준으로 읽는다.** 이후 스토리별 브랜치·요약 표·항목별 `blockedOn`·재개 절차는 2026-09-08~09 당시 기록이다. 당시의 LOCAL_VERIFIED·FakeCore/E test double·생산자 미연결·미푸시 설명은 현재 통합 상태나 이후 MR 병합 상태를 뜻하지 않는다.
 
-## 스토리별 브랜치 (2026-09-09, 로컬·미푸시)
+## 2026-09-10 전체 연결 검증 — B 조립 갱신
 
-선형 이력을 Jira 스토리별 스택 브랜치로 잘랐다. 각 브랜치는 바로 위 행의 브랜치를 부모로 하며, MR도 같은 순서로 앞 브랜치를 대상으로 올린 뒤 앞 MR 병합 후 대상을 `develop`으로 바꾼다. 이전 선형 브랜치는 `backup/b-linear-2026-09-09`로 보존했고 최종 트리는 동일하다(`git diff` 없음). SHA는 cherry-pick으로 바뀌었으며 아래 표와 요약 표가 현재 값이다.
+- 기준: 최초 `origin/develop` `d5816f6`에서 시작한 뒤 F-16 `baffe7a`와 F QA `4c84d20`을 반영했다. 현재 상태는 `codex/integration-20260910`의 **`4c84d20` + 미커밋 통합 변경**이다. 사용자 승인 범위는 전체 연결·통합 검증이며 새 Jira는 생성하지 않았다. 아래 기존 스토리·Jira·MR 기록은 당시 이력으로 보존한다.
+- localStage: `LOCAL_VERIFIED`. `SERVER_PROFILE=product`에서 실제 A `matchCore`·튜닝·연습/맵 포트와 F의 명시적 설정을 `ProductProfileLoader`로 조립한다. 실제 인증 fallback의 wrapper 및 8개 variant를 소비한다. `MEDIA_MODE=livekit`에는 E coordinator·운영 인증·health/operations 핸들러를 연결하고, `disabled`는 admission/readiness를 잠근다. 개발 admission hook은 strict 제품에서 무시한다.
+- B/E/D 연결: HTTP 발급에 서버 requestId를 생성·재사용하며 E TTL/권한/예산 검사를 계속 수행한다. 연결 상태·정확한 scope의 ready/recovering/failed/closed를 E lifecycle에 전달한다. E control·binding·audio를 tick에 적용하고, 원격 회수·이전 세대 종료·재경기 장벽을 연결했다. 늦은 비동기 맵/발급 결과를 현재 단계에 적용하지 않는다. Room 종료 후에도 회수 미확인 좌석의 확인 callback을 유지한다.
+- 통합 순서 보강: 첫 actual frame의 E 관측을 발급 장벽으로 사용해 초기 view 직후 HTTP가 먼저 도착하는 경합을 막는다. 이전 연습의 실패·binding·audio는 새 게임에 적용하지 않는다. 일반 장치·맵 준비 실패 시 기존 READY를 초기화하고 새 신고를 기다린다(`preparation-failure.test.ts`의 6인 HTTP/SDK 회귀 통과). 미디어 발급 실패/불명은 같은 match의 숨은 세대를 재사용하지 않도록 `ABORTED/MEDIA_UNAVAILABLE`로 종료한다. F `RuntimeEvidence`의 검증된 namespace/최초 설치·감사/공식 예산 revision을 E에 공급하며 감시 자원은 앱과 함께 닫는다.
+- HTTP 경계: 초대·운영 인증을 해당 route에만 적용해 게임 세션의 미디어 경로를 가로막지 않는다. 제품에서 개발 세션·관리/시험 화면·sandbox를 열지 않는다. E evidence 시각은 밀리초를 보존하여 전달한다.
+- F 관측: registry·alert policy·구조화 로그·process sampler를 bootstrap에 연결했다. `tick.duration`은 실제 onTick 실행 시간이며 같은 run의 방들은 동일 atMs로 합산할 수 있다. 이름/단위가 다른 중복 overload 표본을 제거했다.
+- 검증 기록: 최신 전체 검사 결과·실행 기준·미검증 범위는 [프로젝트 검증 기록](../../verification.md)을 기준으로 확인한다. 이 인계에는 계속 바뀌는 최종 시험 수와 소요 시간을 중복 기록하지 않는다.
+- 실제 생산자 통합: `server/test/media/product-integration.test.ts`에서 실제 A/B/C/E/F로 6인 연습 → 서명 webhook 처리 → 로딩/카운트다운/경기 → 한 명만 세대 교체(나머지 5명 유지) → 실제 3600 tick 종료 → 13개 closed 보고 204·원격 fixture 참가자 부재 → 새 matchId 재경기 DEVICE_CHECK를 확인했다. D 장치 facade·Cloud transport/공식 증거는 synthetic이며 실제 Cloud·6대·실시간 부하 인수가 아니다. 최종 실행 결과는 [프로젝트 검증 기록](../../verification.md)을 따른다.
+- 추가 전환 회귀: `media-transition-barrier.test.ts`는 실제 B HTTP/Colyseus와 E coordinator/registry/issuer로 초기 grant보다 먼저 도착한 6명 PRACTICE_READY, E 발급 후 B promise 대기, 정확한 이전 closed 204, 새 game generation 2, ready callback 직후 producer 예외의 명시 종료를 검증했다. A와 Cloud는 이 짧은 시험의 fixture다. 장벽·기존 DEVICE_CHECK 복귀·60초 기한과 strict 타입 검증의 최신 결과는 [프로젝트 검증 기록](../../verification.md)에서 확인한다.
+- 시험 격리: A/B/E/F 서버와 Cloud fixture는 `product-server-child.ts`의 별도 Node 프로세스, 실제 C/SDK 6개는 Vitest 프로세스에 둔다. 실제 monotonic/epoch 시계와 250ms 기준은 유지하며 IPC는 allowlist metadata만 전달한다. JWT는 IPC·로그로 보내지 않는다. 자식 프로세스 버전의 전체 기능 통합 재실행 결과는 [프로젝트 검증 기록](../../verification.md)을 따른다.
+- 성능 검증: 실제 tick과 이벤트 루프 지연을 구분해 확인하며 과부하 기준을 완화하지 않았다. 원인 조사·후속 보완 및 실제 시계와 고정 tick 기능 검증의 구분은 [프로젝트 검증 기록](../../verification.md)을 따른다. 여러 방·실시간 성능 인수는 F 부하 검증에 남긴다.
+- blockedOn: 실제 Cloud 자격·공식 최신 예산·namespace 소유권·최초 설치/감사 증거 및 실제 6대 미디어/부하 검증. loader는 증거가 없을 때 READY를 만들지 않는다. 테스트의 synthetic Cloud transport·증거는 실제 Cloud 성공을 의미하지 않는다. 최신 loader 조립으로 기존 B-REQ-A-1/A-2/E-1/F-1/F-2 생산자 연결 대기는 해소되지만, 운영 증거에 대한 최종 인수는 별도다.
+
+## 스토리별 브랜치 — 2026-09-09 당시 기록
+
+당시에는 선형 이력을 Jira 스토리별 스택 브랜치로 잘랐다. 각 브랜치는 바로 위 행의 브랜치를 부모로 하며, MR도 같은 순서로 앞 브랜치를 대상으로 올린 뒤 앞 MR 병합 후 대상을 `develop`으로 바꾸는 방식이었다. 이전 선형 브랜치는 `backup/b-linear-2026-09-09`로 보존했고 최종 트리는 동일했다(`git diff` 없음). SHA는 cherry-pick으로 바뀌었으며 아래 표와 요약 표는 당시 커밋과 이후 기록된 MR 병합 이력을 보존한다.
 
 | 순서 | 브랜치                                              | 커밋                                                                                                        | 작업 / Jira                                                                                                                                |
 | ---- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -30,7 +47,7 @@
 | 18   | `feat/S15P21C204-98-rematch`                        | `e916cd2`                                                                                                   | B-18 / S15P21C204-98 · MR [!57](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/57) develop 병합 `cddffd1`(2026-09-09) |
 | 19   | `feat/S15P21C204-84-kkakkung-room-assembly`         | `4a2b42a`(조립), `a70e95f`·`b1be16d`와 MR 기록 문서 커밋, develop 병합 3회(`a7a264f`, `f00fd09`, `ba7f167`) | 조립: B-04 대표, 키 82·84·87·89~98 · 스토리 18건 병합 완료 뒤 `988ddda` 기준 develop 재병합, 전체 검증 통과                                |
 
-## 요약 표
+## 요약 표 — 스토리 구현 당시 기록
 
 | 고정 번호 | 원본 ID | Jira          | localStage     | 구현 commit                     | blockedOn                                                  |
 | --------- | ------- | ------------- | -------------- | ------------------------------- | ---------------------------------------------------------- |
@@ -224,7 +241,7 @@ A가 구현할 `CorePort<State>`(createMatch/createPractice/stepMatch/getPlayerK
 | B-REQ-C-1 | C    | `apps/web/src/app/SessionRuntime.ts`                                  | 위 채널·스키마 소비, `readPublicRoundState`로 null 정규화, 개발 `joinTeamRoom('kkakkung',0.1.0)`은 제품 profile 서버에서는 PROTOCOL_MISMATCH                                                                                                   | B-02/B-11/B-14 소비자 시험                                                                   | C 인계 기록                                                                                           |
 | B-REQ-D-1 | D    | `apps/web/src/features/media/*`                                       | `mediaBindingsSchema`/`audioPolicySchema` 모양 소비, `media-bindings-refresh` 1초 1회                                                                                                                                                          | B-11 재대조 시험                                                                             | D 인계 기록                                                                                           |
 
-## 재개 시 확인
+## 당시 재개 확인 절차 (2026-09-08~09)
 
 1. `git log b12cb9c..HEAD`의 20개 커밋이 현재 checkout에 있는지 확인한다(원격 push 전).
 2. `pnpm build:packages && pnpm exec vitest run` — 2026-09-08 결과 46 파일 200 case 통과. `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm check:execution`, `node scripts/check-role-scope.mjs --role B --base b12cb9c` 모두 통과.

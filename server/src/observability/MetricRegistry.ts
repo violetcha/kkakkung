@@ -38,6 +38,7 @@ export const REGISTERED_METRICS = Object.freeze({
   'process.memory': 'bytes',
   'process.cpu': 'ratio',
   'eventLoop.lag': 'ms',
+  'eventLoop.delayP99': 'ms',
   'media.api.total60s': 'count',
   'media.api.normal60s': 'count',
   'media.api.429': 'count',
@@ -399,17 +400,14 @@ export type ProcessSamplerOptions = Readonly<{
   eventLoopDelay: EventLoopDelaySource;
   memoryUsage?: () => Readonly<{ rss: number }>;
   cpuUsage?: () => Readonly<{ user: number; system: number }>;
-  /** Percentile of the event-loop histogram reported as `eventLoop.lag`. Default p99. */
-  lagPercentile?: number;
 }>;
 
 /**
- * Returns a `sample()` function. Each call emits `eventLoop.lag` (ms), `process.memory` (bytes)
+ * Returns a `sample()` function. Each call emits `eventLoop.delayP99` (ms), `process.memory` (bytes)
  * and, from the second call on, `process.cpu` as a 0–1 ratio of the wall time since the previous
  * call. Nothing here schedules a timer: the caller owns the interval.
  */
 export function createProcessSampler(options: ProcessSamplerOptions): () => void {
-  const percentile = options.lagPercentile ?? 99;
   const memoryUsage = options.memoryUsage ?? (() => process.memoryUsage());
   const cpuUsage = options.cpuUsage ?? (() => process.cpuUsage());
   let lastCpu: { user: number; system: number } | null = null;
@@ -417,8 +415,10 @@ export function createProcessSampler(options: ProcessSamplerOptions): () => void
   return () => {
     const atMs = options.now();
     try {
-      const lagMs = nsToMs(options.eventLoopDelay.percentile(percentile));
-      options.emit({ name: 'eventLoop.lag', value: lagMs, unit: 'ms', atMs });
+      // A histogram percentile is not a coordinator tick's now-minus-due lag. Mixing them
+      // changes the sample population and invalidates the game's eventLoop.lag p95 gate.
+      const delayP99Ms = nsToMs(options.eventLoopDelay.percentile(99));
+      options.emit({ name: 'eventLoop.delayP99', value: delayP99Ms, unit: 'ms', atMs });
       options.eventLoopDelay.reset?.();
       options.emit({ name: 'process.memory', value: memoryUsage().rss, unit: 'bytes', atMs });
       const cpu = cpuUsage();

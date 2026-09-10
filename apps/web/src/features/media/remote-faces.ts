@@ -79,7 +79,10 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
   const askRefresh = () => {
     const scope = deps.bindings.getScope();
     if (!scope) return;
-    deps.requestBindingsRefresh({ ...scope, lastBindingRevision: deps.bindings.getRevision() });
+    deps.requestBindingsRefresh({
+      ...scope,
+      lastBindingRevision: Math.max(0, deps.bindings.getRevision()),
+    });
   };
 
   const dropPending = (evicted: readonly { trackSid: string }[], needsRefresh: boolean) => {

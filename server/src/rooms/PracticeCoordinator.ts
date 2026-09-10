@@ -59,6 +59,10 @@ export class PracticeCoordinator {
     return this.practiceReady.has(playerId);
   }
 
+  expired(nowMs: number) {
+    return this.startedAtMs !== null && nowMs - this.startedAtMs >= this.maxDurationMs;
+  }
+
   /** Early end when every participant reported ready; timeout at the cap. */
   evaluate(
     nowMs: number,
@@ -67,7 +71,7 @@ export class PracticeCoordinator {
     if (this.startedAtMs === null) return 'continue';
     if (participants.length > 0 && participants.every((id) => this.practiceReady.has(id)))
       return 'end-all-ready';
-    if (nowMs - this.startedAtMs >= this.maxDurationMs) return 'end-timeout';
+    if (this.expired(nowMs)) return 'end-timeout';
     return 'continue';
   }
 

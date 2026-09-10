@@ -1,0 +1,12 @@
+{
+  "mode": "synthetic",
+  "note": "DP-06 automation only: six isolated browser contexts, canvas video and oscillator audio. This is not representative-device acceptance or a Cloud approval.",
+  "participants": [
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" },
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" },
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" },
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" },
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" },
+    { "video": "canvas 320x240 15fps", "audio": "oscillator 440Hz" }
+  ]
+}

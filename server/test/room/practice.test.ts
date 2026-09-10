@@ -25,6 +25,9 @@ describe('team practice', () => {
     for (const id of [...roles.keys()])
       expect(practice.applyPracticeReady(id, true)).toEqual({ result: 'applied', code: null });
     expect(practice.evaluate(45_000, [...roles.keys()])).toBe('end-all-ready');
+    // Early-ready verdict does not erase the original deadline for a pending media barrier.
+    expect(practice.expired(59_999)).toBe(false);
+    expect(practice.expired(60_000)).toBe(true);
   });
 
   it('times out at 60 seconds and returns to DEVICE_CHECK when a device report was withdrawn', () => {

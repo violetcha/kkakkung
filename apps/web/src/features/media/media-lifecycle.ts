@@ -101,9 +101,15 @@ export function createMediaLifecycle(deps: MediaLifecycleDeps): MediaLifecycle {
     deps.media.closeOutput();
     deps.media.stopListeners();
     deps.media.releaseRemote();
-    await deps.media.unpublishAll().catch(() => undefined);
+    let failed = false;
+    await deps.media.unpublishAll().catch(() => {
+      failed = true;
+    });
     // 3) SDK disconnect를 기다린다. 이것은 로컬 closed일 뿐이다.
-    await deps.media.disconnect().catch(() => undefined);
+    await deps.media.disconnect().catch(() => {
+      failed = true;
+    });
+    if (failed) throw new Error('LOCAL_RETIREMENT_UNCONFIRMED');
     setState('closed');
   };
 
@@ -117,10 +123,13 @@ export function createMediaLifecycle(deps: MediaLifecycleDeps): MediaLifecycle {
   };
 
   const runEnd = async (): Promise<void> => {
-    await retireGeneration('personal-ended');
-    deps.participation.stopInput();
-    deps.participation.stopVision();
-    await deps.participation.stopDevices().catch(() => undefined);
+    try {
+      await retireGeneration('personal-ended');
+    } finally {
+      deps.participation.stopInput();
+      deps.participation.stopVision();
+      await deps.participation.stopDevices();
+    }
   };
 
   return {
@@ -137,12 +146,15 @@ export function createMediaLifecycle(deps: MediaLifecycleDeps): MediaLifecycle {
       if (disposed) return;
       const running = ending ?? runEnd();
       ending = running;
-      await running;
-      disposed = true;
+      try {
+        await running;
+      } finally {
+        disposed = true;
+      }
     },
 
     beginGeneration() {
-      if (disposed) return;
+      if (disposed || state === 'terminal') return;
       // 새 라운드는 여기서만 시작한다. 이전 정리 Promise를 비워 재사용을 허용한다.
       retiring = null;
       ending = null;

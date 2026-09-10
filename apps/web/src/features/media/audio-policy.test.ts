@@ -277,7 +277,8 @@ describe('세대 교체와 policyRevision 바닥', () => {
     store.apply(bindings(), SELF);
     expect(policies.apply(policy({ policyRevision: 7 })).status).toBe('applied');
 
-    // 회수 없이 서버가 새 수신자 세대의 바인딩을 밀어 넣는다.
+    // 새 grant로 수신자 세대를 확정한 뒤 바인딩을 받는다.
+    store.beginScope(gen2Scope);
     store.apply(bindings({ ...gen2Scope, bindingRevision: 4 }), SELF);
     const next = policies.apply(policy({ ...gen2Scope, policyRevision: 1, bindingRevision: 4 }));
 

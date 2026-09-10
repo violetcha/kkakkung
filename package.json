@@ -21,7 +21,7 @@
     "format:check": "prettier --check .",
     "check:execution": "node scripts/check-execution-plan.mjs",
     "test": "pnpm build:packages && vitest run",
-    "test:maps": "pnpm build:packages && vitest run packages/game-core/test/world.test.ts",
+    "test:maps": "pnpm build:packages && vitest run packages/game-core/test/match/certified-maps.test.ts",
     "test:e2e": "pnpm build:packages && playwright test",
     "verify": "pnpm format:check && pnpm check:execution && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e",
     "check:environment": "node scripts/check-execution-environment.mjs",

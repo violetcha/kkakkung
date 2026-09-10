@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   inspectReservationReadiness,
+  ReservationReadinessInspector,
   type ReservationReadinessInput,
 } from '../../src/health/ReservationReadiness.js';
 import {
@@ -9,11 +10,94 @@ import {
   type Generation,
 } from '../../src/media/MediaGenerationRegistry.js';
 import { checksum } from '../../src/operations/CheckpointStore.js';
+import * as checkpointStore from '../../src/operations/CheckpointStore.js';
 import type { JournalEntry, JournalRecord } from '../../src/operations/OperationJournal.js';
 import type { UsageReservation } from '../../src/operations/UsageCheckpoint.js';
 import { practiceFrame, prepareRequest } from '../media/generation-fixtures.js';
 
 const NOW = 1_800_000_000_000;
+
+describe('exact accounting reuse', () => {
+  it('does not rehash unchanged journal entries while accepting fresh equivalent snapshots', () => {
+    const { input } = setup();
+    const inspector = new ReservationReadinessInspector();
+    const hash = vi.spyOn(checkpointStore, 'checksum');
+    try {
+      expect(inspector.inspect(input)).toEqual({ consistent: true, unresolvedCount: 0 });
+      const calls = hash.mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+      for (let i = 0; i < 20; i++)
+        expect(inspector.inspect(structuredClone(input)).consistent).toBe(true);
+      expect(hash.mock.calls.length).toBe(calls);
+    } finally {
+      hash.mockRestore();
+    }
+  });
+
+  it('observes in-place terminal state and changed durable checksums without a clock advance', () => {
+    const { generation, input } = setup();
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(input).unresolvedCount).toBe(0);
+    generation.terminal = true;
+    expect(inspector.inspect(input).unresolvedCount).toBe(1);
+    generation.terminal = false;
+    expect(inspector.inspect(input).consistent).toBe(true);
+    expect(
+      inspector.inspect({ ...input, records: [{ ...input.records[0]!, checksum: 'corrupt' }] })
+        .consistent,
+    ).toBe(false);
+  });
+
+  it('rejects a cloned preparation after warming the same value with the exact registry object', () => {
+    const { generation, input } = setup();
+    const inspector = new ReservationReadinessInspector();
+    const preparing = { ...input, records: [], pendingPreparations: [generation] };
+    expect(inspector.inspect(preparing).consistent).toBe(true);
+    expect(
+      inspector.inspect({ ...preparing, pendingPreparations: [structuredClone(generation)] })
+        .consistent,
+    ).toBe(false);
+    expect(inspector.inspect({ ...preparing, pendingPreparations: [] }).consistent).toBe(false);
+  });
+
+  it('rechecks exact retirement membership and disappearance of its bounded exemption', () => {
+    const { generation, input } = setup();
+    generation.terminal = true;
+    generation.state = 'REVOKING';
+    const retiring = {
+      ...input,
+      records: [entry(generation)],
+      reservations: [reservation(generation.reservationId, { status: 'RETIRING' })],
+      pendingRetirements: [generation],
+    };
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(retiring)).toEqual({ consistent: true, unresolvedCount: 0 });
+    expect(
+      inspector.inspect({ ...retiring, pendingRetirements: [structuredClone(generation)] })
+        .consistent,
+    ).toBe(false);
+    expect(inspector.inspect({ ...retiring, pendingRetirements: [] }).unresolvedCount).toBe(1);
+  });
+
+  it('detects removed journal records and changed reservation scope even with unchanged seq', () => {
+    const { input } = setup();
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(input).consistent).toBe(true);
+    expect(inspector.inspect({ ...input, records: [] }).consistent).toBe(false);
+    expect(inspector.inspect(input).consistent).toBe(true);
+    const changed = structuredClone(input);
+    (changed.reservations[0]!.request as { matchId: string }).matchId = 'different';
+    expect(inspector.inspect(changed).consistent).toBe(false);
+  });
+
+  it('does not hide an extra undefined journal field behind JSON equivalence', () => {
+    const { input } = setup();
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(input).consistent).toBe(true);
+    const invalidEntry = { ...input.records[0]!, unexpected: undefined };
+    expect(inspector.inspect({ ...input, records: [invalidEntry] }).consistent).toBe(false);
+  });
+});
 
 function reservation(root: string, overrides: Partial<UsageReservation> = {}): UsageReservation {
   return {

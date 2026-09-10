@@ -295,6 +295,8 @@ describe('createRemoteFaces', () => {
     base.store.apply(bindings([participant(SELF, 1), participant('p2', 2)]), SELF);
     base.faces.addTrack(remoteTrack(2));
 
+    base.store.beginScope({ ...base.store.getScope()!, receiverGeneration: 2 });
+
     base.store.apply(
       bindings([participant(SELF, 1), participant('p2', 2)], {
         receiverGeneration: 2,

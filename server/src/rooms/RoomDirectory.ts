@@ -2,8 +2,12 @@
  * Registry of live product rooms by roomCode. HTTP media routes and E callbacks reach a room
  * only through this narrow interface; they never mutate room state directly.
  */
-import type { MediaBindings, AudioPolicy } from '@kkakkung/protocol/game-messages';
-import type { MediaControl } from '../game/ports.js';
+import type {
+  MediaBindings,
+  AudioPolicy,
+  MediaStatusReport,
+} from '@kkakkung/protocol/game-messages';
+import type { MediaControl, PreparationResult } from '../game/ports.js';
 
 export interface ProductRoomHandle {
   readonly roomCode: string;
@@ -13,6 +17,12 @@ export interface ProductRoomHandle {
     playerId: string,
     purpose: 'practice' | 'game',
   ): { mediaInstanceId: string; gameInstanceId: string } | null;
+  requestMediaGrant(
+    playerId: string,
+    purpose: 'practice' | 'game',
+    previousGeneration: number | null,
+  ): Promise<PreparationResult | null>;
+  acceptMediaReport(playerId: string, report: MediaStatusReport): boolean;
   enqueueMediaControl(control: MediaControl): void;
   deliverBindings(playerId: string, message: MediaBindings): void;
   deliverAudioPolicy(playerId: string, message: AudioPolicy): void;

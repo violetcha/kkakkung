@@ -203,7 +203,7 @@ async function terminal(f: Fixture, requestId: string) {
 
 async function resume(f: Fixture, requestId = 'resume') {
   expect(f.operations.submit({ requestId, action: 'resume' }).status).toBe('accepted');
-  expect((await terminal(f, requestId)).status).toBe('succeeded');
+  expect(await terminal(f, requestId)).toMatchObject({ status: 'succeeded', code: null });
   expect(f.runtime.canIssue()).toBe(true);
 }
 

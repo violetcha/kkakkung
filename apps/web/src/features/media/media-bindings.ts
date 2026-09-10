@@ -23,6 +23,8 @@ export type BindingApplyResult =
     }>;
 
 export interface BindingStore {
+  /** Only an accepted grant can authorize a receiver scope change. */
+  beginScope(scope: MediaScope): void;
   apply(bindings: MediaBindings, selfPlayerId: string): BindingApplyResult;
   /** 현재 세대의 검증된 원격 항목. 자기 entry는 제외한다. */
   getRemote(): readonly MediaBinding[];
@@ -58,6 +60,13 @@ export function createBindingStore(): BindingStore {
   let self: MediaBinding | null = null;
 
   return {
+    beginScope(next) {
+      if (scope && isSameScope(scope, next)) return;
+      scope = { ...next };
+      revision = -1;
+      remote = [];
+      self = null;
+    },
     apply(bindings, selfPlayerId) {
       if (
         typeof bindings !== 'object' ||
@@ -73,13 +82,8 @@ export function createBindingStore(): BindingStore {
         mediaInstanceId: bindings.mediaInstanceId,
         receiverGeneration: bindings.receiverGeneration,
       };
-      // 수신자 세대가 바뀌면 이전 목록과 revision을 모두 버린다.
-      if (scope && !isSameScope(scope, incoming)) {
-        scope = null;
-        revision = -1;
-        remote = [];
-        self = null;
-      }
+      if (scope && !isSameScope(scope, incoming))
+        return { status: 'ignored', reason: 'WRONG_SCOPE' };
       if (scope && bindings.bindingRevision <= revision)
         return { status: 'ignored', reason: 'STALE_REVISION' };
 

@@ -38,6 +38,11 @@ describe('operator invitation routes', () => {
       body: JSON.stringify(body),
     });
 
+  it('does not intercept unrelated player routes with operator authentication', async () => {
+    const response = await post('/api/media/grants', {}, 'Bearer player-session');
+    expect(response.status).toBe(404);
+  });
+
   it('issues with the operator token, returns the raw token once and revokes idempotently', async () => {
     const response = await post(
       INVITATION_ROUTES.issue,

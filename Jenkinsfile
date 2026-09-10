@@ -130,7 +130,13 @@ pipeline {
         //    이미지가 없거나 라벨이 다르면 여기서 멈춥니다 (태그로 커밋을 추정하지 않음).
         sh '''
           mkdir -p "$STATE_DIR/releases"
-          node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA"             --profile "$DEPLOY_PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
+          set --
+          if [ "$DEPLOY_PROFILE" = product ]; then
+            : "${OPS_OFFICIAL_BUDGET_MAX_AGE_MS:?Set the approved runtime budget max age before product deployment}"
+            set -- --official-budget-max-age-ms "$OPS_OFFICIAL_BUDGET_MAX_AGE_MS"
+          fi
+          node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA" \
+            --profile "$DEPLOY_PROFILE" --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json" "$@"
         '''
 
         // 2) 장벽 실행. 운영 토큰은 product 프로파일에서만 Secret text 로 바인딩합니다 (로그 마스킹).

@@ -1,5 +1,24 @@
 # C 공개 인계 기록
 
+전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
+
+## 2026-09-10 통합 작업 · 미디어 종료 신고와 실제 연결 순서
+
+최초 기준 develop `d5816f6`, 이후 F-16 `baffe7a`와 F QA `4c84d20` 병합을 반영한 로컬 통합 브랜치 `codex/integration-20260910`이다. 아래 실행 시간과 시험 수는 당시 기록이며 최신 최종 결과는 [공통 검증 기록](../../verification.md)을 확인한다. 로컬 검증과 원격 전달·실제 Cloud 인수는 구분한다.
+
+- `app/product-runtime.ts`는 현재 승인 grant의 미디어 scope를 보관한다. SDK `recovering`/`failed`는 같은 scope로 B에 즉시 신고한다. SDK `Disconnected` 자체는 정리 완료가 아니므로 `failed`로 신고한다.
+- 연습→경기의 이전 scope를 먼저 캡처하고 D의 `retireMediaGeneration()`이 끝난 뒤에만 그 scope의 `closed`를 POST한다. 이 응답까지 성공한 뒤 `previousReceiverGeneration`을 유지한 다음 grant 요청을 보낸다. 실패하면 새 발급·새 연결을 진행하지 않는다.
+- 실제 B 미디어 신고의 성공 응답 `204 No Content`는 본문 없이 처리한다. 신고 성공을 JSON 파싱 실패로 바꾸지 않으며 동일 응답을 사용한 전환 회귀를 통과했다.
+- SDK의 짧은 `recovering → connected`는 현재 세대를 유지한다. 예상 밖 `closed`/`failed`는 해당 참가자만 `failed` 신고 → 동일 미디어 작업 큐 → D `retireMediaGeneration('reconnect')` 완료 → 정확한 이전 scope `closed` → `previousReceiverGeneration`을 넣은 발급 → 같은 미디어 instance의 새 세대 연결/게시 순서로 교체한다. 연습/로딩/카운트다운/경기에서 현재 ACTIVE scope만 허용하며 논리 게임 지식은 유지한다. E가 최초 10초와 회수/예산을 판정한다.
+- 의도적인 정리 상태, 중복 종료 신호, 교체 도중 재실패는 새 복구 작업을 만들지 않는다. 신고·로컬 정리·발급·SDK 연결 실패 후 자동 반복을 하지 않고, 종료 후 늦은 grant는 연결/게시 없이 정리 신고한다.
+- 최종 코드 검토에서 복구 발급과 논리 phase 전환의 경쟁을 보완했다. 현재 SDK 연결과 마지막 발급 세대를 분리하여 발급 대기 중 phase가 바뀌거나 HTTP가 거절되어도 다음 요청의 이전 세대를 잃지 않는다. 늦게 받은 미연결 grant도 로컬 정리·closed 신고 후 그 세대를 다음 발급의 이전 세대로 보존한다. 같은 game의 COUNTDOWN → PLAYING에서 화면 개인 뷰가 잠시 비는 동안에는 마지막 권위 논리 scope/ACTIVE 기록으로 복구를 유지하고, 논리 scope 종류 변경·종료·재경기에는 무효화한다.
+- 개인 종료·연결 종료·재경기도 같은 로컬 정리 장벽을 사용한다. 이전 scope의 종료 신고는 공유 Promise로 합친다. 늦은 구세대 SDK 상태·바인딩·정책은 현재 scope를 바꾸지 못한다. 게시 완료 뒤 최초 바인딩 재전송을 요청한다.
+- `app/product-integration-fixture.ts`의 `createSyntheticInteractionFactory({ publish, close, control })`는 서버 통합 시험 전용 D 합성 facade다. 선택 `control` 콜백의 `failOnce()`는 현재 참가자의 SDK 영구 종료를 한 번만 발생시켜 전체 복구 경로를 시험한다. 실제 `bindProductRoom`과 B/E를 연결하되 DOM·카메라·추론·SDK·Cloud 성공을 대신 주장하지 않는다. 제품 App은 이 fixture를 import하지 않는다.
+
+검증: 직전 웹 전체 단위 회귀 **57파일 436시험 통과**, 최종 C product-runtime **29시험 통과**, 웹 `tsc --noEmit`·ESLint·포맷 통과. 최종 추가 4회귀는 복구 발급의 거절/늦은 성공과 phase 전환의 경쟁, 종료 신호 전/발급 응답 대기 중 개인 뷰 공백을 검사한다. 기존 시험은 순간 SDK 복구와 전체 세대 교체의 분리, 네 phase의 교체, 최초 SDK 연결 실패 복구, 중복/의도적 종료, 신고·정리·발급·재연결 실패의 반복 금지, 종료 후 늦은 grant 게시 금지와 잘못된 match/instance/generation 응답 거절을 검사한다. 앞선 미디어·D runtime·C 연결 대상 **14파일 204시험**도 통과했다. 실제 브라우저 장치·Cloud·6대 실측은 별도 통합 인수 대상이다.
+
+루트 통합 시험 `server/test/media/product-integration.test.ts`도 **1시험 통과(64.087초)**했다. 실제 제품 profile·A 규칙·B HTTP/Colyseus 6클라이언트·C `bindProductRoom`·E 운영/발급/회수에 연결하여 연습 → 로컬 서명 webhook 검증 → 본 경기 로딩/카운트다운/PLAYING → 한 명만 새 미디어 세대로 복구(다른 다섯 명 유지) → 실제 서버 3600 Tick 후 RESULT → 13개 closed 신고의 HTTP 204와 transport 참가자 부재 → REMATCH의 DEVICE_CHECK를 확인했다. D는 위 합성 facade, Cloud API·운영 증거는 로컬 fixture다. 이 결과는 장치·LiveKit SDK·실제 Cloud 인수가 아니다.
+
 수정자: C 김산이 · 2026-09-10 · [담당 계획](../c-web-ui.md) · [공통 규칙](../common.md)
 
 ## 현재 상태

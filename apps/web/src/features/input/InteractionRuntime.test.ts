@@ -375,10 +375,28 @@ describe('remote media limits and pending sweep', () => {
   };
 
   it('uses the practice limit while the authoritative phase is TEAM_PRACTICE', async () => {
-    const base = harness();
+    const base = harness({
+      createMediaRoom: () => ({
+        connect: async () => {},
+        disconnect: async () => {},
+        on: () => {},
+        removeAllListeners: () => {},
+      }),
+      epochNowSeconds: () => 1000,
+    });
     await base.runtime.startDevices({ microphone: false });
 
     base.runtime.setContext({ ...playing, phase: 'TEAM_PRACTICE' });
+    await base.runtime.connectMedia({
+      matchId: 'match-1',
+      mediaInstanceId: 'instance-1',
+      receiverGeneration: 1,
+      url: 'wss://local.invalid',
+      token: 'fixture',
+      roomName: 'room',
+      mediaIdentity: 'self',
+      expiresAt: 1300,
+    });
     const practiceBindings = {
       matchId: 'match-1',
       mediaInstanceId: 'instance-1',
@@ -600,6 +618,34 @@ describe('제품 경로의 livekit SDK 어댑터', () => {
     });
   });
 
+  it('does not finish runtime retirement until a pending SDK publish is compensated', async () => {
+    const base = sdkHarness();
+    await base.runtime.startDevices({ microphone: false });
+    base.runtime.setContext(playing);
+    await base.runtime.connectMedia(grant);
+    let finish!: (value: { trackSid: string }) => void;
+    base.sdk.rooms[0]!.publishTrack.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const publishing = base.runtime.publishMedia();
+    const rejected = expect(publishing).rejects.toMatchObject({ code: 'RETIRED' });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const retiring = base.runtime.retireMediaGeneration();
+    expect(base.runtime.getGenerationState()).toBe('terminal');
+    expect(base.sdk.rooms[0]!.disconnect).not.toHaveBeenCalled();
+    finish({ trackSid: 'late-face' });
+    await rejected;
+    await retiring;
+    expect(base.runtime.getGenerationState()).toBe('closed');
+    expect(base.runtime.getPublications()).toEqual([]);
+    expect(base.sdk.rooms[0]!.disconnect).toHaveBeenCalledOnce();
+    expect(base.track.stop).not.toHaveBeenCalled();
+    await base.runtime.dispose();
+  });
+
   it('createMediaRoom 주입이 있으면 SDK를 적재하지 않는다', async () => {
     const injected = {
       connect: vi.fn(async () => undefined),
@@ -650,9 +696,16 @@ describe('제품 경로의 livekit SDK 어댑터', () => {
     base.advance(2_001);
     base.fireTimers();
 
-    // 바인딩을 한 번도 받지 못했으면 참조할 revision이 없어 재전송을 요청하지 않는다.
+    // 승인 grant의 scope로 초기 검증 목록을 요청한다. 미확인 트랙은 표시하지 않는다.
     expect(base.faceTracks).toHaveLength(0);
-    expect(base.refreshRequests).toHaveLength(0);
+    expect(base.refreshRequests).toEqual([
+      {
+        matchId: 'match-1',
+        mediaInstanceId: 'instance-1',
+        receiverGeneration: 1,
+        lastBindingRevision: 0,
+      },
+    ]);
   });
 
   it('구독 해제 주입이 없으면 SDK publication의 구독을 실제로 멈춘다', async () => {

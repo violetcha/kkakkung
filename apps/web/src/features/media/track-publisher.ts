@@ -43,7 +43,9 @@ export type PublicationRecord = Readonly<{
 }>;
 
 export class PublishRejectedError extends Error {
-  constructor(readonly code: 'RAW_TRACK_REJECTED' | 'SCREEN_SHARE_REJECTED' | 'NO_SCOPE') {
+  constructor(
+    readonly code: 'RAW_TRACK_REJECTED' | 'SCREEN_SHARE_REJECTED' | 'NO_SCOPE' | 'RETIRED',
+  ) {
     super(code);
     this.name = 'PublishRejectedError';
   }
@@ -76,6 +78,34 @@ export function createTrackPublisher(deps: TrackPublisherDeps): TrackPublisher {
   const tracks = new Map<PublishSource, MediaStreamTrack>();
   let configuredBps: number = FACE_ENCODING.maxBitrate;
   let lastBytes: { at: number; bytes: number } | null = null;
+  let terminal = false;
+  let tail: Promise<void> = Promise.resolve();
+  let retiring: Promise<void> | null = null;
+  let cleanupFailed = false;
+  const serialize = <T>(work: () => Promise<T>): Promise<T> => {
+    const result = tail.then(work);
+    tail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  };
+  const assertLive = () => {
+    if (terminal) throw new PublishRejectedError('RETIRED');
+  };
+  const unpublish = async (track: MediaStreamTrack) => {
+    try {
+      await deps.participant.unpublishTrack(track, false);
+    } catch {
+      cleanupFailed = true;
+      throw new Error('LOCAL_RETIREMENT_UNCONFIRMED');
+    }
+  };
+  const rejectLate = async (track: MediaStreamTrack) => {
+    if (!terminal) return;
+    await unpublish(track);
+    throw new PublishRejectedError('RETIRED');
+  };
 
   const publish = () => deps.onPublication?.([...records.values()]);
 
@@ -85,73 +115,89 @@ export function createTrackPublisher(deps: TrackPublisherDeps): TrackPublisher {
     records.delete(source);
     if (!track) return;
     // 게시 트랙 정리는 원본 장치 track을 stop하지 않는다.
-    await deps.participant.unpublishTrack(track, false).catch(() => undefined);
+    await unpublish(track);
   };
 
   return {
-    async publishFace(handle, scope, preset = 'medium') {
-      if (!scope.mediaInstanceId) throw new PublishRejectedError('NO_SCOPE');
-      // 원본 카메라 track이나 임의 객체는 여기서 막힌다.
-      if (!isProcessedFaceHandle(handle)) throw new PublishRejectedError('RAW_TRACK_REJECTED');
-      const processed = assertProcessedFace(handle);
-      const encoding = preset === 'low' ? LOW_FACE_ENCODING : FACE_ENCODING;
-      configuredBps = encoding.maxBitrate;
-      // 새 SID 게시는 이전 publication을 먼저 정리한다.
-      await remove('processed-face');
-      const { trackSid } = await deps.participant.publishTrack(processed.track, {
-        source: 'camera',
-        simulcast: false,
-        videoEncoding: encoding,
+    publishFace(handle, scope, preset = 'medium') {
+      return serialize(async () => {
+        assertLive();
+        if (!scope.mediaInstanceId) throw new PublishRejectedError('NO_SCOPE');
+        // 원본 카메라 track이나 임의 객체는 여기서 막힌다.
+        if (!isProcessedFaceHandle(handle)) throw new PublishRejectedError('RAW_TRACK_REJECTED');
+        const processed = assertProcessedFace(handle);
+        const encoding = preset === 'low' ? LOW_FACE_ENCODING : FACE_ENCODING;
+        configuredBps = encoding.maxBitrate;
+        // 새 SID 게시는 이전 publication을 먼저 정리한다.
+        await remove('processed-face');
+        assertLive();
+        const { trackSid } = await deps.participant.publishTrack(processed.track, {
+          source: 'camera',
+          simulcast: false,
+          videoEncoding: encoding,
+        });
+        if (terminal) await rejectLate(processed.track);
+        tracks.set('processed-face', processed.track);
+        // SDK 성공은 서버 권한 승인이 아니다. 바인딩 확인 전에는 serverConfirmed=false다.
+        records.set('processed-face', {
+          source: 'processed-face',
+          trackSid,
+          scope,
+          serverConfirmed: false,
+        });
+        lastBytes = null;
+        publish();
+        return trackSid;
       });
-      tracks.set('processed-face', processed.track);
-      // SDK 성공은 서버 권한 승인이 아니다. 바인딩 확인 전에는 serverConfirmed=false다.
-      records.set('processed-face', {
-        source: 'processed-face',
-        trackSid,
-        scope,
-        serverConfirmed: false,
-      });
-      lastBytes = null;
-      publish();
-      return trackSid;
     },
 
-    async publishMicrophone(track, scope) {
-      if (!scope.mediaInstanceId) throw new PublishRejectedError('NO_SCOPE');
-      if (track.kind !== 'audio') throw new PublishRejectedError('SCREEN_SHARE_REJECTED');
-      await remove('microphone');
-      const { trackSid } = await deps.participant.publishTrack(track, {
-        source: 'microphone',
-        simulcast: false,
+    publishMicrophone(track, scope) {
+      return serialize(async () => {
+        assertLive();
+        if (!scope.mediaInstanceId) throw new PublishRejectedError('NO_SCOPE');
+        if (track.kind !== 'audio') throw new PublishRejectedError('SCREEN_SHARE_REJECTED');
+        await remove('microphone');
+        assertLive();
+        const { trackSid } = await deps.participant.publishTrack(track, {
+          source: 'microphone',
+          simulcast: false,
+        });
+        if (terminal) await rejectLate(track);
+        tracks.set('microphone', track);
+        records.set('microphone', {
+          source: 'microphone',
+          trackSid,
+          scope,
+          serverConfirmed: false,
+        });
+        publish();
+        return trackSid;
       });
-      tracks.set('microphone', track);
-      records.set('microphone', {
-        source: 'microphone',
-        trackSid,
-        scope,
-        serverConfirmed: false,
-      });
-      publish();
-      return trackSid;
     },
 
-    async stopMicrophone() {
-      if (!records.has('microphone')) return;
-      await remove('microphone');
-      publish();
+    stopMicrophone() {
+      return serialize(async () => {
+        if (!records.has('microphone')) return;
+        await remove('microphone');
+        publish();
+      });
     },
 
-    async replaceFaceSource(nextTrack) {
-      const current = tracks.get('processed-face');
-      const record = records.get('processed-face');
-      if (!current || !record) return 'unsupported';
-      if (!deps.participant.replaceTrack) return 'unsupported';
-      await deps.participant.replaceTrack(current, nextTrack);
-      tracks.set('processed-face', nextTrack);
-      // 같은 SID를 유지하므로 기존 권한과 불허 수신자 차단이 그대로다.
-      // 새 webhook/SID를 기다리며 멈추지 않는다.
-      publish();
-      return 'replaced';
+    replaceFaceSource(nextTrack) {
+      return serialize(async () => {
+        assertLive();
+        const current = tracks.get('processed-face');
+        const record = records.get('processed-face');
+        if (!current || !record) return 'unsupported';
+        if (!deps.participant.replaceTrack) return 'unsupported';
+        await deps.participant.replaceTrack(current, nextTrack);
+        if (terminal) await rejectLate(nextTrack);
+        tracks.set('processed-face', nextTrack);
+        // 같은 SID를 유지하므로 기존 권한과 불허 수신자 차단이 그대로다.
+        // 새 webhook/SID를 기다리며 멈추지 않는다.
+        publish();
+        return 'replaced' as const;
+      });
     },
 
     confirmFromBindings(scope, confirmedSids) {
@@ -187,11 +233,16 @@ export function createTrackPublisher(deps: TrackPublisherDeps): TrackPublisher {
 
     getPublications: () => [...records.values()],
 
-    async unpublishAll() {
-      await remove('processed-face');
-      await remove('microphone');
-      lastBytes = null;
-      publish();
+    unpublishAll() {
+      terminal = true;
+      retiring ??= serialize(async () => {
+        const results = await Promise.allSettled([remove('processed-face'), remove('microphone')]);
+        lastBytes = null;
+        publish();
+        if (cleanupFailed || results.some((result) => result.status === 'rejected'))
+          throw new Error('LOCAL_RETIREMENT_UNCONFIRMED');
+      });
+      return retiring;
     },
   };
 }

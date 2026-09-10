@@ -85,7 +85,31 @@ describe('RoomTickCoordinator', () => {
     expect(h.coordinator.run().executed).toBe(4);
     expect(h.overloads.a).toEqual([]);
     const names = new Set(h.metrics.map((m) => m.name));
-    expect([...names].sort()).toEqual(['eventLoop.lag', 'tick.catchup', 'tick.due']);
+    expect([...names].sort()).toEqual([
+      'eventLoop.lag',
+      'tick.catchup',
+      'tick.due',
+      'tick.duration',
+    ]);
     expect(h.metrics.every((m) => m.unit === 'count' || m.unit === 'ms')).toBe(true);
+  });
+
+  it('reports measured room work with one shared run timestamp for combined-room timing', () => {
+    const h = setup();
+    for (const [id, duration] of [
+      ['a', 2],
+      ['b', 3],
+    ] as const)
+      h.coordinator.register(id, {
+        onTick: () => h.clock.advance(duration),
+        onOverload: () => undefined,
+      });
+    h.clock.set(50);
+    h.coordinator.run();
+    const durations = h.metrics.filter((sample) => sample.name === 'tick.duration');
+    expect(durations.map((sample) => [sample.matchRef, sample.value, sample.atMs])).toEqual([
+      ['a', 2, 50],
+      ['b', 3, 50],
+    ]);
   });
 });
