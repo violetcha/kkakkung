@@ -227,6 +227,17 @@ describe('stage plan and gating', () => {
     expect(result.checks.find((c) => c.name === 'tick.overloads')?.status).toBe('FAIL');
   });
 
+  it('a lag threshold miss fails the stage but does not stop escalation', () => {
+    const clients = Array.from({ length: 6 }, (_, i) => clientStats({ playerId: `p${i}` }));
+    const result = evaluateStage(
+      { rooms: 1, durationSeconds: 60, clients, server: server({ lagMs: [5, 10, 25, 30, 40] }) },
+      60_000,
+    );
+    expect(result.status).toBe('FAIL');
+    expect(result.stopEscalation).toBe(false);
+    expect(result.checks.find((c) => c.name === 'eventLoop.lag.p95Ms')?.status).toBe('FAIL');
+  });
+
   it('sixty idle connections fail the input coverage check even with perfect latency', () => {
     const clients = Array.from({ length: 60 }, (_, i) =>
       clientStats({ playerId: `p${i}`, commandsSent: 3, ackLatenciesMs: [5, 5, 5] }),

@@ -223,6 +223,9 @@ export function evaluateStage(input: StageInput, stageEndMs: number): StageResul
   const failed = checks.some((c) => c.status === 'FAIL');
   const unmeasured = checks.some((c) => c.status === 'NOT_MEASURED');
   const status = failed ? 'FAIL' : unmeasured ? 'INCOMPLETE' : 'PASS';
+  // Only structural failures stop the escalation: an overload, an aborted match or missing
+  // clients would make larger stages meaningless. Threshold misses (lag, ack) fail the stage
+  // but the run continues so 3/5/10-room measurements still exist for the report.
   const stopEscalation =
     failed &&
     checks.some(
@@ -230,9 +233,7 @@ export function evaluateStage(input: StageInput, stageEndMs: number): StageResul
         c.status === 'FAIL' &&
         (c.name === 'tick.overloads' ||
           c.name === 'match.aborts' ||
-          c.name === 'clients.connected' ||
-          c.name === 'command.ack.p95Ms' ||
-          c.name === 'eventLoop.lag.p95Ms'),
+          c.name === 'clients.connected'),
     );
   return {
     rooms: input.rooms,
