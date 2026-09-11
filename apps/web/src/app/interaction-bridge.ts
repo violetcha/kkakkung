@@ -25,8 +25,20 @@ export function createInteractionBridge(
     if (preview && preview.parentElement === host) preview.remove();
   };
   const attach = () => {
-    if (!disposed && host && preview && context?.phase === 'DEVICE_CHECK')
-      host.appendChild(preview);
+    const visible =
+      !disposed &&
+      context?.status === 'ACTIVE' &&
+      [
+        'DEVICE_CHECK',
+        'TEAM_PRACTICE',
+        'MAP_FINALIZING',
+        'GAME_LOADING',
+        'COUNTDOWN',
+        'PLAYING',
+      ].includes(context.phase);
+    if (visible && host && preview) {
+      if (preview.parentElement !== host) host.appendChild(preview);
+    } else detach();
   };
   const runtime = factory({
     ...deps,
@@ -73,13 +85,14 @@ export function createInteractionBridge(
     runtime,
     setContext(next: InteractionContext) {
       if (disposed) return;
-      detach();
       context = { ...next };
+      interaction = { mode: next.mode, selectedEquipment: next.selectedEquipment ?? 'sensor' };
       if (next.phase !== 'DEVICE_CHECK') readyRequested = false;
       runtime.setContext(context);
       attach();
     },
     setPreviewHost(next: HTMLElement | null) {
+      if (next === host) return;
       detach();
       host = next;
       attach();

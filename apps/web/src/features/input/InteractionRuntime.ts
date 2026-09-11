@@ -664,6 +664,7 @@ export const createInteractionRuntime = (
     getPhase: () => context.get()?.phase ?? null,
   });
   let keyboardBound: (() => void) | null = null;
+  let inputWatchdog: number | null = null;
 
   const move: MoveIntentController = createMoveIntentController({
     send: (direction) => {
@@ -757,6 +758,8 @@ export const createInteractionRuntime = (
   };
 
   const stopVision = () => {
+    if (inputWatchdog !== null) vision.clearTimer(inputWatchdog);
+    inputWatchdog = null;
     pump?.stop();
     pump = null;
     scheduler?.dispose();
@@ -796,7 +799,12 @@ export const createInteractionRuntime = (
    */
   const applyMotionIntents = (snapshot: SensorSnapshot) => {
     const nowMs = vision.now();
-    if (!context.acceptsInput || context.inChallenge) {
+    if (
+      !context.acceptsInput ||
+      context.inChallenge ||
+      context.get()?.mode !== 'motion' ||
+      fallback.degraded
+    ) {
       move.updateMotion(null, nowMs);
       turn.updateMotion(null, nowMs);
       return;
@@ -902,6 +910,18 @@ export const createInteractionRuntime = (
     pump = frames;
     patch({ vision: 'loading', errorCode: null });
     frames.start();
+    const checkInput = () => {
+      if (disposed || !scheduler) return;
+      const now = vision.now();
+      if (lastSnapshot && context.acceptsInput)
+        fallback.observe(lastSnapshot, now, runtimeGeneration);
+      if (lastStatus.vision === 'ready' && !hasFreshValidFace()) patch({ vision: 'loading' });
+      // A silent Worker emits no callback. Expired samples must still release held motion.
+      if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) move.updateMotion(null, now);
+      if (!isSampleFresh(lastSnapshot?.face ?? null, 'face', now)) turn.updateMotion(null, now);
+      inputWatchdog = vision.setTimer(checkInput, 100);
+    };
+    inputWatchdog = vision.setTimer(checkInput, 100);
   };
 
   const bindKeyboard = () => {

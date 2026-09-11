@@ -637,6 +637,111 @@ it('sends a final movement stop on blur through the real keyboard input runtime'
   }
 });
 
+it('routes explicit keyboard mode to real left and right turn handlers', async () => {
+  const keys = new Map<string, (event: KeyboardEvent) => void>();
+  const f = fixture((deps) =>
+    createInteractionRuntime(deps, {
+      keyboardTarget: {
+        addEventListener: (type, listener) => {
+          keys.set(type, listener);
+        },
+        removeEventListener: (type) => {
+          keys.delete(type);
+        },
+      },
+    }),
+  );
+  const key = (type: string, code: string, repeat = false) =>
+    keys.get(type)!({
+      code,
+      repeat,
+      isComposing: false,
+      target: null,
+      preventDefault() {},
+    } as KeyboardEvent);
+  try {
+    f.state({ phase: 'PLAYING' });
+    f.messages.get('private-view')!(viewFixture());
+    key('keydown', 'KeyA');
+    key('keyup', 'KeyA');
+    expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toEqual([]);
+    f.runtime.selectInputMode('keyboard');
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    key('keydown', 'KeyA');
+    key('keydown', 'KeyA', true);
+    key('keyup', 'KeyA');
+    key('keydown', 'ArrowRight');
+    key('keyup', 'ArrowRight');
+    expect(
+      f.send.mock.calls.filter(([channel]) => channel === 'command').map(([, value]) => value),
+    ).toMatchObject([
+      { type: 'TURN', payload: { direction: 'left' } },
+      { type: 'TURN', payload: { direction: 'right' } },
+    ]);
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('locks movement while recalibrating and resumes motion after fresh calibration', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  const ready = {
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+  } as const;
+  f.callbacks.onDeviceStatus(ready);
+  f.runtime.selectInputMode('keyboard');
+  let finish!: () => void;
+  vi.mocked(f.fake.calibrate).mockImplementation(async () => {
+    f.callbacks.onDeviceStatus({ ...ready, calibration: 'running' });
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    f.callbacks.onDeviceStatus(ready);
+    return ready;
+  });
+  try {
+    const calibration = f.runtime.calibrateMotion();
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('motion');
+    expect(f.context.mock.lastCall?.[0].pageActive).toBe(false);
+    expect(f.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } })).toBe('');
+    expect(f.runtime.send({ type: 'TURN', payload: { direction: 'right' } })).toBe('');
+    await f.runtime.calibrateMotion();
+    expect(f.fake.calibrate).toHaveBeenCalledOnce();
+    finish();
+    await calibration;
+    expect(f.context.mock.lastCall?.[0]).toMatchObject({ pageActive: true, mode: 'motion' });
+    expect(f.runtime.send({ type: 'TURN', payload: { direction: 'right' } })).not.toBe('');
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('keeps keyboard available if motion recalibration fails', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  f.callbacks.onDeviceStatus({ ...INITIAL_DEVICES, camera: 'ready' });
+  f.runtime.selectInputMode('keyboard');
+  vi.mocked(f.fake.calibrate).mockResolvedValue({
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    calibration: 'failed',
+    errorCode: 'CALIBRATION_NO_POSE',
+  });
+  try {
+    await f.runtime.calibrateMotion();
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    expect(f.context.mock.lastCall?.[0]).toMatchObject({ pageActive: true, mode: 'keyboard' });
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
 it('releases rejected exit start immediately without creating a challenge', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });

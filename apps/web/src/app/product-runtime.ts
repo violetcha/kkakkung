@@ -332,6 +332,7 @@ export function bindProductRoom(
         onDeviceStatus: (devices) => {
           if (!live()) return;
           publish({ devices });
+          updateContext();
           if (
             practiceReadyReported &&
             !deviceReady(devices) &&
@@ -471,6 +472,7 @@ export function bindProductRoom(
       ...(target ? { targetPlayerId: target } : {}),
       pageActive:
         pageActive &&
+        snapshot.devices.calibration !== 'running' &&
         participating &&
         !snapshot.lost &&
         (round.phase === 'DEVICE_CHECK' ||
@@ -593,7 +595,8 @@ export function bindProductRoom(
     }
     if (
       ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
-      ((!pageActive && !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||
+      (((!pageActive || snapshot.devices.calibration === 'running') &&
+        !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||
         !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
     )
       return '';
@@ -916,6 +919,41 @@ export function bindProductRoom(
       bridge.setPreviewHost(host);
     },
     startDevices: (microphone: boolean) => bridge.startDevices(microphone).catch(error),
+    selectInputMode(mode: InteractionState['mode']) {
+      if (!active || !participating || snapshot.lost) return;
+      interaction = { ...interaction, mode };
+      publish({ interaction });
+      updateContext();
+    },
+    async calibrateMotion() {
+      if (
+        !active ||
+        !participating ||
+        snapshot.lost ||
+        snapshot.devices.camera !== 'ready' ||
+        snapshot.devices.calibration === 'running'
+      )
+        return;
+      const owner = bridge;
+      interaction = { ...interaction, mode: 'motion' };
+      publish({ interaction });
+      updateContext();
+      try {
+        const status = await owner.runtime.calibrate();
+        if (!active || !participating || owner !== bridge) return;
+        if (status.calibration !== 'ready') {
+          interaction = { ...interaction, mode: 'keyboard' };
+          publish({ interaction });
+          updateContext();
+        }
+      } catch {
+        if (!active || !participating || owner !== bridge) return;
+        interaction = { ...interaction, mode: 'keyboard' };
+        publish({ interaction });
+        updateContext();
+        error();
+      }
+    },
     ready: (value: boolean) => bridge.ready(value),
     quality: (value: QualityPreset) => quality.select(value),
     selectEquipment(value: InteractionState['selectedEquipment']) {

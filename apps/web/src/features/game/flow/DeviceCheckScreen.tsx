@@ -12,7 +12,7 @@ export function DeviceCheckScreen({
   ready: boolean;
   onStart(microphone: boolean): Promise<void>;
   onReady(value: boolean): void;
-  previewHost(element: HTMLDivElement | null): void;
+  previewHost?(element: HTMLDivElement | null): void;
 }) {
   const [microphone, setMicrophone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export function DeviceCheckScreen({
     running: '보정 중',
   };
   return (
-    <section className="device-check">
+    <section className={previewHost ? 'device-check' : 'device-check device-check-with-controls'}>
       <div>
         <h2>플레이 전 장치 점검</h2>
         <p>
@@ -54,14 +54,14 @@ export function DeviceCheckScreen({
           <input
             type="checkbox"
             checked={microphone}
-            disabled={busy}
+            disabled={busy || status.calibration === 'running'}
             onChange={(e) => setMicrophone(e.target.checked)}
           />{' '}
           마이크 사용
         </label>
         <div className="actions">
           <button
-            disabled={busy}
+            disabled={busy || status.calibration === 'running'}
             onClick={() => {
               setBusy(true);
               void onStart(microphone).finally(() => setBusy(false));
@@ -82,7 +82,9 @@ export function DeviceCheckScreen({
           </p>
         )}
       </div>
-      <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+      {previewHost && (
+        <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+      )}
     </section>
   );
 }
