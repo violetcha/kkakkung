@@ -51,6 +51,7 @@ import {
   type OutputLock,
 } from '../media/audio-graph';
 import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
+import { createEffectBuffer } from '../media/effect-buffer';
 import {
   createMediaLifecycle,
   type MediaLifecycle,
@@ -402,6 +403,10 @@ export type KeyboardTarget = Readonly<{
 function browserAudio(): AudioGraphEnvironment | null {
   if (typeof AudioContext === 'undefined') return null;
   const context = new AudioContext();
+  const effectBuffers = new Map<
+    Parameters<AudioGraphEnvironment['createEffectSource']>[0],
+    AudioBuffer
+  >();
   const master = context.createGain();
   master.connect(context.destination);
   const wrap = <T extends AudioNode>(node: T) => ({
@@ -432,9 +437,22 @@ function browserAudio(): AudioGraphEnvironment | null {
         },
       };
     },
-    createEffectSource: () => {
+    createEffectSource: (kind) => {
       const source = context.createBufferSource();
-      return { ...wrap(source), start: () => source.start(), stop: () => source.stop() };
+      let buffer = effectBuffers.get(kind);
+      if (!buffer) {
+        buffer = createEffectBuffer(context, kind);
+        effectBuffers.set(kind, buffer);
+      }
+      source.buffer = buffer;
+      return {
+        ...wrap(source),
+        start: () => source.start(),
+        stop: () => source.stop(),
+        onEnded: (listener) => {
+          source.onended = listener;
+        },
+      };
     },
     createGain: () => {
       const gain = context.createGain();

@@ -24,13 +24,13 @@ export function viewFixture(overrides: Partial<PrivateView> = {}): PrivateView {
     },
     knownTerrain: [
       { x: 1, y: 1, kind: 'floor' },
-      { x: 1, y: 1, side: 0, kind: 'wall' },
+      { x: 1, y: 0, side: 2, kind: 'wall' },
     ],
     knownActiveExits: [
-      { exitId: 'exit', ownerId: 'self', approach: { x: 1, y: 1 }, wall: { x: 1, y: 1, side: 0 } },
+      { exitId: 'exit', ownerId: 'self', approach: { x: 1, y: 1 }, wall: { x: 1, y: 0, side: 2 } },
     ],
     visibleCells: [{ x: 1, y: 1 }],
-    visibleWallFaces: [{ x: 1, y: 1, side: 0 }],
+    visibleWallFaces: [{ x: 1, y: 0, side: 2 }],
     visibleEntities: [],
     ...overrides,
   };

@@ -223,6 +223,125 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
 }
 
 describe('createInteractionRuntime', () => {
+  it('assigns real effect buffers in the browser adapter and reuses PCM without reusing sources', async () => {
+    const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    const source = () => ({
+      ...node(),
+      buffer: null as AudioBuffer | null,
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: null as (() => void) | null,
+    });
+    const sources: ReturnType<typeof source>[] = [];
+    const buffers: AudioBuffer[] = [];
+    class AudioContextProbe {
+      sampleRate = 48000;
+      destination = node();
+      createGain() {
+        return { ...node(), gain: { value: 1 } };
+      }
+      createBiquadFilter() {
+        return { ...node(), frequency: { value: 20000 }, type: '' };
+      }
+      createStereoPanner() {
+        return { ...node(), pan: { value: 0 } };
+      }
+      createBufferSource() {
+        const value = source();
+        sources.push(value);
+        return value;
+      }
+      createBuffer(_channels: number, length: number, sampleRate: number) {
+        const data = new Float32Array(length);
+        const buffer = { sampleRate, length, getChannelData: () => data } as unknown as AudioBuffer;
+        buffers.push(buffer);
+        return buffer;
+      }
+    }
+    vi.stubGlobal('AudioContext', AudioContextProbe);
+    const { runtime } = harness({
+      epochNowSeconds: () => 1000,
+      createMediaRoom: () => ({
+        connect: async () => {},
+        disconnect: async () => {},
+        on: () => {},
+        removeAllListeners: () => {},
+      }),
+    });
+    const scope = { matchId: 'm', mediaInstanceId: 'media', receiverGeneration: 1 };
+    try {
+      runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'keyboard',
+        pageActive: true,
+      });
+      await runtime.connectMedia({
+        ...scope,
+        url: 'wss://synthetic.invalid',
+        token: 'synthetic',
+        roomName: 'synthetic',
+        mediaIdentity: 'self',
+        expiresAt: 2000,
+      });
+      runtime.applyMediaBindings({
+        ...scope,
+        bindingRevision: 1,
+        participants: [
+          {
+            playerId: 'self',
+            publisherGeneration: 1,
+            mediaIdentity: 'self',
+            participantSid: 'PA_self',
+            faceTrackSid: 'TR_face',
+          },
+        ],
+      });
+      const policy = {
+        ...scope,
+        policyRevision: 1,
+        bindingRevision: 1,
+        stateVersion: 1,
+        voices: [],
+        effects: (['footstep', 'sensor', 'trap'] as const).map((kind) => ({
+          eventId: kind,
+          kind,
+          gain: 1,
+          azimuthRad: 0,
+          lowpassHz: 10000,
+          tick: 1,
+        })),
+      };
+      runtime.applyAudioPolicy(policy);
+      runtime.applyAudioPolicy({ ...policy, policyRevision: 2 });
+      expect(sources).toHaveLength(3);
+      expect(buffers).toHaveLength(3);
+      for (const item of sources) {
+        expect(item.start).toHaveBeenCalledOnce();
+        expect(item.buffer!.getChannelData(0).some((sample) => Math.abs(sample) > 0.05)).toBe(true);
+        item.onended!();
+        expect(item.disconnect).toHaveBeenCalledOnce();
+      }
+      runtime.applyAudioPolicy({
+        ...policy,
+        policyRevision: 3,
+        effects: [{ ...policy.effects[0]!, eventId: 'footstep-2' }],
+      });
+      expect(sources).toHaveLength(4);
+      expect(buffers).toHaveLength(3);
+      expect(sources[3]!.buffer).toBe(sources[0]!.buffer);
+    } finally {
+      await runtime.dispose();
+      vi.unstubAllGlobals();
+    }
+    expect(sources[0]!.stop).not.toHaveBeenCalled();
+    expect(sources[3]!.stop).toHaveBeenCalledOnce();
+    expect(sources[3]!.disconnect).toHaveBeenCalledOnce();
+  });
+
   it('starts the vision pipeline only after the camera is ready', async () => {
     const base = harness();
 

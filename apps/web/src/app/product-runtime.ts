@@ -18,6 +18,7 @@ import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import {
   createChallengeController,
   exitCandidate,
+  facesExit,
 } from '../features/game/pose/challenge-controller';
 import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
 import { createPrivateEvents } from '../features/room/private-events';
@@ -486,7 +487,7 @@ export function bindProductRoom(
             exitId: own.challenge.exitId,
             poseKind: own.challenge.poseKind,
           }
-        : exit && own?.dir === exit.wall.side
+        : exit && facesExit(own, exit)
           ? { exitId: exit.exitId }
           : {}),
       ...(own?.installation ? { installationId: own.installation.installationId } : {}),
@@ -549,7 +550,7 @@ export function bindProductRoom(
         own.restraintUntilTick !== null ||
         !exit ||
         exit.exitId !== command.payload.exitId ||
-        own.dir !== exit.wall.side ||
+        !facesExit(own, exit) ||
         snapshot.round.phase !== 'PLAYING'
       )
         return '';
@@ -592,7 +593,8 @@ export function bindProductRoom(
     }
     if (
       ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
-      (!pageActive || !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
+      ((!pageActive && !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||
+        !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
     )
       return '';
     if (command.type === 'EXIT_START') {

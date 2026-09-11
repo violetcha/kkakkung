@@ -1,15 +1,16 @@
 import { expect, it, vi } from 'vitest';
 import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
-import type {
-  InteractionContext,
-  InteractionDeps,
-  InteractionRuntime,
+import {
+  createInteractionRuntime,
+  type InteractionContext,
+  type InteractionDeps,
+  type InteractionRuntime,
 } from '../features/input/InteractionRuntime';
 import { bindProductRoom, type ProductRoomPort } from './product-runtime';
 import { roundFixture, viewFixture } from '../features/room/product-fixture';
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
-function fixture() {
+function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRuntime) {
   let now = 0;
   let sequence = 0;
   const messages = new Map<string, (value: unknown) => void>();
@@ -77,7 +78,7 @@ function fixture() {
       fetcher,
       interactionFactory: (deps) => {
         callbacks = deps;
-        return fake;
+        return interactionFactory?.(deps) ?? fake;
       },
     },
   );
@@ -546,6 +547,96 @@ it('shares EXIT_START with D and waits for challenge projection after an applied
   expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
   await f.runtime.leave();
 });
+it.each([0, 1, 2, 3] as const)(
+  'only starts an exit when facing wall side %i from its approach',
+  async (side) => {
+    const f = fixture();
+    try {
+      f.state({ phase: 'PLAYING' });
+      const view = viewFixture();
+      if (view.self?.status !== 'ACTIVE') throw Error();
+      const vectors = [
+        { x: 0, y: -1 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: -1, y: 0 },
+      ];
+      const vector = vectors[side]!;
+      const wall = { x: 1 - vector.x, y: 1 - vector.y, side };
+      for (const dir of [side, (side + 1) % 4, (side + 3) % 4, (side + 2) % 4] as const) {
+        const stateVersion = ++view.stateVersion;
+        f.state({ phase: 'PLAYING', stateVersion });
+        f.messages.get('private-view')!({
+          ...view,
+          stateVersion,
+          self: { ...view.self, dir },
+          knownActiveExits: [{ ...view.knownActiveExits[0]!, wall }],
+          visibleWallFaces: [wall],
+        });
+        const facing = dir === (side + 2) % 4;
+        expect(f.context.mock.lastCall?.[0].exitId).toBe(facing ? 'exit' : undefined);
+        expect(!!f.runtime.send({ type: 'EXIT_START', payload: { exitId: 'exit' } })).toBe(facing);
+      }
+      expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(1);
+    } finally {
+      await f.runtime.leave();
+    }
+  },
+);
+
+it('sends a final movement stop on blur through the real keyboard input runtime', async () => {
+  const keys = new Map<string, (event: KeyboardEvent) => void>();
+  const f = fixture((deps) =>
+    createInteractionRuntime(deps, {
+      keyboardTarget: {
+        addEventListener: (type, listener) => {
+          keys.set(type, listener);
+        },
+        removeEventListener: (type) => {
+          keys.delete(type);
+        },
+      },
+      vision: {
+        now: () => 0,
+        setTimer: () => 1,
+        clearTimer: () => {},
+        createWorker: () => {
+          throw Error('No camera needed');
+        },
+        createFrameSource: () => {
+          throw Error('No camera needed');
+        },
+      },
+    }),
+  );
+  try {
+    f.state({ phase: 'PLAYING' });
+    f.messages.get('private-view')!(viewFixture());
+    const event = {
+      code: 'KeyW',
+      repeat: false,
+      isComposing: false,
+      target: null,
+      preventDefault() {},
+    } as KeyboardEvent;
+    keys.get('keydown')!(event);
+    f.runtime.setPageActive(false);
+    keys.get('keydown')!(event);
+    expect(f.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } })).toBe('');
+    expect(f.runtime.send({ type: 'TURN', payload: { direction: 'left' } })).toBe('');
+    expect(
+      f.send.mock.calls.filter(([channel]) => channel === 'command').map(([, message]) => message),
+    ).toMatchObject([
+      { type: 'MOVE_INTENT', payload: { direction: 'forward' } },
+      { type: 'MOVE_INTENT', payload: { direction: null } },
+    ]);
+    f.state({ phase: 'RESULT', stateVersion: 11 });
+    expect(f.runtime.send({ type: 'MOVE_INTENT', payload: { direction: null } })).toBe('');
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
 it('releases rejected exit start immediately without creating a challenge', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });

@@ -1,6 +1,6 @@
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import type { CommandInput } from '../../room/command-lifecycle';
-import { exitCandidate } from './challenge-controller';
+import { exitCandidate, facesExit } from './challenge-controller';
 export const POSE_LABELS = {
   left: '내 왼팔 들기',
   right: '내 오른팔 들기',
@@ -55,7 +55,7 @@ export function PoseChallenge({
             disabled={
               starting ||
               !exit ||
-              self.dir !== exit.wall.side ||
+              !facesExit(self, exit) ||
               !!self.action ||
               self.restraintUntilTick !== null
             }

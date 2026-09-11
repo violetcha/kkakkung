@@ -29,6 +29,7 @@ export interface PannerLike extends AudioNodeLike {
 export interface SourceLike extends AudioNodeLike {
   start?(): void;
   stop?(): void;
+  onEnded?(listener: (() => void) | null): void;
 }
 
 /** 사용자 제스처로 이미 열린 AudioContext를 재사용한다. */
@@ -73,7 +74,7 @@ export interface AudioGraph {
 export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
   const voices = new Map<string, VoiceChain>();
   const playedEffects = new Set<string>();
-  const activeEffects = new Set<SourceLike>();
+  const activeEffects = new Map<SourceLike, () => void>();
   let lock: OutputLock = 'open';
   let disposed = false;
 
@@ -161,8 +162,23 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
         filter.connect(gain);
         gain.connect(panner);
         panner.connect(deps.environment.masterGain);
-        source.start?.();
-        activeEffects.add(source);
+        const cleanup = () => {
+          if (!activeEffects.delete(source)) return;
+          source.onEnded?.(null);
+          source.disconnect();
+          filter.disconnect();
+          gain.disconnect();
+          panner.disconnect();
+        };
+        activeEffects.set(source, cleanup);
+        source.onEnded?.(cleanup);
+        try {
+          source.start?.();
+        } catch (error) {
+          cleanup();
+          playedEffects.delete(effect.eventId);
+          throw error;
+        }
         played.push(effect.eventId);
       }
       return played;
@@ -185,9 +201,9 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
       disposed = true;
       for (const chain of voices.values()) teardown(chain);
       voices.clear();
-      for (const source of activeEffects) {
+      for (const [source, cleanup] of activeEffects) {
         source.stop?.();
-        source.disconnect();
+        cleanup();
       }
       activeEffects.clear();
       playedEffects.clear();

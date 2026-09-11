@@ -42,6 +42,8 @@ export type SessionRouteDeps = Readonly<{
   monotonicNow: () => number;
   /** Only honour proxy headers when F's trusted proxy path is configured. */
   trustProxy: boolean;
+  /** Reclaim expired reservations before a new admission checks capacity. */
+  cleanupReservations?: () => void;
 }>;
 
 function clientIp(req: Request, trustProxy: boolean): string | null {
@@ -75,6 +77,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       deps.monotonicNow(),
     );
     if (verdict !== 'allowed') return fail(res, 429, 'RATE_LIMITED');
+    deps.cleanupReservations?.();
     const nowMs = deps.monotonicNow();
     let roomCode: string;
     let issued: ReturnType<ProductSessionStore['issue']>;
