@@ -24,6 +24,7 @@ function body(overrides: Record<number, Raw> = {}): Raw[] {
     z: 0,
     visibility: 0.9,
   }));
+  points[POSE_KEY_POINTS.nose] = { x: 0.5, y: 0.1, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.leftShoulder] = { x: 0.4, y: 0.3, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.rightShoulder] = { x: 0.6, y: 0.3, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.leftHip] = { x: 0.42, y: 0.7, z: 0, visibility: 0.9 };
@@ -45,14 +46,12 @@ describe('readPoseSensor', () => {
     expect(Math.abs(lean!)).toBeLessThan(0.1);
   });
 
-  it('reports a forward and backward lean around the torso axis', () => {
+  it('uses face-to-shoulder depth for forward/back without relying on hips', () => {
     const forward = body({
-      [POSE_KEY_POINTS.leftShoulder]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
-      [POSE_KEY_POINTS.rightShoulder]: { x: 0.7, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.1, z: -0.1, visibility: 0.9 },
     });
     const back = body({
-      [POSE_KEY_POINTS.leftShoulder]: { x: 0.3, y: 0.3, z: 0, visibility: 0.9 },
-      [POSE_KEY_POINTS.rightShoulder]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.1, z: 0.1, visibility: 0.9 },
     });
 
     const leanForward = torsoLeanRad(normalizePoseLandmarks(forward)!);
@@ -73,18 +72,35 @@ describe('readPoseSensor', () => {
     expect(isUsableQuality(outcome.data.quality)).toBe(false);
   });
 
-  it('marks a seated body with hidden hips uncertain', () => {
+  it('accepts a seated upper body even when the hips are unseen or invalid', () => {
     const seated = body({
-      [POSE_KEY_POINTS.leftHip]: { x: 0.42, y: 0.7, z: 0, visibility: 0.2 },
-      [POSE_KEY_POINTS.rightHip]: { x: 0.58, y: 0.7, z: 0, visibility: 0.2 },
+      [POSE_KEY_POINTS.leftHip]: { x: Number.NaN, y: 1.5, z: 0, visibility: 0 },
+      [POSE_KEY_POINTS.rightHip]: { x: 0.58, y: 1.5, z: 0, visibility: 0 },
     });
     const outcome = readPoseSensor({ landmarks: [seated] });
     if (outcome.status !== 'valid') throw new Error('expected a valid pose');
 
-    expect(outcome.data.quality).toBe('uncertain');
+    expect(outcome.data.quality).toBe('valid');
+    expect(torsoLeanRad(outcome.data.landmarks as readonly PoseLandmark[])).toBe(0);
   });
 
-  it('reports missing for no body, a non finite coordinate or a flat torso', () => {
+  it('accepts face, shoulders and hands without any lower-body landmarks', () => {
+    const upperOnly = body().slice(0, POSE_KEY_POINTS.rightWrist + 1);
+    expect(readPoseSensor({ landmarks: [upperOnly] })).toMatchObject({
+      status: 'valid',
+      data: { quality: 'valid' },
+    });
+  });
+
+  it('refuses a hidden face or shoulder instead of inventing a neutral reference', () => {
+    for (const index of [POSE_KEY_POINTS.nose, POSE_KEY_POINTS.leftShoulder]) {
+      const points = body();
+      points[index]!.visibility = 0;
+      expect(readPoseSensor({ landmarks: [points] })).toEqual({ status: 'missing', data: null });
+    }
+  });
+
+  it('reports missing for no body, a non finite coordinate or a flat upper-body axis', () => {
     expect(readPoseSensor({ landmarks: [] })).toEqual({ status: 'missing', data: null });
     expect(readPoseSensor(null)).toEqual({ status: 'missing', data: null });
     const broken = body({
@@ -92,8 +108,7 @@ describe('readPoseSensor', () => {
     });
     expect(readPoseSensor({ landmarks: [broken] })).toEqual({ status: 'missing', data: null });
     const flat = body({
-      [POSE_KEY_POINTS.leftHip]: { x: 0.42, y: 0.3, z: 0, visibility: 0.9 },
-      [POSE_KEY_POINTS.rightHip]: { x: 0.58, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
     });
     expect(readPoseSensor({ landmarks: [flat] })).toEqual({ status: 'missing', data: null });
   });

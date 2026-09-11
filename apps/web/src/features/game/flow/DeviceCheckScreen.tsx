@@ -38,7 +38,10 @@ export function DeviceCheckScreen({
     <section className="device-check">
       <div>
         <h2>플레이 전 장치 점검</h2>
-        <p>정면을 보고 편안한 자세를 유지해 주세요. 마이크는 사용하지 않아도 됩니다.</p>
+        <p>
+          얼굴과 양쪽 어깨·팔꿈치·손이 화면에 들어오도록 앉아 정면을 봐 주세요. 골반이나 다리는
+          보이지 않아도 됩니다. 마이크는 사용하지 않아도 됩니다.
+        </p>
         <dl>
           {Object.entries(labels).map(([key, label]) => (
             <div key={key}>
@@ -71,7 +74,12 @@ export function DeviceCheckScreen({
           </button>
         </div>
         {status.errorCode && (
-          <p role="alert">장치를 확인한 뒤 다시 점검해 주세요. ({status.errorCode})</p>
+          <p role="alert">
+            {status.errorCode === 'CALIBRATION_NO_POSE'
+              ? '얼굴과 양쪽 어깨·팔꿈치·손이 모두 보이도록 카메라를 조정한 뒤 다시 보정해 주세요.'
+              : '장치를 확인한 뒤 다시 점검해 주세요.'}{' '}
+            ({status.errorCode})
+          </p>
         )}
       </div>
       <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />

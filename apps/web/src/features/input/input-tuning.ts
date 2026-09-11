@@ -2,7 +2,7 @@
 // 서버 행동 시간(move 9 Tick=450ms, turn 6 Tick=300ms)과 다른 값이며 섞지 않는다.
 
 /** 이 버전은 검사 증거에 남긴다. sensorTuningVersion은 D, poseTuningVersion은 C가 소유한다. */
-export const SENSOR_TUNING_VERSION = 'D-input-1';
+export const SENSOR_TUNING_VERSION = 'D-input-2-upper-body';
 
 export type InputTuning = Readonly<{
   tuningVersion: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { POSE_KEY_POINTS } from '../vision/pose-sensor';
+import { POSE_KEY_POINTS, readPoseSensor } from '../vision/pose-sensor';
 import type { SensorSnapshot } from '../vision/sensor-types';
 import { createCalibrator, isNeutralUsable, relativeToNeutral } from './calibration';
 import { INPUT_TUNING } from './input-tuning';
@@ -14,10 +14,11 @@ function poseLandmarks(leanOffset = 0) {
     z: 0,
     visibility: 0.9,
   }));
+  points[POSE_KEY_POINTS.nose] = { x: 0.5, y: 0.1, z: -leanOffset, visibility: 0.9 };
   points[POSE_KEY_POINTS.leftShoulder] = { x: 0.4 + leanOffset, y: 0.3, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.rightShoulder] = { x: 0.6 + leanOffset, y: 0.3, z: 0, visibility: 0.9 };
-  points[POSE_KEY_POINTS.leftHip] = { x: 0.4, y: 0.7, z: 0, visibility: 0.9 };
-  points[POSE_KEY_POINTS.rightHip] = { x: 0.6, y: 0.7, z: 0, visibility: 0.9 };
+  points[POSE_KEY_POINTS.leftHip] = { x: 0.4, y: 1.7, z: 0, visibility: 0 };
+  points[POSE_KEY_POINTS.rightHip] = { x: 0.6, y: 1.7, z: 0, visibility: 0 };
   return points;
 }
 
@@ -73,6 +74,22 @@ function feed(
 }
 
 describe('createCalibrator', () => {
+  it('calibrates normalized upper-body observations with no hips or legs in frame', () => {
+    const calibrator = createCalibrator();
+    calibrator.begin(GENERATION);
+    const pose = readPoseSensor({
+      landmarks: [poseLandmarks().slice(0, POSE_KEY_POINTS.rightWrist + 1)],
+    });
+    for (let index = 0; index < INPUT_TUNING.calibrationMinSamples; index++) {
+      const at = 1000 + index * 40;
+      const value = snapshot(index + 1, at);
+      calibrator.observe(
+        { ...value, pose: { frameId: index + 1, sampledAtMs: at, receivedAtMs: at, ...pose } },
+        at,
+      );
+    }
+    expect(calibrator.finish()).toMatchObject({ state: 'ready', errorCode: null });
+  });
   it('produces a neutral reference from enough stable samples', () => {
     const calibrator = createCalibrator();
     calibrator.begin(GENERATION);

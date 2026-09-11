@@ -42,10 +42,11 @@ function poseLandmarks() {
     z: 0,
     visibility: 0.9,
   }));
+  points[POSE_KEY_POINTS.nose] = { x: 0.5, y: 0.1, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.leftShoulder] = { x: 0.4, y: 0.3, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.rightShoulder] = { x: 0.6, y: 0.3, z: 0, visibility: 0.9 };
-  points[POSE_KEY_POINTS.leftHip] = { x: 0.4, y: 0.7, z: 0, visibility: 0.9 };
-  points[POSE_KEY_POINTS.rightHip] = { x: 0.6, y: 0.7, z: 0, visibility: 0.9 };
+  points[POSE_KEY_POINTS.leftHip] = { x: 0.4, y: 1.7, z: 0, visibility: 0 };
+  points[POSE_KEY_POINTS.rightHip] = { x: 0.6, y: 1.7, z: 0, visibility: 0 };
   return points;
 }
 

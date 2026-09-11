@@ -4,6 +4,7 @@ import type { ModelOutcome, PoseSensor, SensorQuality } from './sensor-types';
 
 /** PoseLandmarker canonical 인덱스 중 상체 판정에 쓰는 관절. */
 export const POSE_KEY_POINTS = Object.freeze({
+  nose: 0,
   leftShoulder: 11,
   rightShoulder: 12,
   leftElbow: 13,
@@ -17,12 +18,11 @@ export const POSE_KEY_POINTS = Object.freeze({
 /** 이 값 미만의 visibility는 해당 관절을 보지 못한 것으로 본다. */
 export const POSE_MIN_VISIBILITY = 0.5;
 
-/** 몸통 축을 세우는 데 필요한 필수 관절. 하나라도 없으면 자세를 판정하지 않는다. */
+/** 얼굴과 어깨로 상체 축을 잡는다. 화면 밖 골반·다리는 사용하지 않는다. */
 export const POSE_REQUIRED_POINTS = Object.freeze([
+  POSE_KEY_POINTS.nose,
   POSE_KEY_POINTS.leftShoulder,
   POSE_KEY_POINTS.rightShoulder,
-  POSE_KEY_POINTS.leftHip,
-  POSE_KEY_POINTS.rightHip,
 ]);
 
 type RawLandmark = Readonly<{ x: number; y: number; z: number; visibility?: number }>;
@@ -46,8 +46,15 @@ export function normalizePoseLandmarks(
   landmarks: readonly RawLandmark[],
 ): readonly PoseLandmark[] | null {
   const normalized: PoseLandmark[] = [];
-  for (const point of landmarks) {
-    if (!finite(point.x) || !finite(point.y) || !finite(point.z)) return null;
+  for (const [index, point] of landmarks.entries()) {
+    if (!finite(point.x) || !finite(point.y) || !finite(point.z)) {
+      // 화면 밖 하체의 추정 실패가 얼굴·상체·양손 보정을 막지 않게 한다.
+      if (index >= POSE_KEY_POINTS.leftHip) {
+        normalized.push({ x: 0, y: 0, z: 0, visibility: 0 });
+        continue;
+      }
+      return null;
+    }
     normalized.push({
       x: point.x,
       y: point.y,
@@ -63,24 +70,22 @@ export function isJointVisible(landmark: PoseLandmark | undefined): boolean {
 }
 
 /**
- * 몸통 축 기준 상체 기울임. 어깨 중점과 엉덩이 중점을 잇는 축의 기울기다.
- * 화면 y는 아래로 증가하므로 앞으로 숙이면 축이 짧아지고 좌우 기울임은 x 차이로 나온다.
- * 반환은 라디안이며 0이 수직이다.
+ * 코와 어깨 중점의 상대 깊이로 전후 기울임 신호를 만든다. 골반은 사용하지 않는다.
+ * MediaPipe z는 카메라에 가까울수록 작으므로 앞으로 숙이면 양수가 커진다.
+ * 개인별 얼굴 돌출·카메라 높이 차이는 중립 보정값을 빼서 제거한다.
+ * 인체의 절대 각도가 아닌 라디안 단위 입력 신호다.
  */
 export function torsoLeanRad(landmarks: readonly PoseLandmark[]): number | null {
+  const nose = landmarks[POSE_KEY_POINTS.nose];
   const leftShoulder = landmarks[POSE_KEY_POINTS.leftShoulder];
   const rightShoulder = landmarks[POSE_KEY_POINTS.rightShoulder];
-  const leftHip = landmarks[POSE_KEY_POINTS.leftHip];
-  const rightHip = landmarks[POSE_KEY_POINTS.rightHip];
-  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) return null;
-  const shoulderX = (leftShoulder.x + rightShoulder.x) / 2;
+  if (!nose || !leftShoulder || !rightShoulder) return null;
+  if (!POSE_REQUIRED_POINTS.every((index) => isJointVisible(landmarks[index]))) return null;
   const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
-  const hipX = (leftHip.x + rightHip.x) / 2;
-  const hipY = (leftHip.y + rightHip.y) / 2;
-  const dx = shoulderX - hipX;
-  const dy = hipY - shoulderY;
-  if (Math.abs(dy) < 1e-6) return null;
-  const lean = Math.atan2(dx, dy);
+  const shoulderZ = (leftShoulder.z + rightShoulder.z) / 2;
+  const dy = shoulderY - nose.y;
+  if (dy <= 1e-6) return null;
+  const lean = Math.atan2(shoulderZ - nose.z, dy);
   return finite(lean) ? lean : null;
 }
 
