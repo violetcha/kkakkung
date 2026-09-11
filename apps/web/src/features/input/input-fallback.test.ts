@@ -129,6 +129,16 @@ describe('createInputFallback', () => {
     // 같은 저하 상태에서는 모드 변경을 반복하지 않는다.
     expect(base.modes).toEqual(['keyboard']);
     expect(base.failures).toEqual(['CAMERA_ENDED', 'WORKER_ERROR']);
+    expect(base.clearHolds).toHaveBeenCalledOnce();
+  });
+
+  it('does not repeatedly clear keyboard holds while the same inference failure persists', () => {
+    const base = harness();
+    base.fallback.observe(snapshot(1, 1000), 1000, GENERATION);
+    for (const now of [2600, 2700, 2800, 2900]) base.fallback.observe(null, now, GENERATION);
+    expect(base.modes).toEqual(['keyboard']);
+    expect(base.clearHolds).toHaveBeenCalledOnce();
+    expect(base.failures).toEqual(['INFERENCE_STALLED']);
   });
 
   it('keeps the motion mode when only the microphone failed', () => {

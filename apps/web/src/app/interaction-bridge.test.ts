@@ -64,7 +64,7 @@ it('registers callbacks once, keeps sensor updates out of UI and ignores late di
   expect(runtime.dispose).toHaveBeenCalledOnce();
   expect(changed).toHaveBeenCalledTimes(2);
 });
-it('reattaches a D-owned preview only in device check and removes attachment without touching media', async () => {
+it('keeps the preview attached across practice, loading and play without remounting on state updates', async () => {
   let callbacks!: InteractionDeps;
   const runtime = {
     setContext: vi.fn(),
@@ -105,9 +105,54 @@ it('reattaches a D-owned preview only in device check and removes attachment wit
   bridge.setPreviewHost(null);
   bridge.setPreviewHost(host as unknown as HTMLElement);
   expect(host.appendChild).toHaveBeenCalledTimes(2);
-  bridge.setContext({ ...context, phase: 'PLAYING' });
+  for (const phase of [
+    'TEAM_PRACTICE',
+    'MAP_FINALIZING',
+    'GAME_LOADING',
+    'COUNTDOWN',
+    'PLAYING',
+  ] as const) {
+    bridge.setContext({ ...context, phase });
+    bridge.setContext({ ...context, phase, pageActive: false });
+    expect(element.parentElement).toBe(host);
+    expect(host.appendChild).toHaveBeenCalledTimes(2);
+  }
+  bridge.setContext({ ...context, phase: 'PLAYING', status: 'CAPTURED' });
   expect(element.parentElement).toBeNull();
   await bridge.dispose();
   callbacks.onLocalPreview(element as unknown as HTMLVideoElement);
   expect(host.appendChild).toHaveBeenCalledTimes(2);
+});
+
+it('reports fallback again after the user explicitly returns to motion mode', async () => {
+  let callbacks!: InteractionDeps;
+  const onInteractionState = vi.fn();
+  const bridge = createInteractionBridge(
+    {
+      sendCommand: vi.fn(),
+      requestMediaGrant: vi.fn(),
+      reportMediaStatus: vi.fn(),
+      requestBindingsRefresh: vi.fn(),
+      onDeviceStatus: vi.fn(),
+      onFaceTrack: vi.fn(),
+      onMediaStatus: vi.fn(),
+      onSensors: vi.fn(),
+      onInteractionState,
+      onLocalPreview: vi.fn(),
+    },
+    (deps) => {
+      callbacks = deps;
+      return {
+        setContext: vi.fn(),
+        dispose: vi.fn(async () => {}),
+      } as unknown as InteractionRuntime;
+    },
+  );
+  bridge.setContext(context);
+  callbacks.onInteractionState({ selectedEquipment: 'sensor', mode: 'keyboard' });
+  bridge.setContext({ ...context, mode: 'keyboard' });
+  bridge.setContext(context);
+  callbacks.onInteractionState({ selectedEquipment: 'sensor', mode: 'keyboard' });
+  expect(onInteractionState).toHaveBeenCalledTimes(2);
+  await bridge.dispose();
 });

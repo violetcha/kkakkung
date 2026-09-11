@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { requestSession, joinProductRoom, productRoomPort } from '../features/room/product-session';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
+import { LocalControls } from '../features/game/flow/LocalControls';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
@@ -214,6 +215,17 @@ export function ProductApp({
             value={snapshot.quality}
             onChange={(value) => runtime.current?.quality(value)}
           />
+          {round && !inResult && round.phase !== 'LOBBY' && (
+            <LocalControls
+              status={snapshot.devices}
+              mode={snapshot.interaction.mode}
+              previewHost={preview}
+              onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+              onMotion={async () => {
+                await runtime.current?.calibrateMotion();
+              }}
+            />
+          )}
           {snapshot.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
             <LobbyScreen roster={snapshot.roster} selfId={selfId} roomCode={code} />
           )}
@@ -221,7 +233,6 @@ export function ProductApp({
             <DeviceCheckScreen
               status={snapshot.devices}
               ready={snapshot.roster?.players.find((p) => p.playerId === selfId)?.ready ?? false}
-              previewHost={preview}
               onStart={async (microphone) => {
                 await runtime.current?.startDevices(microphone);
               }}

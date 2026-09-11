@@ -184,6 +184,7 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
   });
   return {
     runtime,
+    deps,
     track,
     processedTrack,
     faceTracks,
@@ -197,7 +198,7 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
       clock += ms;
     },
     now: () => clock,
-    emit: (frameId: number, generation = 1) =>
+    emit: (frameId: number, generation = 1, yawRad = 0.01, leanDepth = 0) =>
       workerHandler?.({
         data: {
           type: 'result',
@@ -206,9 +207,17 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
           sampledAtMs: clock,
           outcomes: {
             face: snapshot(frameId, clock, generation).face
-              ? { status: 'valid', data: { landmarks: [], yawRad: 0.01, quality: 'valid' } }
+              ? { status: 'valid', data: { landmarks: [], yawRad, quality: 'valid' } }
               : undefined,
-            pose: { status: 'valid', data: { landmarks: poseLandmarks(), quality: 'valid' } },
+            pose: {
+              status: 'valid',
+              data: {
+                landmarks: poseLandmarks().map((point, index) =>
+                  index === POSE_KEY_POINTS.nose ? { ...point, z: -leanDepth } : point,
+                ),
+                quality: 'valid',
+              },
+            },
           },
         },
       }),
@@ -217,12 +226,123 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
         data: { type: 'ready', runtimeGeneration: generation, loaded: ['face', 'pose', 'gesture'] },
       }),
     fireTimers: () => {
-      for (const handler of [...timers.values()]) handler();
+      const due = [...timers.values()];
+      timers.clear();
+      for (const handler of due) handler();
     },
   };
 }
 
 describe('createInteractionRuntime', () => {
+  it('turns both ways from fresh calibrated face samples and suppresses motion in keyboard mode', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const calibrating = base.runtime.calibrate();
+      for (let i = 1; i <= 8; i++) {
+        base.advance(40);
+        base.emit(i);
+      }
+      expect((await calibrating).calibration).toBe('ready');
+      const context = {
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      } as const;
+      base.runtime.setContext(context);
+      let frame = 9;
+      const observe = (yaw: number, lean = 0) => {
+        for (let i = 0; i < 18; i++) {
+          base.advance(50);
+          base.emit(frame++, 1, yaw, lean);
+        }
+      };
+      observe(0.7);
+      observe(0.01);
+      observe(-0.7);
+      expect(
+        vi
+          .mocked(base.deps.sendCommand)
+          .mock.calls.filter(([command]) => command.type === 'TURN')
+          .map(([command]) => command.payload),
+      ).toEqual([{ direction: 'right' }, { direction: 'left' }]);
+      observe(0.01, 0.2);
+      expect(base.deps.sendCommand).toHaveBeenCalledWith({
+        type: 'MOVE_INTENT',
+        payload: { direction: 'forward' },
+      });
+      base.runtime.setContext({ ...context, mode: 'keyboard' });
+      vi.mocked(base.deps.sendCommand).mockClear();
+      observe(0.7, 0.2);
+      expect(base.deps.sendCommand).not.toHaveBeenCalled();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('releases stale motion and falls back even when the Worker stops emitting entirely', async () => {
+    const keys = new Map<string, (event: KeyboardEvent) => void>();
+    const base = harness({
+      keyboardTarget: {
+        addEventListener: (type, listener) => {
+          keys.set(type, listener);
+        },
+        removeEventListener: (type) => {
+          keys.delete(type);
+        },
+      },
+    });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      });
+      base.emit(1);
+      base.advance(1600);
+      base.fireTimers();
+      expect(base.deps.onInteractionState).toHaveBeenCalledWith({
+        mode: 'keyboard',
+        selectedEquipment: 'sensor',
+      });
+      expect(base.statuses.at(-1)?.errorCode).toBe('INFERENCE_STALLED');
+      expect(base.statuses.at(-1)?.vision).toBe('loading');
+      const event = {
+        code: 'KeyW',
+        repeat: false,
+        isComposing: false,
+        target: null,
+        preventDefault() {},
+      } as KeyboardEvent;
+      keys.get('keydown')!(event);
+      base.advance(100);
+      base.fireTimers();
+      base.advance(100);
+      base.fireTimers();
+      const moves = vi
+        .mocked(base.deps.sendCommand)
+        .mock.calls.filter(([command]) => command.type === 'MOVE_INTENT')
+        .map(([command]) => command.payload);
+      expect(moves.length).toBeGreaterThanOrEqual(2);
+      expect(
+        moves.every((payload) => 'direction' in payload && payload.direction === 'forward'),
+      ).toBe(true);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
   it('assigns real effect buffers in the browser adapter and reuses PCM without reusing sources', async () => {
     const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
     const source = () => ({

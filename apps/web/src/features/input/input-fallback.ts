@@ -53,11 +53,15 @@ export function createInputFallback(deps: InputFallbackDeps): InputFallback {
   let lastFrameId: number | null = null;
 
   const degrade = (code: InputFailureCode) => {
+    const changed = lastFailure !== code;
     lastFailure = code;
+    if (degraded && mode === 'keyboard') {
+      if (changed) deps.onFailure(code);
+      return;
+    }
     // 장애 직전 held를 남기지 않는다. 새 키누름부터 다시 받는다.
     deps.clearHolds();
     deps.onFailure(code);
-    if (degraded && mode === 'keyboard') return;
     degraded = true;
     if (mode !== 'keyboard') {
       mode = 'keyboard';
