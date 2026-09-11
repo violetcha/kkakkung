@@ -14,7 +14,7 @@ export interface SyntheticMediaControl {
 }
 
 export function createSyntheticInteractionFactory(hooks: {
-  publish(grant: MediaGrant): Promise<void> | void;
+  publish(grant: MediaGrant): Promise<string>;
   close?(grant: MediaGrant): Promise<void> | void;
   control?(control: SyntheticMediaControl): void;
 }) {
@@ -77,8 +77,7 @@ export function createSyntheticInteractionFactory(hooks: {
       },
       publishMedia: async () => {
         if (!grant || state !== 'live') return null;
-        await hooks.publish(grant);
-        return null;
+        return hooks.publish(grant);
       },
       applyMediaBindings: (bindings) => {
         const self = bindings.participants.find((p) => p.mediaIdentity === grant?.mediaIdentity);

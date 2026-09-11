@@ -285,6 +285,7 @@ class Coordinator implements MediaCoordinatorRuntime {
       enqueueBindings: deps.enqueueBindings,
       enqueueAudioPolicy: deps.enqueueAudioPolicy,
       emitMetric: deps.emitMetric,
+      emitEvent: deps.emitEvent,
       isPermissionsAllowed: (g) =>
         !this.closed &&
         this.registry.isCurrent(g) &&

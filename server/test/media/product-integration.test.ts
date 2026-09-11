@@ -155,6 +155,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
           publish: async (grant) => {
             grants.push(grant);
             await server.publish(grant);
+            return `FACE_${grant.mediaIdentity}`;
           },
         }),
       });

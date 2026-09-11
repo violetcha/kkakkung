@@ -21,6 +21,7 @@ export type MediaPolicyBindingsOptions = Readonly<{
   enqueueBindings: MediaCoordinatorDeps['enqueueBindings'];
   enqueueAudioPolicy: MediaCoordinatorDeps['enqueueAudioPolicy'];
   emitMetric: MediaCoordinatorDeps['emitMetric'];
+  emitEvent?: MediaCoordinatorDeps['emitEvent'];
   onFailure: (generation: Generation, code: MediaFailureCode) => void;
   /** Existing healthy generations remain permitted during ordinary admission draining. */
   isPermissionsAllowed: (generation: Generation) => boolean;
@@ -78,12 +79,22 @@ export class MediaPolicyBindings {
         }
       },
       onChanged: (owner) => this.publish(owner.matchId, owner.mediaInstanceId),
-      onUnauthorized: (owner) => {
+      onUnauthorized: (owner, reason) => {
         const generation = this.findOwner(owner);
-        if (generation) this.fail(generation);
+        if (generation) {
+          this.diagnostic({
+            generation: generation.generation,
+            stage: 'track-validation',
+            code: reason,
+          });
+          this.fail(generation);
+        }
       },
     });
     this.subscriptions = new SubscriptionController({
+      allowResponseTimeoutMs:
+        options.config.subscriptionMode === 'publisher-permissions' ? 5000 : 1000,
+      onDiagnostic: (input) => this.diagnostic(input),
       now: options.monotonicNow,
       validateKey: (key) => {
         const generation = this.findReceiver(key);
@@ -102,7 +113,11 @@ export class MediaPolicyBindings {
           request.subscribe,
           {
             requestId: request.requestId,
-            deadlineMs: options.monotonicNow() + 1000,
+            deadlineMs:
+              options.monotonicNow() +
+              (request.subscribe && options.config.subscriptionMode === 'publisher-permissions'
+                ? 5000
+                : 1000),
             priority: request.subscribe ? 'normal' : 'cleanup',
             signal: this.registered.get(generation)!.signal,
             beforeDispatch: request.beforeDispatch,
@@ -313,6 +328,25 @@ export class MediaPolicyBindings {
         generation.generation === binding.publisherGeneration
       );
     });
+  }
+
+  private diagnostic(fields: {
+    generation: number;
+    stage: string;
+    code: string;
+    requestId?: string | null;
+    durationMs?: number;
+  }): void {
+    try {
+      this.options.emitEvent?.({
+        event: 'media.policy.uncertain',
+        level: 'warn',
+        atMs: this.options.monotonicNow(),
+        fields,
+      });
+    } catch {
+      /* Diagnostics cannot affect permission control. */
+    }
   }
 
   private fail(generation: Generation): void {

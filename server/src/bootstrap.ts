@@ -184,6 +184,7 @@ export function createApplication<State = unknown>(
   if (product?.createMediaCoordinator && product.mediaConfig) {
     media = product.createMediaCoordinator({
       config: { ...product.mediaConfig, productSecurityReady },
+      emitEvent: eventLogger.emit,
       emitMetric,
       enqueueControl: (control) => {
         const matchId = control.type === 'MEDIA_FAILED' ? control.matchId : control.result.matchId;

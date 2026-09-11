@@ -382,6 +382,7 @@ export type GameActivitySnapshot = Readonly<{
   pendingAdmissions: number;
 }>;
 export type MediaCoordinatorDeps = Readonly<{
+  emitEvent?: (event: import('../observability/StructuredEvents.js').StructuredEvent) => void;
   config: MediaConfiguration;
   emitMetric: EmitMetric;
   enqueueControl: (control: MediaControl) => void;

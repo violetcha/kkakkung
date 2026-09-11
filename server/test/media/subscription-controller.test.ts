@@ -172,3 +172,33 @@ describe('generation subscription controller', () => {
     expect(s.controller.inspect(key)?.acknowledgedTracks).toEqual([]);
   });
 });
+
+it('records only safe failure codes and keeps the terminal latch if diagnostics throws', async () => {
+  const diagnostics: unknown[] = [];
+  const failure = vi.fn();
+  const controller = new SubscriptionController({
+    now: () => 0,
+    timer: () => () => {},
+    validateKey: () => true,
+    validateTrack: () => true,
+    getTrackFingerprint: (_, sid) => sid,
+    onUnknown: failure,
+    onDiagnostic: (event) => {
+      diagnostics.push(event);
+      throw new Error('observer failed');
+    },
+    send: async (request) => {
+      request.beforeDispatch();
+      throw new Error('secret fixture credential');
+    },
+  });
+  controller.setDesired({ key, policyVersion: 1, trackSids: ['A'], generatedAtMs: 0 });
+  await flush();
+  expect(failure).toHaveBeenCalledOnce();
+  expect(controller.inspect(key)?.terminal).toBe(true);
+  expect(diagnostics).toContainEqual(
+    expect.objectContaining({ stage: 'allow-rejected', code: 'REQUEST_FAILED' }),
+  );
+  expect(JSON.stringify(diagnostics)).not.toContain('secret');
+  controller.dispose();
+});

@@ -578,3 +578,30 @@ describe('actual E policy and track bindings composition with synthetic Cloud tr
     expect(s.getParticipant).toHaveBeenCalledTimes(3);
   });
 });
+
+it('publisher permissions accepts a delayed allow while server-controlled keeps its 1s bound', async () => {
+  for (const subscriptionMode of ['publisher-permissions', 'server-controlled'] as const) {
+    const emitEvent = vi.fn();
+    const s = setup(2, { config: { ...config, subscriptionMode }, emitEvent });
+    const resolves: (() => void)[] = [];
+    s.updateSubscriptions.mockImplementation(
+      () => new Promise<void>((done) => resolves.push(done)),
+    );
+    await s.binding.reconcile();
+    await settle();
+    expect(resolves.length).toBeGreaterThan(0);
+    s.time(1500);
+    for (const resolve of resolves) resolve();
+    await settle();
+    if (subscriptionMode === 'publisher-permissions') expect(s.onFailure).not.toHaveBeenCalled();
+    else {
+      expect(s.onFailure).toHaveBeenCalled();
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'media.policy.uncertain',
+          fields: expect.objectContaining({ code: 'RESPONSE_TIMEOUT' }),
+        }),
+      );
+    }
+  }
+});

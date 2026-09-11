@@ -32,7 +32,7 @@ function fixture() {
     retireMediaGeneration: vi.fn(async () => {}),
     beginMediaGeneration: vi.fn(),
     getGenerationState: () => 'live',
-    publishMedia: vi.fn(async () => null),
+    publishMedia: vi.fn(async () => 'FACE_SELF'),
     getPublications: () => [],
     addRemoteTrack: vi.fn(),
     removeRemoteTrack: vi.fn(),
@@ -103,8 +103,9 @@ function fixture() {
     },
   };
 }
-async function mediaFixture(options: { failInitial?: boolean } = {}) {
+async function mediaFixture(options: { failInitial?: boolean; missingFace?: boolean } = {}) {
   const f = fixture();
+  if (options.missingFace) vi.mocked(f.fake.publishMedia).mockResolvedValue(null);
   let next = 0;
   f.fetcher.mockImplementation(async (url) =>
     url === MEDIA_ROUTES.report
@@ -639,4 +640,20 @@ it('recreates a disposed runtime for new match and rejects old view and command 
   f.messages.get('private-view')!(viewFixture({ stateVersion: 500 }));
   expect(f.runtime.getSnapshot().view).toBeNull();
   await f.runtime.leave();
+});
+
+it('reports and retires an empty face publication without requesting bindings', async () => {
+  const f = await mediaFixture({ missingFace: true });
+  await vi.waitFor(() =>
+    expect(f.runtime.getSnapshot().error).toContain('FACE_PUBLICATION_MISSING'),
+  );
+  expect(f.requests()).toContainEqual(
+    expect.objectContaining({
+      url: MEDIA_ROUTES.report,
+      body: expect.objectContaining({ status: 'failed' }),
+    }),
+  );
+  expect(f.fake.retireMediaGeneration).toHaveBeenCalled();
+  expect(f.send.mock.calls.some(([type]) => type === 'media-bindings-refresh')).toBe(false);
+  f.close();
 });

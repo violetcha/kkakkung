@@ -14,12 +14,14 @@ export class PolicyUncertainty {
 
   constructor(
     private readonly now: () => number,
-    private readonly onUnknown: () => void,
+    private readonly onUnknown: (
+      reason: 'REQUEST_FAILED' | 'RESPONSE_TIMEOUT' | 'BLOCK_TIMEOUT',
+    ) => void,
     private readonly timer: PolicyTimer = nodePolicyTimer,
   ) {}
 
-  sent(atMs: number): void {
-    this.requestDeadline = atMs + 1000;
+  sent(atMs: number, responseTimeoutMs = 1000): void {
+    this.requestDeadline = atMs + responseTimeoutMs;
     this.arm();
   }
   responded(): void {
@@ -35,15 +37,20 @@ export class PolicyUncertainty {
     this.securityDeadline = null;
     this.arm();
   }
-  fail(): void {
+  fail(reason: 'REQUEST_FAILED' | 'RESPONSE_TIMEOUT' | 'BLOCK_TIMEOUT' = 'REQUEST_FAILED'): void {
     if (this.terminal) return;
     this.terminal = true;
     this.cancelTimer?.();
     this.cancelTimer = null;
-    this.onUnknown();
+    this.onUnknown(reason);
   }
   check(): void {
-    if (!this.terminal && this.now() >= this.deadline()) this.fail();
+    if (!this.terminal && this.now() >= this.deadline())
+      this.fail(
+        (this.securityDeadline ?? Infinity) <= (this.requestDeadline ?? Infinity)
+          ? 'BLOCK_TIMEOUT'
+          : 'RESPONSE_TIMEOUT',
+      );
   }
   isTerminal(): boolean {
     return this.terminal;

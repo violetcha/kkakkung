@@ -652,6 +652,7 @@ export function bindProductRoom(
       () => false,
     );
     mediaJob = mediaJob.then(async () => {
+      let mediaStage = 'MEDIA_PREPARATION_FAILED';
       try {
         if (reported && !(await reported)) throw new Error('MEDIA_UNAVAILABLE');
         if (!current() || (recovery && !sameMediaScope(recovery.scope))) return;
@@ -689,14 +690,27 @@ export function bindProductRoom(
         }
         mediaScope = issuedScope;
         if (owner.runtime.getGenerationState() !== 'live') owner.runtime.beginMediaGeneration();
+        mediaStage = 'MEDIA_CONNECT_FAILED';
         await owner.runtime.connectMedia(grant);
         if (!current() || !sameMediaScope(grant)) return;
-        await owner.runtime.publishMedia();
+        mediaStage = 'MEDIA_PUBLISH_FAILED';
+        const faceSid = await owner.runtime.publishMedia();
+        if (!current() || !sameMediaScope(grant)) return;
+        if (!faceSid) {
+          mediaStage = 'FACE_PUBLICATION_MISSING';
+          try {
+            await post(MEDIA_ROUTES.report, { ...mediaScope, status: 'failed' });
+          } finally {
+            await retireAndReport(owner, mediaScope);
+          }
+          throw new Error('FACE_PUBLICATION_MISSING');
+        }
         if (!current() || !sameMediaScope(grant)) return;
         send('media-bindings-refresh', { ...mediaScope, lastBindingRevision: 0 });
         updateLoading();
       } catch {
-        if (current() && (recovery || !recoveryQueued)) error();
+        if (current() && (recovery || !recoveryQueued))
+          publish({ error: `미디어 준비에 실패했습니다. (${mediaStage})` });
       }
     });
     await mediaJob;

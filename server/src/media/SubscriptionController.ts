@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GatewayError } from './LiveKitGateway.js';
 import { PolicyUncertainty, type PolicyTimer } from './PolicyUncertainty.js';
 import type { MediaScope, MetricSample } from './types.js';
 
@@ -19,6 +20,15 @@ export type SubscriptionRequest = Readonly<{
 export type SubscriptionDependencies = Readonly<{
   now: () => number;
   timer?: PolicyTimer;
+  /** Only allow acknowledgements may use a longer window; block deadlines remain 1s. */
+  allowResponseTimeoutMs?: number;
+  onDiagnostic?: (input: {
+    requestId: string | null;
+    generation: number;
+    stage: string;
+    code: string;
+    durationMs: number;
+  }) => void;
   send: (request: SubscriptionRequest) => Promise<void>;
   validateKey: (key: SubscriptionKey) => boolean;
   validateTrack: (key: SubscriptionKey, trackSid: string) => boolean;
@@ -79,9 +89,14 @@ export class SubscriptionController {
       };
       const uncertainty = new PolicyUncertainty(
         this.deps.now,
-        () => {
+        (reason) => {
           const current = this.targets.get(id);
           if (!current || current.terminal) return;
+          this.diagnostic(
+            current,
+            current.inFlight?.subscribe ? 'allow-terminal' : 'block-terminal',
+            reason,
+          );
           current.terminal = true;
           current.desired.clear();
           try {
@@ -200,7 +215,10 @@ export class SubscriptionController {
         return false;
       permitted = true;
       request.sentAt = this.deps.now();
-      target.uncertainty.sent(request.sentAt);
+      target.uncertainty.sent(
+        request.sentAt,
+        request.subscribe ? (this.deps.allowResponseTimeoutMs ?? 1000) : 1000,
+      );
       this.metric(
         'media.policy.queueWait',
         request.sentAt - target.generatedAtMs,
@@ -261,7 +279,29 @@ export class SubscriptionController {
           this.updateBlockDeadline(target);
           this.drain(target);
         },
-        () => {
+        (error: unknown) => {
+          this.diagnostic(
+            target,
+            request.subscribe ? 'allow-rejected' : 'block-rejected',
+            error instanceof GatewayError &&
+              [
+                'not_found',
+                'permission_denied',
+                'unauthenticated',
+                'resource_exhausted',
+                'unavailable',
+                'internal',
+                'unknown',
+                'deadline_exceeded',
+                'invalid_argument',
+                'already_exists',
+                'failed_precondition',
+                'TRANSPORT_ERROR',
+                'REMOTE_ERROR',
+              ].includes(error.code)
+              ? error.code
+              : 'REQUEST_FAILED',
+          );
           if (target.terminal || target.inFlight !== request) {
             this.lateResponse(target, request.id, 'rejected');
             return;
@@ -321,6 +361,7 @@ export class SubscriptionController {
     requestId: string,
     outcome: 'resolved' | 'rejected',
   ): void {
+    this.diagnostic(state, 'late-response', outcome);
     try {
       this.deps.onLateResponse?.({
         requestId,
@@ -329,6 +370,19 @@ export class SubscriptionController {
       });
     } catch {
       /* Diagnostics cannot reopen or break a terminal target. */
+    }
+  }
+  private diagnostic(state: TargetState, stage: string, code: string): void {
+    try {
+      this.deps.onDiagnostic?.({
+        requestId: state.inFlight?.id ?? null,
+        generation: state.key.receiverGeneration,
+        stage,
+        code,
+        durationMs: state.inFlight?.sentAt == null ? 0 : this.deps.now() - state.inFlight.sentAt,
+      });
+    } catch {
+      /* Diagnostics cannot affect permission control. */
     }
   }
   private id(key: SubscriptionKey): string {

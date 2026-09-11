@@ -182,6 +182,7 @@ export interface MediaCoordinator {
   close(): Promise<void>;
 }
 export type MediaCoordinatorDeps = Readonly<{
+  emitEvent?: (event: import('../observability/StructuredEvents.js').StructuredEvent) => void;
   config: MediaConfiguration;
   emitMetric: (sample: MetricSample) => void;
   enqueueControl: (control: MediaControl) => void;

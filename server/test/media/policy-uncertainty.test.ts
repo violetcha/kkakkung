@@ -131,3 +131,61 @@ describe('policy uncertainty', () => {
     expect(controller.inspect(key)?.terminal).toBe(true);
   });
 });
+
+it('allows a bounded 5s response but preserves a new 1s block deadline and rejects late success', async () => {
+  let now = 0;
+  let resolve!: () => void;
+  const failure = vi.fn();
+  const diagnostic = vi.fn();
+  const controller = new SubscriptionController({
+    now: () => now,
+    timer: () => () => {},
+    allowResponseTimeoutMs: 5000,
+    validateKey: () => true,
+    validateTrack: () => true,
+    getTrackFingerprint: (_, sid) => sid,
+    onUnknown: failure,
+    onDiagnostic: diagnostic,
+    send: async (request) => {
+      request.beforeDispatch();
+      await new Promise<void>((done) => {
+        resolve = done;
+      });
+    },
+  });
+  controller.setDesired({ key, policyVersion: 1, trackSids: ['A'], generatedAtMs: 0 });
+  await flush();
+  now = 1500;
+  controller.checkDeadlines();
+  expect(failure).not.toHaveBeenCalled();
+  controller.setDesired({ key, policyVersion: 2, trackSids: [], generatedAtMs: now });
+  now = 2499;
+  controller.checkDeadlines();
+  expect(failure).not.toHaveBeenCalled();
+  now = 2500;
+  controller.checkDeadlines();
+  expect(failure).toHaveBeenCalledOnce();
+  expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'BLOCK_TIMEOUT' }));
+  resolve();
+  await flush();
+  expect(controller.inspect(key)).toMatchObject({ terminal: true, acknowledgedTracks: [] });
+  expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ stage: 'late-response' }));
+  controller.dispose();
+});
+it('accepts an allow at 1500ms but terminates an unanswered allow at 5000ms', () => {
+  let now = 0;
+  const failed = vi.fn();
+  const latch = new PolicyUncertainty(
+    () => now,
+    failed,
+    () => () => {},
+  );
+  latch.sent(0, 5000);
+  now = 1500;
+  latch.responded();
+  expect(failed).not.toHaveBeenCalled();
+  latch.sent(now, 5000);
+  now = 6500;
+  latch.check();
+  expect(failed).toHaveBeenCalledWith('RESPONSE_TIMEOUT');
+});
