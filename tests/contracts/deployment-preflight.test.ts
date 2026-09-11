@@ -39,7 +39,12 @@ function setup() {
     preflightPath,
     sourceCommit: plan.sourceCommit,
     nowEpochMs,
-    env: { SMOKE_COOKIE: 'local-test-cookie', OPS_TOKEN: 'local-test-operator' },
+    env: {
+      SMOKE_INTERNAL_TOKEN: 'a'.repeat(64),
+      OPS_TOKEN: 'local-test-operator',
+      SMOKE_INTERNAL_BASE_URL: 'http://127.0.0.1:18081',
+      SMOKE_PUBLIC_BASE_URL: 'https://example.test',
+    },
   };
 }
 it('uses the exact approved QA evidence directory instead of release/smoke', () => {
@@ -48,7 +53,7 @@ it('uses the exact approved QA evidence directory instead of release/smoke', () 
     resolve(input.root, '.local/qa/local-fixture'),
   );
 });
-it.each(['SMOKE_COOKIE', 'OPS_TOKEN'])(
+it.each(['SMOKE_INTERNAL_TOKEN', 'OPS_TOKEN'])(
   'refuses absent %s before release adapters can run',
   (key) => {
     const input = setup();

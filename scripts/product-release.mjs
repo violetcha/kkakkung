@@ -33,10 +33,11 @@ try {
   if (statSync(opt.envFile).size > 64 * 1024) throw new Error('ENV_FILE_TOO_LARGE');
   const privateEnv = parseEnv(readFileSync(opt.envFile, 'utf8'));
   const allowed =
-    /^(LIVEKIT_|OPS_|MEDIA_|INVITE_|SESSION_|ROOM_IDLE_|SERVICE_NAMESPACE$|SMOKE_COOKIE$)/;
+    /^(LIVEKIT_|OPS_|MEDIA_|INVITE_|SESSION_|ROOM_IDLE_|SERVICE_NAMESPACE$|SMOKE_INTERNAL_TOKEN$|SMOKE_INTERNAL_BASE_URL$)/;
   const env = { ...process.env };
   for (const [key, value] of Object.entries(privateEnv)) if (allowed.test(key)) env[key] = value;
   env.OPS_EVIDENCE_DIR = resolve(opt.evidenceDir);
+  env.SMOKE_PUBLIC_BASE_URL = opt.baseUrl;
   const prepared = await checkProductDeployment({
     env,
     baseUrl: opt.baseUrl,

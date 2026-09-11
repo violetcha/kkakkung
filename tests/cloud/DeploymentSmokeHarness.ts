@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { validateSmokeTarget } from '../../scripts/lib/smoke-target.mjs';
 import { setTimeout as pause } from 'node:timers/promises';
 import { Client, type Room } from '@colyseus/sdk';
 import {
@@ -41,6 +42,8 @@ export type DeploymentSmokeOptions = {
   mode: 'cloud' | 'local-contract';
   baseUrl: string;
   cookie: string;
+  publicBaseUrl?: string;
+  internalToken?: string;
   opsToken: string;
   origin: string;
   preflight: CloudPreflight;
@@ -59,14 +62,11 @@ export async function runDeploymentSmoke(
   const started = options.startedAtEpochMs ?? Date.now();
   if (!Number.isSafeInteger(started) || started > Date.now()) throw new Error('DP06_INVALID_START');
   validateDeploymentSmokePlan(options.preflight, options.deviceManifest, started);
-  if (
-    options.mode === 'cloud' &&
-    (!/^https:\/\/[a-z0-9.-]+$/.test(options.baseUrl) ||
-      options.origin !== options.baseUrl ||
-      !options.cookie ||
-      options.advanceLocalRound)
-  )
-    throw new Error('DP06_CLOUD_TARGET_OR_EXECUTION_POLICY_INVALID');
+  if (options.mode === 'cloud') {
+    validateSmokeTarget(options.baseUrl, options.publicBaseUrl ?? '', options.internalToken ?? '');
+    if (options.origin !== options.publicBaseUrl || options.cookie || options.advanceLocalRound)
+      throw new Error('DP06_CLOUD_TARGET_OR_EXECUTION_POLICY_INVALID');
+  }
   if (!options.opsToken) throw new Error('DP06_OPERATOR_TOKEN_MISSING');
   const report: DeploymentSmokeReport = {
     evidenceScope:
@@ -127,6 +127,7 @@ export async function runDeploymentSmoke(
     const headers = new Headers(init?.headers);
     headers.set('origin', options.origin);
     if (options.cookie) headers.set('cookie', options.cookie);
+    if (options.internalToken) headers.set('x-kkakkung-smoke-key', options.internalToken);
     const response = await fetch(options.baseUrl + path, {
       ...init,
       headers,
@@ -230,11 +231,19 @@ export async function runDeploymentSmoke(
   try {
     stage = 'DP06_ISOLATION_OR_READINESS_FAILED';
     if (options.mode === 'cloud') {
-      const response = await fetch(options.baseUrl + '/api/config', {
+      const response = await fetch(options.publicBaseUrl + '/api/config', {
         redirect: 'manual',
         signal: AbortSignal.timeout(10_000),
       });
       if (![301, 302, 401, 403].includes(response.status)) throw new Error('DP06_ISOLATION');
+      for (const headers of [new Headers(), new Headers({ 'x-kkakkung-smoke-key': 'invalid' })]) {
+        const rejected = await fetch(options.baseUrl + '/api/config', {
+          headers,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (rejected.status !== 403) throw new Error('DP06_INTERNAL_AUTH_NOT_ENFORCED');
+      }
     }
     const ready = await api('/health/ready');
     if (ready.state !== 'READY' || !healthy(await status(), 'OPEN'))
@@ -252,6 +261,7 @@ export async function runDeploymentSmoke(
       headers: {
         origin: options.origin,
         ...(options.cookie ? { cookie: options.cookie } : {}),
+        ...(options.internalToken ? { 'x-kkakkung-smoke-key': options.internalToken } : {}),
       },
     });
     let roomCode: string | undefined;

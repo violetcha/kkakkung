@@ -76,7 +76,7 @@ if (manifest.profile === 'product') {
       root,
       preflightPath: opt.preflight,
       sourceCommit: manifest.releaseSha,
-      env: process.env,
+      env: { ...process.env, SMOKE_PUBLIC_BASE_URL: opt.baseUrl },
       nowEpochMs: Date.now(),
     });
   } catch {
@@ -191,11 +191,15 @@ const adapters = {
           ]
         : ['scripts/deployment-smoke.mjs', '--base-url', opt.baseUrl, '--evidence', smokeDir];
     return new Promise((resolveCode) => {
-      // The child inherits the environment (SMOKE_COOKIE / LiveKit names) but stdout is ours.
+      // The child inherits the environment (internal smoke key / LiveKit names) but stdout is ours.
       const child = spawn(process.execPath, cmd, {
         cwd: root,
         stdio: 'inherit',
-        env: { ...process.env, SMOKE_BASE_URL: opt.baseUrl },
+        env: {
+          ...process.env,
+          SMOKE_PUBLIC_BASE_URL: opt.baseUrl,
+          SMOKE_BASE_URL: process.env.SMOKE_INTERNAL_BASE_URL,
+        },
       });
       child.on('exit', (code) => resolveCode({ code: code ?? 1 }));
       child.on('error', () => resolveCode({ code: 1 }));

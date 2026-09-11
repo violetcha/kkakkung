@@ -94,3 +94,24 @@ Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 
 ## 비밀값
 
 `.env`, `*.pem` 은 커밋 금지 (루트 `.gitignore`). 운영 비밀값은 `infra/production.env.example` 을 토대로 만든 파일을 Jenkins **Secret file** 크리덴셜 `kkakkung-production-env` 에만 둔다. 배포 때 `/opt/kkakkung/production.env`(600) 로 내려가 `compose.production.yaml` 의 `env_file` 로 game-server 에 주입된다. 이미지·compose·MR·채팅에 값을 쓰지 않는다. 필요하면 인프라에게.
+
+## 자동 배포 시험 인증
+
+DP-06 자동 게임·LiveKit 시험은 개인 SSO 쿠키 대신 호스트 내부 Nginx
+`http://127.0.0.1:18081`과 전용 `SMOKE_INTERNAL_TOKEN`을 사용한다.
+키는 암호학적 난수 32바이트의 hex 64자리이며 `OPS_TOKEN`과 별개다.
+Jenkins `kkakkung-production-env`에 `SMOKE_INTERNAL_TOKEN`과
+`SMOKE_INTERNAL_BASE_URL=http://127.0.0.1:18081`을 보관한다.
+브라우저 코드, 공개 프록시, Git 저장소에는 키를 넣지 않는다.
+
+호스트 root 전용 키 파일을 준비한 뒤
+`node scripts/write-smoke-proxy.mjs /opt/kkakkung/smoke-internal.key /etc/nginx/conf.d/kkakkung-smoke.conf`로
+설정을 만들고 `nginx -t` 후 reload한다. 포트는 반드시 loopback에만 바인딩한다.
+HTTP와 WebSocket 모두 전용 헤더 인증을 거치며 키 누락·불일치는 403이다.
+공개 HTTPS의 SSO는 유지한다. Cloud 시험은 공개 주소의 익명 접근 차단을 별도로 검사한다.
+개인 GitLab 로그인 성공은 자동 게임 시험의 검증 범위가 아니며 별도 수동 SSO 점검으로 기록한다.
+
+승인 preflight의 credentialEnvNames에서는 SMOKE_COOKIE를 SMOKE_INTERNAL_TOKEN으로 교체한다.
+기존 예산·만료·검증 결과를 갱신한 것으로 간주하지 않는다.
+키 교체 시 root 키 파일, 생성 Nginx 설정, Jenkins 환경 파일을 함께 바꾸고 재검증한다.
+시험 종료 시 내부 listener를 제거하고 키를 폐기해 회수할 수 있다.

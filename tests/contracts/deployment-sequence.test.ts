@@ -704,10 +704,8 @@ describe('wiring: Jenkinsfile and infra/deploy.sh go through the runner only', (
     expect(deploySh).not.toMatch(/docker build/);
   });
 
-  it('the operator policy comes from the secret file and the SSO cookie is separately bound', () => {
-    expect(jenkinsfile).toContain(
-      "string(credentialsId: 'kkakkung-smoke-cookie', variable: 'SMOKE_COOKIE')",
-    );
+  it('operator and internal smoke policy come from the secret file without a personal cookie', () => {
+    expect(jenkinsfile).not.toContain('kkakkung-smoke-cookie');
     expect(jenkinsfile).toContain("credentialsId: 'kkakkung-production-env'");
     expect(jenkinsfile).toContain('--check-only');
     expect(jenkinsfile).not.toMatch(/echo[^\n]*OPS_TOKEN/);

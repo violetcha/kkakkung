@@ -4,10 +4,16 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadCloudPreflight } from '../../tests/cloud/CloudPreflight.ts';
 import { validateDeploymentSmokePlan } from '../../tests/cloud/DeploymentSmokePlan.ts';
+import { validateSmokeTarget } from './smoke-target.mjs';
 
 export function prepareDeploymentSmoke({ root, preflightPath, sourceCommit, env, nowEpochMs }) {
-  if (!preflightPath || !env.SMOKE_COOKIE || !env.OPS_TOKEN)
+  if (!preflightPath || !env.SMOKE_INTERNAL_TOKEN || !env.OPS_TOKEN)
     throw new Error('DP06_PREFLIGHT_OR_CREDENTIALS_MISSING');
+  validateSmokeTarget(
+    env.SMOKE_INTERNAL_BASE_URL,
+    env.SMOKE_PUBLIC_BASE_URL,
+    env.SMOKE_INTERNAL_TOKEN,
+  );
   const preflight = loadCloudPreflight(resolve(root, preflightPath), {
     expectedCase: 'DP-06',
     nowEpochMs,

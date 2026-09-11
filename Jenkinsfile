@@ -130,18 +130,16 @@ pipeline {
         script {
           withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {
             if (env.DEPLOY_PROFILE == 'product') {
-              withCredentials([string(credentialsId: 'kkakkung-smoke-cookie', variable: 'SMOKE_COOKIE')]) {
-                sh '''
-                  set +x
-                  node --import tsx scripts/product-release.mjs --check-only --env-file "$PROD_ENV_FILE" \
-                    --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
-                    --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
-                  install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"
-                  node --import tsx scripts/product-release.mjs --env-file "$STATE_DIR/production.env" \
-                    --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
-                    --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
-                '''
-              }
+              sh '''
+                set +x
+                node --import tsx scripts/product-release.mjs --check-only --env-file "$PROD_ENV_FILE" \
+                  --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
+                  --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
+                install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"
+                node --import tsx scripts/product-release.mjs --env-file "$STATE_DIR/production.env" \
+                  --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
+                  --sha "$GIT_SHA" --base-url "$PUBLIC_URL" --state-dir "$STATE_DIR"
+              '''
             } else {
               sh '''
                 install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"

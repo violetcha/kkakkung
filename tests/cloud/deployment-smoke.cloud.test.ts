@@ -17,9 +17,10 @@ const deviceManifest: unknown = JSON.parse(
 );
 validateDeploymentSmokePlan(preflight, deviceManifest, Date.now());
 const baseUrl = process.env.SMOKE_BASE_URL ?? '';
-const cookie = process.env.SMOKE_COOKIE ?? '';
+const publicBaseUrl = process.env.SMOKE_PUBLIC_BASE_URL ?? '';
+const internalToken = process.env.SMOKE_INTERNAL_TOKEN ?? '';
 const opsToken = process.env.OPS_TOKEN ?? '';
-if (!/^https:\/\/[a-z0-9.-]+$/.test(baseUrl) || !cookie || !opsToken)
+if (!baseUrl || !publicBaseUrl || !internalToken || !opsToken)
   throw new Error('DP06_TARGET_OR_CREDENTIALS_MISSING');
 
 it(
@@ -34,8 +35,10 @@ it(
       result = await runDeploymentSmoke({
         mode: 'cloud',
         baseUrl,
-        origin: baseUrl,
-        cookie,
+        origin: publicBaseUrl,
+        publicBaseUrl,
+        internalToken,
+        cookie: '',
         opsToken,
         preflight,
         deviceManifest,
@@ -70,6 +73,8 @@ it(
             browsersClosed,
             withinApprovedDuration,
             deviceAcceptance: 'NOT_RUN',
+            authentication: 'LOOPBACK_DEDICATED_KEY',
+            ssoLoginAcceptance: 'NOT_RUN',
             note: 'Synthetic Cloud smoke; no camera, gesture, spatial playback or representative device acceptance.',
           },
           null,
