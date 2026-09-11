@@ -38,6 +38,7 @@ export async function checkProductDeployment(input: {
   )
     failures.push('PUBLIC_WINDOW_TOO_SHORT');
   const options = {
+    subscriptionMode: config.subscriptionMode,
     opsDataDir: resolve(input.evidenceDir),
     projectAlias: config.livekit.projectAlias,
     namespace: config.namespace,

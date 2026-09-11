@@ -23,6 +23,10 @@ export type AudioEffect = Readonly<{
 
 export type AudioPolicy = MediaScope &
   Readonly<{
+    publisherPermissions?: readonly Readonly<{
+      participantIdentity: string;
+      allowedTrackSids: readonly string[];
+    }>[];
     policyRevision: number;
     bindingRevision: number;
     stateVersion: number;
@@ -79,6 +83,25 @@ export function isPolicyShape(value: unknown): value is AudioPolicy {
   if (!isFiniteNumber(policy.policyRevision) || !isFiniteNumber(policy.bindingRevision))
     return false;
   if (!isFiniteNumber(policy.stateVersion)) return false;
+  if (policy.publisherPermissions !== undefined) {
+    const entries = policy.publisherPermissions;
+    if (
+      !Array.isArray(entries) ||
+      entries.length > 5 ||
+      !entries.every((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return false;
+        const p = entry as Record<string, unknown>;
+        return (
+          typeof p.participantIdentity === 'string' &&
+          p.participantIdentity.length > 0 &&
+          Array.isArray(p.allowedTrackSids) &&
+          p.allowedTrackSids.length <= 2 &&
+          p.allowedTrackSids.every((sid: unknown) => typeof sid === 'string' && sid.length > 0)
+        );
+      })
+    )
+      return false;
+  }
   if (!Array.isArray(policy.voices) || !policy.voices.every(isVoiceShape)) return false;
   if (!Array.isArray(policy.effects) || !policy.effects.every(isEffectShape)) return false;
   return true;

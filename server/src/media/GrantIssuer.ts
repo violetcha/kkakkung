@@ -174,6 +174,9 @@ export class GrantIssuer {
         receiverGeneration: generation.generation,
         code: null,
         grant: {
+          ...(d.config.subscriptionMode === 'publisher-permissions'
+            ? { subscriptionMode: 'publisher-permissions' as const }
+            : {}),
           matchId: input.matchId,
           mediaInstanceId: input.mediaInstanceId,
           receiverGeneration: generation.generation,
@@ -211,7 +214,14 @@ export class GrantIssuer {
 
   private async sign(generation: Generation): Promise<string> {
     const report = this.deps.capability();
-    if (report?.status !== 'SUPPORTED' || !report.grantProfile)
+    if (
+      report?.status !== 'SUPPORTED' ||
+      !report.grantProfile ||
+      (report.subscriptionMode ?? 'server-controlled') !==
+        (this.deps.config.subscriptionMode ?? 'server-controlled') ||
+      report.grantProfile.canSubscribe !==
+        (this.deps.config.subscriptionMode === 'publisher-permissions')
+    )
       throw new Error('CAPABILITY_UNVERIFIED');
     const token = new AccessToken(this.deps.config.apiKey, this.deps.config.apiSecret, {
       identity: generation.identity,
@@ -224,7 +234,7 @@ export class GrantIssuer {
       roomJoin: true,
       room: generation.roomName,
       canPublishData: false,
-      canSubscribe: false,
+      canSubscribe: this.deps.config.subscriptionMode === 'publisher-permissions',
       canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
       roomAdmin: false,
       roomRecord: false,

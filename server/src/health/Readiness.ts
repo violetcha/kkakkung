@@ -201,6 +201,8 @@ export class ReadinessGate {
       const report = parseCapabilityReport(o.capability());
       if (
         report.status !== 'SUPPORTED' ||
+        (report.subscriptionMode ?? 'server-controlled') !==
+          (this.config.subscriptionMode ?? 'server-controlled') ||
         report.cloudProjectAlias !== this.config.projectAlias ||
         report.namespace !== this.config.namespace ||
         report.sdkVersion !== LIVEKIT_SDK_VERSION ||

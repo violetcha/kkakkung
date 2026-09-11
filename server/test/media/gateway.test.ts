@@ -6,6 +6,7 @@ import { LiveKitGateway, type GatewayObservation } from '../../src/media/LiveKit
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const config = {
@@ -27,6 +28,61 @@ function createGateway(observe?: (event: GatewayObservation) => void) {
 }
 
 describe('installed SDK gateway with intercepted transport (no Cloud)', () => {
+  it('accepts a response after one second without replaying or extending the queue deadline', async () => {
+    const timeouts: number[] = [];
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      timeouts.push(ms);
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms).unref();
+      return controller.signal;
+    });
+    const fetch = vi.fn(
+      (_input: unknown, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('timeout')));
+          setTimeout(() => resolve(Response.json({ rooms: [] })), 1500);
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const { gateway, budget } = createGateway();
+    const result = gateway.listRooms();
+    await expect(result).resolves.toEqual([]);
+    expect(timeouts).toEqual([10_000]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(budget.getSnapshot().total60s).toBe(1);
+    budget.close();
+  });
+
+  it('uses the configured transport timeout and keeps failures outcome-unknown without replay', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetch = vi.fn(async () => {
+      throw new Error('timeout');
+    });
+    vi.stubGlobal('fetch', fetch);
+    const { budget } = createGateway();
+    const gateway = new LiveKitGateway(config, budget, {
+      monotonicNow: () => 10,
+      requestTimeoutMs: 7500,
+    });
+    await expect(gateway.createRoom({ name: 'synthetic' })).rejects.toMatchObject({
+      outcomeUnknown: true,
+    });
+    expect(timeout).toHaveBeenCalledWith(7500);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    budget.close();
+  });
+
+  it.each([0, -1, NaN, Infinity, 1.5, 2 ** 32])(
+    'rejects invalid transport timeout %s before any call',
+    (requestTimeoutMs) => {
+      const { budget } = createGateway();
+      expect(
+        () => new LiveKitGateway(config, budget, { monotonicNow: () => 10, requestTimeoutMs }),
+      ).toThrow('INVALID_CLOUD_REQUEST_TIMEOUT');
+      expect(budget.getSnapshot().total60s).toBe(0);
+      budget.close();
+    },
+  );
   it('preserves validated provider wait metadata but never invents a discarded Retry-After header', async () => {
     const fetch = vi.fn(async () =>
       Response.json({ code: 'resource_exhausted', meta: { retry_after: '12' } }, { status: 429 }),

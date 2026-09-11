@@ -6,7 +6,7 @@ export type MinimumGrantProfile = Readonly<{
   roomJoin: true;
   room: string;
   canPublishData: false;
-  canSubscribe: false;
+  canSubscribe: boolean;
   canPublishSources: readonly ['camera', 'microphone'] | readonly ['microphone', 'camera'];
   roomAdmin: false;
   roomRecord: false;
@@ -21,6 +21,7 @@ export type RevocationProfile = Readonly<{
 }>;
 
 export type CapabilityReport = Readonly<{
+  subscriptionMode?: 'publisher-permissions';
   status: 'SUPPORTED' | 'BLOCKED';
   sdkVersion: string;
   cloudProjectAlias: string;
@@ -73,7 +74,7 @@ function number(input: unknown, field: string, integer: boolean, minimum = 0): n
   return input;
 }
 
-function grant(input: unknown): MinimumGrantProfile {
+function grant(input: unknown, publisherMode: boolean): MinimumGrantProfile {
   const data = record(
     input,
     [
@@ -91,7 +92,8 @@ function grant(input: unknown): MinimumGrantProfile {
   );
   if (
     data.roomJoin !== true ||
-    ['canPublishData', 'canSubscribe', 'roomAdmin', 'roomRecord', 'roomCreate', 'roomList'].some(
+    data.canSubscribe !== publisherMode ||
+    ['canPublishData', 'roomAdmin', 'roomRecord', 'roomCreate', 'roomList'].some(
       (key) => data[key] !== false,
     ) ||
     !Array.isArray(data.canPublishSources) ||
@@ -105,7 +107,7 @@ function grant(input: unknown): MinimumGrantProfile {
     roomJoin: true,
     room: identifier(data.room, 'grantProfile.room'),
     canPublishData: false,
-    canSubscribe: false,
+    canSubscribe: publisherMode,
     canPublishSources: Object.freeze(['camera', 'microphone'] as const),
     roomAdmin: false,
     roomRecord: false,
@@ -142,6 +144,7 @@ function revocation(input: unknown): RevocationProfile {
 
 /** Validates structure only. E's MC-01 harness measures Cloud behavior; F approves the evidence. */
 export function parseCapabilityReport(input: unknown): CapabilityReport {
+  const publisherMode = !!input && typeof input === 'object' && 'subscriptionMode' in input;
   const data = record(
     input,
     [
@@ -156,9 +159,12 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
       'forbiddenRejected',
       'revocationVerified',
       'evidenceRefs',
+      ...(publisherMode ? ['subscriptionMode'] : []),
     ],
     'report',
   );
+  if (publisherMode && data.subscriptionMode !== 'publisher-permissions')
+    throw new InvalidCapabilityReport('subscriptionMode');
   if (data.status !== 'SUPPORTED' && data.status !== 'BLOCKED') {
     throw new InvalidCapabilityReport('status');
   }
@@ -186,7 +192,7 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
   if (new Set(evidenceRefs).size !== evidenceRefs.length) {
     throw new InvalidCapabilityReport('evidenceRefs');
   }
-  const grantProfile = data.grantProfile === null ? null : grant(data.grantProfile);
+  const grantProfile = data.grantProfile === null ? null : grant(data.grantProfile, publisherMode);
   const revocationProfile =
     data.revocationProfile === null ? null : revocation(data.revocationProfile);
   if (
@@ -202,6 +208,7 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
   }
   return Object.freeze({
     status: data.status,
+    ...(publisherMode ? { subscriptionMode: 'publisher-permissions' as const } : {}),
     sdkVersion: identifier(data.sdkVersion, 'sdkVersion'),
     cloudProjectAlias: identifier(data.cloudProjectAlias, 'cloudProjectAlias'),
     namespace: identifier(data.namespace, 'namespace'),
@@ -221,6 +228,7 @@ export type CapabilityLoadResult =
 
 /** No environment access, network calls, or permissive fallback is performed by this loader. */
 export async function loadCapabilityReport(options: {
+  subscriptionMode?: 'server-controlled' | 'publisher-permissions';
   opsDataDir: string;
   projectAlias: string;
   namespace: string;
@@ -251,6 +259,11 @@ export async function loadCapabilityReport(options: {
     return { status: 'blocked', report: null, reasons: ['CAPABILITY_REPORT_INVALID'] };
   }
   const reasons: string[] = [];
+  if (
+    (report.subscriptionMode ?? 'server-controlled') !==
+    (options.subscriptionMode ?? 'server-controlled')
+  )
+    reasons.push('CAPABILITY_SUBSCRIPTION_MODE_MISMATCH');
   if (report.status !== 'SUPPORTED') reasons.push('CLOUD_CAPABILITY_BLOCKED');
   if (report.cloudProjectAlias !== options.projectAlias)
     reasons.push('CAPABILITY_PROJECT_MISMATCH');

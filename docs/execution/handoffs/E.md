@@ -1,10 +1,40 @@
 # E 공개 인계 기록
 
+## S15P21C204-174 제출 기준
+
+- Jira: [S15P21C204-174](https://ssafy.atlassian.net/browse/S15P21C204-174), 담당 이주헌, 상위 에픽 S15P21C204-44.
+- 제출 브랜치: `feat/S15P21C204-174-livekit-publisher-permissions` → `develop`. 사용자의 스토리 생성·커밋·푸시 요청에 따라 검증된 최종 변경을 제출용 단일 커밋으로 묶었다. 아래 임시 브랜치·Jira 미지정·푸시 미실행 설명은 시험 당시 기록이다.
+- 실제 Cloud 시험 원본 SHA `09c2a2912905083f8b817d903c919debe3b5dae2`는 그대로 보존한다. 제출 시 제품 코드·시험 코드·설정이 원본과 동일한지 Git diff로 확인하며 제출 메타데이터만 인계 문서에 추가한다. 이전 로컬 시험 브랜치는 증거 추적용으로 남긴다.
+- MR 본문을 제공하며 MR 생성·병합·제품 배포·실제 6대 완주는 별도다.
+
+## 2026-09-11 내부 6인 송신 허용 목록 — 구현·실제 Cloud 통과
+
+- 사용자 승인: “내부 테스트 우선 — 송신 허용 목록 방식 적용”. 정상 팀 송신 앱을 전제로 하는 1방·6인 예외다. 변조된 송신 앱에 대한 서버 단독 통제 또는 공개 운영 통과를 의미하지 않는다. 기본 `server-controlled`의 아래 실패 기록은 유지한다.
+- 구현 SHA `09c2a2912905083f8b817d903c919debe3b5dae2`, 브랜치 `codex/livekit-cloud-timeout`. `MEDIA_SUBSCRIPTION_MODE=publisher-permissions`를 명시하고 동일 모드의 capability 보고서가 있어야 발급한다. 다른 프로필의 보고서로 readiness/배포 사전 검사를 통과할 수 없다.
+- B/E/D 연결: grant에 프로필을 전달하고 AudioPolicy에 송신자의 전체 Identity·트랙별 허용 목록을 넣는다. 현재 scope·bindingRevision·새 policyRevision만 반영하고, 자기 게시 SID만 SFU에 허용한다. 게시 전 빈 목록, 권위 프레임별 lease 갱신, 1.5초 갱신 중단·재연결·세대 종료 시 철회를 적용한다. 같은 목록 갱신은 SDK 설정 호출을 반복하지 않으며 기존 API 예산을 유지한다.
+- `localStage`: **INTEGRATED**. `pnpm verify` 통과: 214파일 2,095시험, 브라우저 E2E 4개, 타입/lint/빌드/실제 모델 Worker 검사. 실제 장치 카메라 시험은 아니다.
+- 실제 MC-01 R9: 2026-09-11 10:19:40–10:20:01 KST, 위 구현 SHA, `kkakkung` / `kkakkung-ec2`, **SUPPORTED(publisher-permissions)**. 영상 표식과 660/880/1100Hz 음성 수신, 금지 수신자의 직접 구독 차단, 금지→허용 대조, 허용 철회 후 재구독 차단 통과. 기존·갱신·미입장 토큰 모두 401, 동일 초 발급/회수 및 새 Identity 정상 접속 통과. 19,123ms, 정상 API 4회·정리 17회, 참가자 및 시험 방 부재 확인.
+- 원본 증거: 서버 `/opt/kkakkung/preflight-6280538/.local/qa/MC-01-r9/`. 검토/배포 준비용 사본: `/opt/kkakkung/runtime-evidence/MC-01-r9/`, capability 보고서 `/opt/kkakkung/runtime-evidence/capability-report.json`. `capability-evidence.json` SHA-256: `30fc8849cd576d1eabb1e7671031bef858ab785e9513f0fb48fb5dd2e542a6df`. 로컬 사본은 해당 작업 디렉터리 `.local/qa/MC-01-r9/`이며 다른 팀원의 checkout에 있다고 가정하지 않는다.
+- `blockedOn`: 이 변경의 develop 반영, Jenkins Secret file의 내부 시험 정책 반영, 공식 잔여 예산·namespace/최초 설치·감사 증거의 최종 운영 파일, 제품 배포 readiness, 실제 6대 연습→경기→종료→재경기. 실제 합성 Cloud 통과를 이들 전체 완료로 확장하지 않는다.
+- 사용자 Git 신원으로 로컬 커밋했다. 새 Jira는 미지정이다. GitLab 푸시·MR·원격 병합·제품 배포는 실행하지 않았다. 운영 중 컨테이너와 비밀 환경 파일은 변경하지 않았다.
+
+## 2026-09-11 실제 Cloud 재시험 — 수신 권한 BLOCKED
+
+- 당시 기본 서버 통제 모드의 결과다. 시작 `fdaf8e3af8724143b1d242ccc8ff8bb9d696c436`, 브랜치 `codex/livekit-cloud-timeout`. 새 Jira 미지정으로 기존 스토리 키를 재사용하지 않았다. 사용자 승인 범위는 코드 제한 수정·실제 재시험·통과한 증거와 운영 정책 반영이며 제품 배포는 포함하지 않는다.
+- `LiveKitGateway` HTTP 응답 제한을 기본 10초로 변경하고 제품에서는 `operationTimeoutMs`를 전달한다. 대기열 발송 제한과 구독 보안 UNKNOWN 1초, 자동 failover 금지, API 예산, 회수 cutoff는 유지한다.
+- `localStage`: 로컬 검사 통과. `pnpm verify`의 214파일 2,089시험, E2E 4개, 빌드·실제 모델 Worker 검사 통과. 이후 Cloud 시험 진단 변경은 QA 타입 검사와 capability harness 36시험으로 추가 확인했다. Worker 검사는 실제 카메라나 실제 6명 시험이 아니다.
+- 실제 MC-01 최종 시험 SHA `d63aed24ab20c7fddee3004fd09b32ccb2aa1f9d`, Cloud `kkakkung`, namespace `kkakkung-ec2`. 서버 격리 체크아웃 `/opt/kkakkung/preflight-6280538/.local/qa/MC-01-r5/`의 `run-summary.json`, `capability-evidence.json`, `capability-report.json`이 원본이다. 디렉터리 이름과 최종 시험 SHA는 다르므로 증거의 sourceCommit을 따른다.
+- 실제 성공: 방 생성·참가자 연결·게시 트랙 확인, 퇴장 기존/SDK 갱신/미입장 토큰의 재접속 401 거절, 같은 초 발급·회수, 새 Identity 정상 접속, 참가자 회수와 방 삭제 후 부재 확인. 최종 시험 22,471ms, 정상 API 3회·정리 16회. 원본·갱신 토큰은 프로세스/브라우저 메모리에서만 사용한다.
+- `blockedOn`: `MC01_RECEPTION_UNCONFIRMED`. `canSubscribe:false` 수신자에게 서버 `updateSubscriptions`가 성공 응답해도 10초 뒤 실제 구독 0개·수신 0 bytes·영상/음성 미검출이다. 연결 true·게시 트랙 2개로 확인됐으며 허용 수신·금지 수신 대조·원격 구독 해제 후 차단 증거는 통과하지 않았다. 독립적인 토큰 회수 통과만으로 전체 SUPPORTED를 만들지 않는다.
+- 동일 증상의 [LiveKit 공개 이슈 #4651](https://github.com/livekit/livekit/issues/4651)가 열려 있다. 현 프로젝트의 서버 원인 확정은 아니며 배포된 Cloud 버전/해당 조합 지원 확인이 필요하다. `canSubscribe:true`나 로컬 음소거로 바꿔 통과시킨 것이 아니다. 권한 방식 변경은 B/D와 공개 계약·금지 수신 방어를 함께 재설계하고 실제 재시험해야 한다.
+- 시험 한도는 회당 방 1개·Identity 최대 5개·본 시험 240초+정리 60초, 예약 25 participant-min/300 MB이며 이번 3회는 서로 종료·정리를 확인한 뒤 순차 실행했다. 대시보드 최근 30일 표시 0초/0 bytes와 Build 명목 제공량을 관측했고 후속 시험은 앞선 예약 전체를 보수적으로 차감했다. 계정 공유 잔량·보고 지연을 독립 측정한 공식 운영 잔여량으로 승격하지 않는다.
+- Nginx 및 SSO 기존 설정은 유지한다. 실패한 capability report를 제품 통과 증거로 배치하지 않았으며 운영 정책은 후보 상태다. 제품 배포·GitLab 푸시·MR·Jira 변경은 하지 않았다. 수신 통과 후 공식 잔여량과 운영 증거를 갱신하고 정책을 적용해야 한다.
+
 전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
 
 수정자: **E** · 2026-09-10 · [담당 계획](../e-media-operations.md) · [공통 규칙](../common.md)
 
-이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 아래 **2026-09-10 전체 연결 검증**이다. S15P21C204-170과 E-01~E-16 항목은 당시 검증·인계를 보존하며 과거의 선행 미도착 설명보다 최신 항목을 우선한다. 병합과 최종 기능 인수는 구분한다.
+이 파일은 팀원 AI가 E의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. 최신 작업은 위 **2026-09-11 실제 Cloud 재시험**이다. 아래 전체 연결 검증과 S15P21C204-170, E-01~E-16 항목은 당시 검증·인계를 보존하며 과거의 선행 미도착 설명보다 최신 항목을 우선한다. 병합과 최종 기능 인수는 구분한다.
 
 ## 2026-09-10 전체 연결 검증
 

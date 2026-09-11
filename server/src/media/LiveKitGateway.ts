@@ -9,6 +9,7 @@ import {
 import { ApiBudget, type ApiKind, type ApiPriority } from '../operations/ApiBudget.js';
 
 export const LIVEKIT_SDK_VERSION = '2.18.0';
+export const DEFAULT_CLOUD_REQUEST_TIMEOUT_MS = 10_000;
 
 export type GatewayClient = Pick<
   RoomServiceClient,
@@ -43,6 +44,8 @@ export type GatewayObservation = Readonly<{
 
 export type GatewayOptions = Readonly<{
   monotonicNow: () => number;
+  /** Transport wait only; queue and policy security deadlines remain independent. */
+  requestTimeoutMs?: number;
   observe?: (observation: GatewayObservation) => void;
   clientFactory?: (
     httpUrl: string,
@@ -145,9 +148,16 @@ export class LiveKitGateway {
       options.clientFactory ??
       ((host, key, secret, clientOptions) =>
         new RoomServiceClient(host, key, secret, clientOptions));
+    const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_CLOUD_REQUEST_TIMEOUT_MS;
+    if (
+      !Number.isSafeInteger(requestTimeoutMs) ||
+      requestTimeoutMs <= 0 ||
+      requestTimeoutMs > 2 ** 32 - 1
+    )
+      throw new Error('INVALID_CLOUD_REQUEST_TIMEOUT');
     // Timeout is in seconds. Disabling implicit region replay is necessary for exact accounting.
     this.client = factory(config.httpUrl, config.apiKey, config.apiSecret, {
-      requestTimeout: 1,
+      requestTimeout: requestTimeoutMs / 1000,
       failover: false,
     });
   }
@@ -237,6 +247,7 @@ export class LiveKitGateway {
       target,
       kind,
       priority: context?.priority ?? defaultPriority,
+      // This is a queue dispatch deadline, not the in-flight HTTP response timeout.
       deadlineMs: context?.deadlineMs ?? this.options.monotonicNow() + 1_000,
       signal: context?.signal,
       beforeDispatch: context?.beforeDispatch,

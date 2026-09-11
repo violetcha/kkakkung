@@ -51,6 +51,10 @@ export type MediaBindings = MediaScope &
   Readonly<{ bindingRevision: number; participants: readonly MediaBinding[] }>;
 export type AudioPolicy = MediaScope &
   Readonly<{
+    publisherPermissions?: readonly Readonly<{
+      participantIdentity: string;
+      allowedTrackSids: readonly string[];
+    }>[];
     policyRevision: number;
     bindingRevision: number;
     stateVersion: number;
@@ -72,6 +76,7 @@ export type AudioPolicy = MediaScope &
   }>;
 export type MediaGrant = MediaScope &
   Readonly<{
+    subscriptionMode?: 'publisher-permissions';
     url: string;
     token: string;
     roomName: string;
@@ -191,6 +196,7 @@ export type MediaCoordinatorDeps = Readonly<{
   }>;
 }>;
 export type MediaConfiguration = Readonly<{
+  subscriptionMode?: 'server-controlled' | 'publisher-permissions';
   httpUrl: string;
   wsUrl: string;
   apiKey: string;
