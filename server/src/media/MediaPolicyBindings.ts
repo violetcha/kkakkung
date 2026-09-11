@@ -16,7 +16,7 @@ import type {
 export type MediaPolicyBindingsOptions = Readonly<{
   registry: MediaGenerationRegistry;
   gateway: LiveKitGateway;
-  config: Pick<MediaConfiguration, 'apiKey' | 'apiSecret'>;
+  config: Pick<MediaConfiguration, 'apiKey' | 'apiSecret' | 'subscriptionMode'>;
   monotonicNow: () => number;
   enqueueBindings: MediaCoordinatorDeps['enqueueBindings'];
   enqueueAudioPolicy: MediaCoordinatorDeps['enqueueAudioPolicy'];
@@ -262,7 +262,12 @@ export class MediaPolicyBindings {
           this.options.enqueueBindings(generation.request.playerId, structuredClone(bindings));
         if (this.publishVersions.get(scope) !== version) return;
         if (!this.allowed(generation) || !audible) continue;
-        const policy = this.projection.project(audible, generation.request.playerId, bindings);
+        const policy = this.projection.project(
+          audible,
+          generation.request.playerId,
+          bindings,
+          this.options.config.subscriptionMode === 'publisher-permissions',
+        );
         if (!policy) continue;
         this.options.enqueueAudioPolicy(generation.request.playerId, structuredClone(policy));
         if (this.publishVersions.get(scope) !== version) return;

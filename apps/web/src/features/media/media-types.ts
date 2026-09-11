@@ -12,6 +12,7 @@ export type MediaScope = Readonly<{
 
 export type MediaGrant = MediaScope &
   Readonly<{
+    subscriptionMode?: 'publisher-permissions';
     url: string;
     token: string;
     roomName: string;
@@ -81,7 +82,11 @@ export function isSameScope(left: MediaScope, right: MediaScope): boolean {
 
 /** 실제 SDK Room의 최소 인터페이스. Node 시험에서 주입한다. */
 export interface MediaRoomPort {
-  connect(url: string, token: string, options: { autoSubscribe: false }): Promise<void>;
+  connect(
+    url: string,
+    token: string,
+    options: { autoSubscribe: false; subscriptionMode?: 'publisher-permissions' },
+  ): Promise<void>;
   disconnect(): Promise<void>;
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeAllListeners(): void;

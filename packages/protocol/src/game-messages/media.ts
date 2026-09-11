@@ -31,6 +31,16 @@ export type MediaBindings = z.infer<typeof mediaBindingsSchema>;
 
 const gainSchema = z.number().finite().min(0).max(1);
 export const audioPolicySchema = mediaScopeSchema.extend({
+  /** Internal six-person test: sender applies this complete SFU allowlist. */
+  publisherPermissions: z
+    .array(
+      z.strictObject({
+        participantIdentity: idSchema,
+        allowedTrackSids: z.array(idSchema).max(2),
+      }),
+    )
+    .max(5)
+    .optional(),
   policyRevision: revision,
   bindingRevision: revision,
   stateVersion: revision,
@@ -64,6 +74,7 @@ export const mediaGrantRequestSchema = z.strictObject({
 export type MediaGrantRequest = z.infer<typeof mediaGrantRequestSchema>;
 
 export const mediaGrantSchema = mediaScopeSchema.extend({
+  subscriptionMode: z.literal('publisher-permissions').optional(),
   url: z.string().min(1),
   token: z.string().min(1),
   roomName: z.string().min(1),

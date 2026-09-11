@@ -144,3 +144,30 @@ describe('capability report input validation (local only)', () => {
     }
   });
 });
+
+it('requires matching evidence and configuration for the internal publisher profile', async () => {
+  const input = {
+    ...fixture(),
+    subscriptionMode: 'publisher-permissions',
+    grantProfile: { ...fixture().grantProfile, canSubscribe: true },
+  };
+  expect(parseCapabilityReport(input).grantProfile?.canSubscribe).toBe(true);
+  expect(() => parseCapabilityReport({ ...input, grantProfile: fixture().grantProfile })).toThrow(
+    'grantProfile',
+  );
+  const dir = await mkdtemp(join(tmpdir(), 'publisher-profile-'));
+  temporaryDirectories.push(dir);
+  await writeFile(join(dir, 'capability-report.json'), JSON.stringify(input));
+  const options = {
+    opsDataDir: dir,
+    projectAlias: input.cloudProjectAlias,
+    namespace: input.namespace,
+  };
+  expect(await loadCapabilityReport(options)).toMatchObject({
+    status: 'blocked',
+    reasons: ['CAPABILITY_SUBSCRIPTION_MODE_MISMATCH'],
+  });
+  expect(
+    await loadCapabilityReport({ ...options, subscriptionMode: 'publisher-permissions' }),
+  ).toMatchObject({ status: 'supported' });
+});

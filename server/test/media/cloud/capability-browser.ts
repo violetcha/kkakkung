@@ -23,6 +23,8 @@ export type Measurement = {
   marker: Marker | null;
   frequency: number | null;
   bytesReceived: number;
+  audioContextState: AudioContextState;
+  audioBytesReceived: number;
 };
 export type ConnectionResult = {
   outcome: 'connected' | 'denied' | 'unconfirmed';
@@ -41,11 +43,16 @@ const received = new Map<
   {
     track: RemoteTrack;
     video?: HTMLVideoElement;
+    audioElement?: HTMLAudioElement;
     analyser?: AnalyserNode;
     source?: MediaStreamAudioSourceNode;
   }
 >();
 const audio = new AudioContext();
+// Keep the analyser graph rendering without playing synthetic sound on the test host.
+const silentOutput = audio.createGain();
+silentOutput.gain.value = 0;
+silentOutput.connect(audio.destination);
 
 function attach(track: RemoteTrack) {
   if (track.kind === Track.Kind.Video) {
@@ -58,18 +65,26 @@ function attach(track: RemoteTrack) {
     void video.play().catch(() => {});
     received.set(track.sid!, { track, video });
   } else if (track.kind === Track.Kind.Audio) {
+    const audioElement = document.createElement('audio');
+    audioElement.autoplay = true;
+    audioElement.volume = 0;
+    track.attach(audioElement);
+    document.body.append(audioElement);
+    void audioElement.play().catch(() => {});
     const source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
     const analyser = audio.createAnalyser();
     analyser.fftSize = 2048;
-    source.connect(analyser);
-    received.set(track.sid!, { track, source, analyser });
+    source.connect(analyser).connect(silentOutput);
+    received.set(track.sid!, { track, source, analyser, audioElement });
   }
 }
 function detach(sid: string) {
   const entry = received.get(sid);
   entry?.track.detach();
   entry?.video?.remove();
+  entry?.audioElement?.remove();
   entry?.source?.disconnect();
+  entry?.analyser?.disconnect();
   received.delete(sid);
 }
 async function disconnect() {
@@ -79,7 +94,11 @@ async function disconnect() {
   room = null;
   for (const sid of received.keys()) detach(sid);
 }
-async function connect(url: string, token: string): Promise<ConnectionResult> {
+async function connect(
+  url: string,
+  token: string,
+  publisherMode = false,
+): Promise<ConnectionResult> {
   await disconnect();
   endpoint = url;
   initialToken = token;
@@ -89,6 +108,7 @@ async function connect(url: string, token: string): Promise<ConnectionResult> {
     dynacast: false,
     reconnectPolicy: { nextRetryDelayInMs: () => null },
   });
+  if (publisherMode) room.localParticipant.setTrackSubscriptionPermissions(false, []);
   room
     .on(RoomEvent.TrackSubscribed, attach)
     .on(RoomEvent.TrackUnsubscribed, (track) => detach(track.sid!));
@@ -140,6 +160,7 @@ async function publish() {
   gain.gain.value = 0.1;
   const destination = audio.createMediaStreamDestination();
   oscillator.connect(gain).connect(destination);
+  gain.connect(silentOutput);
   oscillator.start();
   const draw = () => {
     drawing.fillStyle = `rgb(${colors[marker].join(',')})`;
@@ -181,10 +202,14 @@ async function measure(): Promise<Measurement> {
   let seen: Marker | null = null;
   let frequency: number | null = null;
   let bytesReceived = 0;
+  let audioBytesReceived = 0;
   for (const { track, video, analyser } of received.values()) {
     const stats = await track.getRTCStatsReport();
     stats?.forEach((stat) => {
-      if (stat.type === 'inbound-rtp') bytesReceived += Number(stat.bytesReceived ?? 0);
+      if (stat.type === 'inbound-rtp') {
+        bytesReceived += Number(stat.bytesReceived ?? 0);
+        if (track.kind === Track.Kind.Audio) audioBytesReceived += Number(stat.bytesReceived ?? 0);
+      }
     });
     if (video && video.readyState >= 2) {
       const canvas = document.createElement('canvas');
@@ -215,9 +240,25 @@ async function measure(): Promise<Measurement> {
     marker: seen,
     frequency,
     bytesReceived,
+    audioBytesReceived,
+    audioContextState: audio.state,
   };
 }
 export const probe = {
+  restrictTracks: (permissions: { participantIdentity: string; allowedTrackSids: string[] }[]) => {
+    if (!room) throw new Error('MC01_NOT_CONNECTED');
+    room.localParticipant.setTrackSubscriptionPermissions(
+      false,
+      permissions.map((p) => ({ ...p, allowAll: false })),
+    );
+  },
+  restrictSubscribers: (identities: string[]) => {
+    if (!room) throw new Error('MC01_NOT_CONNECTED');
+    room.localParticipant.setTrackSubscriptionPermissions(
+      false,
+      identities.map((participantIdentity) => ({ participantIdentity, allowAll: true })),
+    );
+  },
   connect,
   reconnect,
   disconnect,

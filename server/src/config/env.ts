@@ -52,6 +52,9 @@ const environment = z.object({
     .regex(/^[a-z0-9-]+$/)
     .default('kkakkung-local'),
   MEDIA_MODE: z.enum(['disabled', 'livekit']).default('disabled'),
+  MEDIA_SUBSCRIPTION_MODE: z
+    .enum(['server-controlled', 'publisher-permissions'])
+    .default('server-controlled'),
   // Capacity: one room is six seats. The service cap is rooms * 6 and only rooms that were
   // actually load-tested may be opened (QA-10/QA-11 raise this step by step).
   MAX_ROOMS: z.coerce.number().int().min(1).max(10).default(1),
@@ -130,6 +133,8 @@ export function parseConfig(input: Record<string, string | undefined>) {
     throw new Error('ALLOWED_ORIGINS must contain exact HTTP origins');
   if (raw.MAX_SLOTS !== raw.MAX_ROOMS * 6)
     throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
+  if (raw.MEDIA_SUBSCRIPTION_MODE === 'publisher-permissions' && raw.MAX_ROOMS !== 1)
+    throw new Error('Publisher permissions are limited to one internal six-person test room');
 
   const livekit = group(
     raw,
@@ -228,6 +233,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
+    subscriptionMode: raw.MEDIA_SUBSCRIPTION_MODE,
     publicWindow: publicWindow
       ? {
           opensAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS,

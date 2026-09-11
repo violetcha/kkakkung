@@ -10,6 +10,7 @@
 // 소유권 주의: 원본 카메라·마이크 track과 가공 Canvas track은 D가 소유한다. SDK가 대신
 // stop하지 않도록 disconnect·unpublish·replaceTrack의 stop 인수를 모두 D 소유 쪽으로 준다.
 // retireMediaGeneration이 원본 장치를 살려 두는 계약이 여기에 걸려 있다.
+import type { AudioPolicy } from './audio-policy';
 import { ROOM_EVENTS, type MediaRoomPort } from './media-types';
 import type { RemoteTrack } from './remote-faces';
 import type { PublishOptions, PublisherPort } from './track-publisher';
@@ -36,6 +37,14 @@ export interface SdkLocalTrackPublication {
 }
 
 export interface SdkLocalParticipant {
+  setTrackSubscriptionPermissions(
+    allParticipantsAllowed: boolean,
+    permissions: {
+      participantIdentity?: string;
+      allowAll?: boolean;
+      allowedTrackSids?: string[];
+    }[],
+  ): void;
   publishTrack(
     track: MediaStreamTrack,
     options?: SdkPublishOptions,
@@ -80,6 +89,8 @@ export type LiveKitAdapterHooks = Readonly<{
 }>;
 
 export interface LiveKitAdapter {
+  applyPublisherPermissions(policy: AudioPolicy): void;
+  clearPublisherPermissions(): void;
   /** media-session이 세대마다 부른다. 이 Room이 현재 세대의 유일한 Room이 된다. */
   createRoom(): MediaRoomPort;
   /** 현재 Room의 LocalParticipant 기반 게시 port. Room이 없으면 null이다. */
@@ -90,7 +101,13 @@ export interface LiveKitAdapter {
   getAudioTrack(trackSid: string): MediaStreamTrack | null;
 }
 
+export const PUBLISHER_PERMISSION_LEASE_MS = 1500;
 type RoomState = {
+  publisherMode: boolean;
+  revision: number;
+  permissions: NonNullable<AudioPolicy['publisherPermissions']>;
+  permissionFingerprint: string;
+  lease: ReturnType<typeof setTimeout> | null;
   readonly room: SdkRoom;
   readonly remoteTracks: Map<string, SdkRemoteTrack>;
   readonly remotePublications: Map<string, SdkRemoteTrackPublication>;
@@ -116,7 +133,28 @@ export function createLiveKitAdapter(
 ): LiveKitAdapter {
   let current: RoomState | null = null;
 
+  const applyPermissions = (state: RoomState) => {
+    if (!state.publisherMode) return;
+    const permissions = state.permissions
+      .map((entry) => ({
+        participantIdentity: entry.participantIdentity,
+        allowAll: false,
+        allowedTrackSids: entry.allowedTrackSids.filter((sid) => state.localPublications.has(sid)),
+      }))
+      .filter((entry) => entry.allowedTrackSids.length > 0);
+    const fingerprint = JSON.stringify(permissions);
+    if (fingerprint === state.permissionFingerprint) return;
+    state.room.localParticipant.setTrackSubscriptionPermissions(false, permissions);
+    state.permissionFingerprint = fingerprint;
+  };
+  const clearPermissions = (state: RoomState) => {
+    if (state.lease !== null) clearTimeout(state.lease);
+    state.lease = null;
+    state.permissions = [];
+    applyPermissions(state);
+  };
   const forget = (state: RoomState) => {
+    clearPermissions(state);
     if (current !== state) return;
     state.remoteTracks.clear();
     state.remotePublications.clear();
@@ -158,6 +196,13 @@ export function createLiveKitAdapter(
       hooks.onRemoteTrackRemoved(trackSid);
     };
 
+    for (const event of [
+      ROOM_EVENTS.reconnecting,
+      ROOM_EVENTS.signalReconnecting,
+      ROOM_EVENTS.disconnected,
+    ]) {
+      state.room.on(event, () => clearPermissions(state));
+    }
     state.room.on(ROOM_EVENTS.trackSubscribed, onSubscribed as (...args: never[]) => void);
     state.room.on(ROOM_EVENTS.trackUnsubscribed, onUnsubscribed as (...args: never[]) => void);
   };
@@ -173,6 +218,7 @@ export function createLiveKitAdapter(
           ...(options.videoEncoding ? { videoEncoding: options.videoEncoding } : {}),
         });
         state.localPublications.set(publication.trackSid, publication);
+        if (current === state) applyPermissions(state);
         return { trackSid: publication.trackSid };
       },
       async unpublishTrack(track: MediaStreamTrack) {
@@ -201,9 +247,15 @@ export function createLiveKitAdapter(
 
   return {
     createRoom() {
+      if (current) clearPermissions(current);
       const room = new sdk.Room();
       const state: RoomState = {
         room,
+        publisherMode: false,
+        revision: -1,
+        permissions: [],
+        permissionFingerprint: '',
+        lease: null,
         remoteTracks: new Map(),
         remotePublications: new Map(),
         localPublications: new Map(),
@@ -211,9 +263,15 @@ export function createLiveKitAdapter(
       current = state;
       bindSubscriptions(state);
       return {
-        connect: (url, token, options) => room.connect(url, token, options),
+        connect: (url, token, options) => {
+          state.publisherMode = options.subscriptionMode === 'publisher-permissions';
+          // Deny before connect or any publication; never inherit SDK default allow-all.
+          applyPermissions(state);
+          return room.connect(url, token, { autoSubscribe: false });
+        },
         // stopTracks=false. 세대 종료가 원본 카메라·마이크를 끄면 안 된다.
         disconnect: async () => {
+          clearPermissions(state);
           await room.disconnect(false);
         },
         on: (event, listener) => {
@@ -228,6 +286,23 @@ export function createLiveKitAdapter(
       };
     },
 
+    applyPublisherPermissions(policy) {
+      const state = current;
+      if (
+        !state?.publisherMode ||
+        !policy.publisherPermissions ||
+        policy.policyRevision <= state.revision
+      )
+        return;
+      state.revision = policy.policyRevision;
+      state.permissions = policy.publisherPermissions;
+      applyPermissions(state);
+      if (state.lease !== null) clearTimeout(state.lease);
+      state.lease = setTimeout(() => clearPermissions(state), PUBLISHER_PERMISSION_LEASE_MS);
+    },
+    clearPublisherPermissions() {
+      if (current) clearPermissions(current);
+    },
     getPublisher() {
       if (!current) return null;
       return createPublisher(current);

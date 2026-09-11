@@ -55,6 +55,7 @@ function fakeRoom() {
   }));
   const room = {
     localParticipant: {
+      setTrackSubscriptionPermissions: vi.fn(),
       publishTrack,
       unpublishTrack: vi.fn(async () => undefined),
     },
@@ -373,5 +374,107 @@ describe('livekit adapter · 소스 교체와 통계', () => {
     await publisher?.unpublishTrack(source);
 
     await expect(publisher?.getOutboundBytes?.('local-face')).resolves.toBeNull();
+  });
+});
+
+describe('internal publisher permissions', () => {
+  const policy = (revision: number) => ({
+    matchId: 'm',
+    mediaInstanceId: 'i',
+    receiverGeneration: 1,
+    policyRevision: revision,
+    bindingRevision: 1,
+    stateVersion: revision,
+    voices: [],
+    effects: [],
+    publisherPermissions: [
+      { participantIdentity: 'receiver', allowedTrackSids: ['local-camera', 'foreign-track'] },
+    ],
+  });
+  it('denies before connect and permits only known local tracks, including a late publication', async () => {
+    const { adapter, rooms } = harness();
+    const port = adapter.createRoom();
+    await port.connect('wss://media.example', 'token', {
+      autoSubscribe: false,
+      subscriptionMode: 'publisher-permissions',
+    });
+    const room = rooms[0]!;
+    const permission = room.localParticipant.setTrackSubscriptionPermissions;
+    expect(permission).toHaveBeenCalledWith(false, []);
+    expect(permission.mock.invocationCallOrder[0]).toBeLessThan(
+      room.connect.mock.invocationCallOrder[0]!,
+    );
+    adapter.applyPublisherPermissions(policy(1));
+    expect(permission).toHaveBeenCalledTimes(1);
+    await adapter
+      .getPublisher()!
+      .publishTrack(mediaTrack('camera'), { source: 'camera', simulcast: false });
+    expect(permission).toHaveBeenLastCalledWith(false, [
+      { participantIdentity: 'receiver', allowAll: false, allowedTrackSids: ['local-camera'] },
+    ]);
+    await port.disconnect();
+    expect(permission).toHaveBeenLastCalledWith(false, []);
+  });
+  it('fresh revisions renew the lease without SDK churn; duplicates cannot keep permission alive', async () => {
+    vi.useFakeTimers();
+    try {
+      const { adapter, rooms } = harness();
+      const port = adapter.createRoom();
+      await port.connect('wss://media.example', 'token', {
+        autoSubscribe: false,
+        subscriptionMode: 'publisher-permissions',
+      });
+      await adapter
+        .getPublisher()!
+        .publishTrack(mediaTrack('camera'), { source: 'camera', simulcast: false });
+      const permission = rooms[0]!.localParticipant.setTrackSubscriptionPermissions;
+      adapter.applyPublisherPermissions(policy(1));
+      vi.advanceTimersByTime(1000);
+      adapter.applyPublisherPermissions(policy(2));
+      expect(permission).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(1000);
+      adapter.applyPublisherPermissions(policy(2));
+      vi.advanceTimersByTime(501);
+      expect(permission).toHaveBeenLastCalledWith(false, []);
+      await port.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('reconnecting clears permissions; an old room event cannot clear the next generation', async () => {
+    const { adapter, rooms } = harness();
+    const old = adapter.createRoom();
+    await old.connect('wss://media.example', 'token', {
+      autoSubscribe: false,
+      subscriptionMode: 'publisher-permissions',
+    });
+    await adapter
+      .getPublisher()!
+      .publishTrack(mediaTrack('camera'), { source: 'camera', simulcast: false });
+    adapter.applyPublisherPermissions(policy(1));
+    rooms[0]!.emit(ROOM_EVENTS.reconnecting);
+    expect(rooms[0]!.localParticipant.setTrackSubscriptionPermissions).toHaveBeenLastCalledWith(
+      false,
+      [],
+    );
+    const next = adapter.createRoom();
+    await next.connect('wss://media.example', 'token', {
+      autoSubscribe: false,
+      subscriptionMode: 'publisher-permissions',
+    });
+    await adapter
+      .getPublisher()!
+      .publishTrack(mediaTrack('camera'), { source: 'camera', simulcast: false });
+    adapter.applyPublisherPermissions(policy(1));
+    rooms[0]!.emit(ROOM_EVENTS.disconnected);
+    expect(rooms[1]!.localParticipant.setTrackSubscriptionPermissions).toHaveBeenLastCalledWith(
+      false,
+      [{ participantIdentity: 'receiver', allowAll: false, allowedTrackSids: ['local-camera'] }],
+    );
+    next.removeAllListeners();
+    expect(rooms[1]!.localParticipant.setTrackSubscriptionPermissions).toHaveBeenLastCalledWith(
+      false,
+      [],
+    );
   });
 });

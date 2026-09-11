@@ -355,6 +355,7 @@ export type MetricSample = Readonly<{
 }>;
 export type EmitMetric = (sample: MetricSample) => void;
 export type MediaConfiguration = Readonly<{
+  subscriptionMode?: 'server-controlled' | 'publisher-permissions';
   httpUrl: string;
   wsUrl: string;
   apiKey: string;

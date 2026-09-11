@@ -119,6 +119,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     });
     const gateway = new LiveKitGateway(config, this.apiBudget, {
       monotonicNow: deps.monotonicNow,
+      requestTimeoutMs: config.operationTimeoutMs,
       clientFactory: services.clientFactory,
     });
     this.gateway = gateway;

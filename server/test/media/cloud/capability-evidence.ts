@@ -125,6 +125,7 @@ export function capabilityReport(
   room: string,
   evidence: CapabilityEvidence,
   testedAtEpochMs: number,
+  publisherMode = false,
 ): CapabilityReport {
   const { clockOffsetUpperBoundMs: offset, ...checks } = evidence;
   const supported =
@@ -135,6 +136,7 @@ export function capabilityReport(
     offset + CUTOFF_BUFFER_SECONDS * 1000 < 60_000;
   return parseCapabilityReport({
     status: supported ? 'SUPPORTED' : 'BLOCKED',
+    ...(publisherMode ? { subscriptionMode: 'publisher-permissions' } : {}),
     sdkVersion: LIVEKIT_SDK_VERSION,
     cloudProjectAlias: p.projectAlias,
     namespace: p.namespace,
@@ -144,7 +146,7 @@ export function capabilityReport(
           roomJoin: true,
           room,
           canPublishData: false,
-          canSubscribe: false,
+          canSubscribe: publisherMode,
           canPublishSources: ['camera', 'microphone'],
           roomAdmin: false,
           roomRecord: false,

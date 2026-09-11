@@ -414,8 +414,23 @@ function browserAudio(): AudioGraphEnvironment | null {
   });
   return {
     createSourceFromTrack: (track) => {
-      const source = context.createMediaStreamSource(new MediaStream([track]));
-      return { ...wrap(source) };
+      const stream = new MediaStream([track]);
+      const source = context.createMediaStreamSource(stream);
+      // Chromium needs a playing media sink to render remote WebRTC audio reliably.
+      // It is silent: all audible output still goes through the policy-controlled graph.
+      const sink = document.createElement('audio');
+      sink.autoplay = true;
+      sink.volume = 0;
+      sink.srcObject = stream;
+      void sink.play().catch(() => {});
+      return {
+        ...wrap(source),
+        disconnect: () => {
+          source.disconnect();
+          sink.pause();
+          sink.srcObject = null;
+        },
+      };
     },
     createEffectSource: () => {
       const source = context.createBufferSource();
@@ -532,10 +547,13 @@ export const createInteractionRuntime = (
 
   /** 정책·바인딩·트랙 중 어느 입력이 바뀌어도 다시 맞춘다. */
   const reconcileAudio = () => {
-    const graph = ensureAudio();
-    if (!graph) return;
     policyStore.revisit(vision.now());
-    graph.reconcileVoices(policyStore.resolveVoices());
+    const policy = policyStore.getPolicy();
+    if (policy && policy.bindingRevision === bindingStore.getRevision())
+      liveKit?.applyPublisherPermissions(policy);
+    else liveKit?.clearPublisherPermissions();
+    const graph = ensureAudio();
+    graph?.reconcileVoices(policyStore.resolveVoices());
   };
   const pendingTracks: PendingTrackStore = createPendingTrackStore();
   let sweepTimer: number | null = null;
@@ -678,6 +696,7 @@ export const createInteractionRuntime = (
       closeOutput: () => audioGraph?.setOutputLock('locked'),
       stopListeners: () => {
         acceptedScope = null;
+        liveKit?.clearPublisherPermissions();
         policyStore.reset();
       },
       unpublishAll: async () => {

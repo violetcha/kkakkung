@@ -51,6 +51,7 @@ function scopeOf(grant: MediaGrant): MediaScope {
 
 function isCompleteGrant(grant: MediaGrant): boolean {
   return (
+    (grant.subscriptionMode === undefined || grant.subscriptionMode === 'publisher-permissions') &&
     typeof grant.url === 'string' &&
     grant.url.length > 0 &&
     typeof grant.token === 'string' &&
@@ -140,7 +141,10 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
     bindEvents(target, current);
     try {
       // 승인 URL/token을 그대로 쓴다. 토큰은 메모리에만 둔다.
-      await target.connect(grant.url, grant.token, { autoSubscribe: false });
+      await target.connect(grant.url, grant.token, {
+        autoSubscribe: false,
+        ...(grant.subscriptionMode ? { subscriptionMode: grant.subscriptionMode } : {}),
+      });
     } catch {
       await teardown(target);
       if (epoch !== connectionEpoch || disposed) return;

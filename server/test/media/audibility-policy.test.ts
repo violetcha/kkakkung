@@ -158,3 +158,49 @@ describe('path-based audibility', () => {
     ).toBeNull();
   });
 });
+
+it('projects per-track outgoing permissions and renews leases on unchanged authoritative frames', () => {
+  const audible = new AudibilityPolicy();
+  const projection = new AudioProjection();
+  const bindings: MediaBindings = {
+    matchId: 'm',
+    mediaInstanceId: 'i',
+    receiverGeneration: 1,
+    bindingRevision: 1,
+    participants: [
+      {
+        playerId: 'receiver',
+        publisherGeneration: 1,
+        mediaIdentity: 'self',
+        participantSid: 'PA_self',
+        faceTrackSid: 'TR_face',
+        audioTrackSid: 'TR_audio',
+      },
+      {
+        playerId: 'sender',
+        publisherGeneration: 2,
+        mediaIdentity: 'other-generation-2',
+        participantSid: 'PA_other',
+        audioTrackSid: 'TR_other',
+      },
+    ],
+  };
+  const first = projection.project(audible.observe(frame(2))!, 'receiver', bindings, true)!;
+  expect(first.publisherPermissions).toEqual([
+    { participantIdentity: 'other-generation-2', allowedTrackSids: ['TR_face', 'TR_audio'] },
+  ]);
+  const heartbeat = projection.project(audible.observe(frame(2, 2))!, 'receiver', bindings, true)!;
+  expect(heartbeat.policyRevision).toBe(first.policyRevision + 1);
+  expect(heartbeat.publisherPermissions).toEqual(first.publisherPermissions);
+  const distant = projection.project(audible.observe(frame(9, 3))!, 'receiver', bindings, true)!;
+  expect(distant.publisherPermissions).toEqual([
+    { participantIdentity: 'other-generation-2', allowedTrackSids: ['TR_face'] },
+  ]);
+  const retired = projection.project(
+    audible.observe(frame(9, 4))!,
+    'receiver',
+    { ...bindings, bindingRevision: 2, participants: bindings.participants.slice(0, 1) },
+    true,
+  )!;
+  expect(retired.publisherPermissions).toEqual([]);
+});

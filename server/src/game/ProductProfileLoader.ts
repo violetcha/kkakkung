@@ -88,11 +88,19 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
                   ...message,
                   participants: message.participants.map((participant) => ({ ...participant })),
                 }),
-              enqueueAudioPolicy: (playerId, message) =>
+              enqueueAudioPolicy: (playerId, { publisherPermissions, ...message }) =>
                 deps.enqueueAudioPolicy(playerId, {
                   ...message,
                   voices: message.voices.map((voice) => ({ ...voice })),
                   effects: message.effects.map((effect) => ({ ...effect })),
+                  ...(publisherPermissions
+                    ? {
+                        publisherPermissions: publisherPermissions.map((entry) => ({
+                          participantIdentity: entry.participantIdentity,
+                          allowedTrackSids: [...entry.allowedTrackSids],
+                        })),
+                      }
+                    : {}),
                 }),
             },
             {
@@ -115,6 +123,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
             publicWindow: config.publicWindow,
             officialBudgetMaxAgeMs: config.officialBudgetMaxAgeMs!,
             operationTimeoutMs: config.operationTimeoutMs!,
+            subscriptionMode: config.subscriptionMode,
             initialBudget: null,
             maxConcurrentParticipants: config.maxSlots,
             ...config.mediaApiLimits!,

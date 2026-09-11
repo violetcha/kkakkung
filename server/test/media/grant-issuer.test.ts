@@ -238,3 +238,28 @@ describe('journal-before-sign generation issuance; local SDK verification only',
     expect(() => s.registry.allocate(prepareRequest, s.now())).toThrow('WRONG_SCOPE');
   });
 });
+
+it('issues opt-in publisher grants only against matching capability evidence', async () => {
+  const s = setup();
+  s.deps.config = { ...s.deps.config, subscriptionMode: 'publisher-permissions' };
+  s.deps.capability = () => ({
+    ...localCapability,
+    subscriptionMode: 'publisher-permissions',
+    grantProfile: { ...localCapability.grantProfile!, canSubscribe: true },
+  });
+  const result = await s.issuer.prepare(prepareRequest);
+  expect(result.status).toBe('ready');
+  if (result.status !== 'ready') throw new Error('EXPECTED_READY');
+  expect(result.grant.subscriptionMode).toBe('publisher-permissions');
+  const claims = await new TokenVerifier(s.deps.config.apiKey, s.deps.config.apiSecret).verify(
+    result.grant.token,
+  );
+  expect(claims.video?.canSubscribe).toBe(true);
+  expect(claims.video?.canPublishData).toBe(false);
+  const mismatched = setup();
+  mismatched.deps.config = { ...mismatched.deps.config, subscriptionMode: 'publisher-permissions' };
+  expect(await mismatched.issuer.prepare(prepareRequest)).toMatchObject({
+    status: 'unknown',
+    grant: null,
+  });
+});

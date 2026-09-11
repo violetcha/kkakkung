@@ -10,6 +10,7 @@ import { it } from 'vitest';
 import { caseTimeoutMs, requireCloudPreflight } from '../../../tests/cloud/CloudPreflight.js';
 import { ApiBudget } from '../../src/operations/ApiBudget.js';
 import {
+  DEFAULT_CLOUD_REQUEST_TIMEOUT_MS,
   GatewayError,
   LiveKitGateway,
   type GatewayObservation,
@@ -47,6 +48,10 @@ it(
     const observations: GatewayObservation[] = [];
     const samples: { phase: string; measurement: Measurement }[] = [];
     const denials: { phase: string; result: ConnectionResult }[] = [];
+    // Exploratory publisher-controlled profile. Never promotes the product's minimum grant.
+    const publisherPermissions = { allowed: false, denied: false, switched: false, retired: false };
+    let publisherPermissionsAttempted = false;
+    const publisherMode = process.env.MEDIA_SUBSCRIPTION_MODE === 'publisher-permissions';
     const roomName = `${preflight.namespace}--${randomUUID()}`;
     const start = performance.now();
     const deadline = start + Math.min(preflight.maxDurationSeconds, 240) * 1000;
@@ -75,6 +80,7 @@ it(
     });
     const gateway = new LiveKitGateway(config, apiBudget, {
       monotonicNow: () => performance.now(),
+      requestTimeoutMs: DEFAULT_CLOUD_REQUEST_TIMEOUT_MS,
       observe: (value) => observations.push(value),
     });
     const context = (cleanup = false) => {
@@ -108,14 +114,19 @@ it(
     };
     const waitFor = async (page: Page, condition: (m: Measurement) => boolean, phase: string) => {
       const until = Math.min(deadline, performance.now() + 10_000);
+      let lastMeasurement: Measurement | undefined;
       while (performance.now() < until) {
         const measurement = await measure(page);
+        lastMeasurement = measurement;
         if (condition(measurement)) {
           samples.push({ phase, measurement });
           return;
         }
         await sleep(100);
       }
+      // Persist only bounded non-secret measurements, including the failed phase.
+      if (lastMeasurement)
+        samples.push({ phase: `${phase}-timeout`, measurement: lastMeasurement });
       throw new Error('MC01_MEASUREMENT_UNCONFIRMED');
     };
     const markerReceived = (marker: Marker) => (m: Measurement) =>
@@ -150,7 +161,7 @@ it(
         roomJoin: true,
         room: roomName,
         canPublish: true,
-        canSubscribe: false,
+        canSubscribe: publisherMode,
         canPublishData: false,
         canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
         roomAdmin: false,
@@ -256,34 +267,143 @@ it(
         [forbidden, d],
       ] as const)
         connected(
-          await page.evaluate(({ url, token }) => window.capabilityProbe.connect(url, token), {
-            url: config.wsUrl,
-            token: credential.token,
-          }),
+          await page.evaluate(
+            ({ url, token, publisherMode }) =>
+              window.capabilityProbe.connect(url, token, publisherMode),
+            {
+              url: config.wsUrl,
+              token: credential.token,
+              publisherMode,
+            },
+          ),
         );
-      const tracks = await publisher.evaluate(() => window.capabilityProbe.publish());
-      if (tracks.length !== 2 || tracks.some((sid) => !sid))
-        throw new Error('MC01_PUBLISH_UNCONFIRMED');
-      await waitFor(forbidden, (m) => m.connected && m.publications === 2, 'tracks-visible');
-      if ((await forbidden.evaluate(() => window.capabilityProbe.directSubscribe())) !== 2)
-        throw new Error('MC01_DIRECT_SUBSCRIBE_NOT_ATTEMPTED');
-      await gateway.updateSubscriptions(roomName, a.identity, tracks, true, context());
-      await publisher.evaluate(() => window.capabilityProbe.setMarker(1));
-      await waitFor(allowed, markerReceived(1), 'allowed-green-660Hz');
-      evidence.allowReceived = true;
-      await proveBlocked(forbidden, 'direct-subscribe-denied');
-      evidence.forbiddenRejected = true;
-      // The very same forbidden client must subsequently decode a fresh positive control.
-      await gateway.updateSubscriptions(roomName, d.identity, tracks, true, context());
-      await publisher.evaluate(() => window.capabilityProbe.setMarker(2));
-      await waitFor(forbidden, markerReceived(2), 'denied-client-positive-blue-880Hz');
-      evidence.deniedClientPositiveControl = true;
-      await gateway.updateSubscriptions(roomName, d.identity, tracks, false, context(true));
-      await waitFor(forbidden, (m) => m.connected && m.subscribed === 0, 'unsubscribe-ack');
-      await publisher.evaluate(() => window.capabilityProbe.setMarker(3));
-      await waitFor(allowed, markerReceived(3), 'fresh-yellow-1100Hz');
-      await proveBlocked(forbidden, 'remote-unsubscribe-blocked');
-      evidence.revokedSubscriptionBlocked = true;
+      try {
+        const tracks = await publisher.evaluate(() => window.capabilityProbe.publish());
+        if (tracks.length !== 2 || tracks.some((sid) => !sid))
+          throw new Error('MC01_PUBLISH_UNCONFIRMED');
+        await waitFor(forbidden, (m) => m.connected && m.publications === 2, 'tracks-visible');
+        if ((await forbidden.evaluate(() => window.capabilityProbe.directSubscribe())) !== 2)
+          throw new Error('MC01_DIRECT_SUBSCRIBE_NOT_ATTEMPTED');
+        if (publisherMode)
+          await publisher.evaluate(
+            (permissions) => window.capabilityProbe.restrictTracks(permissions),
+            [{ participantIdentity: a.identity, allowedTrackSids: tracks }],
+          );
+        await gateway.updateSubscriptions(roomName, a.identity, tracks, true, context());
+        await publisher.evaluate(() => window.capabilityProbe.setMarker(1));
+        await waitFor(allowed, markerReceived(1), 'allowed-green-660Hz');
+        evidence.allowReceived = true;
+        await proveBlocked(forbidden, 'direct-subscribe-denied');
+        evidence.forbiddenRejected = true;
+        // The very same forbidden client must subsequently decode a fresh positive control.
+        if (publisherMode)
+          await publisher.evaluate(
+            (permissions) => window.capabilityProbe.restrictTracks(permissions),
+            [
+              { participantIdentity: a.identity, allowedTrackSids: tracks },
+              { participantIdentity: d.identity, allowedTrackSids: tracks },
+            ],
+          );
+        await gateway.updateSubscriptions(roomName, d.identity, tracks, true, context());
+        await publisher.evaluate(() => window.capabilityProbe.setMarker(2));
+        await waitFor(forbidden, markerReceived(2), 'denied-client-positive-blue-880Hz');
+        evidence.deniedClientPositiveControl = true;
+        if (publisherMode)
+          await publisher.evaluate(
+            (permissions) => window.capabilityProbe.restrictTracks(permissions),
+            [{ participantIdentity: a.identity, allowedTrackSids: tracks }],
+          );
+        await gateway.updateSubscriptions(roomName, d.identity, tracks, false, context(true));
+        await waitFor(forbidden, (m) => m.connected && m.subscribed === 0, 'unsubscribe-ack');
+        await publisher.evaluate(() => window.capabilityProbe.setMarker(3));
+        await waitFor(allowed, markerReceived(3), 'fresh-yellow-1100Hz');
+        if (publisherMode) await forbidden.evaluate(() => window.capabilityProbe.directSubscribe());
+        await proveBlocked(forbidden, 'remote-unsubscribe-blocked');
+        evidence.revokedSubscriptionBlocked = true;
+      } catch (error) {
+        // A measured reception failure does not prevent independent token-revocation probes.
+        // Keep the permission evidence false; budget, transport and cleanup errors still abort.
+        if (!(error instanceof Error) || error.message !== 'MC01_MEASUREMENT_UNCONFIRMED')
+          throw error;
+        failure = 'MC01_RECEPTION_UNCONFIRMED';
+      }
+
+      if (!publisherMode && failure === 'MC01_RECEPTION_UNCONFIRMED') {
+        publisherPermissionsAttempted = true;
+        await publisher.evaluate(
+          (identity) => window.capabilityProbe.restrictSubscribers([identity]),
+          a.identity,
+        );
+        for (const identity of [a.identity, d.identity])
+          await gateway.updateParticipant(
+            roomName,
+            identity,
+            {
+              permission: {
+                canSubscribe: true,
+                canPublish: true,
+                canPublishData: false,
+                canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
+              },
+            },
+            context(),
+          );
+        try {
+          await allowed.evaluate(() => window.capabilityProbe.directSubscribe());
+          await forbidden.evaluate(() => window.capabilityProbe.directSubscribe());
+          await publisher.evaluate(() => window.capabilityProbe.setMarker(1));
+          await waitFor(allowed, markerReceived(1), 'publisher-permissions-allowed');
+          publisherPermissions.allowed = true;
+          await proveBlocked(forbidden, 'publisher-permissions-direct-denied');
+          publisherPermissions.denied = true;
+          await publisher.evaluate(
+            (identity) => window.capabilityProbe.restrictSubscribers([identity]),
+            d.identity,
+          );
+          await publisher.evaluate(() => window.capabilityProbe.setMarker(2));
+          await waitFor(forbidden, markerReceived(2), 'publisher-permissions-switched');
+          await waitFor(
+            allowed,
+            (m) => m.connected && m.subscribed === 0,
+            'publisher-permissions-old-blocked',
+          );
+          await proveBlocked(allowed, 'publisher-permissions-old-direct-denied');
+          publisherPermissions.switched = true;
+          await publisher.evaluate(() => window.capabilityProbe.restrictSubscribers([]));
+          await waitFor(
+            forbidden,
+            (m) => m.connected && m.subscribed === 0,
+            'publisher-permissions-retired',
+          );
+          await forbidden.evaluate(() => window.capabilityProbe.directSubscribe());
+          await proveBlocked(forbidden, 'publisher-permissions-retired-direct-denied');
+          publisherPermissions.retired = true;
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            !['MC01_MEASUREMENT_UNCONFIRMED', 'MC01_FORBIDDEN_MEDIA_OR_INVALID_CONTROL'].includes(
+              error.message,
+            )
+          )
+            throw error;
+        } finally {
+          await publisher.evaluate(() => window.capabilityProbe.restrictSubscribers([]));
+          for (const identity of [a.identity, d.identity])
+            await gateway.updateParticipant(
+              roomName,
+              identity,
+              {
+                permission: {
+                  canSubscribe: false,
+                  canPublish: true,
+                  canPublishData: false,
+                  canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
+                },
+              },
+              context(true),
+            );
+        }
+      }
 
       await allowed.evaluate(() => window.capabilityProbe.disconnect());
       await revoke(a.identity);
@@ -292,7 +412,8 @@ it(
         'departed-original-token',
         await allowed.evaluate(() => window.capabilityProbe.reconnect('original')),
       );
-      evidence.departedTokenRejected = true;
+      // Permission updates can themselves revoke the original token in the exploratory profile.
+      evidence.departedTokenRejected = !publisherPermissionsAttempted;
       await forbidden.evaluate(() => window.capabilityProbe.clearRefresh());
 
       await gateway.updateParticipant(
@@ -343,7 +464,7 @@ it(
         }),
       );
       evidence.freshConnectionControl = true;
-      failure = 'MC01_MISSING_PROOF';
+      if (failure === 'MC01_UNCONFIRMED') failure = 'MC01_MISSING_PROOF';
     } catch (error) {
       // SDK/Playwright exceptions may contain credentials; persist only this allowlisted category.
       if (error instanceof Error && /^MC01_[A-Z_]+$/.test(error.message)) failure = error.message;
@@ -393,18 +514,20 @@ it(
       }
       clearTimeout(cleanupWatchdog);
     }
-    const report = capabilityReport(preflight, roomName, evidence, Date.now());
+    const report = capabilityReport(preflight, roomName, evidence, Date.now(), publisherMode);
     const directory = resolve(root, preflight.evidenceDir);
     await writeFile(
       resolve(directory, 'capability-evidence.json'),
       JSON.stringify(
         {
           case: 'MC-01',
+          subscriptionMode: publisherMode ? 'publisher-permissions' : 'server-controlled',
           sourceCommit: preflight.sourceCommit,
           lockfileHash: preflight.lockfileHash,
           roomName,
           identities: [...identities],
           evidence,
+          publisherPermissions,
           samples,
           denials,
           observations,
