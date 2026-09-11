@@ -184,6 +184,30 @@ afterEach(async () => {
 });
 
 describe('E-14 real local operations bindings (no Cloud calls)', () => {
+  it('completes a clean locked drain but never permits resume or issuance', async () => {
+    const f = await setup();
+    f.bindings.setAdmission('LOCKED');
+    f.operations.submit({ requestId: 'locked-drain', action: 'drain' });
+    expect((await terminal(f, 'locked-drain')).status).toBe('succeeded');
+    expect(f.operations.getStatus().admission).toBe('LOCKED');
+    expect(f.bindings.canResume()).toBe(false);
+    expect(f.bindings.canIssue()).toBe(false);
+  });
+  it.each(['activity', 'journal', 'history', 'unresolved'])(
+    'locked drain still refuses incomplete cleanup: %s',
+    async (defect) => {
+      const f = await setup({ operationTimeoutMs: 60 });
+      f.bindings.setAdmission('LOCKED');
+      if (defect === 'activity') f.state.activity.activeMatches = 1;
+      if (defect === 'journal') await f.journal.append(record());
+      if (defect === 'history') f.state.readiness.historyComplete = false;
+      if (defect === 'unresolved') f.state.readiness.unresolvedCount = 1;
+      f.operations.submit({ requestId: 'locked-drain', action: 'drain' });
+      expect((await terminal(f, 'locked-drain')).status).toBe('failed');
+      expect(f.operations.getStatus().admission).toBe('LOCKED');
+    },
+  );
+
   it('starts drained and shares one gate with actual B invitation issuance', async () => {
     const f = await setup();
     const invites = new InviteStore({

@@ -1,3 +1,4 @@
+import { freezeSnapshot } from './ImmutableSnapshot.js';
 import type { OfficialBudgetCheckpoint } from '../media/types.js';
 import { checksum, safeIdentifier } from './CheckpointStore.js';
 import {
@@ -35,6 +36,8 @@ const proportions: Record<BudgetPurpose, { minutes: number; bytes: number }> = {
 
 export class UsageBudget {
   private state: UsageState = { official: null, reservations: [] };
+  private immutableState: UsageState | null = null;
+  private immutableSnapshot: ReturnType<UsageBudget['snapshot']> | null = null;
   private sequence = 0;
   private integrity: 'ok' | 'missing' | 'corrupt' = 'missing';
   private initializable = false;
@@ -309,6 +312,19 @@ export class UsageBudget {
         ...this.state,
         reservations: this.state.reservations.map((r) => (r === reservation ? replacement : r)),
       });
+    });
+  }
+
+  /** Only immutable accounting data is reused; writable/integrity remain live. */
+  readSnapshot(): ReturnType<UsageBudget['snapshot']> {
+    if (this.immutableState !== this.state || !this.immutableSnapshot) {
+      this.immutableSnapshot = freezeSnapshot(this.snapshot());
+      this.immutableState = this.state;
+    }
+    return Object.freeze({
+      ...this.immutableSnapshot,
+      integrity: this.integrity,
+      writable: !this.closed && !this.failed && this.options.store.writable,
     });
   }
 

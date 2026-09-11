@@ -171,7 +171,7 @@ export class RecoveryBootstrap {
         pendingRecords: structuredClone(this.records.pendingRecords),
         retryIntents: structuredClone(this.records.retryIntents),
         retryDeadlines: structuredClone(this.records.retryDeadlines),
-        reservations: this.options.usageBudget.snapshot().reservations,
+        reservations: this.options.usageBudget.readSnapshot().reservations,
         signal: this.abort.signal,
         beforeDispatch: () => this.canCleanUp(),
       });
@@ -192,7 +192,7 @@ export class RecoveryBootstrap {
   private canCleanUp(): boolean {
     if (this.closed || this.abort.signal.aborted || !this.records) return false;
     const snapshot = this.state.snapshot();
-    const usage = this.options.usageBudget.snapshot();
+    const usage = this.options.usageBudget.readSnapshot();
     if (
       !snapshot.singleWriter ||
       !snapshot.writable ||
@@ -222,7 +222,7 @@ export class RecoveryBootstrap {
   }
 
   private budgetConfirmed(): boolean {
-    const usage = this.options.usageBudget.snapshot();
+    const usage = this.options.usageBudget.readSnapshot();
     const checkpoint = usage.official?.checkpoint;
     const now = this.options.nowEpochMs();
     const age = checkpoint ? now - checkpoint.checkedAtEpochMs : -1;

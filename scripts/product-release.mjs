@@ -2,11 +2,11 @@
 // node --import tsx scripts/product-release.mjs --env-file <private file> --evidence-dir <approved dir>
 // --preflight <approved DP-06 file> --sha <verified SHA> [--check-only]
 import { parseEnv } from 'node:util';
-import { readFileSync, statSync, mkdirSync } from 'node:fs';
+import { readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { checkProductDeployment } from '../server/src/config/ProductDeployment.ts';
-import { prepareDeploymentSmoke } from './lib/deployment-smoke-preflight.mjs';
+import { deriveDeploymentPreflight } from './lib/deployment-smoke-preflight.mjs';
 
 const args = process.argv.slice(2);
 const opt = { baseUrl: 'https://j15c204.p.ssafy.io', stateDir: '/opt/kkakkung' };
@@ -18,6 +18,7 @@ const keys = {
   '--base-url': 'baseUrl',
   '--state-dir': 'stateDir',
 };
+let stage = 'ARGUMENTS_OR_ENV';
 try {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--check-only') {
@@ -38,6 +39,7 @@ try {
   for (const [key, value] of Object.entries(privateEnv)) if (allowed.test(key)) env[key] = value;
   env.OPS_EVIDENCE_DIR = resolve(opt.evidenceDir);
   env.SMOKE_PUBLIC_BASE_URL = opt.baseUrl;
+  stage = 'PRODUCT_EVIDENCE';
   const prepared = await checkProductDeployment({
     env,
     baseUrl: opt.baseUrl,
@@ -54,7 +56,8 @@ try {
     preflight.projectAlias !== env.LIVEKIT_PROJECT_ALIAS
   )
     throw new Error('SCOPE_MISMATCH');
-  prepareDeploymentSmoke({
+  stage = 'PREFLIGHT';
+  const runPreflight = deriveDeploymentPreflight({
     root: process.cwd(),
     preflightPath: opt.preflight,
     sourceCommit: opt.sha,
@@ -66,7 +69,9 @@ try {
   } else {
     const state = resolve(opt.stateDir);
     const manifest = resolve(state, 'releases', opt.sha.slice(0, 8) + '.json');
+    const runPreflightPath = resolve(state, 'releases', opt.sha.slice(0, 8) + '-preflight.json');
     mkdirSync(resolve(state, 'releases'), { recursive: true });
+    writeFileSync(runPreflightPath, JSON.stringify(runPreflight, null, 2) + '\n', { mode: 0o600 });
     const run = (command) => {
       const result = spawnSync(process.execPath, ['--import', 'tsx', ...command], {
         env,
@@ -102,10 +107,10 @@ try {
       '--state-dir',
       state,
       '--preflight',
-      resolve(opt.preflight),
+      runPreflightPath,
     ]);
   }
 } catch {
-  console.error('BLOCKED: PRODUCT_DEPLOYMENT_INPUT_INVALID');
+  console.error(`BLOCKED: PRODUCT_DEPLOYMENT_INPUT_INVALID stage=${stage}`);
   process.exitCode = 3;
 }

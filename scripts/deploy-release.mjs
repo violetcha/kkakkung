@@ -165,10 +165,28 @@ const adapters = {
     });
     return result.status === 0 ? result.stdout.trim() : null;
   },
-  async compose(tag, profile) {
+  async compose(tag, profile, images) {
     const selectedFiles = composeFiles.filter((file) => file !== 'infra/compose.product.yaml');
     if (profile === 'product') selectedFiles.push('infra/compose.product.yaml');
-    const composeArgs = ['compose', ...selectedFiles.flatMap((f) => ['-f', f]), 'up', '-d'];
+    // Docker image IDs are immutable even if a human has moved the SHA tag.
+    const exactImages = resolve(evidenceDir, `compose-${tag}-images.json`);
+    writeFileSync(
+      exactImages,
+      JSON.stringify({
+        services: {
+          'game-server': { image: images.game.digest, pull_policy: 'never' },
+          'web-proxy': { image: images.web.digest, pull_policy: 'never' },
+        },
+      }),
+    );
+    selectedFiles.push(exactImages);
+    const composeArgs = [
+      'compose',
+      ...selectedFiles.flatMap((f) => ['-f', f]),
+      'up',
+      '-d',
+      '--no-build',
+    ];
     const result = spawnSync('docker', composeArgs, {
       cwd: root,
       env: { ...process.env, TAG: tag },
@@ -197,6 +215,7 @@ const adapters = {
         stdio: 'inherit',
         env: {
           ...process.env,
+          CI: 'true',
           SMOKE_PUBLIC_BASE_URL: opt.baseUrl,
           SMOKE_BASE_URL: process.env.SMOKE_INTERNAL_BASE_URL,
         },

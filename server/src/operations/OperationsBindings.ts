@@ -115,9 +115,10 @@ export class OperationsBindings {
   }
 
   canComplete(command: OperationsCommand): boolean {
-    if (this.closed || this.locked) return false;
-    if (command.action === 'resume') return this.canResume();
+    if (this.closed) return false;
     if (command.action === 'drain') return this.drained();
+    if (this.locked) return false;
+    if (command.action === 'resume') return this.canResume();
     return this.options.journal.writable && this.options.usageBudget.snapshot().writable;
   }
 
@@ -268,7 +269,6 @@ export class OperationsBindings {
       const usage = this.options.usageBudget.snapshot();
       return (
         !this.closed &&
-        !this.locked &&
         readiness.historyComplete &&
         readiness.unresolvedCount === 0 &&
         journal.writable &&

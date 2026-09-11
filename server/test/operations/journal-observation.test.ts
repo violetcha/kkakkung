@@ -149,3 +149,22 @@ describe('current durable journal observation', () => {
     });
   });
 });
+
+it('reuses immutable durable records and invalidates on writes while writer status stays live', async () => {
+  const journal = await create();
+  await journal.restore();
+  await journal.append(record);
+  const first = journal.readSnapshot();
+  expect(journal.readSnapshot().records).toBe(first.records);
+  expect(() => {
+    first.records[0]!.record.state = 'REVOKED';
+  }).toThrow();
+  const detached = journal.snapshot();
+  detached.records[0]!.record.state = 'REVOKED';
+  expect(journal.readSnapshot().records[0]!.record.state).toBe('PREPARED');
+  await journal.append({ ...record, state: 'REVOKED' });
+  expect(journal.readSnapshot().records).not.toBe(first.records);
+  expect(journal.readSnapshot().records[0]!.record.state).toBe('REVOKED');
+  await journal.close();
+  expect(journal.readSnapshot().writable).toBe(false);
+});

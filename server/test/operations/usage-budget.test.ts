@@ -223,3 +223,18 @@ describe('durable usage reservations', () => {
     expect(await budget.reserve(request)).toEqual({ status: 'rejected', code: 'ISSUANCE_BLOCKED' });
   });
 });
+
+it('reuses frozen accounting until persistence and observes close immediately', async () => {
+  const s = await setup();
+  const first = s.budget.readSnapshot();
+  expect(s.budget.readSnapshot().reservations).toBe(first.reservations);
+  expect(() => {
+    first.official!.checkpoint.remainingMinutes = 0;
+  }).toThrow();
+  await s.budget.reserve(request);
+  const next = s.budget.readSnapshot();
+  expect(next.reservations).not.toBe(first.reservations);
+  expect(next.reservations).toHaveLength(1);
+  await s.budget.close();
+  expect(s.budget.readSnapshot().writable).toBe(false);
+});

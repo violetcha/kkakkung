@@ -198,11 +198,11 @@ export async function runRelease(input, adapters) {
     const requestId = `deploy-${tagForId}-${label.toLowerCase()}-${adapters.now()}`;
     await command('drain', requestId, deadlines.drainMs, label);
     const status = await operationsStatus();
-    if (status.admission !== 'DRAINING')
+    if (!['DRAINING', 'LOCKED'].includes(status.admission))
       fail('FAILED', `${label}_STATE_MISMATCH`, `admission=${status.admission}`);
     if (status.unresolvedCount !== 0)
       fail('FAILED', `${label}_UNRESOLVED`, `unresolvedCount=${status.unresolvedCount}`);
-    ok(`${label} state`, 'admission=DRAINING unresolved=0');
+    ok(`${label} state`, `admission=${status.admission} unresolved=0`);
     return requestId;
   };
 
@@ -274,7 +274,7 @@ export async function runRelease(input, adapters) {
   /** Post-swap barrier shared by the release and by a rollback. */
   const barrier = async (label, tag, images, useOperations) => {
     setPhase('DEPLOYING');
-    const composed = await adapters.compose(tag, useOperations ? 'product' : 'skeleton');
+    const composed = await adapters.compose(tag, useOperations ? 'product' : 'skeleton', images);
     if (composed.code !== 0) fail('FAILED', `${label}_COMPOSE_FAILED`, `exit ${composed.code}`);
     ok(`${label} compose up`, `tag=${tag}`);
     const ready = await waitReady(label);
@@ -322,7 +322,7 @@ export async function runRelease(input, adapters) {
       if (useOperations) await drain('ROLLBACK_DRAIN', manifest.tag);
       if (!previous) fail('ROLLBACK_BLOCKED', 'NO_PREVIOUS_RELEASE');
       for (const key of IMAGE_KEYS) {
-        const ref = `${manifest.images[key].ref.split(':')[0]}:${previous.tag}`;
+        const ref = previous.images[key].digest;
         const image = await adapters.inspectImage(ref);
         if (!image) fail('ROLLBACK_BLOCKED', 'PREVIOUS_IMAGE_MISSING', ref);
         if (image.id !== previous.images[key].digest)

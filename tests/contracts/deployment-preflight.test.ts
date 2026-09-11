@@ -3,7 +3,10 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { prepareDeploymentSmoke } from '../../scripts/lib/deployment-smoke-preflight.mjs';
+import {
+  prepareDeploymentSmoke,
+  deriveDeploymentPreflight,
+} from '../../scripts/lib/deployment-smoke-preflight.mjs';
 import { localDeploymentDevices, localDeploymentPlan } from '../fixtures/deployment-smoke-plan.js';
 
 const temporary: string[] = [];
@@ -67,4 +70,34 @@ it('refuses stale approvals or source/lock mismatch before a deployment mutation
   expect(() => prepareDeploymentSmoke({ ...input, sourceCommit: 'c'.repeat(40) })).toThrow();
   writeFileSync(join(input.root, 'pnpm-lock.yaml'), 'different lock');
   expect(() => prepareDeploymentSmoke(input)).toThrow();
+});
+
+it('derives a fresh release run while preserving approval, budget and source file', () => {
+  const input = setup();
+  const original = readFileSync(input.preflightPath, 'utf8');
+  const base = JSON.parse(original);
+  const derived = deriveDeploymentPreflight({ ...input, sourceCommit: 'c'.repeat(40) });
+  expect(derived.sourceCommit).toBe('c'.repeat(40));
+  expect(derived.checkedAtEpochMs).toBe(base.checkedAtEpochMs);
+  expect(derived.expiresAtEpochMs).toBe(base.expiresAtEpochMs);
+  expect(derived.remainingMinutes).toBe(base.remainingMinutes);
+  expect(derived.remainingBytes).toBe(base.remainingBytes);
+  expect(derived.budgetReservation.participantMinutes).toBe(
+    base.budgetReservation.participantMinutes,
+  );
+  expect(derived.deviceManifest).toEqual(base.deviceManifest);
+  expect(readFileSync(input.preflightPath, 'utf8')).toBe(original);
+  expect(
+    deriveDeploymentPreflight({ ...input, nowEpochMs: input.nowEpochMs + 1 }).evidenceDir,
+  ).not.toBe(derived.evidenceDir);
+  writeFileSync(input.preflightPath, JSON.stringify(derived));
+  expect(prepareDeploymentSmoke({ ...input, sourceCommit: derived.sourceCommit }).evidenceDir).toBe(
+    resolve(input.root, derived.evidenceDir),
+  );
+});
+it('derivation cannot refresh expiry or bypass a changed dependency lock', () => {
+  const input = setup();
+  expect(() => deriveDeploymentPreflight({ ...input, nowEpochMs: 1e12 })).toThrow();
+  writeFileSync(join(input.root, 'pnpm-lock.yaml'), 'changed');
+  expect(() => deriveDeploymentPreflight(input)).toThrow();
 });

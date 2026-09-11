@@ -32,7 +32,11 @@ export type ReleaseAdapters = Readonly<{
   ) => Promise<HttpResponse>;
   inspectImage: (ref: string) => Promise<Readonly<{ id: string; revision: string | null }> | null>;
   runningImage: (service: 'game' | 'web') => Promise<string | null>;
-  compose: (tag: string, profile: 'product' | 'skeleton') => Promise<Readonly<{ code: number }>>;
+  compose: (
+    tag: string,
+    profile: 'product' | 'skeleton',
+    images: Readonly<Record<'game' | 'web', { digest: string }>>,
+  ) => Promise<Readonly<{ code: number }>>;
   runSmoke: (mode: 'cloud' | 'http') => Promise<Readonly<{ code: number }>>;
   writeState: (name: string, text: string) => Promise<void> | void;
   sleep: (ms: number) => Promise<void>;

@@ -118,6 +118,8 @@ function world(over: Partial<World> = {}): World {
       [PREV_TAG]: { game: digest('3'), web: digest('4') },
     },
     images: {
+      [digest('3')]: { id: digest('3'), revision: 'b'.repeat(40) },
+      [digest('4')]: { id: digest('4'), revision: 'b'.repeat(40) },
       [`kkakkung-game:${TAG}`]: { id: digest('1'), revision: SHA },
       [`kkakkung-web:${TAG}`]: { id: digest('2'), revision: SHA },
       [`kkakkung-game:${PREV_TAG}`]: { id: digest('3'), revision: 'b'.repeat(40) },
@@ -446,6 +448,47 @@ describe('barrier before the swap', () => {
 });
 
 describe('release, recovery, resume, smoke, publication', () => {
+  it('accepts completed clean LOCKED drain without reopening the old server', async () => {
+    const h = harness(
+      world({ statusAfterDrain: { ...world().statusAfterDrain, admission: 'LOCKED' } }),
+    );
+    expect(await runRelease(h.input(), h.adapters)).toMatchObject({ result: 'READY' });
+    expect(h.calls.posts.map((p) => p.action)).toEqual(['drain', 'resume']);
+  });
+  it('rolls back by recorded ID even if an old tag moved', async () => {
+    const h = harness(
+      world({
+        smokeCodes: { [TAG]: 1 },
+        images: {
+          ...world().images,
+          [`kkakkung-game:${PREV_TAG}`]: { id: digest('9'), revision: SHA },
+        },
+      }),
+    );
+    const compose = h.adapters.compose;
+    const selected: unknown[] = [];
+    const adapters: ReleaseAdapters = {
+      ...h.adapters,
+      compose: async (tag, profile, images) => {
+        selected.push(images);
+        return compose(tag, profile, images);
+      },
+    };
+    expect(await runRelease(h.input(), adapters)).toMatchObject({ result: 'ROLLED_BACK' });
+    expect(selected[1]).toEqual(manifest().previous!.images);
+  });
+  it('reports a deleted rollback image and never publishes last-good', async () => {
+    const h = harness(
+      world({ smokeCodes: { [TAG]: 1 }, images: { ...world().images, [digest('3')]: null } }),
+    );
+    expect(await runRelease(h.input(), h.adapters)).toMatchObject({
+      result: 'ROLLBACK_BLOCKED',
+      reason: 'PREVIOUS_IMAGE_MISSING',
+      lastGoodWritten: false,
+    });
+    expect(h.calls.compose).toEqual([TAG]);
+  });
+
   it('the full product barrier ends READY with last-good written and distinct drain/resume ids', async () => {
     const h = harness(
       world({
@@ -526,7 +569,7 @@ describe('release, recovery, resume, smoke, publication', () => {
         readyByTag: { [TAG]: [{ status: 503, json: { status: 'starting' } }] },
         images: {
           ...world().images,
-          [`kkakkung-game:${PREV_TAG}`]: { id: digest('9'), revision: 'b'.repeat(40) },
+          [digest('3')]: { id: digest('9'), revision: 'b'.repeat(40) },
         },
       }),
     );
@@ -714,7 +757,7 @@ describe('wiring: Jenkinsfile and infra/deploy.sh go through the runner only', (
 
   it('defaults are explicit: deadlines are bounded and the skeleton profile is a named choice', () => {
     expect(DEFAULT_DEADLINES.drainMs).toBeGreaterThan(0);
-    expect(jenkinsfile).toContain("choices: ['skeleton', 'product']");
+    expect(jenkinsfile).toContain("choices: ['product', 'skeleton']");
   });
 });
 

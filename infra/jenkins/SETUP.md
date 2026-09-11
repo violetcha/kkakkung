@@ -134,7 +134,7 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 
 | 항목             | 값                                                                                                                                                                                                              |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 프로파일         | Build with Parameters의 `RELEASE_PROFILE`: skeleton(기본) 또는 product. [6인 시험 절차](../../docs/six-player-test.md)를 따른다.                                                                                |
+| 프로파일         | Build with Parameters의 `RELEASE_PROFILE`: product(기본) 또는 skeleton. [6인 시험 절차](../../docs/six-player-test.md)를 따른다.                                                                                |
 | 운영 토큰        | Secret file `kkakkung-production-env`의 `OPS_TOKEN`을 서버와 제품 배포 러너가 함께 읽는다. 내부 시험 키 `SMOKE_INTERNAL_TOKEN`과 `SMOKE_INTERNAL_BASE_URL`도 같은 파일에 둔다. 개인 SSO 쿠키는 사용하지 않는다. |
 | preflight        | product 에서 `/opt/kkakkung/cloud-preflight.json`(DP-06 허용, 1방 6명) 이 있어야 smoke 가 돈다. 없으면 BLOCKED                                                                                                  |
 | 예산 신선도 정책 | `product-release.mjs`가 private env를 데이터로 파싱하고 `OPS_OFFICIAL_BUDGET_MAX_AGE_MS`를 매니페스트에 전달한다. 실제 runtime 증거 3개와 DP-06 preflight를 먼저 검증하며 누락·불일치 시 차단한다.              |
@@ -144,3 +144,10 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 | 수동             | `DEPLOY_PROFILE=product ./infra/deploy.sh <SHA>`는 같은 product-release 러너를 호출한다. 내부 시험 키는 제품 환경 파일에서 읽는다.                                                                              |
 
 첫 실제 실행(develop 머지 → Jenkins Deploy)은 이 MR 이 머지된 뒤다. 그 결과를 docs/verification.md F-16 에 기록한다.
+
+### 제품 배포 재실행과 이미지 보존
+
+- `build-release-images.mjs`는 같은 커밋 태그의 기존 이미지를 재사용한다. revision이 다른 이미지는 덮어쓰지 않고 실패한다. 배포와 롤백은 매니페스트의 이미지 ID를 Compose override로 지정하며 자동 재빌드·pull을 하지 않는다.
+- 기본 DP-06 preflight의 유효기간·공식 예산·기기 계획·lockfile 검증을 통과하면 배포 대상 SHA와 실행별 reservation/evidence 경로를 파생한다. 기본 파일과 공식 확인 시각은 변경하지 않는다. 실제 실행 파일은 `releases/<tag>-preflight.json`에 기록된다. 의존성 변경이나 만료된 승인은 별도 갱신이 필요하다.
+- `LOCKED`여도 경기·입장·저널·예산·회수 정리가 확인되면 drain은 완료할 수 있다. 기존 서버의 입장 잠금은 유지한다. 회수 미확인이나 기록 손상은 계속 차단한다.
+- 마지막 정상 이미지 ID가 이미 삭제됐다면 롤백은 `PREVIOUS_IMAGE_MISSING`으로 실패한다. 같은 소스를 재빌드한 이미지를 기존 digest의 대체물로 취급하거나 실패한 배포를 last-good으로 기록하지 않는다.

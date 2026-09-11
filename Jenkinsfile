@@ -11,7 +11,7 @@ pipeline {
   agent any
 
   parameters {
-    choice(name: 'RELEASE_PROFILE', choices: ['skeleton', 'product'], description: 'product: 승인된 Cloud/운영 증거와 6인 smoke를 검사한 뒤 배포')
+    choice(name: 'RELEASE_PROFILE', choices: ['product', 'skeleton'], description: 'product: 승인된 Cloud/운영 증거와 6인 smoke를 검사한 뒤 배포')
   }
 
   options {
@@ -33,7 +33,7 @@ pipeline {
     PUBLIC_URL = 'https://j15c204.p.ssafy.io'
     DEPLOY_BRANCH = 'develop'
     // product: private environment, approved runtime evidence and DP-06 preflight are required.
-    DEPLOY_PROFILE = "${params.RELEASE_PROFILE ?: 'skeleton'}"
+    DEPLOY_PROFILE = "${params.RELEASE_PROFILE ?: 'product'}"
     // 검증 도구체인은 infra/docker/Dockerfile.ci (Node 24.19.0 + pnpm 11.19.0 + Playwright Chromium).
     // 파일 해시로 태그해서 Dockerfile.ci 가 바뀔 때만 다시 빌드합니다.
     CI_IMAGE   = 'kkakkung-ci'
@@ -102,8 +102,7 @@ pipeline {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // 컨텍스트는 저장소 루트 (workspace 패키지 의존). 루트 .dockerignore 가 node_modules/dist 를 걸러줍니다.
         sh '''
-          docker build -f infra/docker/Dockerfile.game-server -t "$IMG_GAME:$TAG" --label "org.opencontainers.image.revision=$GIT_SHA" .
-          docker build -f infra/docker/Dockerfile.web         -t "$IMG_WEB:$TAG"  --label "org.opencontainers.image.revision=$GIT_SHA" .
+          node scripts/build-release-images.mjs "$GIT_SHA"
         '''
       }
     }

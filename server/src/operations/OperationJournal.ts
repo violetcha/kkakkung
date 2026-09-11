@@ -1,3 +1,4 @@
+import { freezeSnapshot } from './ImmutableSnapshot.js';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
@@ -193,6 +194,7 @@ export class OperationJournal {
   private readonly lockPath: string;
   private readonly writerId = randomUUID();
   private readonly checkpoint: CheckpointStore<JournalCheckpointState>;
+  private immutableRecords: readonly JournalEntry[] | null = null;
   private readonly latest = new Map<string, JournalEntry>();
   private queue: Promise<void> = Promise.resolve();
   private handle: FileHandle | null = null;
@@ -226,6 +228,18 @@ export class OperationJournal {
       records: structuredClone([...this.latest.values()].sort((a, b) => a.seq - b.seq)),
       writable: this.writable,
     };
+  }
+
+  /** Immutable durable records reused until append/replay/compaction changes the data.
+   * Writer status and sequence are always read live, including failures and close.
+   */
+  readSnapshot(): ReturnType<OperationJournal['snapshot']> {
+    this.immutableRecords ??= freezeSnapshot(this.snapshot().records);
+    return Object.freeze({
+      lastSeq: this.seq,
+      records: this.immutableRecords,
+      writable: this.writable,
+    });
   }
 
   /** Wait for already accepted journal work; a failed or closing writer is never confirmed. */
@@ -282,6 +296,7 @@ export class OperationJournal {
         else {
           this.seq = checkpoint.lastSeq;
           for (const entry of checkpoint.state.entries) {
+            this.immutableRecords = null;
             this.latest.set(recordKey(entry.record), structuredClone(entry));
             if (entry.seq > afterSeq) records.push(entry);
           }
@@ -334,6 +349,7 @@ export class OperationJournal {
           const entry = validateEntry(value);
           if (entry.seq !== expected) throw new Error('SEQUENCE_GAP');
           if (entry.seq > checkpointSeq) {
+            this.immutableRecords = null;
             this.latest.set(recordKey(entry.record), structuredClone(entry));
             if (entry.seq > afterSeq) records.push(entry);
           }
@@ -457,6 +473,7 @@ export class OperationJournal {
         await this.handle.sync();
         if (created) await syncDirectory(this.options.opsDataDir);
         this.seq = payload.seq;
+        this.immutableRecords = null;
         this.latest.set(recordKey(record), { ...payload, checksum: checksum(payload) });
         return { seq: this.seq, durable: true as const };
       } catch (error) {
@@ -527,6 +544,7 @@ export class OperationJournal {
         await fs.rename(temporary, this.filePath);
         await syncDirectory(this.options.opsDataDir);
         this.handle = await fs.open(this.filePath, 'a', 0o600);
+        this.immutableRecords = null;
         this.latest.clear();
         for (const entry of retained)
           this.latest.set(recordKey(entry.record), structuredClone(entry));

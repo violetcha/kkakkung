@@ -5,3 +5,11 @@ export function prepareDeploymentSmoke(input: {
   env: Record<string, string | undefined>;
   nowEpochMs: number;
 }): { evidenceDir: string };
+
+export function deriveDeploymentPreflight(input: {
+  root: string;
+  preflightPath: string;
+  sourceCommit: string;
+  env: Record<string, string | undefined>;
+  nowEpochMs: number;
+}): import('../../tests/cloud/CloudPreflight').CloudPreflight;

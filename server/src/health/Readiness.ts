@@ -175,8 +175,8 @@ export class ReadinessGate {
     if (!local.historyComplete || !recovery.historyComplete) codes.add('HISTORY_INCOMPLETE');
     if (!recovery.singleWriter) codes.add('SINGLE_WRITER_UNCONFIRMED');
     if (!['ok', 'missing'].includes(recovery.integrity)) codes.add('JOURNAL_INTEGRITY');
-    const journal = o.journal.snapshot();
-    const usage = o.usageBudget.snapshot();
+    const journal = o.journal.readSnapshot();
+    const usage = o.usageBudget.readSnapshot();
     if (
       !recovery.writable ||
       !o.journal.writable ||
