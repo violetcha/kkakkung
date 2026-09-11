@@ -26,6 +26,29 @@ function frame(distance: number, revision = 1): TrustedMediaFrame {
 }
 
 describe('path-based audibility', () => {
+  it('rechecks changed walls, movement, orientation and retirement after routes are warm', () => {
+    const policy = new AudibilityPolicy();
+    const first = frame(2);
+    expect(policy.observe(first)!.receivers[0]!.voices[0]!.gain).toBeCloseTo(1 / 3);
+    const turned = {
+      ...frame(2, 2),
+      participants: [{ ...player('receiver', 0), dir: 0 as const }, player('sender', 2)],
+    };
+    expect(policy.observe(turned)!.receivers[0]!.voices[0]!.azimuthRad).toBeCloseTo(Math.PI / 2);
+    first.topology.walkable[1] = false;
+    expect(policy.observe({ ...first, frameRevision: 3 })!.receivers[0]!.voices).toEqual([]);
+    first.topology.walkable[1] = true;
+    expect(
+      policy.observe({
+        ...first,
+        frameRevision: 4,
+        participants: [player('receiver', 1), player('sender', 2)],
+      })!.receivers[0]!.voices[0]!.gain,
+    ).toBeCloseTo(1 / 2);
+    policy.forget('m', 'i');
+    expect(policy.observe(frame(6))!.receivers[0]!.voices).toEqual([]);
+  });
+
   it('maintains exact 5 -> 6 -> 7 -> 6 -> 5 hysteresis', () => {
     const policy = new AudibilityPolicy();
     const observed = [5, 6, 7, 6, 5].map(

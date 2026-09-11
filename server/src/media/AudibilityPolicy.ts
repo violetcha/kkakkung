@@ -90,12 +90,33 @@ export function shortestAcousticPaths(topology: Topology, from: Cell) {
 
 export class AudibilityPolicy {
   private readonly scopes = new Map<string, { revision: number; pairs: Set<string> }>();
+  private readonly routes = new Map<
+    string,
+    {
+      topology: Topology;
+      receivers: Map<
+        string,
+        { x: number; y: number; paths: ReturnType<typeof shortestAcousticPaths> }
+      >;
+    }
+  >();
   constructor(private readonly tuning: AudibilityTuning = INITIAL_AUDIBILITY_TUNING) {}
 
   observe(frame: TrustedMediaFrame): AudibilityFrame | null {
     const key = scopeKey(frame.matchId, frame.mediaInstanceId);
     const previous = this.scopes.get(key);
     if (previous && frame.frameRevision <= previous.revision) return null;
+    let routes = this.routes.get(key);
+    if (
+      !routes ||
+      routes.topology.width !== frame.topology.width ||
+      routes.topology.height !== frame.topology.height ||
+      routes.topology.walkable.length !== frame.topology.walkable.length ||
+      routes.topology.walkable.some((cell, index) => cell !== frame.topology.walkable[index])
+    ) {
+      routes = { topology: structuredClone(frame.topology), receivers: new Map() };
+      this.routes.set(key, routes);
+    }
     const pairs = new Set<string>();
     const open = ['TEAM_PRACTICE', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'].includes(frame.phase);
     const active = open ? frame.participants.filter((p) => p.status === 'ACTIVE') : [];
@@ -103,7 +124,12 @@ export class AudibilityPolicy {
       const voices: (AcousticValues & { playerId: string })[] = [];
       const effects: AudioPolicy['effects'][number][] = [];
       if (open && receiver.status === 'ACTIVE') {
-        const paths = shortestAcousticPaths(frame.topology, receiver.cell);
+        let route = routes.receivers.get(receiver.playerId);
+        if (!route || route.x !== receiver.cell.x || route.y !== receiver.cell.y) {
+          route = { ...receiver.cell, paths: shortestAcousticPaths(frame.topology, receiver.cell) };
+          routes.receivers.set(receiver.playerId, route);
+        }
+        const paths = route.paths;
         for (const sender of active) {
           if (
             sender.playerId === receiver.playerId ||
@@ -148,6 +174,8 @@ export class AudibilityPolicy {
       }
       return { playerId: receiver.playerId, voices, effects };
     });
+    const activeIds = new Set(active.map((p) => p.playerId));
+    for (const id of routes.receivers.keys()) if (!activeIds.has(id)) routes.receivers.delete(id);
     this.scopes.set(key, { revision: frame.frameRevision, pairs });
     return {
       matchId: frame.matchId,
@@ -159,6 +187,7 @@ export class AudibilityPolicy {
 
   forget(matchId: string, mediaInstanceId: string): void {
     this.scopes.delete(scopeKey(matchId, mediaInstanceId));
+    this.routes.delete(scopeKey(matchId, mediaInstanceId));
   }
 
   private acoustics(

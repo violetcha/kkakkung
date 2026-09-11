@@ -7,6 +7,7 @@ import type { OperationsAudit } from '../operations/OperationsAudit.js';
 import type { RecoveryBootstrap } from '../operations/RecoveryBootstrap.js';
 import type { RevocationRetries } from '../operations/RevocationRetries.js';
 import type { UsageBudget } from '../operations/UsageBudget.js';
+import { freezeSnapshot, isImmutableSnapshot } from '../operations/ImmutableSnapshot.js';
 import { validateOfficialBudget, validateUsageState } from '../operations/UsageCheckpoint.js';
 import { ReservationReadinessInspector } from './ReservationReadiness.js';
 
@@ -134,6 +135,11 @@ export class ReadinessGate {
   private readonly config: MediaConfiguration;
   private readonly locked = new Set<string>();
   private readonly accounting = new ReservationReadinessInspector();
+  private validatedUsage: {
+    official: unknown;
+    reservations: unknown;
+    value: ReturnType<typeof validateUsageState>;
+  } | null = null;
 
   constructor(private readonly options: ReadinessGateOptions) {
     this.config = structuredClone(options.config);
@@ -216,10 +222,22 @@ export class ReadinessGate {
     let accounting = { consistent: false, unresolvedCount: 0 };
     try {
       if (usage.integrity !== 'ok') throw new Error('UNCONFIRMED_USAGE');
-      const validated = validateUsageState({
-        official: usage.official,
-        reservations: usage.reservations,
-      });
+      if (
+        !this.validatedUsage ||
+        this.validatedUsage.official !== usage.official ||
+        this.validatedUsage.reservations !== usage.reservations ||
+        !isImmutableSnapshot(usage.reservations) ||
+        (usage.official !== null && !isImmutableSnapshot(usage.official))
+      ) {
+        this.validatedUsage = {
+          official: usage.official,
+          reservations: usage.reservations,
+          value: freezeSnapshot(
+            validateUsageState({ official: usage.official, reservations: usage.reservations }),
+          ),
+        };
+      }
+      const validated = this.validatedUsage.value;
       accounting = this.accounting.inspect({
         namespace: this.config.namespace,
         serverEpoch: o.registry.serverEpoch,

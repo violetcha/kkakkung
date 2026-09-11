@@ -11,6 +11,7 @@ import {
 } from '../../src/media/MediaGenerationRegistry.js';
 import { checksum } from '../../src/operations/CheckpointStore.js';
 import * as checkpointStore from '../../src/operations/CheckpointStore.js';
+import { freezeSnapshot } from '../../src/operations/ImmutableSnapshot.js';
 import type { JournalEntry, JournalRecord } from '../../src/operations/OperationJournal.js';
 import type { UsageReservation } from '../../src/operations/UsageCheckpoint.js';
 import { practiceFrame, prepareRequest } from '../media/generation-fixtures.js';
@@ -18,6 +19,36 @@ import { practiceFrame, prepareRequest } from '../media/generation-fixtures.js';
 const NOW = 1_800_000_000_000;
 
 describe('exact accounting reuse', () => {
+  it('reuses frozen history but rechecks mutable generations and replacement records', () => {
+    const { generation, input } = setup();
+    const frozen = {
+      ...input,
+      records: freezeSnapshot(structuredClone(input.records)),
+      reservations: freezeSnapshot(structuredClone(input.reservations)),
+    };
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(frozen).consistent).toBe(true);
+    generation.terminal = true;
+    expect(inspector.inspect(frozen).unresolvedCount).toBe(1);
+    generation.terminal = false;
+    expect(inspector.inspect(frozen).consistent).toBe(true);
+    expect(
+      inspector.inspect({
+        ...frozen,
+        records: freezeSnapshot([{ ...frozen.records[0]!, checksum: 'corrupt' }]),
+      }).consistent,
+    ).toBe(false);
+  });
+
+  it('does not trust shallow-frozen caller arrays with mutable entries', () => {
+    const { input } = setup();
+    const records = Object.freeze(structuredClone(input.records));
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect({ ...input, records }).consistent).toBe(true);
+    records[0]!.record.state = 'REVOKED';
+    expect(inspector.inspect({ ...input, records }).consistent).toBe(false);
+  });
+
   it('does not rehash unchanged journal entries while accepting fresh equivalent snapshots', () => {
     const { input } = setup();
     const inspector = new ReservationReadinessInspector();

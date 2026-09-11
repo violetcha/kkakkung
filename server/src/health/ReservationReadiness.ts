@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { isImmutableSnapshot } from '../operations/ImmutableSnapshot.js';
 import type { Generation } from '../media/MediaGenerationRegistry.js';
 import { checksum, safeIdentifier, strictObject } from '../operations/CheckpointStore.js';
 import {
@@ -46,7 +47,18 @@ export class ReservationReadinessInspector {
       const result = inspectReservationReadiness(input);
       // Own the previous values: registry state mutates in place and snapshots can be replaced
       // without advancing the journal sequence (for example, compaction or reservation changes).
-      this.previous = structuredClone(input);
+      // Frozen journal/history arrays can retain identity; cloning them here would force a
+      // full history comparison for every track permission check. Mutable registry objects
+      // and untrusted caller arrays still get owned copies and value comparisons.
+      this.previous = {
+        ...structuredClone({ ...input, records: [], reservations: [] }),
+        records: isImmutableSnapshot(input.records)
+          ? input.records
+          : structuredClone(input.records),
+        reservations: isImmutableSnapshot(input.reservations)
+          ? input.reservations
+          : structuredClone(input.reservations),
+      };
       this.result = Object.freeze(result);
       return this.result;
     } catch {

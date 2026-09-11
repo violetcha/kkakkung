@@ -5,8 +5,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import type { ProductServerProbe } from './product-server-probe.js';
+import { profileProductPhases } from './product-phase-profile.js';
 
-export async function startProductCpuProfile(snapshot: () => ProductServerProbe) {
+export async function startProductCpuProfile(
+  snapshot: () => ProductServerProbe,
+  phase: () => string,
+) {
+  const phases = profileProductPhases(phase);
   const session = new Session();
   session.connect();
   await session.post('Profiler.enable');
@@ -32,10 +37,12 @@ export async function startProductCpuProfile(snapshot: () => ProductServerProbe)
           profileStartProbeBeforeMs: beforeMs,
           profileStartProbeAfterMs: afterMs,
           probe: snapshot(),
+          phases: phases.snapshot(),
         }),
         { flag: 'wx' },
       );
     } finally {
+      phases.close();
       session.disconnect();
     }
   };

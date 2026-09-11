@@ -34,12 +34,13 @@ let closing: Promise<void> | undefined;
 let booting = false;
 let advancing = false;
 let stopProfile: (() => Promise<void>) | undefined;
-const probe = createProductServerProbe(() => {
+const currentPhase = () => {
   if (!application) return 'BOOT';
   const roomCode = application.slots?.roomCodes().values().next().value;
   const room = roomCode ? application.directory.get(roomCode) : null;
   return room && 'phase' in room ? room.phase : 'NO_ROOM';
-});
+};
+const probe = createProductServerProbe(currentPhase);
 
 function inspect(roomCode?: string): ProductServerInspection {
   const handle = roomCode ? application?.directory.get(roomCode) : null;
@@ -84,7 +85,8 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
   if (request.action === 'boot') {
     if (booting || application || closing) throw new Error('ALREADY_STARTED');
     booting = true;
-    if (request.cpuProfile) stopProfile = await startProductCpuProfile(() => probe.snapshot());
+    if (request.cpuProfile)
+      stopProfile = await startProductCpuProfile(() => probe.snapshot(), currentPhase);
     cloud = await productCloudFixture();
     const config = {
       ...parseConfig({

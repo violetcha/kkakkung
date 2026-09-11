@@ -7,7 +7,7 @@ import {
   mediaGrantSchema,
   sessionResponseSchema,
 } from '@kkakkung/protocol/game-messages';
-import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
+import { ABORT_REASONS, type PublicMatchState } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/version';
 import { bindProductRoom } from '../../apps/web/src/app/product-runtime';
 import { productRoomPort } from '../../apps/web/src/features/room/product-session';
@@ -22,6 +22,17 @@ export type DeploymentSmokeReport = {
   evidenceScope: 'SYNTHETIC_CLOUD_DEPLOYMENT_SMOKE' | 'LOCAL_CONTRACT_ONLY';
   status: 'PASS' | 'FAIL';
   failureCode: string | null;
+  failureObservation?: {
+    condition: string | null;
+    clients: {
+      phase: string | null;
+      serverTick: number | null;
+      startTick: number | null;
+      abortReason: string | null;
+      runtimeError: boolean;
+      connectionLost: boolean;
+    }[];
+  };
   participants: number;
   phaseCoverage: string[];
   commandsSent: number;
@@ -382,8 +393,25 @@ export async function runDeploymentSmoke(
     )
       throw new Error('DP06_POSITIVE_GAME_EVIDENCE_MISSING');
     report.status = 'PASS';
-  } catch {
+  } catch (error) {
     report.failureCode = stage;
+    // Observe before leave/drain can replace the state. Never serialize arbitrary errors,
+    // snapshots, participant identities, grants or credentials.
+    report.failureObservation = {
+      condition:
+        error instanceof Error && /^DP06_[A-Z_]{1,100}$/.test(error.message) ? error.message : null,
+      clients: snapshot().map((value) => ({
+        phase: value.round?.phase ?? null,
+        serverTick: value.round?.serverTick ?? null,
+        startTick: value.round?.startTick ?? null,
+        abortReason:
+          value.round?.abortReason && ABORT_REASONS.includes(value.round.abortReason)
+            ? value.round.abortReason
+            : null,
+        runtimeError: Boolean(value.error),
+        connectionLost: value.lost,
+      })),
+    };
   } finally {
     cleaning = true;
     if (timer) clearInterval(timer);
