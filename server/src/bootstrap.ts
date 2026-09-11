@@ -49,6 +49,7 @@ import { createMetricRegistry, createProcessSampler } from './observability/Metr
 import { createLogOptions, createStructuredEventLogger } from './observability/StructuredEvents.js';
 import { createAlertPolicy } from './observability/AlertPolicy.js';
 import { ProductSessionStore } from './session/ProductSessionStore.js';
+import { createReservationCleanup } from './session/ReservationCleanup.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
 import { createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
 import { SessionStore } from './session/SessionStore.js';
@@ -175,6 +176,14 @@ export function createApplication<State = unknown>(
         })
       : null;
   const limiter = product?.sessionAttempts ? new AdmissionLimiter(product.sessionAttempts) : null;
+  const cleanupReservations = slots
+    ? createReservationCleanup({
+        sessions: productSessions,
+        slots,
+        hasLiveRoom: (roomCode) => directory.get(roomCode) !== null,
+        onRoomClosed: (roomCode) => invites?.forgetRoom(roomCode),
+      })
+    : () => {};
   const roomExpiry = new RoomExpiry(product?.roomIdleTtlMs ?? null);
   const authorize =
     product?.opsToken && product.createOperatorAuth
@@ -296,6 +305,7 @@ export function createApplication<State = unknown>(
             admission,
             monotonicNow,
             trustProxy: product.trustProxy,
+            cleanupReservations,
           }),
         );
         if (authorize) {
@@ -424,6 +434,7 @@ export function createApplication<State = unknown>(
 
   let tickTimer: NodeJS.Timeout | null = null;
   let metricsTimer: NodeJS.Timeout | null = null;
+  let reservationTimer: NodeJS.Timeout | null = null;
   return {
     server,
     serverEpoch,
@@ -467,6 +478,8 @@ export function createApplication<State = unknown>(
         });
       tickTimer = setInterval(() => coordinator.run(), 10);
       tickTimer.unref();
+      reservationTimer = setInterval(cleanupReservations, 1000);
+      reservationTimer.unref();
       histogram.enable();
       metricsTimer = setInterval(() => {
         sampleProcess();
@@ -490,6 +503,8 @@ export function createApplication<State = unknown>(
       ready = false;
       if (tickTimer) clearInterval(tickTimer);
       tickTimer = null;
+      if (reservationTimer) clearInterval(reservationTimer);
+      reservationTimer = null;
       if (metricsTimer) clearInterval(metricsTimer);
       metricsTimer = null;
       histogram.disable();

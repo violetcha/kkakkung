@@ -42,6 +42,7 @@ function node<T extends object>(extra: T) {
 function harness(tracks: Record<string, MediaStreamTrack | null> = {}) {
   const sources: (SourceLike & { started: boolean; stopped: boolean })[] = [];
   const effectSources: (SourceLike & { kind: string })[] = [];
+  const effectEnds: (() => void)[] = [];
   const masterGain = node({ gainValue: 1 }) as unknown as GainLike;
   const environment: AudioGraphEnvironment = {
     createSourceFromTrack: () => {
@@ -59,7 +60,14 @@ function harness(tracks: Record<string, MediaStreamTrack | null> = {}) {
       return source as unknown as SourceLike;
     },
     createEffectSource: (kind) => {
-      const source = node({ kind, start: () => undefined, stop: vi.fn() });
+      const source = node({
+        kind,
+        start: () => undefined,
+        stop: vi.fn(),
+        onEnded: (listener: (() => void) | null) => {
+          if (listener) effectEnds.push(listener);
+        },
+      });
       effectSources.push(source as unknown as SourceLike & { kind: string });
       return source as unknown as SourceLike;
     },
@@ -78,6 +86,7 @@ function harness(tracks: Record<string, MediaStreamTrack | null> = {}) {
     graph,
     sources,
     effectSources,
+    effectEnds,
     masterGain,
     environment,
     arriveTrack: (trackSid: string) => {
@@ -178,6 +187,27 @@ describe('createAudioGraph', () => {
 
     expect(base.graph.playEffects([effect()])).toEqual([]);
     expect(base.effectSources).toHaveLength(0);
+  });
+
+  it('disconnects finished effect chains once and stops only still-playing effects on disposal', () => {
+    const base = harness();
+    const factories = [
+      vi.spyOn(base.environment, 'createFilter'),
+      vi.spyOn(base.environment, 'createGain'),
+      vi.spyOn(base.environment, 'createPanner'),
+    ];
+    base.graph.playEffects([effect()]);
+    base.effectEnds[0]!();
+    expect(base.graph.playEffects([effect()])).toEqual([]);
+    base.graph.playEffects([effect({ eventId: 'next' })]);
+    base.graph.dispose();
+    base.effectEnds[0]!(); // A delayed browser callback cannot double-disconnect.
+    expect(base.effectSources[0]!.stop).not.toHaveBeenCalled();
+    expect(base.effectSources[1]!.stop).toHaveBeenCalledOnce();
+    for (const source of base.effectSources) expect(source.disconnect).toHaveBeenCalledOnce();
+    for (const factory of factories)
+      for (const result of factory.mock.results)
+        expect(result.value.disconnect).toHaveBeenCalledOnce();
   });
 
   it('plays only the approved footstep, sensor and trap kinds', () => {

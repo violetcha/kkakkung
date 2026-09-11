@@ -493,6 +493,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     onLeave(client: Client) {
+      this.removeConnection(client);
+    }
+
+    private removeConnection(client: Client, heartbeatLost = false) {
       const auth = this.playersByConnection.get(client.sessionId);
       this.playersByConnection.delete(client.sessionId);
       this.limiter.forget(client.sessionId);
@@ -502,7 +506,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.sessions.releaseConnection(auth.sessionId, client.sessionId);
       this.clientsByPlayer.delete(auth.playerId);
       this.lobby.setConnected(auth.playerId, false);
-      if (control) this.handleConnectionLost(auth.playerId);
+      if (control || heartbeatLost) this.handleConnectionLost(auth.playerId);
       if (this.phase === 'LOBBY' || this.phase === 'DEVICE_CHECK') {
         this.lobby.remove(auth.playerId);
         this.queue.forgetActor(auth.playerId);
@@ -680,8 +684,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             .get(auth.playerId)
             ?.send(PRODUCT_SERVER_MESSAGES.heartbeat, heartbeat);
       }
-      for (const control of this.heartbeat.sweep(now))
-        if (control.type === 'CONNECTION_LOST') this.handleConnectionLost(control.playerId);
+      for (const control of this.heartbeat.sweep(now)) {
+        if (control.type !== 'CONNECTION_LOST') continue;
+        const client = this.clientsByPlayer.get(control.playerId);
+        if (!client) continue;
+        // Clean up synchronously before this tick evaluates readiness. A later onLeave is safe.
+        this.removeConnection(client, true);
+        client.leave(4000, 'HEARTBEAT_TIMEOUT');
+      }
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
       for (const { playerId, message } of this.pendingBindings.splice(0))
         this.applyBindings(playerId, message);

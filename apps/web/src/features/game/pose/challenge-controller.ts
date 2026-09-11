@@ -4,6 +4,14 @@ import type { CommandInput, RequestDisplay } from '../../room/command-lifecycle'
 import { createPoseHold } from './pose-evaluator';
 import { advanceKey, challengeKeys, type ChallengeKey } from './key-challenge';
 
+export function facesExit(
+  self: PrivateView['self'],
+  exit: PrivateView['knownActiveExits'][number],
+) {
+  // A wall face points toward its approach cell; the player must face back toward the wall.
+  return self?.status === 'ACTIVE' && self.dir === (exit.wall.side + 2) % 4;
+}
+
 export function exitCandidate(view: PrivateView | null) {
   const self = view?.self;
   if (!view || self?.status !== 'ACTIVE' || self.role !== 'runner') return null;
