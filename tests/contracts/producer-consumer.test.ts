@@ -1,7 +1,7 @@
 // F-12 / QA-07 producer→consumer boundary on real modules: A `matchCore` (producer) → B
 // MatchDriver/MatchContext/PlayerProjection (serializer) → protocol `privateViewSchema` (the
-// wire contract C's reducer consumes). This suite stops at the strict wire boundary; browser
-// reducer/runtime integration is exercised separately, not represented by a fake consumer here.
+// wire contract C's reducer consumes). This suite stops at the strict wire boundary; the consumer
+// half on C's real reducers is tests/contracts/consumer-reducer.test.ts (F-REQ-09), never a fake.
 import { describe, expect, it } from 'vitest';
 import { privateViewSchema, commandOutcomeSchema } from '@kkakkung/protocol/game-messages';
 import { matchCore } from '@kkakkung/game-core/match';
