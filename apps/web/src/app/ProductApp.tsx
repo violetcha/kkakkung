@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { requestSession, joinProductRoom, productRoomPort } from '../features/room/product-session';
+import {
+  requestSession,
+  joinProductRoom,
+  productRoomPort,
+  cancelSessionReservation,
+} from '../features/room/product-session';
+import type { SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { LocalControls } from '../features/game/flow/LocalControls';
@@ -36,12 +42,20 @@ export function ProductApp({
   const runtime = useRef<ReturnType<typeof bindProductRoom> | null>(null);
   const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
   const generation = useRef(0);
+  const pendingSession = useRef<SessionResponse | null>(null);
+  const appliedInvitation = useRef({ invitation, initialRoom });
+  const cancelPendingAdmission = useCallback(() => {
+    const pending = pendingSession.current;
+    pendingSession.current = null;
+    if (pending) void cancelSessionReservation(pending);
+  }, []);
   const preview = useCallback(
     (element: HTMLDivElement | null) => runtime.current?.setPreviewHost(element),
     [],
   );
   const leave = useCallback(async () => {
     generation.current++;
+    cancelPendingAdmission();
     const old = runtime.current;
     runtime.current = null;
     setJoining(false);
@@ -49,7 +63,23 @@ export function ProductApp({
     await old
       ?.leave()
       .catch(() => setError('연결 정리를 확인하지 못했습니다. 페이지를 새로고침해 주세요.'));
-  }, []);
+  }, [cancelPendingAdmission]);
+  useEffect(() => {
+    const previous = appliedInvitation.current;
+    // Keep a new invitation for the next admission; never evict an active participant.
+    if (
+      runtime.current ||
+      (previous.invitation === invitation && previous.initialRoom === initialRoom)
+    )
+      return;
+    appliedInvitation.current = { invitation, initialRoom };
+    generation.current++;
+    cancelPendingAdmission();
+    setJoining(false);
+    setRoomCode(initialRoom);
+    setCreateRoom(!initialRoom);
+    setError('');
+  }, [invitation, initialRoom, snapshot, cancelPendingAdmission]);
   useEffect(() => {
     const active = () =>
       runtime.current?.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
@@ -73,11 +103,12 @@ export function ProductApp({
       window.removeEventListener('blur', blur);
       window.removeEventListener('pagehide', pagehide);
       generation.current++;
+      cancelPendingAdmission();
       const old = runtime.current;
       runtime.current = null;
       void old?.leave().catch(() => {});
     };
-  }, [leave]);
+  }, [leave, cancelPendingAdmission]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
     if (joining || runtime.current) return;
@@ -85,18 +116,25 @@ export function ProductApp({
     setJoining(true);
     setError('');
     let joined: Awaited<ReturnType<typeof joinProductRoom>> | null = null;
+    let session: SessionResponse | null = null;
     try {
       const base = { nickname: nickname.trim(), inviteToken: invitation };
-      const session = await requestSession(
+      session = await requestSession(
         createRoom
           ? { ...base, createRoom: true }
           : { ...base, createRoom: false, roomCode: roomCode.trim().toUpperCase() },
       );
-      if (run !== generation.current) return;
+      if (run !== generation.current) {
+        await cancelSessionReservation(session);
+        return;
+      }
+      pendingSession.current = session;
       const room = await joinProductRoom(session);
       joined = room;
+      if (pendingSession.current === session) pendingSession.current = null;
       if (run !== generation.current) {
         await room.leave();
+        await cancelSessionReservation(session);
         return;
       }
       runtime.current = bindProductRoom(productRoomPort(room), session, {
@@ -114,6 +152,7 @@ export function ProductApp({
         await productRoomPort(joined)
           .leave()
           .catch(() => {});
+      if (session) await cancelSessionReservation(session);
       if (run === generation.current) {
         runtime.current = null;
         setSnapshot(null);
@@ -124,6 +163,7 @@ export function ProductApp({
           ROOM_NOT_AVAILABLE: '입장할 수 없는 방입니다.',
           RATE_LIMITED: '잠시 기다린 뒤 다시 시도해 주세요.',
           ADMISSION_CLOSED: '지금은 입장을 받고 있지 않습니다.',
+          INVALID_SESSION: '입장 시간이 만료됐습니다. 다시 입장해 주세요.',
         };
         setError(
           labels[cause instanceof Error ? cause.message : ''] ??
@@ -131,6 +171,7 @@ export function ProductApp({
         );
       }
     } finally {
+      if (pendingSession.current === session) pendingSession.current = null;
       if (run === generation.current) setJoining(false);
     }
   }

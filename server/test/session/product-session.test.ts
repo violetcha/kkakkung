@@ -30,18 +30,36 @@ describe('ProductSessionStore', () => {
     const h = store();
     const issued = h.sessions.issue({ nickname: 'n', inviteId: 'inv', roomCode: 'ABC234' });
     expect(issued.expiresAt).toBe(h.now() + SESSION_LIMITS.leaseTtlMs);
+    h.sessions.claimConnection(issued.sessionId, 'first');
     h.advance(SESSION_LIMITS.leaseTtlMs - 1);
     expect(h.sessions.authenticate(issued.sessionToken)).not.toBeNull();
     // Presenting the token does not extend; the lease expires at the deadline.
     h.advance(1);
     expect(h.sessions.authenticate(issued.sessionToken)).toBeNull();
     const second = h.sessions.issue({ nickname: 'n', inviteId: 'inv', roomCode: 'ABC234' });
+    h.sessions.claimConnection(second.sessionId, 'second');
     for (let i = 0; i < 10; i++) {
       h.advance(SESSION_LIMITS.leaseTtlMs - 1000);
       h.sessions.touch(second.sessionId);
     }
     const auth = h.sessions.get(second.sessionId);
     expect(auth).toBeNull();
+  });
+
+  it('expires an unclaimed admission without shortening the lease of a claimed session', () => {
+    const h = store();
+    const abandoned = h.sessions.issue({ nickname: 'a', inviteId: 'inv', roomCode: 'ABC234' });
+    const joined = h.sessions.issue({ nickname: 'b', inviteId: 'inv', roomCode: 'ABC234' });
+    h.advance(SESSION_LIMITS.admissionTtlMs - 1);
+    expect(h.sessions.authenticate(abandoned.sessionToken)).not.toBeNull();
+    expect(h.sessions.claimConnection(joined.sessionId, 'connection')).toBe('claimed');
+    h.advance(1);
+    expect(h.sessions.authenticate(abandoned.sessionToken)).toBeNull();
+    expect(h.sessions.claimConnection(abandoned.sessionId, 'late')).toBe('invalid');
+    expect(h.sessions.authenticate(joined.sessionToken)).not.toBeNull();
+    h.sessions.releaseConnection(joined.sessionId, 'connection');
+    h.sessions.prune();
+    expect(h.sessions.size).toBe(1);
   });
 
   it('invalidates sessions on room end and refuses rejoin with the old token', () => {

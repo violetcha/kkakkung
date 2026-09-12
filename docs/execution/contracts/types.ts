@@ -15,6 +15,9 @@ export type SessionResponse = Readonly<{
   expiresAt: number;
   protocolVersion: '0.2.0';
 }>;
+// Owner-only cancellation before the first game connection; no identity in the body.
+export const SESSION_CANCEL_ROUTE = '/api/sessions/current' as const;
+export type SessionCancelErrorCode = 'INVALID_REQUEST' | 'INVALID_SESSION' | 'SESSION_IN_USE';
 // Server/operator-only. These endpoints do not accept a player's session Bearer token.
 export const INVITATION_ROUTES = {
   issue: '/api/operations/invitations',

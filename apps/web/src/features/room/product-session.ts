@@ -4,6 +4,7 @@ import {
   sessionRequestSchema,
   sessionResponseSchema,
   SESSION_ERROR_CODES,
+  SESSION_CANCEL_ROUTE,
   type SessionRequest,
   type SessionResponse,
 } from '@kkakkung/protocol/game-messages';
@@ -64,6 +65,21 @@ export function joinProductRoom(session: SessionResponse) {
     roomCode: session.roomCode,
     protocolVersion: PRODUCT_PROTOCOL_VERSION,
   });
+}
+
+/** Best effort: the server's short admission deadline covers closed pages/lost responses. */
+export async function cancelSessionReservation(
+  session: SessionResponse,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  await fetcher(SESSION_CANCEL_ROUTE, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${session.sessionToken}` },
+    cache: 'no-store',
+    keepalive: true,
+    signal: AbortSignal.timeout(5000),
+    redirect: 'error',
+  }).catch(() => undefined);
 }
 
 export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductRoomPort {

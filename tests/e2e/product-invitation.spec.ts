@@ -1,5 +1,87 @@
 import { expect, test } from '@playwright/test';
 
+test('same-tab invitations refresh a rejected form and its next request', async ({ page }) => {
+  const attempts: unknown[] = [];
+  await page.route('**/api/sessions', async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } });
+  });
+  await page.goto('/play');
+  await expect(page.getByRole('button', { name: '방 만들기', exact: true })).toBeDisabled();
+  await page.evaluate(() => {
+    location.hash = 'invite=synthetic-create-invitation';
+  });
+  await page.getByLabel('닉네임').fill('test');
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect(page.getByText('유효한 초대 링크가 필요합니다.')).toBeVisible();
+  await page.evaluate(() => {
+    location.hash = 'invite=synthetic-new-invitation&room=ABCDEF';
+  });
+  await expect(page.getByLabel('방 코드')).toHaveValue('ABCDEF');
+  await expect(page.getByText('유효한 초대 링크가 필요합니다.')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/play$/);
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(2);
+  expect(attempts).toEqual([
+    { nickname: 'test', inviteToken: 'synthetic-create-invitation', createRoom: true },
+    {
+      nickname: 'test',
+      inviteToken: 'synthetic-new-invitation',
+      createRoom: false,
+      roomCode: 'ABCDEF',
+    },
+  ]);
+});
+
+test('a late canceled admission and failed SDK join return their own reservations', async ({
+  page,
+}) => {
+  const canceled: string[] = [];
+  let finishFirst!: () => Promise<void>;
+  let attempts = 0;
+  await page.route('**/api/sessions/current', async (route) => {
+    expect(route.request().method()).toBe('DELETE');
+    canceled.push(route.request().headers().authorization!);
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/matchmake/**', (route) => route.abort());
+  await page.route('**/api/sessions', async (route) => {
+    const index = ++attempts;
+    const finish = () =>
+      route.fulfill({
+        status: 201,
+        json: {
+          sessionToken: `synthetic-session-${index}`,
+          playerId: `player-${index}`,
+          roomCode: 'ABCDEF',
+          expiresAt: 1900000000000,
+          protocolVersion: '0.2.0',
+        },
+      });
+    if (index === 1) finishFirst = finish;
+    else await finish();
+  });
+  await page.goto('/play#invite=synthetic-create-invitation');
+  await page.getByLabel('닉네임').fill('test');
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect.poll(() => attempts).toBe(1);
+  await page.evaluate(() => {
+    location.hash = 'invite=synthetic-new-invitation&room=ABCDEF';
+  });
+  await expect(page.getByLabel('방 코드')).toBeEnabled();
+  await finishFirst();
+  await expect.poll(() => canceled).toEqual(['Bearer synthetic-session-1']);
+  await expect(page.getByRole('button', { name: '방 참가', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect
+    .poll(() => canceled)
+    .toEqual(['Bearer synthetic-session-1', 'Bearer synthetic-session-2']);
+  await expect(
+    page.getByText('연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: '방 참가', exact: true })).toBeEnabled();
+});
+
 test('a shared room invitation selects join and removes secrets before admission', async ({
   page,
 }) => {

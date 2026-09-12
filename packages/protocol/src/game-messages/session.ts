@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { PRODUCT_PROTOCOL_VERSION } from '../version.js';
 
 export const SESSION_ROUTE = '/api/sessions';
+/** DELETE with the owner's Bearer token; never accepts a playerId or roomCode. */
+export const SESSION_CANCEL_ROUTE = '/api/sessions/current';
+export const sessionCancelRequestSchema = z.strictObject({});
+export const SESSION_CANCEL_ERROR_CODES = [
+  'INVALID_REQUEST',
+  'INVALID_SESSION',
+  'SESSION_IN_USE',
+] as const;
+export type SessionCancelErrorCode = (typeof SESSION_CANCEL_ERROR_CODES)[number];
 export const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export const nicknameSchema = z.string().min(1).max(20);
