@@ -13,7 +13,20 @@ import {
   roomExpiryFixture,
   preparationFeedbackFixture,
   rematchFeedbackFixture,
+  localAudioFixture,
 } from './fixtures.ts';
+
+test('local audio settings expose no captured media or remote subscription authority', () => {
+  assert.equal(localAudioFixture.microphoneLevel, null);
+  assert.equal(localAudioFixture.testTonePlaying, false);
+  assert.deepEqual(Object.keys(localAudioFixture.preferences).sort(), [
+    'muted',
+    'mutedPlayerIds',
+    'volume',
+  ]);
+  for (const key of ['stream', 'trackSid', 'identity', 'token', 'policyRevision'])
+    assert.equal(key in localAudioFixture, false);
+});
 
 test('preparation and rematch feedback contain safe round metadata without diagnostic paths', () => {
   assert.equal(preparationFeedbackFixture.preparationIssue, 'LAYOUT_UNAVAILABLE');

@@ -2,6 +2,13 @@
 // SID당 Source→Filter→Gain→Panner→Destination을 한 번만 연결한다.
 // audio element attach 재생을 추가하지 않는다. gain=0은 접근 차단이 아니라 표현층 mute다.
 import type { AudioEffect, ResolvedVoice } from './audio-policy';
+import type { AudioDiagnostics } from './audio-diagnostics';
+import {
+  DEFAULT_AUDIO_PREFERENCES,
+  normalizeAudioPreferences,
+  unitGain,
+  type AudioPreferences,
+} from './audio-preferences';
 
 /** COUNTDOWN·개인 종료·권위 상실에서 출력을 잠근다. */
 export type OutputLock = 'open' | 'locked';
@@ -34,6 +41,7 @@ export interface SourceLike extends AudioNodeLike {
 
 /** 사용자 제스처로 이미 열린 AudioContext를 재사용한다. */
 export interface AudioGraphEnvironment {
+  readonly diagnostics?: AudioDiagnostics;
   createSourceFromTrack(track: MediaStreamTrack): SourceLike;
   createEffectSource(kind: AudioEffect['kind']): SourceLike;
   createGain(): GainLike;
@@ -65,6 +73,7 @@ export interface AudioGraph {
   /** 승인된 효과음만 서버 eventId로 중복 없이 재생한다. */
   playEffects(effects: readonly AudioEffect[]): readonly string[];
   setOutputLock(lock: OutputLock): void;
+  setPreferences(preferences: AudioPreferences): void;
   getVoices(): readonly VoiceChain[];
   readonly outputLock: OutputLock;
   /** 종료. 모든 노드와 효과음 source를 정리한다. */
@@ -77,10 +86,14 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
   const activeEffects = new Map<SourceLike, () => void>();
   let lock: OutputLock = 'open';
   let disposed = false;
+  let preferences = DEFAULT_AUDIO_PREFERENCES;
+  const policyGains = new Map<string, number>();
+  let mutedPlayers = new Set<string>();
 
   const applyLock = () => {
     // 잠금은 master gain을 즉시 닫는다.
-    deps.environment.masterGain.gainValue = lock === 'open' ? 1 : 0;
+    deps.environment.masterGain.gainValue =
+      lock === 'open' && !preferences.muted ? preferences.volume : 0;
   };
   applyLock();
 
@@ -100,17 +113,24 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
       // 정책에서 사라졌거나 세대가 바뀐 voice의 출력을 즉시 닫는다.
       for (const [trackSid, chain] of [...voices.entries()]) {
         const voice = wanted.get(trackSid);
-        if (!voice || voice.publisherGeneration !== chain.publisherGeneration) {
+        if (
+          !voice ||
+          voice.publisherGeneration !== chain.publisherGeneration ||
+          voice.playerId !== chain.playerId
+        ) {
           teardown(chain);
           voices.delete(trackSid);
+          policyGains.delete(trackSid);
         }
       }
 
       for (const voice of resolved) {
+        const audibleGain = mutedPlayers.has(voice.playerId) ? 0 : unitGain(voice.gain);
         const existing = voices.get(voice.trackSid);
         if (existing) {
+          policyGains.set(voice.trackSid, unitGain(voice.gain));
           // 같은 정책이 두 번 와도 그래프를 다시 만들지 않는다.
-          existing.gain.gainValue = voice.gain;
+          existing.gain.gainValue = audibleGain;
           existing.filter.frequency = voice.lowpassHz;
           existing.panner.azimuthRad = voice.azimuthRad;
           continue;
@@ -118,12 +138,13 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
         const track = deps.getAudioTrack(voice.trackSid);
         // 실제 SDK 트랙이 없으면 출력 0을 유지한다.
         if (!track) continue;
+        policyGains.set(voice.trackSid, unitGain(voice.gain));
         const source = deps.environment.createSourceFromTrack(track);
         const filter = deps.environment.createFilter();
         const gain = deps.environment.createGain();
         const panner = deps.environment.createPanner();
         filter.frequency = voice.lowpassHz;
-        gain.gainValue = voice.gain;
+        gain.gainValue = audibleGain;
         panner.azimuthRad = voice.azimuthRad;
         source.connect(filter);
         filter.connect(gain);
@@ -185,9 +206,19 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
     },
 
     setOutputLock(next) {
-      if (next === lock) return;
+      if (disposed || next === lock) return;
       lock = next;
       applyLock();
+    },
+    setPreferences(next) {
+      if (disposed) return;
+      preferences = normalizeAudioPreferences(next);
+      mutedPlayers = new Set(preferences.mutedPlayerIds);
+      applyLock();
+      for (const chain of voices.values())
+        chain.gain.gainValue = mutedPlayers.has(chain.playerId)
+          ? 0
+          : (policyGains.get(chain.trackSid) ?? 0);
     },
 
     getVoices: () => [...voices.values()],
@@ -201,6 +232,8 @@ export function createAudioGraph(deps: AudioGraphDeps): AudioGraph {
       disposed = true;
       for (const chain of voices.values()) teardown(chain);
       voices.clear();
+      policyGains.clear();
+      mutedPlayers.clear();
       for (const [source, cleanup] of activeEffects) {
         source.stop?.();
         cleanup();

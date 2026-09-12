@@ -228,6 +228,7 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - observeFrame은 게임의 권위 좌표·지형·현재 참가 상태만 받는다. E가 자신의 확인된 Identity/SID 레지스트리와 결합한다. 동기 호출 구간에 네트워크 대기·파일 쓰기·긴 계산을 넣지 않는다.
 - 내부 6인 시험 예외(2026-09-11 승인): `MediaGrant.subscriptionMode=publisher-permissions`인 경우 `AudioPolicy.publisherPermissions`에 송신자의 전체 수신 대상 Identity·허용 트랙 SID를 전달한다. D는 현재 scope·bindingRevision을 검증하고 자기 게시 SID만 허용한다. 게시 전 차단, 새 정책 revision으로 1.5초 lease 갱신, 종료·연결 상실·lease 만료 시 빈 목록 적용이 필수다. E는 동일 내용이어도 새 권위 프레임에서 정책을 갱신한다. 정상 송신 앱을 전제로 하며 공개 운영의 서버 단독 권한 통과와 구분한다. 자세한 승인 경계는 [최신 결정](../spec/decisions.md)을 따른다.
 - 서버는 `media-bindings`, `audio-policy` 채널로 전체 허용 목록을 전송한다. AudioPolicy의 scope·bindingRevision이 현재 바인딩과 맞아야 적용한다. 같거나 낮은 policyRevision은 중복/과거로 폐기한다. 비어 있는 최신 voices는 기존 음성을 즉시 닫는다.
+- 개인 소리 제어는 D가 소유한 기존 AudioContext를 사용한다. C는 로컬 `AudioPreferences`의 음량(0–1)·전체 수신 음소거·현재 친구별 수신 음소거를 적용하며 서버 정책이나 출력 잠금을 열지 않는다. 방 안의 재경기·세대 교체에는 설정을 유지하고 방 이탈 시 초기화한다. 확인음은 활성 장치 점검/팀 연습에서만 짧게 재생하며 경기 시작·비활성·종료에서 멈춘다. 마이크 입력 크기는 선택한 트랙의 순간 값(0–1, 미사용은 null)만 제공하고 스피커 연결·추가 취득·녹음·저장·업로드를 하지 않는다. 이 로컬 제어는 금지 수신의 Cloud 차단 증거가 아니다.
 - D는 트랙·바인딩·음향 정책을 각각 저장하고 **어느 입력이 바뀌어도 reconcile**한다. 알 수 없는 트랙은 화면/오디오에 붙이지 않는다. 보류는 최대 12개/2초, 넘으면 detach/구독 중지 및 bindings-refresh를 요청한다. 바인딩이 뒤늦게 오면 SDK에 이미 존재하는 publication도 다시 대조한다. nickname/metadata로 매핑을 추측하지 않는다.
 - 바인딩 refresh는 B의 현재 검증 목록 재전송이며 임의 Cloud 조회 증폭을 허용하지 않는다. 수신자당 1초에 1회로 제한한다. 목록이 불명확하면 E의 공유 예산 대조 큐에 합쳐 신규 허용을 막는다.
 - AudioPolicy가 바인딩보다 미래이면 최대 1개 최신 정책을 2초 보류한다. 과거 바인딩 정책은 폐기한다. 트랙 없이 온 정책은 최신 상태로 보관하고 트랙 도착 시 재대조한다. scope가 바뀌면 pending과 실제 그래프를 함께 비운다.
@@ -1121,12 +1122,26 @@ export type InteractionDeps = Readonly<{
   onInteractionState: (state: InteractionState) => void;
   onLocalPreview: (element: HTMLVideoElement | null) => void;
 }>;
+export type AudioPreferences = Readonly<{
+  volume: number;
+  muted: boolean;
+  mutedPlayerIds: readonly string[];
+}>;
+export type LocalAudioStatus = Readonly<{
+  preferences: AudioPreferences;
+  microphoneLevel: number | null;
+  testTonePlaying: boolean;
+}>;
+export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;
   applyAudioPolicy(policy: AudioPolicy): void;
+  setAudioPreferences(preferences: AudioPreferences): void;
+  getLocalAudioStatus(): LocalAudioStatus;
+  playTestTone(): Promise<TestToneResult>;
   applyMediaBindings(bindings: MediaBindings): void;
   setQualityPreset(preset: 'medium' | 'low'): void;
   retireMediaGeneration(): Promise<void>;

@@ -10,6 +10,8 @@ import type { SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { LocalControls } from '../features/game/flow/LocalControls';
+import { AudioControls } from '../features/game/flow/AudioControls';
+import type { AudioPreferences } from '../features/media/audio-preferences';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
 import { preparationFeedback } from '../features/game/flow/preparation-feedback';
 import { commandFeedback } from '../features/game/flow/command-feedback';
@@ -52,6 +54,15 @@ export function ProductApp({
   const [clockTime, setClockTime] = useState<number | null>(null);
   const runtime = useRef<ReturnType<typeof bindProductRoom> | null>(null);
   const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
+  const readAudio = useCallback(() => runtime.current?.getLocalAudioStatus() ?? null, []);
+  const changeAudio = useCallback(
+    (value: AudioPreferences) => runtime.current?.setAudioPreferences(value),
+    [],
+  );
+  const playTestTone = useCallback(
+    async () => (await runtime.current?.playTestTone()) ?? 'unavailable',
+    [],
+  );
   const generation = useRef(0);
   const pendingSession = useRef<SessionResponse | null>(null);
   useEffect(() => {
@@ -217,23 +228,33 @@ export function ProductApp({
     view?.self?.status === 'ACTIVE';
   const localControls =
     round && !inResult && round.phase !== 'LOBBY' ? (
-      <LocalControls
-        status={snapshot!.devices}
-        mode={snapshot!.interaction.mode}
-        previewHost={preview}
-        onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
-        onMotion={async () => {
-          await runtime.current?.calibrateMotion();
-        }}
-        onRecover={async () => {
-          await runtime.current?.recoverDevices();
-        }}
-        onMicrophone={async (enabled) => {
-          await runtime.current?.setMicrophone(enabled);
-        }}
-        canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
-        compact={worldVisible}
-      />
+      <>
+        <LocalControls
+          status={snapshot!.devices}
+          mode={snapshot!.interaction.mode}
+          previewHost={preview}
+          onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+          onMotion={async () => {
+            await runtime.current?.calibrateMotion();
+          }}
+          onRecover={async () => {
+            await runtime.current?.recoverDevices();
+          }}
+          onMicrophone={async (enabled) => {
+            await runtime.current?.setMicrophone(enabled);
+          }}
+          canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
+          compact={worldVisible}
+        />
+        <AudioControls
+          readStatus={readAudio}
+          onPreferences={changeAudio}
+          onTestTone={playTestTone}
+          participants={snapshot?.roster?.players.filter((player) => player.playerId !== selfId)}
+          canTestTone={['DEVICE_CHECK', 'TEAM_PRACTICE'].includes(round.phase)}
+          compact={worldVisible}
+        />
+      </>
     ) : null;
   return (
     <main className={worldVisible ? 'product-shell playing-shell' : 'product-shell'}>

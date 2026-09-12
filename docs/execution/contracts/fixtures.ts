@@ -5,6 +5,7 @@ import type {
   RequestStatusResult,
   MediaBindings,
   AudioPolicy,
+  LocalAudioStatus,
   SensorSnapshot,
   ExchangeView,
   VisibleEntity,
@@ -35,6 +36,12 @@ import type {
 // Cloud connection, journal recovery, deployment, or device test.
 
 // API handoff examples only. No account, public window or Cloud capability is authorized.
+export const localAudioFixture = {
+  preferences: { volume: 0.7, muted: false, mutedPlayerIds: ['friend'] },
+  microphoneLevel: null,
+  testTonePlaying: false,
+} as const satisfies LocalAudioStatus;
+
 export const roomExpiryFixture = {
   phase: 'DEVICE_CHECK',
   matchId: 'fixture-match',

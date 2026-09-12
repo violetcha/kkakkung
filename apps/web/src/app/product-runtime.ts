@@ -34,6 +34,11 @@ import {
 import { createClockSync } from '../features/room/clock-sync';
 import { createProductView } from '../features/room/product-view';
 import { createInteractionBridge } from './interaction-bridge';
+import {
+  DEFAULT_AUDIO_PREFERENCES,
+  normalizeAudioPreferences,
+  type AudioPreferences,
+} from '../features/media/audio-preferences';
 import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
@@ -99,6 +104,7 @@ export function bindProductRoom(
   let active = true;
   let participating = true;
   let pageActive = true;
+  let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
   let generation = 0;
   let snapshot: ProductSnapshot = {
     round: null,
@@ -222,6 +228,7 @@ export function bindProductRoom(
     publish({ error: '연결 상태를 확인해 주세요. 준비되지 않은 기능은 실행하지 않습니다.' });
   const lose = (code?: number) => {
     if (!active || snapshot.lost) return;
+    audioPreferences = DEFAULT_AUDIO_PREFERENCES;
     publish({ lost: true, roomExpired: code === ROOM_EXPIRED_CLOSE_CODE });
     clock.clear();
     heartbeat.dispose();
@@ -316,7 +323,7 @@ export function bindProductRoom(
   function makeBridge() {
     const born = generation;
     const live = () => active && born === generation;
-    return createInteractionBridge(
+    const created = createInteractionBridge(
       {
         sendCommand: (command) => sendCommand(command),
         requestMediaGrant: async (request) => {
@@ -413,6 +420,8 @@ export function bindProductRoom(
       },
       deps.interactionFactory,
     );
+    created.runtime.setAudioPreferences(audioPreferences);
+    return created;
   }
   function retireAndReport(
     owner: ReturnType<typeof createInteractionBridge>,
@@ -853,8 +862,17 @@ export function bindProductRoom(
       result.success &&
       result.data.matchId === snapshot.round?.matchId &&
       result.data.stateVersion >= (snapshot.roster?.stateVersion ?? -1)
-    )
+    ) {
+      const ids = new Set(result.data.players.map((player) => player.playerId));
+      audioPreferences = normalizeAudioPreferences({
+        ...audioPreferences,
+        mutedPlayerIds: audioPreferences.mutedPlayerIds.filter(
+          (id) => ids.has(id) && id !== session.playerId,
+        ),
+      });
+      bridge.runtime.setAudioPreferences(audioPreferences);
       publish({ roster: result.data });
+    }
   });
   on('private-view', (value) => {
     if (views.receive(value)) void connectForView();
@@ -991,6 +1009,20 @@ export function bindProductRoom(
       }
     },
     ready: (value: boolean) => bridge.ready(value),
+    getLocalAudioStatus: () => ({
+      ...bridge.runtime.getLocalAudioStatus(),
+      preferences: audioPreferences,
+    }),
+    setAudioPreferences(value: AudioPreferences) {
+      if (!active || !participating || snapshot.lost) return;
+      const ids = new Set(snapshot.roster?.players.map((player) => player.playerId) ?? []);
+      audioPreferences = normalizeAudioPreferences({
+        ...value,
+        mutedPlayerIds: value.mutedPlayerIds.filter((id) => ids.has(id) && id !== session.playerId),
+      });
+      bridge.runtime.setAudioPreferences(audioPreferences);
+    },
+    playTestTone: () => bridge.runtime.playTestTone(),
     quality: (value: QualityPreset) => quality.select(value),
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
@@ -1005,6 +1037,7 @@ export function bindProductRoom(
     renderTick: clock.renderTick,
     getSnapshot: () => snapshot,
     async leave() {
+      audioPreferences = DEFAULT_AUDIO_PREFERENCES;
       try {
         await participation.leave();
       } finally {

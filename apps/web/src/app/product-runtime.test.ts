@@ -9,6 +9,7 @@ import {
 import { bindProductRoom, type ProductRoomPort } from './product-runtime';
 import { roundFixture, viewFixture } from '../features/room/product-fixture';
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
+import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
 function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRuntime) {
   let now = 0;
@@ -38,6 +39,13 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
     addRemoteTrack: vi.fn(),
     removeRemoteTrack: vi.fn(),
     setAudioOutputLock: vi.fn(),
+    setAudioPreferences: vi.fn(),
+    getLocalAudioStatus: () => ({
+      preferences: DEFAULT_AUDIO_PREFERENCES,
+      microphoneLevel: null,
+      testTonePlaying: false,
+    }),
+    playTestTone: async () => 'unavailable',
   };
   const send = vi.fn();
   const leave = vi.fn(async () => {});
@@ -976,6 +984,51 @@ it('keeps Room for personal result but removes scene immediately and later leave
   expect(f.leave).toHaveBeenCalledOnce();
   expect(f.end).toHaveBeenCalledOnce();
 });
+it('keeps local sound preferences across rematch, prunes departed players and resets on room loss', async () => {
+  const f = fixture();
+  const roster = (matchId: string, stateVersion: number, ids: string[]) => ({
+    matchId,
+    stateVersion,
+    phase: 'DEVICE_CHECK',
+    hostId: 'self',
+    players: ids.map((playerId) => ({
+      playerId,
+      nickname: playerId,
+      ready: false,
+      connected: true,
+    })),
+  });
+  f.messages.get('room-roster')!(roster('m', 10, ['self', 'friend-a', 'friend-b']));
+  f.runtime.setAudioPreferences({
+    volume: 0.3,
+    muted: false,
+    mutedPlayerIds: ['self', 'friend-a', 'friend-a', 'unknown'],
+  });
+  expect(f.runtime.getLocalAudioStatus().preferences).toEqual({
+    volume: 0.3,
+    muted: false,
+    mutedPlayerIds: ['friend-a'],
+  });
+  f.state({ phase: 'RESULT', stateVersion: 11 });
+  await Promise.resolve();
+  vi.mocked(f.fake.setAudioPreferences).mockClear();
+  f.state({ matchId: 'new', phase: 'DEVICE_CHECK', stateVersion: 0 });
+  await vi.waitFor(() =>
+    expect(f.fake.setAudioPreferences).toHaveBeenCalledWith({
+      volume: 0.3,
+      muted: false,
+      mutedPlayerIds: ['friend-a'],
+    }),
+  );
+  f.messages.get('room-roster')!(roster('new', 0, ['self', 'friend-b']));
+  expect(f.runtime.getLocalAudioStatus().preferences.mutedPlayerIds).toEqual([]);
+  expect(f.runtime.getLocalAudioStatus().preferences.volume).toBe(0.3);
+  f.close();
+  f.runtime.setAudioPreferences({ volume: 1, muted: false, mutedPlayerIds: ['friend-b'] });
+  expect(f.runtime.getLocalAudioStatus().preferences).toEqual(DEFAULT_AUDIO_PREFERENCES);
+  await f.runtime.leave();
+});
+
 it('recreates a disposed runtime for new match and rejects old view and command events', async () => {
   const f = fixture();
   f.state({ phase: 'RESULT', stateVersion: 11 });

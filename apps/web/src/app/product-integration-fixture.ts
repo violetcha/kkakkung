@@ -7,6 +7,10 @@ import type {
   MediaGrant,
 } from '../features/input/InteractionRuntime';
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
+import {
+  DEFAULT_AUDIO_PREFERENCES,
+  normalizeAudioPreferences,
+} from '../features/media/audio-preferences';
 
 export interface SyntheticMediaControl {
   /** Test-only SDK terminal disconnect. At most one signal per fixture lifetime. */
@@ -23,6 +27,7 @@ export function createSyntheticInteractionFactory(hooks: {
     let state: 'live' | 'terminal' | 'closed' = 'live';
     let closing: Promise<void> | null = null;
     let failed = false;
+    let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
     let publications: ReturnType<InteractionRuntime['getPublications']> = [];
     const devices = {
       ...INITIAL_DEVICES,
@@ -94,6 +99,15 @@ export function createSyntheticInteractionFactory(hooks: {
       applyAudioPolicy: () => {},
       setQualityPreset: () => {},
       setAudioOutputLock: () => {},
+      setAudioPreferences: (value) => {
+        audioPreferences = normalizeAudioPreferences(value);
+      },
+      getLocalAudioStatus: () => ({
+        preferences: audioPreferences,
+        microphoneLevel: null,
+        testTonePlaying: false,
+      }),
+      playTestTone: async () => 'unavailable',
       retireMediaGeneration: retire,
       beginMediaGeneration: () => {
         state = 'live';

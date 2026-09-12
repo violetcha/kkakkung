@@ -762,12 +762,26 @@ export type InteractionDeps = Readonly<{
   onInteractionState: (state: InteractionState) => void;
   onLocalPreview: (element: HTMLVideoElement | null) => void;
 }>;
+export type AudioPreferences = Readonly<{
+  volume: number;
+  muted: boolean;
+  mutedPlayerIds: readonly string[];
+}>;
+export type LocalAudioStatus = Readonly<{
+  preferences: AudioPreferences;
+  microphoneLevel: number | null;
+  testTonePlaying: boolean;
+}>;
+export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;
   applyAudioPolicy(policy: AudioPolicy): void;
+  setAudioPreferences(preferences: AudioPreferences): void;
+  getLocalAudioStatus(): LocalAudioStatus;
+  playTestTone(): Promise<TestToneResult>;
   applyMediaBindings(bindings: MediaBindings): void;
   setQualityPreset(preset: 'medium' | 'low'): void;
   retireMediaGeneration(): Promise<void>;

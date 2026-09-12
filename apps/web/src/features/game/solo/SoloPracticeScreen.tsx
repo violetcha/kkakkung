@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocalControls } from '../flow/LocalControls';
+import { AudioControls } from '../flow/AudioControls';
+import type { AudioPreferences } from '../../media/audio-preferences';
 import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
 import { POSE_LABELS } from '../pose/PoseChallenge';
@@ -35,6 +37,15 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const [busy, setBusy] = useState(false);
   const [microphone, setMicrophone] = useState(false);
   const [error, setError] = useState('');
+  const readAudio = useCallback(() => session.current?.getLocalAudioStatus() ?? null, []);
+  const changeAudio = useCallback(
+    (value: AudioPreferences) => session.current?.setAudioPreferences(value),
+    [],
+  );
+  const playTestTone = useCallback(
+    async () => (await session.current?.playTestTone()) ?? 'unavailable',
+    [],
+  );
   const stop = useCallback(
     async (reason?: string) => {
       const current = session.current;
@@ -183,6 +194,12 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                     await session.current?.microphone(value);
                   }}
                   canRecover={!closing && !busy}
+                />
+                <AudioControls
+                  readStatus={readAudio}
+                  onPreferences={changeAudio}
+                  onTestTone={playTestTone}
+                  canTestTone={!closing}
                 />
                 <dl className="solo-devices" aria-label="내 장치 상태">
                   {Object.entries(DEVICE_LABELS).map(([name, label]) => (
