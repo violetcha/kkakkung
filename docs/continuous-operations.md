@@ -93,8 +93,16 @@ DP-06 report=PASS와 실행 중 이미지 SHA가 일치해야 한다.
 
 2026-09-13 배포 #91은 과거 방 78개의 순차 조회 지연으로 복구 대기 180초를 넘겼고,
 rollback도 같은 경로에서 제한 시간을 넘었다. 복귀 이미지의 복구 checkpoint는
-제한 직후 완료됐다. 이 수정은 동시 처리 상한으로 지연 누적을 줄인다.
-대기 시간이나 READY·회수·무결성 조건을 완화하지 않는다.
+제한 직후 완료됐다. 동시 처리 상한을 적용한 배포 #92에서는 운영의 분당 total 180회와
+복구 바인딩의 1초 queue deadline이 충돌했다. 필요한 236회 중 56회가 대기 중 만료되어
+REMOTE_RETIREMENT_UNCONFIRMED로 잠겼고 rollback drain도 실패했다.
+
+과거 방 목록·참가자 조회·방 삭제는 다음 60초 rolling window를 기다릴 수 있도록
+queue deadline을 65초로 제한한다. 이 시간은 전송 전 공유 예산 대기에만 적용한다.
+참가자 권한 회수와 그 직후 부재 확인의 queue deadline은 1초이며 기존 재시도 기한을 유지한다.
+실제 HTTP timeout·취소·전송 시 소유권 확인·API total 제한·READY·회수·무결성 조건은 유지한다.
+운영과 같은 normal 120 / total 180 설정을 실제 복구 바인딩에 적용한 로컬 회귀에서
+78개 과거 방의 236회 필수 호출이 rolling window를 건너 완료되는지 확인한다.
 실제 배포는 release.json, Jenkins 결과, 실행 revision과 준비 시간으로 별도 확인한다.
 과거 journal·usage·retry의 안전한 축약은 W14의 별도 작업이며 이 변경으로 보관량이 줄지는 않는다.
 
