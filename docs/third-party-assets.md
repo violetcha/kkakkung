@@ -1,6 +1,15 @@
 # 제3자 자산
 
-현재 저장소는 실제 비전 모델, WASM, GLB, 텍스처, 효과음을 내려받거나 포함하지 않는다.
+2026-09-13 · 코드 기준 `99f90baa`. 저장소에는 고정한 MediaPipe 모델 3개와 SDK WASM 관련 파일 6개가 포함되어 있다. 정확한 파일별 출처·sha256·bytes·취득일의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json), 취득 경위와 라이선스 확인 상태는 [비전 자산 README](../apps/web/public/models/README.md)를 따른다. 제품 범위와 공개 전 확인 사항은 [현행 기획서](spec/current.md)에 연결한다.
+
+| 경로                                                     | 자산                        | 버전·크기                                                 | 현재 라이선스 기록                                          |
+| -------------------------------------------------------- | --------------------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
+| `apps/web/public/models/face/face_landmarker.task`       | FaceLandmarker float16      | release 1 · 3,758,596 bytes                               | pending — 공식 모델 카드 확인 필요                          |
+| `apps/web/public/models/pose/pose_landmarker.task`       | PoseLandmarker Lite float16 | release 1 · 5,777,746 bytes                               | pending — 공식 모델 카드 확인 필요                          |
+| `apps/web/public/models/gesture/gesture_recognizer.task` | GestureRecognizer float16   | release 1 · 8,373,440 bytes                               | pending — 공식 모델 카드 확인 필요                          |
+| `apps/web/public/models/mediapipe/1.0.1/wasm/`           | SDK의 WASM·로더 JS 6개      | `@mediapipe/tasks-vision` 1.0.1 · 파일별 bytes는 manifest | Apache-2.0 — 취득 당시 SDK package.json의 license 필드 기록 |
+
+모델 라이선스의 pending은 실제 자산이 없다는 뜻이 아니라 재배포 조건의 확인이 끝나지 않았다는 뜻이다. SDK의 Apache-2.0을 모델에 그대로 적용하지 않는다. 이번 문서 갱신에서는 공식 모델 카드의 라이선스를 새로 검증하거나 승인하지 않았다. 기존 취득 담당은 D이며, 모델 갱신과 공개 전 라이선스 확인의 인계는 해당 README를 따른다.
 
 자산을 추가할 때 다음을 기록한다.
 
