@@ -18,6 +18,8 @@ type RoomEntry = {
   nextJoinOrder: number;
   createdAtMs: number;
   lastActivityMs: number;
+  phaseStartedAtMs: number;
+  closing: boolean;
 };
 
 export const JOINABLE_PHASES: readonly Phase[] = ['LOBBY', 'DEVICE_CHECK'];
@@ -51,6 +53,7 @@ export class SlotRegistry {
   setPhase(roomCode: string, phase: Phase, nowMs: number) {
     const room = this.rooms.get(roomCode);
     if (!room) return;
+    if (room.phase !== phase) room.phaseStartedAtMs = nowMs;
     room.phase = phase;
     room.lastActivityMs = nowMs;
   }
@@ -62,6 +65,16 @@ export class SlotRegistry {
 
   lastActivity(roomCode: string): number | null {
     return this.rooms.get(roomCode)?.lastActivityMs ?? null;
+  }
+
+  phaseStartedAt(roomCode: string): number | null {
+    return this.rooms.get(roomCode)?.phaseStartedAtMs ?? null;
+  }
+
+  /** Close admission immediately while async socket/media retirement is still pending. */
+  beginClose(roomCode: string): void {
+    const room = this.rooms.get(roomCode);
+    if (room) room.closing = true;
   }
 
   totalOccupied(): number {
@@ -96,9 +109,12 @@ export class SlotRegistry {
         nextJoinOrder: 0,
         createdAtMs: nowMs,
         lastActivityMs: nowMs,
+        phaseStartedAtMs: nowMs,
+        closing: false,
       };
       this.rooms.set(roomCode, room);
     }
+    if (room.closing) return 'ROOM_CLOSED';
     if (room.slots.has(playerId)) return 'reserved';
     if (!JOINABLE_PHASES.includes(room.phase)) return 'ROOM_CLOSED';
     if (room.slots.size >= this.roomCapacity) return 'ROOM_FULL';
@@ -109,7 +125,9 @@ export class SlotRegistry {
   }
 
   markJoined(roomCode: string, playerId: string, nowMs: number): boolean {
-    const slot = this.rooms.get(roomCode)?.slots.get(playerId);
+    const room = this.rooms.get(roomCode);
+    if (room?.closing) return false;
+    const slot = room?.slots.get(playerId);
     if (!slot || slot.state === 'RETIRING') return false;
     slot.state = 'JOINED';
     this.touch(roomCode, nowMs);

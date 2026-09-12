@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { INVITATION_ROUTES } from './types.ts';
+import { INVITATION_ROUTES, ROOM_EXPIRED_CLOSE_CODE } from './types.ts';
 import {
   operatorInvitationFixture,
   rejectedInvitationFixture,
@@ -10,7 +10,15 @@ import {
   planningMetricFixture,
   teamSessionFixture,
   teamAccessFixture,
+  roomExpiryFixture,
 } from './fixtures.ts';
+
+test('room expiry handoff exposes a countdown and a distinct close reason without private coordinates', () => {
+  assert.equal(roomExpiryFixture.roomExpiresInSeconds, 60);
+  assert.equal(ROOM_EXPIRED_CLOSE_CODE, 4001);
+  for (const key of ['players', 'position', 'x', 'y', 'cell', 'map', 'exits'])
+    assert.equal(key in roomExpiryFixture, false);
+});
 
 test('team admission omits invitation data but requires server-side SSO authentication', () => {
   assert.equal(teamAccessFixture.method, 'gitlab-sso');

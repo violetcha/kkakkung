@@ -20,3 +20,5 @@ export const roomRosterSchema = z.strictObject({
     .max(6),
 });
 export type RoomRosterMessage = z.infer<typeof roomRosterSchema>;
+/** Application close code for an expired waiting/result room. */
+export const ROOM_EXPIRED_CLOSE_CODE = 4001;

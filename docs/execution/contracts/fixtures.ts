@@ -28,12 +28,26 @@ import type {
   MetricSample,
   SessionRequest,
   SessionAccessResponse,
+  PublicRoundState,
 } from './types.ts';
 
 // Shared planning examples. These fixtures do not run product modules or certify a real map,
 // Cloud connection, journal recovery, deployment, or device test.
 
 // API handoff examples only. No account, public window or Cloud capability is authorized.
+export const roomExpiryFixture = {
+  phase: 'DEVICE_CHECK',
+  matchId: 'fixture-match',
+  stateVersion: 1,
+  serverTick: 0,
+  startTick: null,
+  startAt: null,
+  deadlineTick: null,
+  counts: { escaped: 0, captured: 0 },
+  result: null,
+  abortReason: null,
+  roomExpiresInSeconds: 60,
+} as const satisfies PublicRoundState;
 export const teamSessionFixture = {
   nickname: '팀원',
   createRoom: true,

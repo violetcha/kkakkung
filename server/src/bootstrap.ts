@@ -51,7 +51,7 @@ import { createAlertPolicy } from './observability/AlertPolicy.js';
 import { ProductSessionStore } from './session/ProductSessionStore.js';
 import { createReservationCleanup } from './session/ReservationCleanup.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
-import { createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
+import { clientIp, createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
 import { SessionStore } from './session/SessionStore.js';
 import { SlotRegistry } from './session/SlotRegistry.js';
 import { readFile } from 'node:fs/promises';
@@ -179,6 +179,14 @@ export function createApplication<State = unknown>(
         })
       : null;
   const limiter = product?.sessionAttempts ? new AdmissionLimiter(product.sessionAttempts) : null;
+  // Outer gate includes failed JSON and matchmaking requests. Four attempts per configured
+  // session IP allowance leave room for access checks, joins and canceled reservations.
+  const entryLimiter = limiter
+    ? new AdmissionLimiter({
+        ...limiter.options,
+        perInvite: Math.min(Number.MAX_SAFE_INTEGER, limiter.options.perIp * 4),
+      })
+    : null;
   const cleanupReservations = slots
     ? createReservationCleanup({
         sessions: productSessions,
@@ -478,11 +486,30 @@ export function createApplication<State = unknown>(
         installHttpBoundary(httpServer, {
           allowedOrigins: config.allowedOrigins,
           rawBodyPaths: [MEDIA_ROUTES.webhook],
+          allowRequest: (request, path) => {
+            if (
+              !entryLimiter ||
+              (!path.startsWith('/api/sessions') && !path.startsWith('/matchmake/'))
+            )
+              return true;
+            return (
+              entryLimiter.attempt(
+                {
+                  inviteId: clientIp(request, product?.trustProxy ?? false) ?? 'unknown-peer',
+                  ip: null,
+                },
+                monotonicNow(),
+              ) === 'allowed'
+            );
+          },
           onRejected: (info) => logger.warn(info, 'HTTP boundary rejected request'),
         });
       tickTimer = setInterval(() => coordinator.run(), 10);
       tickTimer.unref();
-      reservationTimer = setInterval(cleanupReservations, 1000);
+      reservationTimer = setInterval(() => {
+        cleanupReservations();
+        invites?.prune();
+      }, 1000);
       reservationTimer.unref();
       histogram.enable();
       metricsTimer = setInterval(() => {

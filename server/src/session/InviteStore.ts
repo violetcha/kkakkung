@@ -26,6 +26,8 @@ export type InviteStoreOptions = Readonly<{
   knownRoomCodes: () => ReadonlySet<string>;
   /** Operations gate: issuance requires readiness READY and admission OPEN. */
   operationsReady: () => boolean;
+  /** Hard memory ceiling. Live invitations are never evicted to make room. */
+  maxEntries?: number;
 }>;
 
 export function hashInviteToken(token: string): Buffer {
@@ -35,7 +37,13 @@ export function hashInviteToken(token: string): Buffer {
 export class InviteStore implements InvitationPort {
   private readonly records = new Map<string, InviteRecord>();
 
-  constructor(private readonly options: InviteStoreOptions) {}
+  private readonly maxEntries: number;
+
+  constructor(private readonly options: InviteStoreOptions) {
+    this.maxEntries = options.maxEntries ?? 4096;
+    if (!Number.isSafeInteger(this.maxEntries) || this.maxEntries <= 0)
+      throw new Error('INVALID_INVITATION_CAPACITY');
+  }
 
   get size() {
     return this.records.size;
@@ -43,6 +51,7 @@ export class InviteStore implements InvitationPort {
 
   issue(input: IssueInvitation): InvitationIssueResult {
     const now = this.options.now();
+    this.prune(now);
     if (!this.options.operationsReady() || this.options.maxTtlMs === null)
       return { status: 'rejected', code: 'NOT_READY' };
     const window = this.options.publicWindow;
@@ -67,6 +76,7 @@ export class InviteStore implements InvitationPort {
     const known = this.options.knownRoomCodes();
     for (const code of codes)
       if (!known.has(code)) return { status: 'rejected', code: 'INVALID_INVITATION' };
+    if (this.records.size >= this.maxEntries) return { status: 'rejected', code: 'NOT_READY' };
     const inviteToken = randomBytes(32).toString('base64url');
     const record: InviteRecord = {
       inviteId: randomUUID(),
@@ -91,11 +101,11 @@ export class InviteStore implements InvitationPort {
 
   /** Idempotent: unknown or already revoked ids are accepted silently. */
   revoke(inviteId: string): void {
-    const record = this.records.get(inviteId);
-    if (record) record.revoked = true;
+    this.records.delete(inviteId);
   }
 
   verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null {
+    this.prune(this.options.now());
     const record = this.findByToken(input.inviteToken);
     if (!record || record.revoked || this.options.now() >= record.expiresAt) return null;
     if (input.createRoom) return record.allowCreate ? { inviteId: record.inviteId } : null;
@@ -110,10 +120,17 @@ export class InviteStore implements InvitationPort {
 
   /** Room cleanup: no invitation may admit players to a closed room again. */
   forgetRoom(roomCode: string) {
-    for (const record of this.records.values()) {
+    for (const [id, record] of this.records) {
       record.roomCodes.delete(roomCode);
       record.createdRooms.delete(roomCode);
+      if (!record.allowCreate && record.roomCodes.size === 0 && record.createdRooms.size === 0)
+        this.records.delete(id);
     }
+  }
+
+  prune(now = this.options.now()): void {
+    for (const [id, record] of this.records)
+      if (record.revoked || now >= record.expiresAt) this.records.delete(id);
   }
 
   /** Metadata without secrets, for tests and operator diagnostics. */

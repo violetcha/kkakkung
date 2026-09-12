@@ -61,6 +61,8 @@ export type PublicRoundState = Readonly<{
   counts: Counts;
   result: RoundResult | null;
   abortReason: AbortReason | null;
+  /** Present only during the final minute of a waiting/result room's lifetime. */
+  roomExpiresInSeconds?: number;
 }>;
 
 export type ExchangeView = Readonly<{
@@ -199,6 +201,7 @@ export const PublicMatchState = schema(
     counts: t.ref(RoundCounts),
     result: t.ref(RoundResultState),
     abortReason: t.string<AbortReason>(),
+    roomExpiresInSeconds: t.number(),
   },
   'PublicMatchState',
 );
@@ -219,6 +222,7 @@ export function readPublicRoundState(state: {
   counts?: { escaped: number; captured: number } | null;
   result?: { winner: string; reason: string } | null;
   abortReason?: string | null;
+  roomExpiresInSeconds?: number | null;
 }): PublicRoundState {
   const result = nullable(state.result);
   return {
@@ -241,6 +245,11 @@ export function readPublicRoundState(state: {
           }
         : null,
     abortReason: nullable(state.abortReason) as AbortReason | null,
+    ...(typeof state.roomExpiresInSeconds === 'number' &&
+    Number.isFinite(state.roomExpiresInSeconds) &&
+    state.roomExpiresInSeconds >= 0
+      ? { roomExpiresInSeconds: state.roomExpiresInSeconds }
+      : {}),
   };
 }
 
@@ -257,4 +266,5 @@ export const PUBLIC_MATCH_STATE_FIELDS = [
   'counts',
   'result',
   'abortReason',
+  'roomExpiresInSeconds',
 ] as const;

@@ -23,6 +23,38 @@ function store(overrides: Partial<ConstructorParameters<typeof InviteStore>[0]> 
 }
 
 describe('InviteStore', () => {
+  it('keeps live invitations at capacity and reclaims only revoked, expired or closed scopes', () => {
+    const h = store({ maxEntries: 1 });
+    const issue = () =>
+      h.invites.issue({
+        scope: { allowCreate: false, roomCodes: ['ABC234'] },
+        expiresAt: h.now() + 1000,
+      });
+    const first = issue();
+    if (first.status !== 'issued') throw new Error('expected issued');
+    expect(issue()).toEqual({ status: 'rejected', code: 'NOT_READY' });
+    expect(
+      h.invites.verify({
+        inviteToken: first.invitation.inviteToken,
+        createRoom: false,
+        roomCode: 'ABC234',
+      }),
+    ).not.toBeNull();
+    h.invites.forgetRoom('ABC234');
+    expect(h.invites.size).toBe(0);
+    expect(issue().status).toBe('issued');
+    h.advance(1000);
+    expect(issue().status).toBe('issued');
+    expect(h.invites.size).toBe(1);
+    expect(
+      h.invites.verify({
+        inviteToken: first.invitation.inviteToken,
+        createRoom: false,
+        roomCode: 'ABC234',
+      }),
+    ).toBeNull();
+    expect(() => store({ maxEntries: 0 })).toThrow('INVALID_INVITATION_CAPACITY');
+  });
   it('issues a high-entropy token distinct from room codes and verifies scope', () => {
     const h = store();
     const issued = h.invites.issue({
@@ -116,7 +148,8 @@ describe('InviteStore', () => {
     expect(
       h.invites.verify({ inviteToken: fresh.invitation.inviteToken, createRoom: true }),
     ).toBeNull();
-    expect(h.invites.describe(inviteId)?.revoked).toBe(false);
+    expect(h.invites.describe(inviteId)).toBeNull();
+    expect(h.invites.size).toBe(0);
   });
 
   it('rejects issuance outside the public window, over the max TTL, with unknown rooms or when not ready', () => {

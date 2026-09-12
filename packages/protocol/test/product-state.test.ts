@@ -83,4 +83,16 @@ describe('product match state (0.2.0)', () => {
     expect(normalized.result).toBeNull();
     expect(normalized.abortReason).toBe('SERVER_TICK_OVERLOAD');
   });
+
+  it('transmits and clears the optional waiting-room warning without changing private state', () => {
+    const state = new PublicMatchState();
+    state.phase = 'DEVICE_CHECK';
+    state.roomExpiresInSeconds = 60;
+    const { encoder, decoder, client } = roundTrip(state);
+    expect(readPublicRoundState(client).roomExpiresInSeconds).toBe(60);
+    state.phase = 'TEAM_PRACTICE';
+    state.roomExpiresInSeconds = null;
+    decoder.decode(encoder.encode());
+    expect(readPublicRoundState(client)).not.toHaveProperty('roomExpiresInSeconds');
+  });
 });
