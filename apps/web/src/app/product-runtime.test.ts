@@ -15,7 +15,7 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
   let sequence = 0;
   const messages = new Map<string, (value: unknown) => void>();
   let stateHandler!: (state: PublicMatchState) => void;
-  let leaveHandler!: () => void;
+  let leaveHandler!: (code?: number) => void;
   const context = vi.fn<(context: InteractionContext) => void>();
   const end = vi.fn(async () => {});
   const dispose = vi.fn(async () => {});
@@ -97,7 +97,7 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
     },
     state: (overrides: Parameters<typeof roundFixture>[0]) =>
       stateHandler(roundFixture(overrides) as unknown as PublicMatchState),
-    close: () => leaveHandler(),
+    close: (code?: number) => leaveHandler(code),
     time: (value: number) => {
       now = value;
       runtime.poll();
@@ -453,6 +453,14 @@ it('cleans up a lost game connection without reporting from an invalidated parti
   expect(f.end).toHaveBeenCalledOnce();
   expect(f.requests().filter((r) => r.body.status === 'closed')).toHaveLength(0);
   expect(f.requests().filter((r) => r.url === MEDIA_ROUTES.grants)).toHaveLength(1);
+});
+
+it('preserves room expiry as the leave reason while cleaning local resources', async () => {
+  const f = fixture();
+  f.close(4001);
+  await f.runtime.leave();
+  expect(f.runtime.getSnapshot()).toMatchObject({ lost: true, roomExpired: true });
+  expect(f.dispose).toHaveBeenCalledOnce();
 });
 
 it('finishes local exit if the game connection closes while its report is in flight', async () => {

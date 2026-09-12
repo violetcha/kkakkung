@@ -10,6 +10,7 @@ import {
   mediaBindingsSchema,
   mediaGrantSchema,
   MEDIA_ROUTES,
+  ROOM_EXPIRED_CLOSE_CODE,
   type SessionResponse,
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
@@ -56,7 +57,7 @@ export interface ProductRoomPort {
   send(type: string, payload: unknown): void;
   onMessage(type: string, handler: (value: unknown) => void): () => void;
   onStateChange(handler: (state: PublicMatchState) => void): () => void;
-  onLeave(handler: () => void): () => void;
+  onLeave(handler: (code?: number) => void): () => void;
   onError(handler: () => void): () => void;
   leave(): Promise<unknown>;
 }
@@ -78,6 +79,7 @@ export type ProductSnapshot = {
   keyIndex: number;
   practiceReady: boolean;
   lost: boolean;
+  roomExpired?: boolean;
   error: string | null;
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
@@ -217,9 +219,9 @@ export function bindProductRoom(
   );
   const error = () =>
     publish({ error: '연결 상태를 확인해 주세요. 준비되지 않은 기능은 실행하지 않습니다.' });
-  const lose = () => {
+  const lose = (code?: number) => {
     if (!active || snapshot.lost) return;
-    publish({ lost: true });
+    publish({ lost: true, roomExpired: code === ROOM_EXPIRED_CLOSE_CODE });
     clock.clear();
     heartbeat.dispose();
     void participation.leave().catch(error);

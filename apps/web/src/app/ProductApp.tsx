@@ -290,9 +290,15 @@ export function ProductApp({
           )}
         </section>
       ) : snapshot.lost ? (
-        <ConnectionLostScreen onLeave={() => void leave()} />
+        <ConnectionLostScreen onLeave={() => void leave()} expired={snapshot.roomExpired} />
       ) : (
         <>
+          {round?.roomExpiresInSeconds !== undefined && (
+            <p role="status" className="notice">
+              이 방은 {round.roomExpiresInSeconds}초 후 정리됩니다. 준비를 마치거나 새 경기를 시작해
+              주세요.
+            </p>
+          )}
           <QualityControl
             value={snapshot.quality}
             onChange={(value) => runtime.current?.quality(value)}

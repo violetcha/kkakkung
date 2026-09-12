@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
 
 describe('SlotRegistry', () => {
+  it('closes admission before asynchronous retirement without releasing protected seats', () => {
+    const slots = new SlotRegistry({ maxRooms: 1 });
+    slots.reserve('ROOM01', 'reserved', 0, { create: true });
+    slots.reserve('ROOM01', 'retiring', 0);
+    slots.markRetiring('ROOM01', 'retiring');
+    slots.beginClose('ROOM01');
+    expect(slots.reserve('ROOM01', 'new', 1)).toBe('ROOM_CLOSED');
+    expect(slots.reserve('ROOM01', 'reserved', 1)).toBe('ROOM_CLOSED');
+    expect(slots.markJoined('ROOM01', 'reserved', 1)).toBe(false);
+    expect(slots.release('ROOM01', 'retiring')).toBe(false);
+    expect(slots.closeRoom('ROOM01')).toBe(false);
+    slots.release('ROOM01', 'reserved');
+    slots.release('ROOM01', 'retiring', { confirmedRetirement: true });
+    expect(slots.closeRoom('ROOM01')).toBe(true);
+  });
   it('caps a room at six seats and the service at sixty, counting RETIRING seats', () => {
     const slots = new SlotRegistry({ maxRooms: 10 });
     for (let i = 0; i < 6; i++)

@@ -3,7 +3,7 @@ import { RoomExpiry, selectHost } from '../../src/session/RoomExpiry.js';
 
 describe('RoomExpiry', () => {
   it('expires idle or session-less waiting rooms but never a running match', () => {
-    const expiry = new RoomExpiry(10_000);
+    const expiry = new RoomExpiry(10_000, 10_000);
     expect(
       expiry.decide({
         phase: 'LOBBY',
@@ -64,6 +64,25 @@ describe('RoomExpiry', () => {
       }),
     ).toBe('keep');
     expect(() => new RoomExpiry(0)).toThrow('INVALID_ROOM_IDLE_TTL');
+  });
+
+  it('caps preparation and ended phases from phase entry even when activity keeps arriving', () => {
+    const expiry = new RoomExpiry(600_000);
+    for (const phase of ['DEVICE_CHECK', 'RESULT', 'ABORTED'] as const) {
+      const input = {
+        phase,
+        connectedCount: 6,
+        liveSessionCount: 6,
+        lastActivityMs: 299_999,
+        phaseStartedAtMs: 0,
+        nowMs: 299_999,
+      };
+      expect(expiry.remainingMs(input)).toBe(1);
+      expect(expiry.decide(input)).toBe('keep');
+      expect(expiry.decide({ ...input, nowMs: 300_000 })).toBe('expire-idle');
+    }
+    for (const phase of ['TEAM_PRACTICE', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'] as const)
+      expect(expiry.remainingMs({ phase, lastActivityMs: 0, nowMs: 10_000_000 })).toBeNull();
   });
 
   it('delegates host to the earliest connected live participant', () => {

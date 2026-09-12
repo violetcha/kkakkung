@@ -80,6 +80,7 @@ class Coordinator implements MediaCoordinatorRuntime {
   private readonly recovery: ReturnType<typeof createRecoveryBootstrap>;
   private readonly policy: MediaPolicyBindings;
   private readonly transition: GenerationTransition;
+  private readonly pruneGrantRequests: () => void;
   private readonly pendingRetirements = new Map<Generation, number>();
   private readonly retirements = new Map<Generation, Promise<RetirementResult>>();
   private readonly roomCleanups = new Map<string, Promise<void>>();
@@ -328,6 +329,7 @@ class Coordinator implements MediaCoordinatorRuntime {
         this.track(this.rawRetire(this.retirement(g, 'policy-unknown')));
       },
     });
+    this.pruneGrantRequests = () => issuer.prune();
     this.transition = new GenerationTransition({
       monotonicNow: deps.monotonicNow,
       current: (input) => {
@@ -533,6 +535,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     if (!this.isInitialized()) return Promise.resolve();
     if (this.maintenance) return this.maintenance;
     this.maintenance = (async () => {
+      this.pruneGrantRequests();
       await this.policy.reconcile();
       if (this.closed) return;
       this.lifecycle.reconcile();

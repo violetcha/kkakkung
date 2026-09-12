@@ -49,6 +49,46 @@ function setup() {
 }
 
 describe('journal-before-sign generation issuance; local SDK verification only', () => {
+  it('reclaims settled requests without reopening an expired grant or retaining completed scopes', async () => {
+    const s = setup();
+    const issuer = new GrantIssuer(s.deps, { maxRequests: 2, retentionMs: 300_000 });
+    s.deps.sign = async () => 'synthetic';
+    expect((await issuer.prepare(prepareRequest)).status).toBe('ready');
+    await flush();
+    expect(issuer.retained).toEqual({ requests: 1, pendingScopes: 0 });
+    s.time(s.now() + 300_001);
+    issuer.prune();
+    expect(issuer.retained.requests).toBe(0);
+    expect(await issuer.prepare(prepareRequest)).toMatchObject({
+      code: 'STALE_GENERATION',
+      grant: null,
+    });
+    expect(s.deps.reserve).toHaveBeenCalledOnce();
+    expect(s.registry.all()).toHaveLength(1);
+  });
+
+  it('keeps pending issuance pinned at capacity, including across TTL, and serializes its scope', async () => {
+    const s = setup();
+    const signing = deferred<string>();
+    s.deps.sign = () => signing.promise;
+    const issuer = new GrantIssuer(s.deps, { maxRequests: 2, retentionMs: 300_000 });
+    const first = issuer.prepare(prepareRequest);
+    const duplicate = issuer.prepare(prepareRequest);
+    const second = issuer.prepare({ ...prepareRequest, requestId: 'second' });
+    await flush();
+    s.time(s.now() + 300_001);
+    issuer.prune();
+    expect(issuer.retained).toEqual({ requests: 2, pendingScopes: 1 });
+    expect(await issuer.prepare({ ...prepareRequest, requestId: 'overflow' })).toMatchObject({
+      code: 'NOT_READY',
+      receiverGeneration: null,
+    });
+    signing.resolve('expired-synthetic');
+    await Promise.all([first, duplicate, second]);
+    await flush();
+    expect(issuer.retained.pendingScopes).toBe(0);
+    expect(s.deps.reserve).toHaveBeenCalledOnce();
+  });
   it('rechecks a pre-allocation NOT_READY under the same stable request ID without allowing payload reuse', async () => {
     const s = setup();
     s.deny();

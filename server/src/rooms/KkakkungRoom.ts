@@ -15,6 +15,7 @@ import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core
 import {
   PRODUCT_CLIENT_MESSAGES,
   PRODUCT_SERVER_MESSAGES,
+  ROOM_EXPIRED_CLOSE_CODE,
   productJoinOptionsSchema,
   requestStatusSchema,
   type AudioPolicy,
@@ -119,6 +120,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
   class KkakkungRoom extends Room<{ state: PublicMatchState }> implements ProductRoomHandle {
     maxClients = 6;
+    maxMessagesPerSecond = 120;
     state = new PublicMatchState();
     roomCode = '';
     phase: Phase = 'LOBBY';
@@ -126,6 +128,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly context = new MatchContext({ serverEpoch: deps.serverEpoch });
     private readonly queue = new CommandQueue();
     private readonly limiter = new CommandLimiter();
+    private readonly inboundLimiter = new CommandLimiter({ capacity: 90, refillPerSecond: 45 });
+    private closing = false;
     private readonly heartbeat = new HeartbeatTracker({ serverEpoch: deps.serverEpoch });
     private readonly clockSync = new ClockSync({
       serverEpoch: deps.serverEpoch,
@@ -417,25 +421,31 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.autoDispose = true;
       this.patchRate = 50;
       this.syncPublic();
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.command, (client, payload: unknown) =>
+      const onInbound = (type: string, handle: (client: Client, payload: unknown) => void) =>
+        this.onMessage(type, (client, payload: unknown) => {
+          if (this.closing || !this.inboundLimiter.allow(client.sessionId, deps.monotonicNow()))
+            return;
+          handle(client, payload);
+        });
+      onInbound(PRODUCT_CLIENT_MESSAGES.command, (client, payload: unknown) =>
         this.onCommand(client, payload),
       );
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.requestStatus, (client, payload: unknown) =>
+      onInbound(PRODUCT_CLIENT_MESSAGES.requestStatus, (client, payload: unknown) =>
         this.onRequestStatus(client, payload),
       );
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.viewResync, (client, payload: unknown) => {
+      onInbound(PRODUCT_CLIENT_MESSAGES.viewResync, (client, payload: unknown) => {
         const auth = this.playersByConnection.get(client.sessionId);
         if (auth) this.dispatcher.handleResync(auth.playerId, payload, this.phase);
       });
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
+      onInbound(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
         this.heartbeat.ack(client.sessionId, payload, this.context.matchId, deps.monotonicNow());
       });
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.clockProbe, (client, payload: unknown) => {
+      onInbound(PRODUCT_CLIENT_MESSAGES.clockProbe, (client, payload: unknown) => {
         const result = this.clockSync.handle(client.sessionId, payload);
         if (result.status === 'reply')
           client.send(PRODUCT_SERVER_MESSAGES.clockReply, result.reply);
       });
-      this.onMessage(PRODUCT_CLIENT_MESSAGES.mediaBindingsRefresh, (client) => {
+      onInbound(PRODUCT_CLIENT_MESSAGES.mediaBindingsRefresh, (client) => {
         const auth = this.playersByConnection.get(client.sessionId);
         if (!auth) return;
         const now = deps.monotonicNow();
@@ -445,7 +455,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         const bindings = this.lastBindings.get(auth.playerId);
         if (bindings) client.send(PRODUCT_SERVER_MESSAGES.mediaBindings, bindings);
       });
-      this.onMessage('*', () => undefined);
+      onInbound('*', () => undefined);
       deps.coordinator.register(this.roomId, {
         onTick: () => this.tick(),
         onOverload: (lagMs) => this.overload(lagMs),
@@ -455,6 +465,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     onJoin(client: Client, _options: unknown, auth: SessionAuth) {
+      if (this.closing) throw new ServerError(403, 'ROOM_CLOSED');
       if (deps.strictProduct && !deps.canStart?.()) throw new ServerError(503, 'NOT_READY');
       const now = deps.monotonicNow();
       if (!auth || auth.roomCode !== this.roomCode) throw new ServerError(403, 'WRONG_ROOM');
@@ -496,6 +507,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const auth = this.playersByConnection.get(client.sessionId);
       this.playersByConnection.delete(client.sessionId);
       this.limiter.forget(client.sessionId);
+      this.inboundLimiter.forget(client.sessionId);
       this.clockSync.forget(client.sessionId);
       const control = this.heartbeat.close(client.sessionId);
       if (!auth) return;
@@ -517,6 +529,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     onDispose() {
       this.disposed = true;
+      deps.slots.beginClose(this.roomCode);
       this.invalidateLayout();
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
       for (const mediaInstanceId of this.mediaFrameWaiters.keys())
@@ -536,6 +549,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Message handlers: enqueue only ----
 
     private onCommand(client: Client, payload: unknown) {
+      if (this.closing) return;
       const auth = this.playersByConnection.get(client.sessionId);
       if (!auth) return;
       const now = deps.monotonicNow();
@@ -612,6 +626,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private onRequestStatus(client: Client, payload: unknown) {
+      if (this.closing) return;
       const auth = this.playersByConnection.get(client.sessionId);
       if (!auth) return;
       const parsed = requestStatusSchema.safeParse(payload);
@@ -668,7 +683,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Tick ----
 
     tick() {
-      if (this.disposed) return;
+      if (this.disposed || this.closing) return;
       const now = deps.monotonicNow();
       for (const { connectionId, heartbeat } of this.heartbeat.due(
         now,
@@ -1289,15 +1304,20 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Expiry ----
 
     private checkExpiry(now: number) {
+      if (this.closing) return;
       const decision = deps.roomExpiry.decide({
         phase: this.phase,
         connectedCount: this.clientsByPlayer.size,
         liveSessionCount: deps.sessions.sessionsInRoom(this.roomCode).length,
         lastActivityMs: deps.slots.lastActivity(this.roomCode) ?? now,
+        phaseStartedAtMs: deps.slots.phaseStartedAt(this.roomCode) ?? now,
         nowMs: now,
       });
       if (decision === 'keep') return;
-      if (this.clientsByPlayer.size === 0 || decision === 'expire-sessions') void this.disconnect();
+      this.closing = true;
+      deps.slots.beginClose(this.roomCode);
+      deps.sessions.invalidateRoom(this.roomCode);
+      void this.disconnect(ROOM_EXPIRED_CLOSE_CODE);
     }
 
     // ---- Views and public state ----
@@ -1336,6 +1356,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       nullable.startAt = this.context.startAt ?? undefined;
       nullable.deadlineTick = this.context.deadlineTick ?? undefined;
       nullable.abortReason = this.abortReason ?? undefined;
+      const remaining = deps.roomExpiry.remainingMs({
+        phase: this.phase,
+        lastActivityMs: deps.slots.lastActivity(this.roomCode) ?? deps.monotonicNow(),
+        phaseStartedAtMs: deps.slots.phaseStartedAt(this.roomCode) ?? deps.monotonicNow(),
+        nowMs: deps.monotonicNow(),
+      });
+      nullable.roomExpiresInSeconds =
+        remaining !== null && remaining <= 60_000 ? Math.ceil(remaining / 1000) : undefined;
       const game = this.gameInstance();
       const attached = game ? this.driver.instance(game.gameInstanceId) : null;
       const frame = attached && deps.core ? deps.core.getFrame(attached.state) : null;

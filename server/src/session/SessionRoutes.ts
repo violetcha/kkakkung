@@ -16,7 +16,7 @@ import {
   type SessionErrorCode,
   type SessionResponse,
 } from '@kkakkung/protocol/game-messages';
-import type { AdmissionLimiter } from './AdmissionLimiter.js';
+import { AdmissionLimiter } from './AdmissionLimiter.js';
 import type { InvitationPort } from './invite-types.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import type { SlotRegistry } from './SlotRegistry.js';
@@ -51,7 +51,10 @@ export type SessionRouteDeps = Readonly<{
   cleanupReservations?: () => void;
 }>;
 
-function clientIp(req: Request, trustProxy: boolean): string | null {
+export function clientIp(
+  req: Pick<Request, 'headers' | 'socket'>,
+  trustProxy: boolean,
+): string | null {
   if (trustProxy) {
     const forwarded = req.headers['x-forwarded-for'];
     const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
@@ -62,6 +65,27 @@ function clientIp(req: Request, trustProxy: boolean): string | null {
 
 export function createSessionRoutes(deps: SessionRouteDeps): Router {
   const router = Router();
+  // Bound malformed/invalid-token traffic before parsing or scanning invitation hashes.
+  // Use the configured school-NAT IP budget; random tokens do not create new limiter keys.
+  const requestLimiter = deps.limiter
+    ? new AdmissionLimiter({
+        ...deps.limiter.options,
+        perInvite: deps.limiter.options.perIp,
+      })
+    : null;
+  router.use(SESSION_ROUTE, (req, res, next) => {
+    const ip = clientIp(req, deps.trustProxy) ?? 'unknown-peer';
+    if (
+      requestLimiter !== null &&
+      requestLimiter.attempt({ inviteId: ip, ip: null }, deps.monotonicNow()) !== 'allowed'
+    ) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Retry-After', String(Math.ceil(requestLimiter.options.windowMs / 1000)));
+      res.status(429).json({ error: 'RATE_LIMITED' });
+      return;
+    }
+    next();
+  });
   const ssoPrincipal = (req: Request): string | null => {
     if (deps.admissionMode !== 'gitlab-sso' || !deps.trustProxy) return null;
     const user = req.headers['x-sso-user'];

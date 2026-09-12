@@ -21,7 +21,7 @@ function fixture(
     slots,
     directory: { unregister() {} } as any,
     coordinator: { rearm() {} } as any,
-    roomExpiry: { decide: () => 'keep' } as any,
+    roomExpiry: { decide: () => 'keep', remainingMs: () => null } as any,
     core: new FakeCore(),
     tuning: testTuning,
     practice: { port: fakePracticePort, raw: { practiceVersion: 'fixture' } },

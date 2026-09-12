@@ -36,6 +36,8 @@ export type BoundaryPolicy = Readonly<{
   /** Exact paths whose bodies are left untouched (raw-body signature verification). */
   rawBodyPaths?: readonly string[];
   bodyLimitBytes?: number;
+  /** Optional rate gate before any body read/JSON parsing or matchmaking allocation. */
+  allowRequest?: (request: IncomingMessage, path: string) => boolean;
   onRejected?: (info: { path: string; status: number; code: string }) => void;
 }>;
 
@@ -70,6 +72,11 @@ export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) 
   };
   const boundary: Listener = (req, res) => {
     const path = (req.url ?? '/').split('?')[0] ?? '/';
+    if (policy.allowRequest && !policy.allowRequest(req, path)) {
+      reject(res, 429, 'RATE_LIMITED');
+      req.resume();
+      return;
+    }
     const verdict = checkOrigin(req.headers.origin, policy.allowedOrigins);
     if (verdict === 'rejected') {
       policy.onRejected?.({ path, status: 403, code: 'ORIGIN_NOT_ALLOWED' });

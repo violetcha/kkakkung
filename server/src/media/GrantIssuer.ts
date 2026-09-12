@@ -45,14 +45,42 @@ type CachedRequest = {
   fingerprint: string;
   promise: Promise<PreparationResult>;
   result?: PreparationResult;
+  settledAtEpochMs?: number;
 };
 
 export class GrantIssuer {
   private readonly requests = new Map<string, CachedRequest>();
   private readonly scopes = new Map<string, Promise<unknown>>();
-  constructor(private readonly deps: GrantIssuerDeps) {}
+  constructor(
+    private readonly deps: GrantIssuerDeps,
+    private readonly cache = { maxRequests: 4096, retentionMs: 600_000 },
+  ) {
+    if (
+      !Number.isSafeInteger(cache.maxRequests) ||
+      cache.maxRequests <= 0 ||
+      !Number.isSafeInteger(cache.retentionMs) ||
+      cache.retentionMs < 300_000
+    )
+      throw new Error('INVALID_GRANT_CACHE_LIMITS');
+  }
+
+  /** Never discard pending issuance or rely on this cache to authorize a generation. */
+  prune(): void {
+    const now = this.deps.nowEpochMs();
+    for (const [id, request] of this.requests)
+      if (
+        request.settledAtEpochMs !== undefined &&
+        now - request.settledAtEpochMs >= this.cache.retentionMs
+      )
+        this.requests.delete(id);
+  }
+
+  get retained() {
+    return { requests: this.requests.size, pendingScopes: this.scopes.size };
+  }
 
   prepare(requested: PrepareGenerationRequest): Promise<PreparationResult> {
+    this.prune();
     const input = { ...requested };
     const reject = (code: MediaFailureCode): PreparationResult => ({
       ...scope(input),
@@ -87,20 +115,30 @@ export class GrantIssuer {
           return result;
         });
     }
+    if (!existing && this.requests.size >= this.cache.maxRequests)
+      return Promise.resolve(reject('NOT_READY'));
     const key = JSON.stringify([input.matchId, input.playerId]);
     const previous = this.scopes.get(key) ?? Promise.resolve();
     const promise = previous.then(() => this.issue({ ...input }));
-    this.scopes.set(
-      key,
-      promise.catch(() => undefined),
+    const tail = promise.then(
+      () => undefined,
+      () => undefined,
     );
+    this.scopes.set(key, tail);
+    void tail.then(() => {
+      // A later request may already have chained onto this scope.
+      if (this.scopes.get(key) === tail) this.scopes.delete(key);
+    });
     const request: CachedRequest = { fingerprint: fingerprint(input), promise };
     this.requests.set(input.requestId, request);
     void promise.then(
       (result) => {
         request.result = result;
+        request.settledAtEpochMs = this.deps.nowEpochMs();
       },
-      () => {},
+      () => {
+        request.settledAtEpochMs = this.deps.nowEpochMs();
+      },
     );
     return promise;
   }

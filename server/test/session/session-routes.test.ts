@@ -35,6 +35,10 @@ describe('POST /api/sessions', () => {
     return issued.invitation.inviteToken;
   };
 
+  beforeEach(() => {
+    monotonic += 60_000;
+  });
+
   beforeAll(async () => {
     const app = express();
     app.use(express.json({ limit: '2kb' }));
@@ -138,6 +142,28 @@ describe('POST /api/sessions', () => {
     expect(code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
     let calls = 0;
     expect(() => generateRoomCode(() => ++calls <= 64)).toThrow('ROOM_CODE_EXHAUSTED');
+  });
+
+  it('bounds invalid-token and malformed requests before they can reserve a seat', async () => {
+    const before = slots.totalOccupied();
+    for (let i = 0; i < 10; i++) {
+      const response = await post(
+        i % 2
+          ? {}
+          : {
+              nickname: '반복',
+              inviteToken: `invalid-${String(i).padStart(40, 'x')}`,
+              createRoom: true,
+            },
+      );
+      expect([400, 403]).toContain(response.status);
+    }
+    const limited = await post({});
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('retry-after')).toBe('60');
+    expect(slots.totalOccupied()).toBe(before);
+    monotonic += 60_000;
+    expect((await post({})).status).toBe(400);
   });
 });
 

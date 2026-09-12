@@ -594,7 +594,10 @@ export type PublicRoundState = Readonly<{
   counts: Counts;
   result: RoundResult | null;
   abortReason: AbortReason | null;
+  /** D-2026-09-13-01: waiting/result room warning, present only in the last 60 seconds. */
+  roomExpiresInSeconds?: number;
 }>;
+export const ROOM_EXPIRED_CLOSE_CODE = 4001;
 export type RoomRoster = Readonly<{
   matchId: string;
   stateVersion: number;
