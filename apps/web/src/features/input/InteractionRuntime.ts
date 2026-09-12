@@ -87,6 +87,7 @@ import {
   type TrackPublisher,
 } from '../media/track-publisher';
 import { createCalibrator, isNeutralUsable, relativeToNeutral } from './calibration';
+import { createMotionSampleFilter } from './motion-sample-filter';
 import { createContextStore, type ContextStore } from './interaction-context';
 import {
   createGestureIntentController,
@@ -688,10 +689,14 @@ export const createInteractionRuntime = (
   });
 
   /** 문맥 변화·장애에서 이동 timer, 회전 latch, gesture hold를 함께 비운다. */
+  const leanFilter = createMotionSampleFilter('pose', tuning);
+  const yawFilter = createMotionSampleFilter('face', tuning);
   const clearHolds = () => {
     move.release();
     turn.reset();
     gestures.reset();
+    leanFilter.reset(vision.now());
+    yawFilter.reset(vision.now());
   };
 
   /** 장애는 보조 입력 전환이다. 참가·Room·미디어 세대를 끝내지 않는다. */
@@ -822,8 +827,14 @@ export const createInteractionRuntime = (
           failVision('INFERENCE_STALLED');
         if (lastStatus.vision === 'ready' && !hasFreshValidFace()) patch({ vision: 'loading' });
       }
-      if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) move.updateMotion(null, now);
-      if (!isSampleFresh(lastSnapshot?.face ?? null, 'face', now)) turn.updateMotion(null, now);
+      if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) {
+        leanFilter.reset();
+        move.updateMotion(null, now);
+      }
+      if (!isSampleFresh(lastSnapshot?.face ?? null, 'face', now)) {
+        yawFilter.reset();
+        if (context.get()?.mode === 'motion' && !fallback.degraded) turn.reset();
+      }
       inputWatchdog = vision.setTimer(checkInputAndOutput, 100);
     };
     inputWatchdog = vision.setTimer(checkInputAndOutput, 100);
@@ -864,12 +875,16 @@ export const createInteractionRuntime = (
     ) {
       move.updateMotion(null, nowMs);
       turn.updateMotion(null, nowMs);
+      leanFilter.reset(nowMs);
+      yawFilter.reset(nowMs);
       return;
     }
     const neutral = calibrator.getNeutral();
     if (!isNeutralUsable(neutral, runtimeGeneration, tuning)) {
       move.updateMotion(null, nowMs);
       turn.updateMotion(null, nowMs);
+      leanFilter.reset(nowMs);
+      yawFilter.reset(nowMs);
       return;
     }
     const pose = snapshot.pose;
@@ -880,17 +895,34 @@ export const createInteractionRuntime = (
     const lean = usablePose
       ? torsoLeanRad((pose as Sample<PoseSensor> & { status: 'valid' }).data.landmarks)
       : null;
-    move.updateMotion(lean === null ? null : relativeToNeutral(lean, neutral.leanRad), nowMs);
+    const motion = leanFilter.observe(
+      pose,
+      lean === null ? null : relativeToNeutral(lean, neutral.leanRad),
+      nowMs,
+      snapshot.runtimeGeneration,
+    );
+    if (motion.status === 'unavailable') move.updateMotion(null, nowMs);
+    if (motion.status === 'new') {
+      if (motion.restarted) move.updateMotion(null, motion.sampledAtMs);
+      move.updateMotion(motion.value, motion.sampledAtMs);
+    }
 
     const face = snapshot.face;
     const usableFace =
       isSampleFresh(face, 'face', nowMs) &&
       face!.status === 'valid' &&
       isUsableQuality(face!.data.quality);
-    turn.updateMotion(
+    const rotation = yawFilter.observe(
+      face,
       usableFace ? relativeToNeutral(face!.data.yawRad, neutral.yawRad) : null,
       nowMs,
+      snapshot.runtimeGeneration,
     );
+    if (rotation.status === 'unavailable') turn.reset();
+    if (rotation.status === 'new') {
+      if (rotation.restarted) turn.reset();
+      turn.updateMotion(rotation.value, rotation.sampledAtMs);
+    }
   };
 
   const publishSnapshot = (snapshot: SensorSnapshot) => {
@@ -1148,8 +1180,14 @@ export const createInteractionRuntime = (
 
     setContext(next: InteractionContext) {
       if (disposed) return;
+      const previous = context.get();
       const change = context.set(next);
-      if (change.shouldClearHolds) clearHolds();
+      if (
+        change.shouldClearHolds ||
+        previous?.phase !== next.phase ||
+        previous?.selfPlayerId !== next.selfPlayerId
+      )
+        clearHolds();
       // pageActive=false이면 입력과 버퍼를 비우고 새 의도를 막는다.
       if (!context.acceptsInput) clearHolds();
       turn.setMode(next.mode);
