@@ -25,6 +25,7 @@ import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
+import { SoloPracticeScreen } from '../features/game/solo/SoloPracticeScreen';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
 
 export function ProductApp({
@@ -38,6 +39,8 @@ export function ProductApp({
   const [roomCode, setRoomCode] = useState(initialRoom);
   const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
+  const [solo, setSolo] = useState(false);
+  const finishSolo = useCallback(() => setSolo(false), []);
   const [error, setError] = useState('');
   const [access, setAccess] = useState<'checking' | 'invitation' | 'gitlab-sso' | 'failed'>(
     'checking',
@@ -133,7 +136,7 @@ export function ProductApp({
   }, [leave, cancelPendingAdmission]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
-    if (joining || runtime.current) return;
+    if (joining || runtime.current || solo) return;
     const run = ++generation.current;
     setJoining(true);
     setError('');
@@ -242,7 +245,9 @@ export function ProductApp({
           </button>
         )}
       </header>
-      {!snapshot ? (
+      {solo && !snapshot ? (
+        <SoloPracticeScreen onExit={finishSolo} />
+      ) : !snapshot ? (
         <section className="admission">
           <h2>흑백 미로에서 만나요.</h2>
           <p>
@@ -252,6 +257,18 @@ export function ProductApp({
               ? '방을 만들고 친구들에게 방 코드를 알려 주세요.'
               : '초대받은 친구들과 함께 시작하세요.'}
           </p>
+          <p>
+            PC 브라우저에서 6명이 함께하는 게임입니다. 카메라 필수 · 마이크 선택. 도망자 2명이
+            탈출하면 도망자 팀이, 술래가 2명을 잡거나 시간을 버티면 술래 팀이 이깁니다.
+          </p>
+          <ol>
+            <li>혼자 카메라와 조작을 먼저 점검해요.</li>
+            <li>방 코드를 나누고 여섯 명이 모여요.</li>
+            <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
+          </ol>
+          <button type="button" disabled={joining} onClick={() => setSolo(true)}>
+            혼자 장치 점검·조작 체험
+          </button>
           <form onSubmit={(event) => void join(event)}>
             <label htmlFor="product-nickname">닉네임</label>
             <input
