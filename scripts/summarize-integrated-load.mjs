@@ -8,26 +8,36 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { evaluateIntegrated } from '../tests/load/TenRoomSchedule.ts';
+import { evaluateIntegrated, validateIntegratedEvidence } from '../tests/load/TenRoomSchedule.ts';
 
-/** Reads windows.json / cleanup.json / official-after.json / requirements.json from the directory. */
+/** Reads run.json / windows.json / cleanup.json / official-after.json / requirements.json. */
 export function loadIntegratedEvidence(directory) {
   const read = (name) => {
     const file = resolve(directory, name);
-    return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
+    if (!existsSync(file)) return null;
+    try {
+      return JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      throw new Error(`${name} unreadable or invalid JSON`);
+    }
   };
-  const windows = read('windows.json');
-  if (!Array.isArray(windows)) return { error: 'windows.json missing or not an array' };
-  const cleanup = read('cleanup.json');
-  const requirements = read('requirements.json');
-  return {
-    input: {
+  try {
+    const windows = read('windows.json');
+    if (!Array.isArray(windows)) return { error: 'windows.json missing or not an array' };
+    const cleanup = read('cleanup.json');
+    const requirements = read('requirements.json');
+    const input = {
+      run: read('run.json'),
       windows,
       unresolvedRetirements: cleanup?.unresolvedRetirements ?? Number.POSITIVE_INFINITY,
       officialAfter: read('official-after.json'),
       observedRequirements: Array.isArray(requirements) ? requirements : [],
-    },
-  };
+    };
+    const invalid = validateIntegratedEvidence(input);
+    return invalid.length ? { error: invalid.join('; ') } : { input };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'invalid evidence' };
+  }
 }
 
 if (basename(process.argv[1] ?? '') === 'summarize-integrated-load.mjs') {
@@ -58,6 +68,8 @@ function report(evidence, input, output) {
     JSON.stringify(
       {
         generatedAt: new Date().toISOString(),
+        evidenceVersion: 2,
+        run: evidence.run,
         input: input.replace(/\\/g, '/'),
         ...summary,
         note: 'Same-interval G2/G6 judgement; transitional, reduced and destructive windows reported apart. 60 concurrent seconds are measured, never extrapolated from one room.',
