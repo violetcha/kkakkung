@@ -47,6 +47,12 @@
 
 ## 접근 제어 (GitLab SSO)
 
+continuous 제품 배포는 `SESSION_ADMISSION_MODE=gitlab-sso`로 팀원 직접 입장을 연결한다.
+사이트의 GitLab 프로젝트 멤버 검사를 통과하면 별도 초대 없이 방 생성·방 코드 참가가 가능하다.
+SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested 입장 방식은 invitation이다.
+호스트가 `X-SSO-User`를 인증 응답 값으로 덮어쓰고 내부 smoke 프록시는 제거해야 한다.
+게임 포트 비공개·web-proxy loopback 바인딩을 유지한 상태에서만 사용한다.
+
 서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 게이트를 유지한다. 로그인하지 않은 요청은 `/oauth2/start`와 GitLab 인가를 거친다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 심사·시연 참가자는 승인된 프로젝트 접근 권한으로 입장한다. 내부 6인 시험 예외는 SSO 해제를 허용하지 않는다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
 
 ## 파이프라인
@@ -110,6 +116,7 @@ Jenkins `kkakkung-production-env`에 `SMOKE_INTERNAL_TOKEN`과
 `node scripts/write-smoke-proxy.mjs /opt/kkakkung/smoke-internal.key /etc/nginx/conf.d/kkakkung-smoke.conf`로
 설정을 만들고 `nginx -t` 후 reload한다. 포트는 반드시 loopback에만 바인딩한다.
 HTTP와 WebSocket 모두 전용 헤더 인증을 거치며 키 누락·불일치는 403이다.
+내부 요청의 X-SSO-User는 제거하고, 시험 참가자는 기존 초대·세션 발급을 거친다.
 공개 HTTPS의 SSO는 유지한다. Cloud 시험은 공개 주소의 익명 접근 차단을 별도로 검사한다.
 개인 GitLab 로그인 성공은 자동 게임 시험의 검증 범위가 아니며 별도 수동 SSO 점검으로 기록한다.
 

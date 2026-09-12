@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   requestSession,
+  requestSessionAccess,
   joinProductRoom,
   productRoomPort,
   cancelSessionReservation,
@@ -35,6 +36,10 @@ export function ProductApp({
   const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
+  const [access, setAccess] = useState<'checking' | 'invitation' | 'gitlab-sso' | 'failed'>(
+    'checking',
+  );
+  const [accessAttempt, setAccessAttempt] = useState(0);
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);
   const [selfId, setSelfId] = useState('');
   const [code, setCode] = useState('');
@@ -43,6 +48,20 @@ export function ProductApp({
   const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
   const generation = useRef(0);
   const pendingSession = useRef<SessionResponse | null>(null);
+  useEffect(() => {
+    let active = true;
+    setAccess('checking');
+    void requestSessionAccess()
+      .then(({ method }) => {
+        if (active) setAccess(method);
+      })
+      .catch(() => {
+        if (active) setAccess('failed');
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessAttempt]);
   const appliedInvitation = useRef({ invitation, initialRoom });
   const cancelPendingAdmission = useCallback(() => {
     const pending = pendingSession.current;
@@ -118,7 +137,10 @@ export function ProductApp({
     let joined: Awaited<ReturnType<typeof joinProductRoom>> | null = null;
     let session: SessionResponse | null = null;
     try {
-      const base = { nickname: nickname.trim(), inviteToken: invitation };
+      const base = {
+        nickname: nickname.trim(),
+        ...(access === 'gitlab-sso' ? {} : { inviteToken: invitation }),
+      };
       session = await requestSession(
         createRoom
           ? { ...base, createRoom: true }
@@ -158,7 +180,10 @@ export function ProductApp({
         setSnapshot(null);
         const labels: Record<string, string> = {
           INVALID_REQUEST: '닉네임·초대 링크·방 코드를 확인해 주세요.',
-          INVALID_INVITATION: '유효한 초대 링크가 필요합니다.',
+          INVALID_INVITATION:
+            access === 'gitlab-sso'
+              ? '로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'
+              : '유효한 초대 링크가 필요합니다.',
           CAPACITY: '방이 가득 찼습니다.',
           ROOM_NOT_AVAILABLE: '입장할 수 없는 방입니다.',
           RATE_LIMITED: '잠시 기다린 뒤 다시 시도해 주세요.',
@@ -200,7 +225,9 @@ export function ProductApp({
           <p>
             세 명의 도망자, 세 명의 술래.
             <br />
-            초대받은 친구들과 함께 시작하세요.
+            {access === 'gitlab-sso'
+              ? '방을 만들고 친구들에게 방 코드를 알려 주세요.'
+              : '초대받은 친구들과 함께 시작하세요.'}
           </p>
           <form onSubmit={(event) => void join(event)}>
             <label htmlFor="product-nickname">닉네임</label>
@@ -237,7 +264,7 @@ export function ProductApp({
                 />
               </>
             )}
-            <button disabled={joining || !invitation}>
+            <button disabled={joining || (!invitation && access !== 'gitlab-sso')}>
               {joining ? '입장 중…' : createRoom ? '방 만들기' : '방 참가'}
             </button>
             {joining && (
@@ -246,7 +273,21 @@ export function ProductApp({
               </button>
             )}
           </form>
-          {!invitation && <p className="notice">유효한 초대 링크로 열어 주세요.</p>}
+          {!invitation && access === 'checking' && <p className="notice">접속 상태 확인 중…</p>}
+          {!invitation && access === 'invitation' && (
+            <p className="notice">유효한 초대 링크로 열어 주세요.</p>
+          )}
+          {access === 'gitlab-sso' && (
+            <p className="notice">팀원 로그인이 확인됐습니다. 바로 방을 만들거나 참가하세요.</p>
+          )}
+          {access === 'failed' && (
+            <p className="notice">
+              접속 상태를 확인하지 못했습니다. 로그인과 네트워크 상태를 확인해 주세요.{' '}
+              <button type="button" onClick={() => setAccessAttempt((attempt) => attempt + 1)}>
+                접속 상태 다시 확인
+              </button>
+            </p>
+          )}
         </section>
       ) : snapshot.lost ? (
         <ConnectionLostScreen onLeave={() => void leave()} />

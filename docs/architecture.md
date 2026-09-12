@@ -14,7 +14,7 @@ game-core는 protocol에도 의존하지 않는다. 서버 adapter가 검증된 
 
 `SERVER_PROFILE=product`가 실제 kkakkung 0.2 Room과 A/B/E/F 조립을 선택한다. 서버는 명령·미디어 응답을 20Hz 권위 Tick에 반영하고, 코어가 맵·이동·장비·구속·포획·포즈·승패를 판정한다. 공개 라운드/로스터와 수신자별 private view·사건을 분리하며 웹에는 관찰 가능한 상태만 전달한다.
 
-초대·세션 발급 → RESERVED 좌석 → 인증된 Colyseus 연결 → 6인 DEVICE_CHECK → TEAM_PRACTICE → MAP_FINALIZING → GAME_LOADING → COUNTDOWN → PLAYING → RESULT/ABORTED 순서다. 방장이 재경기를 선택하면 새 matchId로 준비를 시작한다. 미디어 회수를 확인하기 전에는 발급 장벽이나 RETIRING 좌석을 임의로 해제하지 않는다.
+초대 또는 GitLab 프로젝트 멤버 인증 → 세션 발급 → RESERVED 좌석 → 인증된 Colyseus 연결 → 6인 DEVICE_CHECK → TEAM_PRACTICE → MAP_FINALIZING → GAME_LOADING → COUNTDOWN → PLAYING → RESULT/ABORTED 순서다. 방장이 재경기를 선택하면 새 matchId로 준비를 시작한다. 미디어 회수를 확인하기 전에는 발급 장벽이나 RETIRING 좌석을 임의로 해제하지 않는다.
 
 입장 예약은 연결되지 않으면 60초에 만료된다. 소유 세션의 취소도 예약을 반환하며 이미 연결된 참가자나 회수 중 좌석은 이 경로로 퇴장시키지 않는다. 입장 후 세션 수명과 예약 만료는 별개다. 전송 규약은 [protocol](protocol.md)을 따른다.
 
@@ -40,7 +40,7 @@ game-core는 protocol에도 의존하지 않는다. 서버 adapter가 검증된 
 
 `server/src/media`는 바인딩·발급·회수·권한을, `server/src/operations`는 지속 저널·사용량·명령·복구 장벽을 소유한다. F의 runtime evidence 공급기가 검토된 운영 자료를 연결한다. `MEDIA_MODE=livekit` 설정만으로 READY를 만들지 않으며 유효한 증거·예산·복구가 필요하다.
 
-내부 `publisher-permissions` 모드는 정상 팀 6명·1방만 승인되어 있다. 게시 전 기본 차단, 확인된 바인딩, 허용 목록 만료·회수, SSO·초대·예산을 유지한다. 기본 `server-controlled` 모드와 Cloud 증거를 혼용하지 않는다.
+내부 `publisher-permissions` 모드는 정상 팀 6명·1방만 승인되어 있다. 게시 전 기본 차단, 확인된 바인딩, 허용 목록 만료·회수, SSO 또는 초대 인증·예산을 유지한다. 기본 `server-controlled` 모드와 Cloud 증거를 혼용하지 않는다.
 
 ## 진단과 배포 경계
 

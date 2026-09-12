@@ -285,7 +285,8 @@ B가 경로를 등록하고 E가 핸들러를, F가 secret 주입·배포 보호
 
 B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSnapshot/getStatus를 각 경로에 연결한다. submit은 accepted+snapshot 또는 conflict를 즉시 반환하고 긴 작업은 E 내부 큐에서 처리한다. drain 접수 시 admission을 먼저 DRAINING으로 바꾼다. B는 입장 승인 직전에 getStatus().admission을 검사하며 await 뒤에도 재검사한다. E는 주입된 getGameActivity()의 진행 경기·연습·입장 수가 모두 0이고 회수가 확인되어야 drain을 succeeded로 바꾼다. 시간 초과는 failed로 종결하고 신규 입장 차단을 유지한다. E가 B의 Room registry를 직접 수정하거나 정의되지 않은 callback을 추가하지 않는다.
 
-- POST /api/sessions: SessionRequest → SessionResponse. 신원은 서버가 발급하고 no-store·메모리 보관, fragment 초대는 읽은 뒤 주소에서 지운다. SessionResponse.expiresAt은 epoch ms이며 MediaGrant.expiresAt은 epoch 초다.
+- GET /api/sessions/access: 해당 요청의 입장 방식만 SessionAccessResponse로 반환한다(no-store). GitLab 신원·토큰은 반환하지 않으며 이 응답은 후속 POST의 인증이 아니다.
+- POST /api/sessions: SessionRequest → SessionResponse. 기본 invitation 모드는 유효한 inviteToken이 필수다. 명시적 SESSION_ADMISSION_MODE=gitlab-sso와 신뢰 프록시 설정을 함께 적용한 제품 서버만 호스트 SSO 검증 후 덮어쓴 X-SSO-User를 인정하여 inviteToken 없는 생성·방 코드 참가를 허용한다. 신원이 없으면 기존 초대 검사를 수행한다. 회원별 해시를 기존 inviteId 제한 버킷에 사용하며 IP·좌석·운영 잠금·예약 반환은 동일하다. 게임 신원은 서버가 발급하고 no-store·메모리 보관, fragment 초대는 읽은 뒤 주소에서 지운다. SessionResponse.expiresAt은 epoch ms이며 MediaGrant.expiresAt은 epoch 초다.
 - DELETE /api/sessions/current: 자기 세션 Bearer만으로 미가입 RESERVED를 반환한다. 본문은 없거나 빈 객체이며 신원 지정은 400, Bearer 누락은 401, 활성 연결·JOINED·RETIRING은 409로 거절한다. 이미 취소·만료된 토큰은 204로 끝난다. 첫 연결 기한은 발급 후 60초이며 가입 후 활동 기반 lease와 구분한다. 상세 HTTP 계약은 docs/protocol.md를 따른다.
 - POST /api/media/grants: Bearer 세션 + MediaGrantRequest → MediaGrant. 이전 회수/예산/phase 불충족은 409, 인증 오류 401/403, 공급자 불명 503으로 안전 code만 반환한다.
 - POST /api/media/report: Bearer 세션 + MediaStatusReport → 204. 수신자 신원과 scope를 검사한다. 신고만으로 원격 회수·권한 성공을 확정하지 않는다.
@@ -365,8 +366,10 @@ export type TracePoint = Readonly<{ x: number; y: number }>;
 export type Dir = 0 | 1 | 2 | 3;
 export type WallFace = Cell & Readonly<{ side: Dir }>;
 export type Role = 'runner' | 'tagger';
-export type SessionRequest = Readonly<{ nickname: string; inviteToken: string }> &
+export type SessionRequest = Readonly<{ nickname: string; inviteToken?: string }> &
   ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export const SESSION_ACCESS_ROUTE = '/api/sessions/access' as const;
+export type SessionAccessResponse = Readonly<{ method: 'invitation' | 'gitlab-sso' }>;
 export type SessionResponse = Readonly<{
   sessionToken: string;
   playerId: string;

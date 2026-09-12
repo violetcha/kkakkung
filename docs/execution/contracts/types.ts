@@ -6,8 +6,10 @@ export type TracePoint = Readonly<{ x: number; y: number }>;
 export type Dir = 0 | 1 | 2 | 3;
 export type WallFace = Cell & Readonly<{ side: Dir }>;
 export type Role = 'runner' | 'tagger';
-export type SessionRequest = Readonly<{ nickname: string; inviteToken: string }> &
+export type SessionRequest = Readonly<{ nickname: string; inviteToken?: string }> &
   ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
+export const SESSION_ACCESS_ROUTE = '/api/sessions/access' as const;
+export type SessionAccessResponse = Readonly<{ method: 'invitation' | 'gitlab-sso' }>;
 export type SessionResponse = Readonly<{
   sessionToken: string;
   playerId: string;

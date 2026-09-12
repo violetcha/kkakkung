@@ -26,12 +26,19 @@ import type {
   InvitationIssueResult,
   MediaConfiguration,
   MetricSample,
+  SessionRequest,
+  SessionAccessResponse,
 } from './types.ts';
 
 // Shared planning examples. These fixtures do not run product modules or certify a real map,
 // Cloud connection, journal recovery, deployment, or device test.
 
 // API handoff examples only. No account, public window or Cloud capability is authorized.
+export const teamSessionFixture = {
+  nickname: '팀원',
+  createRoom: true,
+} as const satisfies SessionRequest;
+export const teamAccessFixture = { method: 'gitlab-sso' } as const satisfies SessionAccessResponse;
 export const operatorInvitationFixture = {
   scope: { allowCreate: false, roomCodes: ['ABC123'] },
   expiresAt: 1_900_000_000_000,

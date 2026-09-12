@@ -37,6 +37,7 @@ const environment = z.object({
   NODE_ENV: z.enum(['development', 'test']).default('development'),
   SERVER_PROFILE: z.enum(['development', 'product']).default('development'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(1).default(0),
+  SESSION_ADMISSION_MODE: z.enum(['invitation', 'gitlab-sso']).default('invitation'),
   PRODUCT_ASSET_VERSION: z.string().min(1).default('c-primitives-1'),
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
   PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
@@ -119,6 +120,11 @@ export function parseConfig(input: Record<string, string | undefined>) {
     );
   }
   const raw = parsed.data;
+  if (
+    raw.SESSION_ADMISSION_MODE === 'gitlab-sso' &&
+    (raw.SERVER_PROFILE !== 'product' || raw.TRUST_PROXY_HOPS !== 1)
+  )
+    throw new Error('GitLab SSO admission requires the product profile and trusted proxy');
   const allowedOrigins = raw.ALLOWED_ORIGINS.split(',').map((s) => s.trim());
   if (
     !allowedOrigins.length ||
@@ -237,6 +243,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
+    sessionAdmissionMode: raw.SESSION_ADMISSION_MODE,
     operatingMode: raw.OPS_OPERATING_MODE,
     subscriptionMode: raw.MEDIA_SUBSCRIPTION_MODE,
     publicWindow:

@@ -308,6 +308,7 @@ export function createApplication<State = unknown>(
             admission,
             monotonicNow,
             trustProxy: product.trustProxy,
+            admissionMode: config.sessionAdmissionMode,
             cleanupReservations,
           }),
         );

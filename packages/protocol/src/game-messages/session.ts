@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { PRODUCT_PROTOCOL_VERSION } from '../version.js';
 
 export const SESSION_ROUTE = '/api/sessions';
+/** Request-scoped hint only; POST independently authenticates the trusted SSO request. */
+export const SESSION_ACCESS_ROUTE = '/api/sessions/access';
+export const sessionAccessResponseSchema = z.strictObject({
+  method: z.enum(['invitation', 'gitlab-sso']),
+});
+export type SessionAccessResponse = z.infer<typeof sessionAccessResponseSchema>;
 /** DELETE with the owner's Bearer token; never accepts a playerId or roomCode. */
 export const SESSION_CANCEL_ROUTE = '/api/sessions/current';
 export const sessionCancelRequestSchema = z.strictObject({});
@@ -21,12 +27,12 @@ export const roomCodeSchema = z.string().regex(ROOM_CODE_PATTERN);
 export const sessionRequestSchema = z.discriminatedUnion('createRoom', [
   z.strictObject({
     nickname: nicknameSchema,
-    inviteToken: inviteTokenSchema,
+    inviteToken: inviteTokenSchema.optional(),
     createRoom: z.literal(true),
   }),
   z.strictObject({
     nickname: nicknameSchema,
-    inviteToken: inviteTokenSchema,
+    inviteToken: inviteTokenSchema.optional(),
     createRoom: z.literal(false),
     roomCode: roomCodeSchema,
   }),

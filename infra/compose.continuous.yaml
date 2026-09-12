@@ -6,6 +6,8 @@ services:
       SERVER_PROFILE: product
       MEDIA_MODE: livekit
       TRUST_PROXY_HOPS: 1
+      # Requires the loopback-only web proxy and host GitLab auth_request boundary.
+      SESSION_ADMISSION_MODE: gitlab-sso
       OPS_OPERATING_MODE: continuous
     volumes:
       - type: bind

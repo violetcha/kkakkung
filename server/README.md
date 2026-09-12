@@ -4,6 +4,11 @@ Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프�
 
 ## 실행
 
+현재 continuous 배포의 팀 입장은 GitLab 프로젝트 멤버 인증을 사용한다.
+`SESSION_ADMISSION_MODE=gitlab-sso`는 product와 TRUST_PROXY_HOPS=1을 모두 요구한다.
+호스트 auth_request가 덮어쓴 X-SSO-User만 사용하며, 서버 포트 비공개와 프록시 사설 경계가 전제다.
+기본 invitation 모드와 내부 smoke의 초대 검사는 유지한다. HTTP 계약은 [프로토콜](../docs/protocol.md)을 따른다.
+
 아래 명령은 모두 `server/`가 아니라 **저장소 루트**에서 실행한다.
 
 ```bash

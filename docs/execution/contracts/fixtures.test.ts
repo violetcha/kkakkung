@@ -8,7 +8,15 @@ import {
   invalidPracticeFixture,
   unconfiguredMediaFixture,
   planningMetricFixture,
+  teamSessionFixture,
+  teamAccessFixture,
 } from './fixtures.ts';
+
+test('team admission omits invitation data but requires server-side SSO authentication', () => {
+  assert.equal(teamAccessFixture.method, 'gitlab-sso');
+  assert.equal(teamSessionFixture.createRoom, true);
+  assert.equal('inviteToken' in teamSessionFixture, false);
+});
 
 test('operator handoff fixes the invite endpoint, scoped request and failure union', () => {
   assert.deepEqual(INVITATION_ROUTES, {
