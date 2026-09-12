@@ -2088,7 +2088,7 @@ feat: 지도 교환 요청과 수락 화면 연결
 
 **연결 계약과 경계**
 
-- eventId=matchId:tick:serial이며 외부 봉투의 `gameScope:ActiveGameScope`를 함께 검증한다. 미래 scope/뷰 사건 큐는 합계 64개/1초이고 개인 view-resync는 B rate limit 계약을 따른다. none에는 개인 게임 사건을 적용하지 않는다.
+- eventId는 공개 스키마의 불투명 식별자로 사용하고 내부 형식을 분해하지 않는다. 외부 봉투의 `gameScope:ActiveGameScope`를 함께 검증한다. 미래 scope/뷰 사건 큐는 합계 64개/1초이고 개인 view-resync는 B rate limit 계약을 따른다. none에는 개인 게임 사건을 적용하지 않는다.
 - 과거점 payload는 B가 허용한 위치 사건이며 visibleEntities 현재 위치와 분리.
 - HUNTER_MARKER={markerId,kind:"exchange"|"sensor"|"trap",point:TracePoint,occurredTick,showAtTick,expiresTick}; point는 두 셀 중심의 중점으로 0.5 단위가 가능하며 정수 Cell로 반올림하지 않는다.
 - serverTick은 라운드 생성부터 20Hz로 증가하며 연습 action도 같은 시계를 사용한다. 본 경기 startTick부터 deadlineTick=startTick+3600이고 startAt은 서버 monotonic ms다. C는 중앙 clock-probe/clock-reply 왕복 시각으로 오프셋을 구해 화면만 보간한다. game-heartbeat는 연결 생존 확인에 사용하며 편도 도착 시각을 정밀 시계 오프셋으로 간주하지 않는다.

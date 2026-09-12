@@ -88,13 +88,7 @@ export function createPrivateEvents(deps: {
         return;
       }
       const event = parsed.data;
-      if (
-        !event.eventId.startsWith(`${event.matchId}:${event.tick}:`) ||
-        !/^\d+$/.test(event.eventId.slice(`${event.matchId}:${event.tick}:`.length))
-      ) {
-        resync();
-        return;
-      }
+      // The producer owns the opaque ID. Scope/version fields establish applicability.
       const id = key(event);
       if (seen.has(id) || pending.has(id)) return;
       if (apply(event) === 'wait') {
