@@ -285,24 +285,11 @@ export type InteractionRuntimeOptions = Readonly<{
 /** 보정 수집 상한. 이 시간 안에 충분한 표본이 없으면 미보정으로 끝낸다. */
 export const CALIBRATION_WINDOW_MS = 2000;
 
-function browserEnvironment(): DeviceEnvironment {
+function browserEnvironment(createAudioUnlock: () => AudioUnlockPort | null): DeviceEnvironment {
   return {
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     createPreviewElement: () => document.createElement('video'),
-    createAudioUnlock: () => {
-      const Constructor: typeof AudioContext | undefined =
-        typeof AudioContext === 'undefined' ? undefined : AudioContext;
-      if (!Constructor) return null;
-      const context = new Constructor();
-      const port: AudioUnlockPort = {
-        get state() {
-          return context.state;
-        },
-        resume: () => context.resume(),
-        close: () => context.close(),
-      };
-      return port;
-    },
+    createAudioUnlock,
     onDeviceChange: (listener) => {
       const target = navigator.mediaDevices;
       target.addEventListener('devicechange', listener);
@@ -400,7 +387,7 @@ export type KeyboardTarget = Readonly<{
  * 사용자 제스처로 연 AudioContext를 재사용하는 기본 그래프 환경.
  * 브라우저에 Web Audio가 없으면 null이며 그때는 오디오를 구성하지 않는다.
  */
-function browserAudio(): AudioGraphEnvironment | null {
+function browserAudio(): (AudioGraphEnvironment & AudioUnlockPort) | null {
   if (typeof AudioContext === 'undefined') return null;
   const context = new AudioContext();
   const effectBuffers = new Map<
@@ -418,6 +405,15 @@ function browserAudio(): AudioGraphEnvironment | null {
     disconnect: (): void => node.disconnect(),
   });
   return {
+    get state() {
+      return context.state;
+    },
+    resume: () => context.resume(),
+    close: async () => {
+      master.disconnect();
+      effectBuffers.clear();
+      await context.close();
+    },
     createSourceFromTrack: (track) => {
       const stream = new MediaStream([track]);
       const source = context.createMediaStreamSource(stream);
@@ -545,21 +541,21 @@ export const createInteractionRuntime = (
     scope.receiverGeneration === acceptedScope.receiverGeneration;
   const policyStore: PolicyStore = createPolicyStore(bindingStore);
   let audioGraph: AudioGraph | null = null;
+  let sharedAudio: (AudioGraphEnvironment & AudioUnlockPort) | null = null;
+  let audioOutputLock: OutputLock = 'locked';
 
   const ensureAudio = (): AudioGraph | null => {
     if (audioGraph) return audioGraph;
-    const environment = options.audio ?? browserAudio();
-    // Web Audio가 없는 환경에서만 null이며, 그 사실을 상태로 보고한다.
-    if (!environment) {
-      patch({ audioPlayback: 'failed', errorCode: 'AUDIO_UNAVAILABLE' });
-      return null;
-    }
+    // 실제 Context는 장치 점검 클릭에서 생성·재개하고 세대 사이에 재사용한다.
+    const environment = options.audio ?? sharedAudio;
+    if (!environment) return null;
     audioGraph = createAudioGraph({
       environment,
       // 주입이 없으면 SDK 어댑터가 들고 있는 구독 오디오 트랙을 읽는다.
       getAudioTrack: (trackSid) =>
         options.getAudioTrack?.(trackSid) ?? liveKit?.getAudioTrack(trackSid) ?? null,
     });
+    audioGraph.setOutputLock(audioOutputLock);
     return audioGraph;
   };
 
@@ -712,7 +708,10 @@ export const createInteractionRuntime = (
   /** 세 종료 경로가 공유하는 단일 정리 수명. */
   const lifecycle: MediaLifecycle = createMediaLifecycle({
     media: {
-      closeOutput: () => audioGraph?.setOutputLock('locked'),
+      closeOutput: () => {
+        audioOutputLock = 'locked';
+        audioGraph?.setOutputLock('locked');
+      },
       stopListeners: () => {
         acceptedScope = null;
         liveKit?.clearPublisherPermissions();
@@ -747,6 +746,7 @@ export const createInteractionRuntime = (
       stopDevices: async () => {
         await devices?.dispose();
         devices = null;
+        sharedAudio = null;
       },
     },
     now: () => vision.now(),
@@ -933,6 +933,7 @@ export const createInteractionRuntime = (
       if (event.isComposing || isTextEntryTarget(event.target)) return;
       const action = ACTION_KEYS[event.code];
       if (action) {
+        if (event.repeat) return;
         // Esc는 challenge 취소만 담당한다.
         if (gestures.pressKey(action) !== null) event.preventDefault();
         return;
@@ -975,7 +976,8 @@ export const createInteractionRuntime = (
   const ensureDevices = (): DeviceManager => {
     if (devices) return devices;
     devices = createDeviceManager({
-      environment: options.environment ?? browserEnvironment(),
+      environment:
+        options.environment ?? browserEnvironment(() => (sharedAudio ??= browserAudio())),
       onStatus: (status) => {
         lastStatus = status;
         if (!disposed) deps.onDeviceStatus(status);
@@ -999,6 +1001,7 @@ export const createInteractionRuntime = (
       const manager = ensureDevices();
       const status = await manager.start(input);
       if (disposed) return status;
+      reconcileAudio();
       const preview = manager.getPreviewElement();
       if (status.camera === 'ready' && preview && !scheduler) {
         runtimeGeneration += 1;
@@ -1058,6 +1061,7 @@ export const createInteractionRuntime = (
       // pageActive=false이면 입력과 버퍼를 비우고 새 의도를 막는다.
       if (!context.acceptsInput) clearHolds();
       turn.setMode(next.mode);
+      gestures.syncEquipment(next.selectedEquipment ?? 'sensor');
       gestures.setMode(next.mode);
       bindKeyboard();
     },
@@ -1091,7 +1095,9 @@ export const createInteractionRuntime = (
 
     /** COUNTDOWN·개인 종료·권위 상실에서 출력을 잠근다. */
     setAudioOutputLock(lock: OutputLock) {
-      ensureAudio()?.setOutputLock(lock);
+      if (disposed) return;
+      audioOutputLock = lock;
+      audioGraph?.setOutputLock(lock);
     },
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */

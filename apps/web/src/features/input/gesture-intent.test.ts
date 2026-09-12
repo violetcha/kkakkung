@@ -69,11 +69,60 @@ function harness(context: InteractionContext) {
 /** 600ms를 채우는 연속 손동작. */
 function holdGesture(base: ReturnType<typeof harness>, kind: 'palm' | 'victory', startMs = 1000) {
   base.controller.observe(gestureSnapshot(1, startMs, kind), startMs, GENERATION);
+  base.controller.observe(gestureSnapshot(2, startMs + 300, kind), startMs + 300, GENERATION);
   const end = startMs + GESTURE_HOLD_MS;
-  return base.controller.observe(gestureSnapshot(2, end, kind), end, GENERATION);
+  return base.controller.observe(gestureSnapshot(3, end, kind), end, GENERATION);
 }
 
 describe('createGestureIntentController', () => {
+  it('requires physical release after firing across installation updates and observation gaps', () => {
+    const base = harness(tagger);
+    expect(holdGesture(base, 'victory')).toBe('install');
+    base.store.set({ ...tagger, installationId: 'installed' });
+    base.controller.reset();
+    for (let i = 4; i <= 20; i++) {
+      const at = 1000 + i * 300;
+      base.controller.observe(gestureSnapshot(i, at, 'victory'), at, GENERATION);
+    }
+    expect(base.sent).toEqual([{ type: 'INSTALL', payload: { kind: 'sensor' } }]);
+    base.controller.observe(gestureSnapshot(21, 7300, 'none'), 7300, GENERATION);
+    for (let i = 22; i <= 24; i++) {
+      const at = 7600 + (i - 22) * 300;
+      base.controller.observe(gestureSnapshot(i, at, 'victory'), at, GENERATION);
+    }
+    expect(base.sent.at(-1)).toEqual({
+      type: 'INSTALL_CANCEL',
+      payload: { installationId: 'installed' },
+    });
+    expect(base.sent).toHaveLength(2);
+  });
+
+  it('does not count sparse, duplicate or stale-generation observations toward a hold', () => {
+    const base = harness({ ...runner, incomingExchangeId: 'exchange' });
+    base.controller.observe(gestureSnapshot(1, 0, 'palm'), 0, GENERATION);
+    base.controller.observe(gestureSnapshot(2, 1000, 'palm'), 1000, GENERATION);
+    expect(base.sent).toHaveLength(0);
+    base.controller.observe(gestureSnapshot(2, 1300, 'palm'), 1300, GENERATION);
+    base.controller.observe(
+      gestureSnapshot(3, 1500, 'palm', { generation: GENERATION - 1 }),
+      1500,
+      GENERATION,
+    );
+    base.controller.observe(gestureSnapshot(3, 1600, 'palm'), 1600, GENERATION);
+    expect(base.sent).toHaveLength(0);
+  });
+
+  it('accepts screen equipment selection without callback echo', () => {
+    const base = harness(tagger);
+    base.controller.syncEquipment('trap');
+    base.controller.syncEquipment('trap');
+    expect(base.states).toEqual([]);
+    base.controller.pressKey('F');
+    expect(base.sent.at(-1)).toEqual({ type: 'INSTALL', payload: { kind: 'trap' } });
+    base.controller.pressKey('1');
+    expect(base.states).toEqual([{ selectedEquipment: 'sensor', mode: 'motion' }]);
+  });
+
   it('accepts an incoming exchange with the palm gesture', () => {
     const base = harness({ ...runner, incomingExchangeId: 'exchange-1' });
 
@@ -101,7 +150,7 @@ describe('createGestureIntentController', () => {
     holdGesture(base, 'palm');
 
     base.controller.observe(
-      gestureSnapshot(3, 1000 + GESTURE_HOLD_MS + 100, 'palm'),
+      gestureSnapshot(4, 1000 + GESTURE_HOLD_MS + 100, 'palm'),
       1000 + GESTURE_HOLD_MS + 100,
       GENERATION,
     );
