@@ -62,7 +62,8 @@ export function isSampleFresh(
   nowMs: number,
 ): boolean {
   if (!sample || sample.status !== 'valid') return false;
-  return nowMs - sample.sampledAtMs <= SENSOR_MAX_AGE_MS[kind];
+  const age = nowMs - sample.sampledAtMs;
+  return Number.isFinite(age) && age >= 0 && age <= SENSOR_MAX_AGE_MS[kind];
 }
 
 /** quality가 uncertain이면 유효 얼굴·자세로 인정하지 않는다. */

@@ -50,28 +50,6 @@ function poseLandmarks() {
   return points;
 }
 
-function snapshot(frameId: number, atMs: number, generation: number): SensorSnapshot {
-  return {
-    runtimeGeneration: generation,
-    emittedAtMs: atMs,
-    face: {
-      frameId,
-      sampledAtMs: atMs,
-      receivedAtMs: atMs,
-      status: 'valid',
-      data: { landmarks: [], yawRad: 0.01, quality: 'valid' },
-    },
-    pose: {
-      frameId,
-      sampledAtMs: atMs,
-      receivedAtMs: atMs,
-      status: 'valid',
-      data: { landmarks: poseLandmarks(), quality: 'valid' },
-    },
-    gesture: null,
-  };
-}
-
 function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
   const track = videoTrack();
   const sensors: SensorSnapshot[] = [];
@@ -200,7 +178,13 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
       clock += ms;
     },
     now: () => clock,
-    emit: (frameId: number, generation = 1, yawRad = 0.01, leanDepth = 0) =>
+    emit: (
+      frameId: number,
+      generation = 1,
+      yawRad = 0.01,
+      leanDepth = 0,
+      model: 'both' | 'face' | 'pose' | 'gesture' = 'both',
+    ) =>
       workerHandler?.({
         data: {
           type: 'result',
@@ -208,18 +192,26 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
           frameId,
           sampledAtMs: clock,
           outcomes: {
-            face: snapshot(frameId, clock, generation).face
-              ? { status: 'valid', data: { landmarks: [], yawRad, quality: 'valid' } }
-              : undefined,
-            pose: {
-              status: 'valid',
-              data: {
-                landmarks: poseLandmarks().map((point, index) =>
-                  index === POSE_KEY_POINTS.nose ? { ...point, z: -leanDepth } : point,
-                ),
-                quality: 'valid',
-              },
-            },
+            face:
+              model === 'both' || model === 'face'
+                ? { status: 'valid', data: { landmarks: [], yawRad, quality: 'valid' } }
+                : undefined,
+            pose:
+              model === 'both' || model === 'pose'
+                ? {
+                    status: 'valid',
+                    data: {
+                      landmarks: poseLandmarks().map((point, index) =>
+                        index === POSE_KEY_POINTS.nose ? { ...point, z: -leanDepth } : point,
+                      ),
+                      quality: 'valid',
+                    },
+                  }
+                : undefined,
+            gesture:
+              model === 'gesture'
+                ? { status: 'valid', data: { kind: 'none', score: 0 } }
+                : undefined,
           },
         },
       }),
@@ -282,6 +274,100 @@ describe('createInteractionRuntime', () => {
       vi.mocked(base.deps.sendCommand).mockClear();
       observe(0.7, 0.2);
       expect(base.deps.sendCommand).not.toHaveBeenCalled();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('does not finish face or torso holds when only gesture snapshots arrive', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const calibration = base.runtime.calibrate();
+      for (let frame = 1; frame <= 8; frame++) {
+        base.advance(40);
+        base.emit(frame);
+      }
+      expect((await calibration).calibration).toBe('ready');
+      base.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        role: 'runner',
+        phase: 'PLAYING',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      });
+      base.advance(40);
+      base.emit(9, 1, 0.7, 0.2);
+      for (let frame = 10; frame <= 16; frame++) {
+        base.advance(50);
+        base.emit(frame, 1, 0, 0, 'gesture');
+      }
+      expect(
+        vi
+          .mocked(base.deps.sendCommand)
+          .mock.calls.filter(
+            ([command]) =>
+              command.type === 'TURN' ||
+              (command.type === 'MOVE_INTENT' && command.payload.direction !== null),
+          ),
+      ).toEqual([]);
+      // Fresh independent face samples can start a new hold after the gap.
+      for (let frame = 17; frame <= 24; frame++) {
+        base.advance(50);
+        base.emit(frame, 1, 0.7, 0, 'face');
+      }
+      expect(
+        vi.mocked(base.deps.sendCommand).mock.calls.filter(([command]) => command.type === 'TURN'),
+      ).toHaveLength(1);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('starts a fresh hold after leaving and returning to an active tab', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const calibration = base.runtime.calibrate();
+      for (let frame = 1; frame <= 8; frame++) {
+        base.advance(40);
+        base.emit(frame);
+      }
+      await calibration;
+      const context = {
+        matchId: 'm',
+        selfPlayerId: 'self',
+        role: 'runner',
+        phase: 'PLAYING',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      } as const;
+      base.runtime.setContext(context);
+      base.advance(40);
+      base.emit(9, 1, 0.7);
+      base.advance(100);
+      base.emit(10, 1, 0.7);
+      base.runtime.setContext({ ...context, pageActive: false });
+      base.advance(50);
+      base.runtime.setContext(context);
+      base.emit(11, 1, 0.7, 0, 'gesture');
+      base.advance(40);
+      base.emit(12, 1, 0.7);
+      expect(
+        vi.mocked(base.deps.sendCommand).mock.calls.filter(([command]) => command.type === 'TURN'),
+      ).toEqual([]);
+      for (let frame = 13; frame <= 16; frame++) {
+        base.advance(50);
+        base.emit(frame, 1, 0.7);
+      }
+      expect(
+        vi.mocked(base.deps.sendCommand).mock.calls.filter(([command]) => command.type === 'TURN'),
+      ).toHaveLength(1);
     } finally {
       await base.runtime.dispose();
     }
