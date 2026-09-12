@@ -127,10 +127,10 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
   if (input.usage.integrity === 'corrupt') reasons.add('USAGE_INTEGRITY');
   else if (input.usage.integrity === 'ok') {
     try {
-      reservations = validateUsageState({
-        official: input.usage.official,
-        reservations: input.usage.reservations,
-      }).reservations;
+      reservations = validateUsageState(
+        { official: input.usage.official, reservations: input.usage.reservations },
+        input.usage.budgetPolicy === 'provider-quota',
+      ).reservations;
     } catch {
       reasons.add('USAGE_INTEGRITY');
     }

@@ -136,9 +136,14 @@ class Coordinator implements MediaCoordinatorRuntime {
       isWritable: writable,
     });
     const usageBudget = new UsageBudget({
-      store: new UsageCheckpoint({ opsDataDir: config.opsDataDir, isWritable: writable }),
+      store: new UsageCheckpoint({
+        opsDataDir: config.opsDataDir,
+        isWritable: writable,
+        providerQuota: config.operatingMode === 'continuous',
+      }),
       projectAlias: config.projectAlias,
       officialBudgetMaxAgeMs: config.officialBudgetMaxAgeMs,
+      providerQuota: config.operatingMode === 'continuous',
       now: nowEpochMs,
       canIssue: () => ({ allowed: this.canIssue() }),
     });
@@ -178,22 +183,24 @@ class Coordinator implements MediaCoordinatorRuntime {
       nowEpochMs,
       monotonicNow: deps.monotonicNow,
       officialBudgetMaxAgeMs: config.officialBudgetMaxAgeMs,
+      providerQuota: config.operatingMode === 'continuous',
       firstInstallationConfirmed: services.firstInstallationConfirmed,
       allowIncompleteHistoryCleanup: true,
       beginCleanup: async (input) => {
         // A checked local official input requires F's independent period/revision evidence.
-        try {
-          const official = await readOfficialUsageInput(config.opsDataDir, {
-            projectAlias: config.projectAlias,
-            nowEpochMs: nowEpochMs(),
-            maxAgeMs: config.officialBudgetMaxAgeMs,
-          });
-          const revision = services.getOfficialRevision?.(official);
-          if (revision && !input.signal.aborted)
-            await usageBudget.reconcileOfficial(official, revision);
-        } catch {
-          /* Missing evidence keeps readiness locked; no invented initialBudget proof. */
-        }
+        if (config.operatingMode !== 'continuous')
+          try {
+            const official = await readOfficialUsageInput(config.opsDataDir, {
+              projectAlias: config.projectAlias,
+              nowEpochMs: nowEpochMs(),
+              maxAgeMs: config.officialBudgetMaxAgeMs,
+            });
+            const revision = services.getOfficialRevision?.(official);
+            if (revision && !input.signal.aborted)
+              await usageBudget.reconcileOfficial(official, revision);
+          } catch {
+            /* Missing evidence keeps readiness locked; no invented initialBudget proof. */
+          }
         this.recovery.refreshBudget();
         return recoveryCleanup.run(input);
       },

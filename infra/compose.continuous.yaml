@@ -1,0 +1,22 @@
+# Persistent service policy; appended only for explicitly continuous product releases.
+# Legacy trial files remain on the host for a verified rollback and are not mounted in this mode.
+services:
+  game-server:
+    environment:
+      SERVER_PROFILE: product
+      MEDIA_MODE: livekit
+      TRUST_PROXY_HOPS: 1
+      OPS_OPERATING_MODE: continuous
+    volumes:
+      - type: bind
+        source: ${OPS_EVIDENCE_DIR:?Set the service configuration directory}/service-operations.json
+        target: /var/lib/kkakkung/service-operations.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OPS_EVIDENCE_DIR:?Set the service configuration directory}/capability-report.json
+        target: /var/lib/kkakkung/capability-report.json
+        read_only: true
+        bind:
+          create_host_path: false

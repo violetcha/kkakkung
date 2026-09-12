@@ -33,8 +33,10 @@ export type CloudPreflight = Readonly<{
   lockfileHash: string;
   checkedAtEpochMs: number;
   expiresAtEpochMs: number;
-  remainingMinutes: number;
-  remainingBytes: number;
+  /** Only bounded DP-06 automation may rely on provider quota instead of dashboard balances. */
+  budgetPolicy?: 'provider-quota';
+  remainingMinutes: number | null;
+  remainingBytes: number | null;
   allowedCases: readonly CloudCase[];
   budgetReservation: Readonly<{ reservationId: string; participantMinutes: number; bytes: number }>;
   credentialEnvNames: readonly string[];
@@ -79,6 +81,7 @@ const KNOWN_KEYS = new Set<string>([
   'expiresAtEpochMs',
   'remainingMinutes',
   'remainingBytes',
+  'budgetPolicy',
   'allowedCases',
   'budgetReservation',
   'credentialEnvNames',
@@ -120,9 +123,36 @@ export function parseCloudPreflight(input: unknown, ctx: PreflightContext): Clou
     if (!(d.checkedAtEpochMs <= ctx.nowEpochMs)) issues.push('checkedAtEpochMs is in the future');
     if (!(ctx.nowEpochMs < d.expiresAtEpochMs)) issues.push('preflight has expired');
   }
-  if (!nonNegativeFinite(d.remainingMinutes)) issues.push('remainingMinutes must be >= 0');
-  if (!(finiteInt(d.remainingBytes) && d.remainingBytes >= 0))
-    issues.push('remainingBytes must be a non-negative integer');
+  if (d.budgetPolicy !== undefined && d.budgetPolicy !== 'provider-quota')
+    issues.push('unknown budget policy');
+  if (d.budgetPolicy === 'provider-quota') {
+    if (
+      ctx.expectedCase !== 'DP-06' ||
+      ctx.env?.OPS_OPERATING_MODE !== 'continuous' ||
+      !Array.isArray(d.allowedCases) ||
+      d.allowedCases.length !== 1 ||
+      d.allowedCases[0] !== 'DP-06' ||
+      d.remainingMinutes !== null ||
+      d.remainingBytes !== null ||
+      !finiteInt(d.checkedAtEpochMs) ||
+      !finiteInt(d.expiresAtEpochMs) ||
+      d.checkedAtEpochMs <= 0 ||
+      d.expiresAtEpochMs - d.checkedAtEpochMs > 30 * 60_000 ||
+      d.maxRooms !== 1 ||
+      d.maxParticipants !== 6 ||
+      !positiveInt(d.maxDurationSeconds) ||
+      d.maxDurationSeconds > 600 ||
+      !positiveInt(d.cleanupAllowanceSeconds) ||
+      d.cleanupAllowanceSeconds > 60 ||
+      !isRecord(d.deviceManifest) ||
+      d.deviceManifest.mode !== 'synthetic'
+    )
+      issues.push('provider quota policy requires bounded continuous DP-06 automation');
+  } else {
+    if (!nonNegativeFinite(d.remainingMinutes)) issues.push('remainingMinutes must be >= 0');
+    if (!(finiteInt(d.remainingBytes) && d.remainingBytes >= 0))
+      issues.push('remainingBytes must be a non-negative integer');
+  }
 
   const cases = d.allowedCases;
   if (!Array.isArray(cases) || cases.length === 0)
@@ -139,7 +169,7 @@ export function parseCloudPreflight(input: unknown, ctx: PreflightContext): Clou
   if (!isRecord(r)) issues.push('budgetReservation must be an object');
   else {
     if (!nonEmptyString(r.reservationId)) issues.push('budgetReservation.reservationId required');
-    if (!(typeof r.participantMinutes === 'number' && r.participantMinutes > 0))
+    if (!(nonNegativeFinite(r.participantMinutes) && r.participantMinutes > 0))
       issues.push('budgetReservation.participantMinutes must be > 0');
     if (!positiveInt(r.bytes)) issues.push('budgetReservation.bytes must be a positive integer');
     if (

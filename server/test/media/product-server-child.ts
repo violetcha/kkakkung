@@ -87,7 +87,8 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
     booting = true;
     if (request.cpuProfile)
       stopProfile = await startProductCpuProfile(() => probe.snapshot(), currentPhase);
-    cloud = await productCloudFixture();
+    cloud = await productCloudFixture(request.operatingMode);
+    const window = cloud.config.publicWindow;
     const config = {
       ...parseConfig({
         NODE_ENV: 'test',
@@ -99,8 +100,13 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
         SESSION_ATTEMPTS_PER_INVITE: '30',
         SESSION_ATTEMPTS_PER_IP: '60',
         ROOM_IDLE_TTL_MS: '600000',
-        OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: String(cloud.config.publicWindow!.opensAtEpochMs),
-        OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: String(cloud.config.publicWindow!.closesAtEpochMs),
+        OPS_OPERATING_MODE: request.operatingMode,
+        ...(window && !('mode' in window)
+          ? {
+              OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: String(window.opensAtEpochMs),
+              OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: String(window.closesAtEpochMs),
+            }
+          : {}),
       }),
       port: 0,
     };

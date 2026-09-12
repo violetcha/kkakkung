@@ -205,7 +205,11 @@ export type MediaConfiguration = Readonly<{
   namespace: string;
   opsDataDir: string;
   projectAlias: string;
-  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  operatingMode?: 'attested' | 'continuous';
+  publicWindow:
+    | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
+    | Readonly<{ mode: 'continuous' }>
+    | null;
   officialBudgetMaxAgeMs: number;
   operationTimeoutMs: number;
   productSecurityReady: boolean;
@@ -241,6 +245,8 @@ export type OperationSnapshot = Readonly<{
   updatedAtEpochMs: number;
 }>;
 export type OperationsStatus = Readonly<{
+  /** Absent means the legacy, manually attested budget policy. */
+  operatingMode?: 'attested' | 'continuous';
   admission: 'OPEN' | 'DRAINING' | 'LOCKED';
   readiness: Readiness['state'];
   unresolvedCount: number;

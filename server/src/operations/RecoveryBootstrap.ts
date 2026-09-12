@@ -30,6 +30,7 @@ export type RecoveryBootstrapOptions = Readonly<{
   nowEpochMs: () => number;
   monotonicNow: () => number;
   officialBudgetMaxAgeMs: number;
+  providerQuota?: boolean;
   beginCleanup?: (input: RecoveryCleanupInput) => Promise<CleanupReport>;
   /** Stop accepting cleanup writes synchronously, then drain its local checkpoint queue. */
   closeCleanup?: () => Promise<void>;
@@ -59,8 +60,9 @@ export class RecoveryBootstrap {
     if (
       !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(options.namespace) ||
       options.namespace.includes('--') ||
-      !Number.isSafeInteger(options.officialBudgetMaxAgeMs) ||
-      options.officialBudgetMaxAgeMs <= 0 ||
+      (!options.providerQuota &&
+        (!Number.isSafeInteger(options.officialBudgetMaxAgeMs) ||
+          options.officialBudgetMaxAgeMs <= 0)) ||
       (options.serverEpoch !== undefined &&
         !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
           options.serverEpoch,
@@ -116,7 +118,7 @@ export class RecoveryBootstrap {
       this.state.restore(
         journal,
         { ...usage, budgetConfirmed: this.budgetConfirmed() },
-        { firstInstallConfirmed },
+        { firstInstallConfirmed, usageInitializedMissing: usage.initializedMissing === true },
       );
       try {
         this.records = reconcileRecoveryRecords({
@@ -229,10 +231,11 @@ export class RecoveryBootstrap {
     return (
       usage.integrity === 'ok' &&
       usage.writable &&
-      checkpoint !== undefined &&
       Number.isSafeInteger(now) &&
-      age >= 0 &&
-      age <= this.options.officialBudgetMaxAgeMs
+      now >= 0 &&
+      (this.options.providerQuota
+        ? usage.budgetPolicy === 'provider-quota'
+        : checkpoint !== undefined && age >= 0 && age <= this.options.officialBudgetMaxAgeMs)
     );
   }
 

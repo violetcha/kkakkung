@@ -808,3 +808,57 @@ describe('first skeleton to product migration', () => {
     expect(h.calls.smoke).toEqual(['cloud', 'http']);
   });
 });
+describe('continuous publication and rollback', () => {
+  const status = {
+    readiness: 'READY',
+    admission: 'OPEN',
+    unresolvedCount: 0,
+    operatingMode: 'continuous',
+    remainingMinutes: null,
+    remainingBytes: null,
+    checkedAtEpochMs: null,
+  };
+  const continuousManifest = () =>
+    manifest({ operatingMode: 'continuous', officialBudgetMaxAgeMs: undefined });
+  it('publishes only the matching explicit provider policy with unknown billing balances', async () => {
+    const h = harness(world({ statusAfterResume: status }));
+    expect(await runRelease(h.input({ manifest: continuousManifest() }), h.adapters)).toMatchObject(
+      { result: 'READY' },
+    );
+    for (const invalid of [world().statusAfterResume, { ...status, remainingMinutes: 5000 }]) {
+      const bad = harness(world({ statusAfterResume: invalid }));
+      expect(
+        await runRelease(bad.input({ manifest: continuousManifest() }), bad.adapters),
+      ).toMatchObject({ result: 'PUBLISH_BLOCKED' });
+    }
+  });
+  it('does not let the legacy manifest use the continuous exemption', async () => {
+    const h = harness(world({ statusAfterResume: status }));
+    expect(await runRelease(h.input(), h.adapters)).toMatchObject({ result: 'PUBLISH_BLOCKED' });
+  });
+  it('selects the previous mode and its official age policy on rollback', async () => {
+    const h = harness(
+      world({ statusAfterResumeByTag: { [TAG]: status }, smokeCodes: { [TAG]: 1 } }),
+    );
+    const modes: (string | undefined)[] = [];
+    const original = h.adapters.compose;
+    const base = continuousManifest();
+    const m = {
+      ...base,
+      previous: {
+        ...base.previous!,
+        operatingMode: 'attested' as const,
+        officialBudgetMaxAgeMs: 3600000,
+      },
+    };
+    const result = await runRelease(h.input({ manifest: m }), {
+      ...h.adapters,
+      compose: async (tag, profile, images, mode) => {
+        modes.push(mode);
+        return original(tag, profile, images, mode);
+      },
+    });
+    expect(result.result).toBe('ROLLED_BACK');
+    expect(modes).toEqual(['continuous', 'attested']);
+  });
+});

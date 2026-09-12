@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -60,6 +68,17 @@ const evidenceSchema = z
   .strict();
 
 export type RuntimeEvidence = z.infer<typeof evidenceSchema>;
+// A deployment configuration, not a periodically renewed statement of Cloud usage.
+// The provider enforces its quota; no remaining allowance or billing timestamp is invented.
+const servicePolicySchema = evidenceSchema
+  .omit({ expiresAtEpochMs: true, officialBudget: true, version: true })
+  .extend({
+    version: z.literal(2),
+    operatingMode: z.literal('continuous'),
+    budgetPolicy: z.literal('provider-quota'),
+    cloudHttpOrigin: z.string().url(),
+  })
+  .strict();
 export type RuntimeEvidenceServices = Required<
   Pick<
     MediaCoordinatorServices,
@@ -73,6 +92,8 @@ export type RuntimeEvidenceServices = Required<
   close(): Promise<void>;
 };
 export type RuntimeEvidenceOptions = Readonly<{
+  operatingMode?: 'attested' | 'continuous';
+  cloudHttpOrigin?: string;
   opsDataDir: string;
   projectAlias: string;
   namespace: string;
@@ -107,33 +128,63 @@ function regularFile(path: string): boolean {
 }
 
 /**
- * Freeze one verified attestation for this process. Changed/missing/expired evidence locks
- * this instance; an operator refresh requires a restart and a new validation. File contents
+ * Freeze the verified scope configuration (or legacy expiring attestation) for this process.
+ * Changed/missing files lock this instance; configuration changes require a new validation.
+ * Continuous scope has no daily expiry. File contents
  * are never logged. Normal getters only check a bounded in-memory lease. An asynchronous
  * refresh verifies the unchanged file; first-use callbacks alone perform durable marker IO.
  */
 export async function loadRuntimeEvidence(
   options: RuntimeEvidenceOptions,
 ): Promise<RuntimeEvidenceServices> {
-  const path = join(options.opsDataDir, EVIDENCE_FILE);
-  let evidence: RuntimeEvidence;
+  const continuous = options.operatingMode === 'continuous';
+  const path = join(options.opsDataDir, continuous ? 'service-operations.json' : EVIDENCE_FILE);
+  let evidence: RuntimeEvidence | z.infer<typeof servicePolicySchema>;
   let originalDigest: string;
   let lastNow = 0;
   try {
     if (
       !isAbsolute(options.opsDataDir) ||
-      !Number.isSafeInteger(options.maxAgeMs) ||
-      options.maxAgeMs <= 0
+      (!continuous && (!Number.isSafeInteger(options.maxAgeMs) || options.maxAgeMs <= 0))
     )
       return LOCKED;
     if (!regularFile(path)) return LOCKED;
     const bytes = await readFile(path);
     if (bytes.byteLength > MAX_BYTES) return LOCKED;
-    evidence = evidenceSchema.parse(JSON.parse(bytes.toString('utf8')));
+    evidence = (continuous ? servicePolicySchema : evidenceSchema).parse(
+      JSON.parse(bytes.toString('utf8')),
+    );
     originalDigest = digest(bytes);
     if (evidence.projectAlias !== options.projectAlias || evidence.namespace !== options.namespace)
       return LOCKED;
-    if (evidence.checkedAtEpochMs >= evidence.expiresAtEpochMs) return LOCKED;
+    if (evidence.version === 1 && evidence.checkedAtEpochMs >= evidence.expiresAtEpochMs)
+      return LOCKED;
+    if (
+      evidence.version === 2 &&
+      (evidence.cloudHttpOrigin !== options.cloudHttpOrigin ||
+        new URL(evidence.cloudHttpOrigin).origin !== evidence.cloudHttpOrigin ||
+        new URL(evidence.cloudHttpOrigin).protocol !== 'https:')
+    )
+      return LOCKED;
+    if (evidence.version === 2) {
+      // Preserve the project binding even for a quota ledger that has no official checkpoint.
+      // Read-only preparation must never create or replace these one-use markers.
+      for (const purpose of ['firstInstallation', 'firstAudit']) {
+        const markerPath = join(options.opsDataDir, `runtime-${purpose}-consumed.json`);
+        if (!existsSync(markerPath)) continue;
+        if (!regularFile(markerPath)) return LOCKED;
+        const marker = JSON.parse(await readFile(markerPath, 'utf8'));
+        if (
+          marker.version !== 1 ||
+          marker.purpose !== purpose ||
+          marker.projectAlias !== evidence.projectAlias ||
+          marker.namespace !== evidence.namespace ||
+          (marker.cloudHttpOrigin !== undefined &&
+            marker.cloudHttpOrigin !== evidence.cloudHttpOrigin)
+        )
+          return LOCKED;
+      }
+    }
   } catch {
     return LOCKED;
   }
@@ -148,8 +199,9 @@ export async function loadRuntimeEvidence(
         !Number.isSafeInteger(now) ||
         now < lastNow ||
         now < evidence.checkedAtEpochMs ||
-        now >= evidence.expiresAtEpochMs ||
-        now - evidence.checkedAtEpochMs > options.maxAgeMs ||
+        (evidence.version === 1 &&
+          (now >= evidence.expiresAtEpochMs ||
+            now - evidence.checkedAtEpochMs > options.maxAgeMs)) ||
         now >= verifiedUntilEpochMs ||
         performance.now() >= verifiedUntilMonotonicMs
       ) {
@@ -226,6 +278,7 @@ export async function loadRuntimeEvidence(
           evidenceSha256: originalDigest,
           projectAlias: evidence.projectAlias,
           namespace: evidence.namespace,
+          ...(evidence.version === 2 ? { cloudHttpOrigin: evidence.cloudHttpOrigin } : {}),
           consumedAtEpochMs: lastNow,
           evidenceRef: evidence.evidenceRefs[purpose],
         }) + '\n',
@@ -265,7 +318,7 @@ export async function loadRuntimeEvidence(
     firstInstallationConfirmed: async () => consume('firstInstallation'),
     firstAuditConfirmed: () => consume('firstAudit'),
     getOfficialRevision: (checkpoint: OfficialBudgetCheckpoint) => {
-      if (!current() || !evidence.officialBudget) return null;
+      if (!current() || evidence.version !== 1 || !evidence.officialBudget) return null;
       try {
         validateOfficialBudget(checkpoint, {
           projectAlias: options.projectAlias,

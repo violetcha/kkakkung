@@ -165,9 +165,16 @@ const adapters = {
     });
     return result.status === 0 ? result.stdout.trim() : null;
   },
-  async compose(tag, profile, images) {
-    const selectedFiles = composeFiles.filter((file) => file !== 'infra/compose.product.yaml');
-    if (profile === 'product') selectedFiles.push('infra/compose.product.yaml');
+  async compose(tag, profile, images, operatingMode = 'attested') {
+    const selectedFiles = composeFiles.filter(
+      (file) => !['infra/compose.product.yaml', 'infra/compose.continuous.yaml'].includes(file),
+    );
+    if (profile === 'product')
+      selectedFiles.push(
+        operatingMode === 'continuous'
+          ? 'infra/compose.continuous.yaml'
+          : 'infra/compose.product.yaml',
+      );
     // Docker image IDs are immutable even if a human has moved the SHA tag.
     const exactImages = resolve(evidenceDir, `compose-${tag}-images.json`);
     writeFileSync(
@@ -189,7 +196,7 @@ const adapters = {
     ];
     const result = spawnSync('docker', composeArgs, {
       cwd: root,
-      env: { ...process.env, TAG: tag },
+      env: { ...process.env, TAG: tag, OPS_OPERATING_MODE: operatingMode },
       stdio: 'inherit',
     });
     return { code: result.status ?? 1 };

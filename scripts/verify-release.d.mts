@@ -5,6 +5,7 @@ export type ManifestInputs = Readonly<{
   tag: string;
   verifiedSha: string;
   profile: 'product' | 'skeleton';
+  operatingMode?: 'attested' | 'continuous';
   officialBudgetMaxAgeMs?: number | null;
   nowEpochMs?: number;
 }>;

@@ -224,6 +224,8 @@ export class OperationsController implements OperationsPort {
       item === null || (typeof item === 'number' && Number.isFinite(item) && item >= 0);
     if (
       !value ||
+      (value.operatingMode !== undefined &&
+        !['attested', 'continuous'].includes(value.operatingMode)) ||
       !['OPEN', 'DRAINING', 'LOCKED'].includes(value.admission) ||
       !['READY', 'RECOVERING', 'LOCKED'].includes(value.readiness) ||
       !count(value.unresolvedCount) ||
@@ -248,6 +250,7 @@ export class OperationsController implements OperationsPort {
       remainingMinutes: value.remainingMinutes,
       remainingBytes: value.remainingBytes,
       checkedAtEpochMs: value.checkedAtEpochMs,
+      ...(value.operatingMode ? { operatingMode: value.operatingMode } : {}),
     };
   }
 

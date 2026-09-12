@@ -268,3 +268,75 @@ describe('F runtime evidence provider', () => {
     expect(readdirSync(f.directory)).toEqual(['runtime-evidence.json']);
   });
 });
+describe('continuous service configuration', () => {
+  function continuous() {
+    const f = fixture();
+    const legacy = valid();
+    const scope = {
+      attestationId: legacy.attestationId,
+      projectAlias: legacy.projectAlias,
+      namespace: legacy.namespace,
+      checkedBy: legacy.checkedBy,
+      evidenceRefs: legacy.evidenceRefs,
+    };
+    const policy = {
+      ...scope,
+      version: 2,
+      operatingMode: 'continuous',
+      budgetPolicy: 'provider-quota',
+      cloudHttpOrigin: 'https://fixture.livekit.cloud',
+      checkedAtEpochMs: NOW - 7 * 86400000,
+    };
+    const path = join(f.directory, 'service-operations.json');
+    writeFileSync(path, JSON.stringify(policy));
+    rmSync(f.path);
+    return {
+      ...f,
+      path,
+      policy,
+      options: {
+        ...f.options,
+        operatingMode: 'continuous' as const,
+        cloudHttpOrigin: policy.cloudHttpOrigin,
+        maxAgeMs: 0,
+      },
+    };
+  }
+  it('accepts a week-old configuration on restart without claiming official billing or replaying first use', async () => {
+    const f = continuous();
+    const first = await loadRuntimeEvidence(f.options);
+    expect(first.namespaceOwnershipConfirmed()).toBe(true);
+    expect(first.getOfficialRevision(official)).toBeNull();
+    expect(await first.firstInstallationConfirmed()).toBe(true);
+    expect(first.firstAuditConfirmed()).toBe(true);
+    await first.close();
+    f.setNow(NOW + 30 * 86400000);
+    const restarted = await loadRuntimeEvidence(f.options);
+    expect(restarted.namespaceOwnershipConfirmed()).toBe(true);
+    expect(await restarted.firstInstallationConfirmed()).toBe(false);
+    expect(restarted.firstAuditConfirmed()).toBe(false);
+  });
+  it('rejects a changed project even if the replacement configuration and environment agree', async () => {
+    const f = continuous();
+    const first = await loadRuntimeEvidence(f.options);
+    expect(await first.firstInstallationConfirmed()).toBe(true);
+    await first.close();
+    writeFileSync(f.path, JSON.stringify({ ...f.policy, projectAlias: 'other-project' }));
+    const restarted = await loadRuntimeEvidence({ ...f.options, projectAlias: 'other-project' });
+    expect(restarted.namespaceOwnershipConfirmed()).toBe(false);
+  });
+  it('still locks on a changed, missing or wrong-origin configuration', async () => {
+    const f = continuous();
+    expect(
+      (
+        await loadRuntimeEvidence({ ...f.options, cloudHttpOrigin: 'https://other.livekit.cloud' })
+      ).namespaceOwnershipConfirmed(),
+    ).toBe(false);
+    const first = await loadRuntimeEvidence(f.options);
+    writeFileSync(f.path, JSON.stringify({ ...f.policy, checkedBy: 'changed-operator' }));
+    await first.refresh();
+    expect(first.namespaceOwnershipConfirmed()).toBe(false);
+    rmSync(f.path);
+    expect((await loadRuntimeEvidence(f.options)).namespaceOwnershipConfirmed()).toBe(false);
+  });
+});

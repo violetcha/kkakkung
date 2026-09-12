@@ -144,6 +144,21 @@ afterEach(async () => {
 });
 
 describe('E-12 durable record reconciliation', () => {
+  it('restores quota reservations without official billing but still requires matching journal history', () => {
+    const quota = { ...usage(), official: null, budgetPolicy: 'provider-quota' as const };
+    expect(reconcileRecoveryRecords(input({ usage: quota })).reasonCodes).toEqual([]);
+    expect(
+      reconcileRecoveryRecords(input({ usage: { ...quota, budgetPolicy: undefined } })).reasonCodes,
+    ).toContain('USAGE_INTEGRITY');
+    expect(
+      reconcileRecoveryRecords(
+        input({
+          usage: quota,
+          journal: { ...journal([], 0), integrity: 'missing' },
+        }),
+      ).reasonCodes,
+    ).toContain('JOURNAL_HISTORY_MISSING');
+  });
   it('replays the latest full scope without losing older epochs or reusing old monotonic clocks', () => {
     const candidate = input({
       journal: journal(

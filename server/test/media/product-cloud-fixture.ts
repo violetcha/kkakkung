@@ -14,16 +14,23 @@ import {
 } from 'livekit-server-sdk';
 import type { GatewayClient } from '../../src/media/LiveKitGateway.js';
 import type { MediaCoordinatorServices } from '../../src/media/MediaCoordinator.js';
-import type { MediaGrant } from '../../src/media/types.js';
+import type { MediaConfiguration, MediaGrant } from '../../src/media/types.js';
 import { localCapability, localConfiguration } from './generation-fixtures.js';
 import { loadRuntimeEvidence, officialCheckpointDigest } from '../../src/config/RuntimeEvidence.js';
 
 type PublicationTarget = Pick<MediaGrant, 'roomName' | 'mediaIdentity'>;
 
-export async function productCloudFixture() {
+export async function productCloudFixture(operatingMode: 'attested' | 'continuous' = 'attested') {
   const epoch = Date.now();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-product-integration-'));
-  const config = { ...localConfiguration(epoch), opsDataDir: directory };
+  const config: MediaConfiguration = {
+    ...localConfiguration(epoch),
+    opsDataDir: directory,
+    operatingMode,
+    ...(operatingMode === 'continuous'
+      ? { publicWindow: { mode: 'continuous' as const }, officialBudgetMaxAgeMs: 0 }
+      : {}),
+  };
   await fs.writeFile(
     path.join(directory, 'capability-report.json'),
     JSON.stringify({ ...localCapability, testedAtEpochMs: epoch }),
@@ -64,12 +71,37 @@ export async function productCloudFixture() {
       },
     }),
   );
+  if (operatingMode === 'continuous') {
+    await fs.writeFile(
+      path.join(directory, 'service-operations.json'),
+      JSON.stringify({
+        version: 2,
+        operatingMode,
+        budgetPolicy: 'provider-quota',
+        cloudHttpOrigin: config.httpUrl,
+        attestationId: 'synthetic-continuous-integration',
+        projectAlias: config.projectAlias,
+        namespace: config.namespace,
+        checkedBy: 'synthetic-local-integration-only',
+        checkedAtEpochMs: epoch - 7 * 86400000,
+        evidenceRefs: {
+          namespaceOwnership: 'synthetic-isolated-fixture',
+          firstInstallation: 'synthetic-new-temporary-directory',
+          firstAudit: 'synthetic-new-audit-fixture',
+        },
+      }),
+    );
+    await fs.unlink(path.join(directory, 'runtime-evidence.json'));
+    await fs.unlink(path.join(directory, 'official-usage-input.json'));
+  }
   const evidence = await loadRuntimeEvidence({
     opsDataDir: directory,
     projectAlias: config.projectAlias,
     namespace: config.namespace,
     nowEpochMs: () => Date.now(),
     maxAgeMs: 3600000,
+    operatingMode,
+    cloudHttpOrigin: config.httpUrl,
   });
   const rooms = new Map<string, Room>();
   const participants = new Map<string, { room: string; participant: ParticipantInfo }>();

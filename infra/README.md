@@ -63,6 +63,8 @@ push → Jenkins
 
 ## 배포 장벽 (DP-06, `scripts/deploy-release.mjs`)
 
+제품 배포 기본 운영 모드는 `continuous`다. `compose.continuous.yaml`로 고정 서비스 설정과 capability를 마운트하고 각 배포 SHA/lockfile별 DP-06 계획을 자동 생성한다. 공개 종료 날짜나 대시보드 확인 시각을 매일 갱신하지 않는다. 기존 `attested` 모드는 `compose.product.yaml`과 기간 한정 증거/예산을 사용한다. [상시 운영](../docs/continuous-operations.md)을 따른다.
+
 Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 쪽도 `compose up` 을 직접 하지 않고, 현재 체크아웃을 임의 태그로 빌드하지 않는다.
 
 1. **매니페스트** (`scripts/verify-release.mjs`): 검증된 커밋 SHA = 배포 SHA, 웹·서버 두 이미지의 digest 와 `org.opencontainers.image.revision` 라벨, 이전 last-good(태그+digest). 이미지가 없거나 라벨이 다르면 BLOCKED.
@@ -72,12 +74,12 @@ Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 
 5. **ready/복구**: `/health/ready` 200. 503 `recovering` 은 RECOVERING 으로 기다린다. 운영 API 가 있으면 readiness=READY 를 따로 확인(admission 은 아직 DRAINING 이어도 정상).
 6. **resume**: 새 requestId 로 `{action:'resume'}` → terminal succeeded → status 가 admission=OPEN·readiness=READY 인지 **별도로** 확인. LOCKED 면 완료 불일치로 실패.
 7. **smoke**: 운영 API 있음 → `run-cloud-check.mjs --case DP-06`(preflight 필요, 6인 HTTP 경로). 없음(skeleton) → `deployment-smoke.mjs`(DP-03 HTTP smoke).
-8. **공개 재검사**: unresolvedCount 0, READY/OPEN, 공식 잔량 확인 시각이 `officialBudgetMaxAgeMs` 안. 아니면 PUBLISH_BLOCKED(새 이미지는 유지, 롤백 없음, 격리 유지).
+8. **공개 재검사**: unresolvedCount 0, READY/OPEN, 매니페스트와 운영 모드 일치. continuous는 공식 잔량/확인 시각이 null인지, attested는 공식 잔량 확인 시각이 `officialBudgetMaxAgeMs` 안인지 확인한다. 아니면 PUBLISH_BLOCKED(새 이미지·격리 유지, 롤백 없음).
 9. **기록**: 위를 모두 통과했을 때만 `/opt/kkakkung/last-good-tag`·`last-good-digest`.
 
 실패(교체 이후): 운영 API 가 있으면 **새 requestId 로 다시 drain** 을 완료한 뒤에만, 이전 태그의 이미지 id 가 last-good-digest 와 같을 때만 복귀하고, 복귀 이미지도 4~8 을 다시 통과해야 한다. 이전 기록 없음·digest 불일치·drain 실패·복귀 이미지 ready 실패는 **ROLLBACK_BLOCKED** 로 남기고 강제 교체하지 않는다.
 
-프로필은 명시적으로 선택한다. `skeleton`은 운영·미디어 없는 진단 배포이며 drain/resume은 NOT_RUN, 결과는 `DEPLOYED_WITHOUT_OPERATIONS`로 제품 시험 완료가 아니다. `product`는 Secret file의 `OPS_TOKEN`, 실제 runtime evidence, `/opt/kkakkung/cloud-preflight.json`과 시험 인증을 사용한다. 성공 결과는 `READY`다. 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`를 따른다.
+프로필은 명시적으로 선택한다. `skeleton`은 운영·미디어 없는 진단 배포이며 drain/resume은 NOT_RUN, 결과는 `DEPLOYED_WITHOUT_OPERATIONS`다. `product`는 Secret file의 OPS_TOKEN, 검증된 운영 설정과 시험 인증을 사용한다. continuous DP-06 계획은 자동 생성하며 `/opt/kkakkung/cloud-preflight.json`은 attested에서만 필요하다. 성공 결과는 READY다. 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`를 따른다.
 
 ## 브랜치와 배포
 
