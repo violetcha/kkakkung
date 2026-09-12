@@ -637,6 +637,13 @@ export type RoundResult = Readonly<{
 }>;
 export type AbortReason =
   'GAME_CONNECTION_LOST' | 'SERVER_TICK_OVERLOAD' | 'MEDIA_POLICY_UNCERTAIN' | 'MEDIA_UNAVAILABLE';
+export type PreparationIssue =
+  | 'SERVICE_NOT_READY'
+  | 'LAYOUT_UNAVAILABLE'
+  | 'DEVICE_LOADING_TIMEOUT'
+  | 'MEDIA_NOT_READY'
+  | 'PREPARATION_UNAVAILABLE';
+export type RematchState = 'available' | 'settling' | 'requested';
 export type PublicRoundState = Readonly<{
   phase: Phase;
   matchId: string;
@@ -650,6 +657,9 @@ export type PublicRoundState = Readonly<{
   abortReason: AbortReason | null;
   /** D-2026-09-13-01: waiting/result room warning, present only in the last 60 seconds. */
   roomExpiresInSeconds?: number;
+  /** Allowlisted preparation feedback; never send raw diagnostics or layout paths. */
+  preparationIssue?: PreparationIssue;
+  rematchState?: RematchState;
 }>;
 export const ROOM_EXPIRED_CLOSE_CODE = 4001;
 export type RoomRoster = Readonly<{

@@ -48,6 +48,15 @@ export const roomExpiryFixture = {
   abortReason: null,
   roomExpiresInSeconds: 60,
 } as const satisfies PublicRoundState;
+export const preparationFeedbackFixture = {
+  ...roomExpiryFixture,
+  preparationIssue: 'LAYOUT_UNAVAILABLE',
+} as const satisfies PublicRoundState;
+export const rematchFeedbackFixture = {
+  ...roomExpiryFixture,
+  phase: 'RESULT',
+  rematchState: 'requested',
+} as const satisfies PublicRoundState;
 export const teamSessionFixture = {
   nickname: '팀원',
   createRoom: true,

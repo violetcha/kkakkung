@@ -67,6 +67,7 @@ import { LoadingCoordinator } from './LoadingCoordinator.js';
 import { LobbyCoordinator } from './LobbyCoordinator.js';
 import { PracticeCoordinator } from './PracticeCoordinator.js';
 import { RematchCoordinator } from './RematchCoordinator.js';
+import { preparationIssue } from './preparation-issue.js';
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -1356,6 +1357,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       nullable.startAt = this.context.startAt ?? undefined;
       nullable.deadlineTick = this.context.deadlineTick ?? undefined;
       nullable.abortReason = this.abortReason ?? undefined;
+      nullable.preparationIssue = ['LOBBY', 'DEVICE_CHECK'].includes(this.phase)
+        ? preparationIssue(this.blockedReason)
+        : undefined;
+      nullable.rematchState = ['RESULT', 'ABORTED'].includes(this.phase)
+        ? this.rematch.pending
+          ? 'requested'
+          : this.hasUnresolvedMedia()
+            ? 'settling'
+            : 'available'
+        : undefined;
       const remaining = deps.roomExpiry.remainingMs({
         phase: this.phase,
         lastActivityMs: deps.slots.lastActivity(this.roomCode) ?? deps.monotonicNow(),

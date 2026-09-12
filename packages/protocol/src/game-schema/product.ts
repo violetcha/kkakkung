@@ -50,6 +50,16 @@ export const ABORT_REASONS = [
   'MEDIA_UNAVAILABLE',
 ] as const;
 export type AbortReason = (typeof ABORT_REASONS)[number];
+export const PREPARATION_ISSUES = [
+  'SERVICE_NOT_READY',
+  'LAYOUT_UNAVAILABLE',
+  'DEVICE_LOADING_TIMEOUT',
+  'MEDIA_NOT_READY',
+  'PREPARATION_UNAVAILABLE',
+] as const;
+export type PreparationIssue = (typeof PREPARATION_ISSUES)[number];
+export const REMATCH_STATES = ['available', 'settling', 'requested'] as const;
+export type RematchState = (typeof REMATCH_STATES)[number];
 export type PublicRoundState = Readonly<{
   phase: Phase;
   matchId: string;
@@ -63,6 +73,8 @@ export type PublicRoundState = Readonly<{
   abortReason: AbortReason | null;
   /** Present only during the final minute of a waiting/result room's lifetime. */
   roomExpiresInSeconds?: number;
+  preparationIssue?: PreparationIssue;
+  rematchState?: RematchState;
 }>;
 
 export type ExchangeView = Readonly<{
@@ -202,6 +214,8 @@ export const PublicMatchState = schema(
     result: t.ref(RoundResultState),
     abortReason: t.string<AbortReason>(),
     roomExpiresInSeconds: t.number(),
+    preparationIssue: t.string<PreparationIssue>(),
+    rematchState: t.string<RematchState>(),
   },
   'PublicMatchState',
 );
@@ -223,6 +237,8 @@ export function readPublicRoundState(state: {
   result?: { winner: string; reason: string } | null;
   abortReason?: string | null;
   roomExpiresInSeconds?: number | null;
+  preparationIssue?: string | null;
+  rematchState?: string | null;
 }): PublicRoundState {
   const result = nullable(state.result);
   return {
@@ -245,6 +261,12 @@ export function readPublicRoundState(state: {
           }
         : null,
     abortReason: nullable(state.abortReason) as AbortReason | null,
+    ...(PREPARATION_ISSUES.includes(state.preparationIssue as PreparationIssue)
+      ? { preparationIssue: state.preparationIssue as PreparationIssue }
+      : {}),
+    ...(REMATCH_STATES.includes(state.rematchState as RematchState)
+      ? { rematchState: state.rematchState as RematchState }
+      : {}),
     ...(typeof state.roomExpiresInSeconds === 'number' &&
     Number.isFinite(state.roomExpiresInSeconds) &&
     state.roomExpiresInSeconds >= 0
@@ -267,4 +289,6 @@ export const PUBLIC_MATCH_STATE_FIELDS = [
   'result',
   'abortReason',
   'roomExpiresInSeconds',
+  'preparationIssue',
+  'rematchState',
 ] as const;

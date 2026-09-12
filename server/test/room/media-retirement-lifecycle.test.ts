@@ -191,6 +191,58 @@ it('does not release an in-flight leaver after a producer fails without a genera
   }
 });
 
+it('publishes settling and requested rematch states until retirement confirms', async () => {
+  const confirmations: Array<() => void> = [];
+  const f = fixture(
+    undefined,
+    (request) =>
+      new Promise((resolve) => {
+        confirmations.push(() => resolve({ ...request, status: 'confirmed', code: null }));
+      }),
+  );
+  try {
+    f.room.endPractice('to-map-finalizing');
+    f.room.startLoading(
+      layoutFor([...f.room.roles].map(([playerId, role]: any) => ({ playerId, role }))),
+      0,
+    );
+    const game = f.room.gameInstance();
+    const mediaInstanceId = f.room.mediaInstances.get(game.gameInstanceId);
+    for (const player of f.players)
+      f.room.playerGenerations.set(player.session.playerId, {
+        mediaInstanceId,
+        receiverGeneration: 1,
+      });
+    f.room.handleMediaIntent(
+      { type: 'RETIRE_INSTANCE', reason: 'round-ended' },
+      game.gameInstanceId,
+    );
+    f.room.finishMatch();
+    f.room.syncPublic();
+    expect(f.room.state.rematchState).toBe('settling');
+    const previous = f.room.matchId;
+    f.room.onCommand(f.players[0]!.client, {
+      matchId: previous,
+      requestId: randomUUID(),
+      sequence: 2,
+      type: 'REMATCH',
+      payload: { mode: 'same' },
+    });
+    f.room.tick();
+    expect(f.room.state.rematchState).toBe('requested');
+    expect(f.room.matchId).toBe(previous);
+    await f.flush();
+    expect(confirmations).toHaveLength(6);
+    confirmations.forEach((confirm) => confirm());
+    await f.flush();
+    await f.flush();
+    expect(f.room.matchId).not.toBe(previous);
+    expect(f.room.state.rematchState).toBeUndefined();
+  } finally {
+    f.close();
+  }
+});
+
 it('does not revive confirmed retirements when a rematch replaces a participant', async () => {
   const f = fixture();
   try {

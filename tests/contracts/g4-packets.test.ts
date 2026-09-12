@@ -268,11 +268,21 @@ describe('public state and versioning', () => {
     expect(coordinatesIn(pub)).toEqual([]);
     expect(Object.keys(pub).sort()).toEqual(
       [...PUBLIC_MATCH_STATE_FIELDS]
-        .filter((f) => f !== 'protocolVersion' && f !== 'roomExpiresInSeconds')
+        .filter(
+          (f) =>
+            ![
+              'protocolVersion',
+              'roomExpiresInSeconds',
+              'preparationIssue',
+              'rematchState',
+            ].includes(f),
+        )
         .sort(),
     );
     // A waiting-room warning is optional metadata and is absent during PLAYING.
     expect(pub).not.toHaveProperty('roomExpiresInSeconds');
+    expect(pub).not.toHaveProperty('preparationIssue');
+    expect(pub).not.toHaveProperty('rematchState');
     // Idle ticks produce no view packets; a real change produces exactly one newer version.
     const before = v.viewsOf('t3').length;
     v.tickAndPublish(3);

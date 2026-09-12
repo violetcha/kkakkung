@@ -77,10 +77,13 @@ it('clears device readiness after preparation fails and waits for new READY repo
       blockedReason: string | null;
     };
     expect(serverRoom.blockedReason).toBe('LAYOUT:LAYOUT_PRODUCER_MISSING');
+    await expect.poll(() => rooms[0]!.state.preparationIssue).toBe('LAYOUT_UNAVAILABLE');
+    expect(JSON.stringify(rooms[0]!.state.toJSON())).not.toContain('LAYOUT_PRODUCER_MISSING');
     for (let index = 0; index < 5; index++) serverRoom.tick();
     expect(serverRoom.phase).toBe('DEVICE_CHECK');
     sendAll('READY', 3);
     await waitPhase('TEAM_PRACTICE');
+    await expect.poll(() => rooms[0]!.state.preparationIssue).toBeUndefined();
   } finally {
     await Promise.allSettled(rooms.map((room) => room.leave()));
     await app.application.close();

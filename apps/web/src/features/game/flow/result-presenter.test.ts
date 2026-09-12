@@ -19,3 +19,17 @@ it('distinguishes each abort cause from a loss', () => {
   expect(new Set(results.map((r) => r.message)).size).toBe(4);
   expect(results.every((r) => r.title === '경기 무효')).toBe(true);
 });
+
+it.each([
+  ['two-escaped', 'runners', '탈출'],
+  ['two-captured', 'taggers', '포획'],
+  ['timeout', 'taggers', '제한 시간'],
+] as const)('explains final %s without a live countdown', (reason, winner, label) => {
+  const result = resultPresenter(
+    roundFixture({ phase: 'RESULT', result: { reason, winner } }),
+    null,
+  );
+  expect(result.message).toContain(label);
+  expect(result.message).toContain('승리');
+  expect(result.remaining).toBeNull();
+});

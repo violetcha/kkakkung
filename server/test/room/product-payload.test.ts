@@ -375,6 +375,7 @@ describe('product kkakkung room (0.2.0) with the harness core', () => {
     const result = readPublicRoundState(first.room.state);
     expect(result.result).toEqual({ winner: 'runners', reason: 'two-escaped' });
     expect(result.counts.escaped).toBe(2);
+    expect(['available', 'settling']).toContain(result.rematchState);
     const ended = latestView(runners[0]!);
     expect(ended.self?.status).toBe('ESCAPED');
     expect(ended.knownTerrain).toEqual([]);
@@ -393,6 +394,7 @@ describe('product kkakkung room (0.2.0) with the harness core', () => {
     await waitPhase('DEVICE_CHECK');
     expect(readPublicRoundState(first.room.state).result).toBeNull();
     expect(readPublicRoundState(first.room.state).startTick).toBeNull();
+    expect(readPublicRoundState(first.room.state)).not.toHaveProperty('rematchState');
     // A command for the previous match is refused as WRONG_MATCH.
     const stale = randomUUID();
     first.room.send(PRODUCT_CLIENT_MESSAGES.command, {

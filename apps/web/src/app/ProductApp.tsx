@@ -11,6 +11,8 @@ import { LobbyScreen } from '../features/room/LobbyScreen';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { LocalControls } from '../features/game/flow/LocalControls';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
+import { preparationFeedback } from '../features/game/flow/preparation-feedback';
+import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { QualityControl } from '../features/game/flow/QualityControl';
@@ -293,6 +295,11 @@ export function ProductApp({
         <ConnectionLostScreen onLeave={() => void leave()} expired={snapshot.roomExpired} />
       ) : (
         <>
+          {preparationFeedback(round?.preparationIssue) && (
+            <p role="alert" className="notice">
+              {preparationFeedback(round?.preparationIssue)}
+            </p>
+          )}
           {round?.roomExpiresInSeconds !== undefined && (
             <p role="status" className="notice">
               이 방은 {round.roomExpiresInSeconds}초 후 정리됩니다. 준비를 마치거나 새 경기를 시작해
@@ -339,6 +346,10 @@ export function ProductApp({
               round={round}
               self={ended ?? null}
               host={snapshot.roster?.hostId === selfId}
+              request={snapshot.requests.REMATCH}
+              connectedCount={
+                snapshot.roster?.players.filter((player) => player.connected).length ?? 0
+              }
               onRematch={(mode) => runtime.current?.send({ type: 'REMATCH', payload: { mode } })}
             />
           )}
@@ -459,14 +470,8 @@ export function ProductApp({
               · 탈출 {round.counts.escaped} · 포획 {round.counts.captured}
             </p>
           )}
-          {snapshot.request && !['pending', 'applied'].includes(snapshot.request.status) && (
-            <p role="status">
-              {snapshot.request.status === 'waiting-view'
-                ? '서버 화면을 확인하고 있습니다.'
-                : snapshot.request.status === 'unconfirmed'
-                  ? '요청 결과를 확인하지 못했습니다. 상태를 확인한 뒤 다시 선택해 주세요.'
-                  : `요청이 처리되지 않았습니다. (${snapshot.request.code ?? 'CANCELED'})`}
-            </p>
+          {commandFeedback(snapshot.request) && snapshot.request?.type !== 'REMATCH' && (
+            <p role="status">{commandFeedback(snapshot.request)}</p>
           )}
           {snapshot.error && <p role="alert">{snapshot.error}</p>}
         </>

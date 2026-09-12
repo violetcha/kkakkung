@@ -49,7 +49,13 @@ HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. �
 | S→C       | `media-bindings`, `audio-policy`           | E가 만든 허용 목록. scope는 미디어 식별자                                                                                    |
 | C→S       | `media-bindings-refresh`                   | 현재 목록 재전송 요청, 1초 1회                                                                                               |
 
-공개 Colyseus 상태 `PublicMatchState`는 `phase, matchId, stateVersion, serverTick, startTick, startAt, deadlineTick, counts, result, abortReason`만 가진다. null 필드는 Schema에서 **absent(undefined)** 로 전달되므로 소비자는 `readPublicRoundState(state)`로 정규화한다. 전체 맵·플레이어·출구·seed·튜닝은 공개 상태에 없다.
+공개 Colyseus 상태 `PublicMatchState`는 `phase, matchId, stateVersion, serverTick, startTick, startAt, deadlineTick, counts, result, abortReason`과 선택 안내 필드만 가진다. null 필드는 Schema에서 **absent(undefined)** 로 전달되므로 소비자는 `readPublicRoundState(state)`로 정규화한다. 전체 맵·플레이어·출구·seed·튜닝은 공개 상태에 없다.
+
+- `roomExpiresInSeconds`: 대기/결과 방 만료 60초 전부터 표시한다. 방 만료 소켓 종료 코드는 4001이다.
+- `preparationIssue`: LOBBY/DEVICE_CHECK의 준비 실패를 `SERVICE_NOT_READY`, `LAYOUT_UNAVAILABLE`, `DEVICE_LOADING_TIMEOUT`, `MEDIA_NOT_READY`, `PREPARATION_UNAVAILABLE`로만 전달한다. 내부 blockedReason·경로·맵 정보는 전달하지 않고 재시도 단계에 진입하면 지운다.
+- `rematchState`: RESULT/ABORTED에서 `settling`(연결 회수 대기), `available`(재경기 선택 가능), `requested`(방장이 요청하여 전환 대기)를 전달한다. 회수 중에도 방장은 요청할 수 있으며 회수가 확인되면 로비로 전환한다. 인원이 6명 미만이면 로비에서 모집한다. 새 경기에서는 필드를 지운다.
+
+새 필드는 뒤에 추가한 선택 메타데이터다. 이전 0.2 서버는 생략할 수 있고 웹은 일반 준비/재경기 안내를 유지한다. 알 수 없는 준비·재경기 값은 화면에 노출하지 않는다. 명령·개인 뷰·미디어 wire는 변경하지 않는다.
 
 ### 거절과 크기
 

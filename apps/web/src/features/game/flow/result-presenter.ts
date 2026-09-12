@@ -6,6 +6,8 @@ const ABORT_LABELS: Record<AbortReason, string> = {
   MEDIA_UNAVAILABLE: '미디어 연결을 사용할 수 없어 경기가 무효 처리되었습니다.',
 };
 export function resultPresenter(round: PublicRoundState, self: PrivateView['self']) {
+  const ended = round.phase === 'RESULT' || round.phase === 'ABORTED';
+  const reason = round.result?.reason;
   return {
     title:
       round.phase === 'ABORTED'
@@ -23,13 +25,21 @@ export function resultPresenter(round: PublicRoundState, self: PrivateView['self
               : '결과 대기',
     message: round.abortReason
       ? ABORT_LABELS[round.abortReason]
-      : '경기가 끝날 때까지 공개 결과를 확인할 수 있습니다.',
+      : ended
+        ? reason === 'two-escaped'
+          ? '도망자 2명이 탈출하여 도망자 팀이 승리했습니다.'
+          : reason === 'two-captured'
+            ? '도망자 2명을 포획하여 술래 팀이 승리했습니다.'
+            : reason === 'timeout'
+              ? '제한 시간이 끝나 술래 팀이 승리했습니다.'
+              : '최종 결과를 확인하고 있습니다.'
+        : '참가가 종료되었습니다. 경기가 끝날 때까지 팀의 공개 결과를 확인할 수 있습니다.',
     counts: {
       ...round.counts,
       active: Math.max(0, 3 - round.counts.escaped - round.counts.captured),
     },
     remaining:
-      round.deadlineTick === null
+      ended || round.deadlineTick === null
         ? null
         : Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20)),
   };

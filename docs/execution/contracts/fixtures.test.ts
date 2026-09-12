@@ -11,7 +11,16 @@ import {
   teamSessionFixture,
   teamAccessFixture,
   roomExpiryFixture,
+  preparationFeedbackFixture,
+  rematchFeedbackFixture,
 } from './fixtures.ts';
+
+test('preparation and rematch feedback contain safe round metadata without diagnostic paths', () => {
+  assert.equal(preparationFeedbackFixture.preparationIssue, 'LAYOUT_UNAVAILABLE');
+  assert.equal(rematchFeedbackFixture.rematchState, 'requested');
+  for (const key of ['blockedReason', 'path', 'layout', 'players', 'cell'])
+    assert.equal(key in preparationFeedbackFixture, false);
+});
 
 test('room expiry handoff exposes a countdown and a distinct close reason without private coordinates', () => {
   assert.equal(roomExpiryFixture.roomExpiresInSeconds, 60);
