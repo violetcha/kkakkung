@@ -10,6 +10,8 @@ export type ProductSession = {
   issuedAt: number;
   /** Epoch ms; extended by real activity up to the lease limit. */
   expiresAt: number;
+  /** First connection deadline only. Cleared after a successful claim. */
+  admissionExpiresAt: number | null;
   /** Colyseus sessionId currently holding this logical session, or null. */
   activeConnectionId: string | null;
   invalidated: boolean;

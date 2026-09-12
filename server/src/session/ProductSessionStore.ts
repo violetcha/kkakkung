@@ -13,9 +13,15 @@ export type ProductSessionStoreOptions = Readonly<{
   leaseTtlMs?: number;
   maxLifetimeMs?: number;
   maxEntries?: number;
+  admissionTtlMs?: number;
 }>;
 
-export const SESSION_LIMITS = { leaseTtlMs: 30 * 60_000, maxLifetimeMs: 2 * 60 * 60_000 } as const;
+export const SESSION_LIMITS = {
+  leaseTtlMs: 30 * 60_000,
+  maxLifetimeMs: 2 * 60 * 60_000,
+  // HTTP response (10s), SDK reservation (15s), plus time for a slow first connection.
+  admissionTtlMs: 60_000,
+} as const;
 
 export type ClaimResult = 'claimed' | 'busy' | 'invalid';
 
@@ -25,12 +31,16 @@ export class ProductSessionStore {
   readonly leaseTtlMs: number;
   readonly maxLifetimeMs: number;
   private readonly maxEntries: number;
+  private readonly admissionTtlMs: number;
 
   constructor(private readonly options: ProductSessionStoreOptions) {
     this.leaseTtlMs = options.leaseTtlMs ?? SESSION_LIMITS.leaseTtlMs;
     this.maxLifetimeMs = options.maxLifetimeMs ?? SESSION_LIMITS.maxLifetimeMs;
     this.maxEntries = options.maxEntries ?? 600;
+    this.admissionTtlMs = options.admissionTtlMs ?? SESSION_LIMITS.admissionTtlMs;
     if (this.leaseTtlMs > this.maxLifetimeMs) throw new Error('INVALID_SESSION_LEASE');
+    if (!Number.isFinite(this.admissionTtlMs) || this.admissionTtlMs <= 0)
+      throw new Error('INVALID_ADMISSION_TTL');
   }
 
   get size() {
@@ -51,6 +61,7 @@ export class ProductSessionStore {
       nickname: input.nickname,
       issuedAt: now,
       expiresAt: now + this.leaseTtlMs,
+      admissionExpiresAt: now + this.admissionTtlMs,
       activeConnectionId: null,
       invalidated: false,
     };
@@ -97,6 +108,7 @@ export class ProductSessionStore {
     if (session.activeConnectionId !== null && session.activeConnectionId !== connectionId)
       return 'busy';
     session.activeConnectionId = connectionId;
+    session.admissionExpiresAt = null;
     this.touch(sessionId);
     return 'claimed';
   }
@@ -140,7 +152,11 @@ export class ProductSessionStore {
 
   prune(now = this.options.now()) {
     for (const [id, session] of this.sessions) {
-      if (session.invalidated || now >= session.expiresAt) {
+      if (
+        session.invalidated ||
+        now >= session.expiresAt ||
+        (session.admissionExpiresAt !== null && now >= session.admissionExpiresAt)
+      ) {
         this.sessions.delete(id);
         this.byPlayer.delete(session.playerId);
       }
@@ -148,7 +164,12 @@ export class ProductSessionStore {
   }
 
   private isLive(session: ProductSession) {
-    return !session.invalidated && this.options.now() < session.expiresAt;
+    const now = this.options.now();
+    return (
+      !session.invalidated &&
+      now < session.expiresAt &&
+      (session.admissionExpiresAt === null || now < session.admissionExpiresAt)
+    );
   }
 }
 

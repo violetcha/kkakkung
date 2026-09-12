@@ -128,6 +128,14 @@ describe('product kkakkung room (0.2.0) with the harness core', () => {
     room.onMessage(PRODUCT_SERVER_MESSAGES.roomRoster, (roster: RoomRosterMessage) =>
       player.rosters.push(roster),
     );
+    // This wire-level harness bypasses the product runtime, so it must answer liveness probes.
+    room.onMessage(PRODUCT_SERVER_MESSAGES.heartbeat, (heartbeat) =>
+      room.send(PRODUCT_CLIENT_MESSAGES.heartbeatAck, {
+        serverEpoch: heartbeat.serverEpoch,
+        matchId: heartbeat.matchId,
+        heartbeatSeq: heartbeat.heartbeatSeq,
+      }),
+    );
     room.onMessage('*', () => undefined);
     players.push(player);
     return player;

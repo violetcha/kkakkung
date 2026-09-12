@@ -9,6 +9,8 @@ import { Router, type Request, type Response } from 'express';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import {
   SESSION_ROUTE,
+  SESSION_CANCEL_ROUTE,
+  sessionCancelRequestSchema,
   sessionRequestSchema,
   type SessionErrorCode,
   type SessionResponse,
@@ -57,6 +59,33 @@ function clientIp(req: Request, trustProxy: boolean): string | null {
 
 export function createSessionRoutes(deps: SessionRouteDeps): Router {
   const router = Router();
+  router.delete(SESSION_CANCEL_ROUTE, (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    // Cleanup remains available while admission is closed. No caller-supplied identity.
+    if (!sessionCancelRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {})).success)
+      return void res.status(400).json({ error: 'INVALID_REQUEST' });
+    const header = req.headers.authorization;
+    if (!header?.startsWith('Bearer ') || header.length <= 7)
+      return void res.status(401).json({ error: 'INVALID_SESSION' });
+    const session = deps.sessions.authenticate(header.slice(7));
+    // Expired/already-canceled credentials have no reservation to modify.
+    if (!session) {
+      deps.cleanupReservations?.();
+      return void res.status(204).end();
+    }
+    const state = deps.slots.slotState(session.roomCode, session.playerId);
+    if (
+      deps.sessions.activeConnection(session.sessionId) ||
+      state === 'JOINED' ||
+      state === 'RETIRING'
+    )
+      return void res.status(409).json({ error: 'SESSION_IN_USE' });
+    // No await between ownership/state check, slot release and session invalidation.
+    if (state === 'RESERVED') deps.slots.release(session.roomCode, session.playerId);
+    deps.sessions.invalidate(session.sessionId);
+    deps.cleanupReservations?.();
+    return void res.status(204).end();
+  });
   const fail = (res: Response, status: number, code: SessionErrorCode) =>
     void res.status(status).json({ error: code });
   router.post(SESSION_ROUTE, (req: Request, res: Response) => {

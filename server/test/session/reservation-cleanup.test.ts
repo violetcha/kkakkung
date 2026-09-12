@@ -103,7 +103,7 @@ it.each(['timer', 'admission'] as const)(
       const issued = sessionResponseSchema.parse(await first.json());
       expect(app.directory.size).toBe(0);
       expect((await post()).status).toBe(503);
-      now += SESSION_LIMITS.leaseTtlMs;
+      now += SESSION_LIMITS.admissionTtlMs;
       if (path === 'timer')
         await vi.waitFor(() => expect(app.slots!.hasRoom(issued.roomCode)).toBe(false), {
           timeout: 2000,
