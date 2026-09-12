@@ -5,6 +5,9 @@ import {
   sessionResponseSchema,
   SESSION_ERROR_CODES,
   SESSION_CANCEL_ROUTE,
+  SESSION_ACCESS_ROUTE,
+  sessionAccessResponseSchema,
+  type SessionAccessResponse,
   type SessionRequest,
   type SessionResponse,
 } from '@kkakkung/protocol/game-messages';
@@ -26,6 +29,20 @@ export function consumeInvitation(
   const token = params.get('inviteToken') ?? params.get('invite') ?? '';
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   return token;
+}
+
+export async function requestSessionAccess(
+  fetcher: typeof fetch = fetch,
+): Promise<SessionAccessResponse> {
+  const response = await fetcher(SESSION_ACCESS_ROUTE, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
+    redirect: 'error',
+  });
+  // Older/diagnostic servers retain invitation admission until they implement this contract.
+  if (response.status === 404) return { method: 'invitation' };
+  if (!response.ok) throw new Error('CONNECTION_FAILED');
+  return sessionAccessResponseSchema.parse(await response.json());
 }
 
 export async function requestSession(

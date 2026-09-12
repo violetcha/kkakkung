@@ -66,6 +66,15 @@ describe('host nginx (TLS edge)', () => {
   it('has no leftover isolation switch', () => {
     expect(host).not.toMatch(/kk_isolation|kk_operator|kk_block/);
   });
+  it('replaces supplied SSO identity with the authenticated upstream identity only', () => {
+    const app = block(https(), 'location / {');
+    expect(app).toContain('auth_request_set $sso_user $upstream_http_x_auth_request_user;');
+    expect(app).toContain('proxy_set_header X-SSO-User $sso_user;');
+    expect(app).not.toContain('$http_x_sso_user');
+    expect(read('scripts/write-smoke-proxy.mjs')).toContain('proxy_set_header X-SSO-User "";');
+    expect(read('infra/compose.yaml')).toContain('127.0.0.1:8080:80');
+    expect(read('infra/compose.continuous.yaml')).toContain('SESSION_ADMISSION_MODE: gitlab-sso');
+  });
 });
 
 describe('container nginx (web-proxy)', () => {

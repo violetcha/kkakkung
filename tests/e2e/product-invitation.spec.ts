@@ -1,5 +1,56 @@
 import { expect, test } from '@playwright/test';
 
+test('team login enables creation and room-code admission without an invitation', async ({
+  page,
+}) => {
+  const attempts: unknown[] = [];
+  await page.route('**/api/sessions/access', (route) =>
+    route.fulfill({ json: { method: 'gitlab-sso' } }),
+  );
+  await page.route('**/api/sessions', async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await route.fulfill({ status: 503, json: { error: 'CAPACITY' } });
+  });
+  await page.goto('/play');
+  await expect(page.getByText('팀원 로그인이 확인됐습니다.', { exact: false })).toBeVisible();
+  await expect(page.getByText('유효한 초대 링크로 열어 주세요.')).toHaveCount(0);
+  await page.getByLabel('닉네임').fill('team');
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect(page.getByText('방이 가득 찼습니다.')).toBeVisible();
+  await page.getByRole('radio', { name: '친구 방 참가' }).check();
+  await page.getByLabel('방 코드').fill('abcdef');
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(2);
+  expect(attempts).toEqual([
+    { nickname: 'team', createRoom: true },
+    { nickname: 'team', createRoom: false, roomCode: 'ABCDEF' },
+  ]);
+});
+
+test('a failed access check stays closed, can retry, and does not reuse SSO as a session', async ({
+  page,
+}) => {
+  let unavailable = true;
+  await page.route('**/api/sessions/access', (route) =>
+    unavailable
+      ? route.fulfill({ status: 503 })
+      : route.fulfill({ json: { method: 'gitlab-sso' } }),
+  );
+  await page.route('**/api/sessions', (route) =>
+    route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } }),
+  );
+  await page.goto('/play');
+  await expect(page.getByRole('button', { name: '접속 상태 다시 확인' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '방 만들기', exact: true })).toBeDisabled();
+  unavailable = false;
+  await page.getByRole('button', { name: '접속 상태 다시 확인' }).click();
+  await page.getByLabel('닉네임').fill('team');
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect(
+    page.getByText('로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'),
+  ).toBeVisible();
+});
+
 test('same-tab invitations refresh a rejected form and its next request', async ({ page }) => {
   const attempts: unknown[] = [];
   await page.route('**/api/sessions', async (route) => {

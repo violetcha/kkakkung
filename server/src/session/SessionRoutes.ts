@@ -4,11 +4,12 @@
  * admission re-check → session issue. Rejections never reveal hidden room content and never
  * leave a reservation behind.
  */
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import {
   SESSION_ROUTE,
+  SESSION_ACCESS_ROUTE,
   SESSION_CANCEL_ROUTE,
   sessionCancelRequestSchema,
   sessionRequestSchema,
@@ -44,6 +45,8 @@ export type SessionRouteDeps = Readonly<{
   monotonicNow: () => number;
   /** Only honour proxy headers when F's trusted proxy path is configured. */
   trustProxy: boolean;
+  /** Enabled only behind the private ingress that overwrites X-SSO-User after GitLab auth. */
+  admissionMode?: 'invitation' | 'gitlab-sso';
   /** Reclaim expired reservations before a new admission checks capacity. */
   cleanupReservations?: () => void;
 }>;
@@ -59,6 +62,19 @@ function clientIp(req: Request, trustProxy: boolean): string | null {
 
 export function createSessionRoutes(deps: SessionRouteDeps): Router {
   const router = Router();
+  const ssoPrincipal = (req: Request): string | null => {
+    if (deps.admissionMode !== 'gitlab-sso' || !deps.trustProxy) return null;
+    const user = req.headers['x-sso-user'];
+    // Never read identity from JSON, cookies or arbitrary forwarded identity headers.
+    // Reject duplicate/combined values and store only a bounded, hashed limiter identity.
+    if (typeof user !== 'string' || !/^[A-Za-z0-9_.@-]{1,255}$/.test(user)) return null;
+    return 'sso:' + createHash('sha256').update(user).digest('hex');
+  };
+  router.get(SESSION_ACCESS_ROUTE, (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.vary('X-SSO-User');
+    res.json({ method: ssoPrincipal(req) ? 'gitlab-sso' : 'invitation' });
+  });
   router.delete(SESSION_CANCEL_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     // Cleanup remains available while admission is closed. No caller-supplied identity.
@@ -95,11 +111,16 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
     if (deps.admission() !== 'OPEN' || deps.limiter === null)
       return fail(res, 503, 'ADMISSION_CLOSED');
     const body = parsed.data;
-    const verified = deps.invites.verify(
-      body.createRoom
-        ? { inviteToken: body.inviteToken, createRoom: true }
-        : { inviteToken: body.inviteToken, createRoom: false, roomCode: body.roomCode },
-    );
+    const principal = ssoPrincipal(req);
+    const verified = principal
+      ? { inviteId: principal }
+      : body.inviteToken
+        ? deps.invites.verify(
+            body.createRoom
+              ? { inviteToken: body.inviteToken, createRoom: true }
+              : { inviteToken: body.inviteToken, createRoom: false, roomCode: body.roomCode },
+          )
+        : null;
     if (!verified) return fail(res, 403, 'INVALID_INVITATION');
     const verdict = deps.limiter.attempt(
       { inviteId: verified.inviteId, ip: clientIp(req, deps.trustProxy) },
@@ -125,7 +146,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
           deps.sessions.invalidate(issued.sessionId);
           return fail(res, 503, 'CAPACITY');
         }
-        deps.invites.bindCreatedRoom(verified.inviteId, roomCode);
+        if (!principal) deps.invites.bindCreatedRoom(verified.inviteId, roomCode);
       } else {
         roomCode = body.roomCode;
         if (!deps.slots.hasRoom(roomCode)) return fail(res, 404, 'ROOM_NOT_AVAILABLE');

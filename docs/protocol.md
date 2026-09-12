@@ -6,11 +6,18 @@
 
 ### 입장
 
-1. 운영자가 `POST /api/operations/invitations`(OPS_TOKEN)로 초대 토큰을 발급한다. 초대 토큰은 방 코드와 다른 고엔트로피 값이며 서버는 해시만 저장한다.
-2. 클라이언트가 `POST /api/sessions`에 strict `SessionRequest`를 보낸다. 생성은 `{nickname, inviteToken, createRoom: true}`(roomCode 금지), 참가는 `{nickname, inviteToken, createRoom: false, roomCode}`다. 응답은 `SessionResponse {sessionToken, playerId, roomCode, expiresAt(epoch ms), protocolVersion: '0.2.0'}`이고 `Cache-Control: no-store`다.
+1. 클라이언트가 `GET /api/sessions/access`로 해당 요청의 `{method: 'gitlab-sso' | 'invitation'}`을 확인한다. no-store이며 실제 신원·토큰은 반환하지 않는다. 기본 invitation에서는 운영자가 `POST /api/operations/invitations`(OPS_TOKEN)로 발급한 초대 토큰이 필요하다. 토큰은 방 코드와 다른 고엔트로피 값이며 서버는 해시만 저장한다.
+2. 클라이언트가 `POST /api/sessions`에 strict `SessionRequest`를 보낸다. 생성은 `{nickname, inviteToken?, createRoom: true}`(roomCode 금지), 참가는 `{nickname, inviteToken?, createRoom: false, roomCode}`다. inviteToken 생략은 명시적 GitLab SSO 모드에서 신뢰 프록시가 확인한 프로젝트 멤버만 가능하다. POST는 매번 인증을 검사하며 access 응답이나 본문의 신원 주장으로 인증하지 않는다. 응답은 `SessionResponse {sessionToken, playerId, roomCode, expiresAt(epoch ms), protocolVersion: '0.2.0'}`이고 `Cache-Control: no-store`다.
 3. `Client.joinOrCreate('kkakkung', { token: sessionToken, roomCode, protocolVersion: '0.2.0' })`. 서버는 매칭 전에 세션·방 코드·버전·좌석·중복 연결을 검사한다(400 INVALID_JOIN, 409 PROTOCOL_MISMATCH, 401 INVALID_SESSION, 403 WRONG_ROOM/ROOM_CLOSED, 409 SESSION_IN_USE).
 
 새 참가는 LOBBY/DEVICE_CHECK에서만 허용하며 진행 중 충원과 같은 세션의 재접속 재개는 거절한다.
+
+SSO 인증은 `SESSION_ADMISSION_MODE=gitlab-sso`와 제품·프록시 신뢰 설정이 모두 필요하다.
+호스트 Nginx는 GitLab 프로젝트 멤버 검사를 통과한 값으로 `X-SSO-User`를 덮어쓴다.
+게임 포트는 외부에 공개하지 않고 web-proxy는 loopback에만 바인딩한다.
+내부 smoke 프록시는 이 헤더를 제거하여 기존 초대 인증을 사용한다.
+SSO 회원의 해시를 기존 inviteId 제한 버킷에 사용하고 IP·인원·방 상태·운영 잠금 검사는 동일하다.
+이름을 바꿔도 회원별 입장 시도 제한을 초기화하지 않는다. 명시적 초대 경로와 0.2 게임 소켓 계약은 호환된다.
 
 HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. 이 미가입 기한은 세션의 활동 기반 30분 lease와 별도이며, 연결을 점유하면 해제된다. 응답을 받지 못했거나 탭이 닫힌 예약은 서버의 1초 정리 주기 또는 다음 입장 요청에서 반환된다. 이미 JOINED/RETIRING인 좌석은 미가입 정리로 반환하지 않는다.
 

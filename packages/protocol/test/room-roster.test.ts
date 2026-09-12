@@ -31,6 +31,11 @@ describe('room roster and session contracts', () => {
   });
 
   it('splits session creation and joining as a strict discriminated union', () => {
+    // Absence is allowed on the wire; only the server can authorize trusted SSO admission.
+    expect(sessionRequestSchema.parse({ nickname: '팀원', createRoom: true })).toBeTruthy();
+    expect(
+      sessionRequestSchema.parse({ nickname: '팀원', createRoom: false, roomCode: 'ABC234' }),
+    ).toBeTruthy();
     const invite = 'invite-token-of-sufficient-length';
     expect(
       sessionRequestSchema.parse({ nickname: '하나', inviteToken: invite, createRoom: true }),

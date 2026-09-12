@@ -32,6 +32,25 @@ const productMedia = {
 };
 
 describe('explicit local product configuration', () => {
+  it('requires an explicit product ingress before accepting GitLab identity headers', () => {
+    expect(parseConfig({}).sessionAdmissionMode).toBe('invitation');
+    expect(() => parseConfig({ SESSION_ADMISSION_MODE: 'gitlab-sso' })).toThrow('trusted proxy');
+    expect(() =>
+      parseConfig({
+        ...admission,
+        SERVER_PROFILE: 'product',
+        SESSION_ADMISSION_MODE: 'gitlab-sso',
+      }),
+    ).toThrow('trusted proxy');
+    expect(
+      parseConfig({
+        ...admission,
+        SERVER_PROFILE: 'product',
+        TRUST_PROXY_HOPS: '1',
+        SESSION_ADMISSION_MODE: 'gitlab-sso',
+      }).sessionAdmissionMode,
+    ).toBe('gitlab-sso');
+  });
   it('preserves development defaults and requires a complete admission policy for product', () => {
     expect(parseConfig({}).serverProfile).toBe('development');
     expect(() => parseConfig({ SERVER_PROFILE: 'product' })).toThrow(/admission/);
