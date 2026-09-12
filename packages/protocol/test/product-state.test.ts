@@ -95,4 +95,37 @@ describe('product match state (0.2.0)', () => {
     decoder.decode(encoder.encode());
     expect(readPublicRoundState(client)).not.toHaveProperty('roomExpiresInSeconds');
   });
+
+  it('round-trips preparation and rematch feedback and clears it between phases', () => {
+    const state = new PublicMatchState();
+    state.phase = 'DEVICE_CHECK';
+    state.preparationIssue = 'LAYOUT_UNAVAILABLE';
+    const { encoder, decoder, client } = roundTrip(state);
+    expect(readPublicRoundState(client).preparationIssue).toBe('LAYOUT_UNAVAILABLE');
+    state.preparationIssue = null;
+    state.phase = 'RESULT';
+    state.rematchState = 'settling';
+    decoder.decode(encoder.encode());
+    encoder.discardChanges();
+    expect(readPublicRoundState(client)).not.toHaveProperty('preparationIssue');
+    expect(readPublicRoundState(client).rematchState).toBe('settling');
+    state.rematchState = 'requested';
+    decoder.decode(encoder.encode());
+    encoder.discardChanges();
+    expect(readPublicRoundState(client).rematchState).toBe('requested');
+    state.rematchState = null;
+    state.phase = 'LOBBY';
+    decoder.decode(encoder.encode());
+    expect(readPublicRoundState(client)).not.toHaveProperty('rematchState');
+  });
+
+  it('does not display unrecognized diagnostic strings from incompatible state', () => {
+    const state = readPublicRoundState({
+      ...new PublicMatchState(),
+      preparationIssue: 'LAYOUT:/private/map.json',
+      rematchState: 'internal-request-id',
+    });
+    expect(state).not.toHaveProperty('preparationIssue');
+    expect(state).not.toHaveProperty('rematchState');
+  });
 });

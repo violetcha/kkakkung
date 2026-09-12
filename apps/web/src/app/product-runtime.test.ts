@@ -543,6 +543,62 @@ it('shares installation pending across D and buttons without optimistic inventor
   expect(f.runtime.getSnapshot().view?.self).toMatchObject({ equipment: { sensor: 2, trap: 1 } });
   await f.runtime.leave();
 });
+it.each(['move', 'turn'] as const)(
+  'blocks both installation senders during %s without spending inventory',
+  async (kind) => {
+    const f = fixture();
+    f.state({ phase: 'PLAYING' });
+    const v = viewFixture();
+    if (v.self?.status !== 'ACTIVE') throw Error();
+    const self = {
+      ...v.self,
+      role: 'tagger' as const,
+      equipment: { sensor: 2, trap: 1 },
+      action: {
+        kind,
+        from: { x: 1, y: 1, dir: 0 as const },
+        to: { x: 2, y: 1, dir: 1 as const },
+        startTick: 100,
+        endTick: 120,
+      },
+    };
+    f.messages.get('private-view')!({ ...v, self });
+    expect(f.runtime.send({ type: 'INSTALL', payload: { kind: 'trap' } })).toBe('');
+    expect(f.callbacks.sendCommand({ type: 'INSTALL', payload: { kind: 'sensor' } })).toBe('');
+    expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(0);
+    f.messages.get('private-view')!({ ...v, stateVersion: 11, self: { ...self, action: null } });
+    // A future private view remains buffered until its public state version arrives.
+    expect(f.callbacks.sendCommand({ type: 'INSTALL', payload: { kind: 'trap' } })).toBe('');
+    f.state({ phase: 'PLAYING', stateVersion: 11, serverTick: 120 });
+    expect(f.callbacks.sendCommand({ type: 'INSTALL', payload: { kind: 'trap' } })).not.toBe('');
+    expect(f.runtime.getSnapshot().view?.self).toMatchObject({ equipment: { sensor: 2, trap: 1 } });
+    await f.runtime.leave();
+  },
+);
+it('does not send an expired incoming exchange even when its view has not cleared', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING', serverTick: 100 });
+  const v = viewFixture();
+  if (v.self?.status !== 'ACTIVE') throw Error();
+  f.messages.get('private-view')!({
+    ...v,
+    self: {
+      ...v.self,
+      exchange: {
+        exchangeId: 'expired',
+        fromPlayerId: 'ally',
+        toPlayerId: 'self',
+        direction: 'incoming',
+        expiresAtTick: 100,
+      },
+    },
+  });
+  expect(
+    f.callbacks.sendCommand({ type: 'EXCHANGE_ACCEPT', payload: { exchangeId: 'expired' } }),
+  ).toBe('');
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toHaveLength(0);
+  await f.runtime.leave();
+});
 it('connects heartbeat ACK on the actual product channel with no media calls in lobby/device check', async () => {
   const f = fixture();
   for (let i = 0; i < 5; i++) {

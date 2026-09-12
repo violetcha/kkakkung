@@ -21,6 +21,7 @@ export function equipmentPresenter(view: PrivateView | null, tick: number) {
       armSeconds: Math.max(0, (item.armedTick - tick) / 20),
     })),
     locked:
+      self.action !== null ||
       self.challenge !== null ||
       (self.restraintUntilTick !== null && tick < self.restraintUntilTick),
   };

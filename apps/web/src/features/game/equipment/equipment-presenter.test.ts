@@ -48,3 +48,27 @@ it('only renders recipient-visible equipment and uses non-owner sensor wall side
   expect(equipmentPresenter(v, 0)).toBeNull();
   expect(visibleEquipment({ ...v, visibleEntities: [] })).toEqual([]);
 });
+
+it.each(['move', 'turn'] as const)(
+  'locks installation throughout authoritative %s actions',
+  (kind) => {
+    const view = viewFixture();
+    if (view.self?.status !== 'ACTIVE') throw Error();
+    const self = {
+      ...view.self,
+      role: 'tagger' as const,
+      action: {
+        kind,
+        from: { x: 1, y: 1, dir: 0 as const },
+        to: { x: 2, y: 1, dir: 1 as const },
+        startTick: 10,
+        endTick: 20,
+      },
+    };
+    expect(equipmentPresenter({ ...view, self }, 15)?.locked).toBe(true);
+    expect(equipmentPresenter({ ...view, self }, 21)?.locked).toBe(true);
+    expect(equipmentPresenter({ ...view, self: { ...self, action: null } }, 21)?.locked).toBe(
+      false,
+    );
+  },
+);

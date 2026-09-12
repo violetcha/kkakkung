@@ -25,6 +25,7 @@ import { createFaceTextures, videoFaceTexture } from '../features/game/scene/fac
 import { createPrivateEvents } from '../features/room/private-events';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
+import { equipmentPresenter } from '../features/game/equipment/equipment-presenter';
 import {
   createCommandLifecycle,
   type CommandInput,
@@ -543,7 +544,8 @@ export function bindProductRoom(
     if (!active || snapshot.lost || !snapshot.round) return '';
     const allowedAfterEnd = command.type === 'REMATCH';
     if (!participating && !allowedAfterEnd) return '';
-    if (!permitsExchange(snapshot.view, command)) return '';
+    const currentTick = clock.renderTick() ?? snapshot.round.serverTick;
+    if (!permitsExchange(snapshot.view, command, currentTick)) return '';
     const own = snapshot.view?.self;
     if (command.type === 'PRACTICE_READY') {
       if (
@@ -582,11 +584,16 @@ export function bindProductRoom(
         return '';
       if (command.type === 'EXIT_CANCEL') challenge.suspend();
     }
-    if (
-      command.type === 'INSTALL' &&
-      (own?.status !== 'ACTIVE' || own.role !== 'tagger' || own.installation || own.challenge)
-    )
-      return '';
+    if (command.type === 'INSTALL') {
+      const equipment = equipmentPresenter(snapshot.view, currentTick);
+      if (
+        !equipment ||
+        equipment.locked ||
+        equipment.installation ||
+        equipment.remaining[command.payload.kind] <= 0
+      )
+        return '';
+    }
     if (
       command.type === 'INSTALL_CANCEL' &&
       (own?.status !== 'ACTIVE' ||

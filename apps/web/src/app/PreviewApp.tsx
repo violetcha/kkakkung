@@ -102,6 +102,7 @@ export default function PreviewApp() {
           round={roundFixture({ phase: 'ABORTED', abortReason: 'MEDIA_POLICY_UNCERTAIN' })}
           self={null}
           host={false}
+          connectedCount={6}
           onRematch={() => {}}
         />
       )}

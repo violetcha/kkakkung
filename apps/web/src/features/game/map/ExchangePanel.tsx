@@ -27,7 +27,9 @@ export function ExchangePanel({
       {exchange ? (
         <>
           <p>
-            {model.canAccept ? '아군이 지도를 나누려고 합니다.' : '아군의 수락을 기다립니다.'}{' '}
+            {exchange.direction === 'incoming'
+              ? '아군이 지도를 나누려고 합니다.'
+              : '아군의 수락을 기다립니다.'}{' '}
             {model.seconds ? `${model.seconds}초` : '서버 종료 확인 중'}
           </p>
           {model.canAccept && (
@@ -51,14 +53,14 @@ export function ExchangePanel({
         </>
       ) : (
         <>
-          <label htmlFor="exchange-target">가시 아군</label>
+          <label htmlFor="exchange-target">바로 옆 아군</label>
           <select
             id="exchange-target"
             value={model.selected ?? ''}
             onChange={(e) => onSelect(e.target.value)}
             disabled={!model.candidates.length || pending}
           >
-            {!model.candidates.length && <option value="">주변 아군 없음</option>}
+            {!model.candidates.length && <option value="">교환할 아군 없음</option>}
             {model.candidates.map((p, i) => (
               <option key={p.id} value={p.id}>
                 아군 {i + 1} · ({p.cell.x}, {p.cell.y})
@@ -77,7 +79,9 @@ export function ExchangePanel({
           {pending && <p role="status">서버의 교환 상태를 확인하고 있습니다.</p>}
         </>
       )}
-      <p>교환이 완료되면 서버에서 받은 지도에 반영됩니다.</p>
+      <p>
+        같은 칸이나 바로 옆 칸의 아군과 지도를 나눌 수 있습니다. 교환한 지점은 술래에게 알려집니다.
+      </p>
     </section>
   );
 }
