@@ -1,4 +1,4 @@
-import type { Action, ActiveSelf } from '@kkakkung/protocol/game-schema';
+import type { Action, ActiveSelf, Cell, Dir } from '@kkakkung/protocol/game-schema';
 import { directionYaw } from './scene-model';
 export function sampleAction(action: Action, tick: number) {
   const alpha = Math.min(
@@ -13,7 +13,14 @@ export function sampleAction(action: Action, tick: number) {
   };
 }
 export function sampleSelf(self: ActiveSelf, tick: number | null) {
-  return self.action && tick !== null
+  return sampleActor(self, tick);
+}
+/** The head, face and body share this one authoritative transform. No extrapolation. */
+export function sampleActor(
+  self: { cell: Cell; dir: Dir; action?: Action | null },
+  tick: number | null,
+) {
+  return self.action && tick !== null && Number.isFinite(tick)
     ? sampleAction(self.action, tick)
     : { x: self.cell.x, z: self.cell.y, yaw: directionYaw(self.dir) };
 }

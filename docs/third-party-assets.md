@@ -11,6 +11,8 @@
 
 모델 라이선스의 pending은 실제 자산이 없다는 뜻이 아니라 재배포 조건의 확인이 끝나지 않았다는 뜻이다. SDK의 Apache-2.0을 모델에 그대로 적용하지 않는다. 이번 문서 갱신에서는 공식 모델 카드의 라이선스를 새로 검증하거나 승인하지 않았다. 기존 취득 담당은 D이며, 모델 갱신과 공개 전 라이선스 확인의 인계는 해당 README를 따른다.
 
+시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 위 비전 모델의 기존 pending 확인은 별도 작업에 남는다.
+
 자산을 추가할 때 다음을 기록한다.
 
 | 항목          | 내용                            |

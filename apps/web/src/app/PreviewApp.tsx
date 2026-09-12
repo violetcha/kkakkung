@@ -11,6 +11,7 @@ import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
+import { RenderPreview } from './RenderPreview';
 const views = [
   '로비',
   '장치 점검',
@@ -23,6 +24,7 @@ const views = [
   '로딩',
   '결과',
   '연결 상실',
+  '렌더 검수',
 ] as const;
 export default function PreviewApp() {
   const [screen, setScreen] = useState<(typeof views)[number]>('로비');
@@ -51,6 +53,7 @@ export default function PreviewApp() {
         ))}
       </nav>
       <QualityControl value={quality} onChange={setQuality} />
+      {screen === '렌더 검수' && <RenderPreview quality={quality} />}
       {['장비', '교환', '포즈', '키 도전', '연습'].includes(screen) && (
         <WorkflowPreview key={screen} screen={screen} />
       )}

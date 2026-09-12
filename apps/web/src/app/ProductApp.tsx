@@ -15,6 +15,7 @@ import { preparationFeedback } from '../features/game/flow/preparation-feedback'
 import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
+import { GameHud } from '../features/game/flow/GameHud';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
@@ -211,8 +212,28 @@ export function ProductApp({
     !inResult &&
     ['PLAYING', 'TEAM_PRACTICE'].includes(round.phase) &&
     view?.self?.status === 'ACTIVE';
+  const localControls =
+    round && !inResult && round.phase !== 'LOBBY' ? (
+      <LocalControls
+        status={snapshot!.devices}
+        mode={snapshot!.interaction.mode}
+        previewHost={preview}
+        onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+        onMotion={async () => {
+          await runtime.current?.calibrateMotion();
+        }}
+        onRecover={async () => {
+          await runtime.current?.recoverDevices();
+        }}
+        onMicrophone={async (enabled) => {
+          await runtime.current?.setMicrophone(enabled);
+        }}
+        canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
+        compact={worldVisible}
+      />
+    ) : null;
   return (
-    <main className="product-shell">
+    <main className={worldVisible ? 'product-shell playing-shell' : 'product-shell'}>
       <header>
         <h1>까꿍</h1>
         {snapshot && (
@@ -310,24 +331,7 @@ export function ProductApp({
             value={snapshot.quality}
             onChange={(value) => runtime.current?.quality(value)}
           />
-          {round && !inResult && round.phase !== 'LOBBY' && (
-            <LocalControls
-              status={snapshot.devices}
-              mode={snapshot.interaction.mode}
-              previewHost={preview}
-              onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
-              onMotion={async () => {
-                await runtime.current?.calibrateMotion();
-              }}
-              onRecover={async () => {
-                await runtime.current?.recoverDevices();
-              }}
-              onMicrophone={async (enabled) => {
-                await runtime.current?.setMicrophone(enabled);
-              }}
-              canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
-            />
-          )}
+          {!worldVisible && localControls}
           {snapshot.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
             <LobbyScreen roster={snapshot.roster} selfId={selfId} roomCode={code} />
           )}
@@ -358,85 +362,101 @@ export function ProductApp({
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
               <LoadingOverlay round={round} serverNow={clockTime} />
             )}
+          {worldVisible && round && view?.self?.status === 'ACTIVE' && (
+            <GameHud round={round} self={view.self} mode={snapshot.interaction.mode} />
+          )}
           <div className="game-workspace">
-            {worldVisible && view && round?.phase === 'TEAM_PRACTICE' && (
-              <PracticeScreen
-                round={round}
-                view={view}
-                devices={snapshot.devices}
-                request={snapshot.requests.PRACTICE_READY}
-                readyReported={snapshot.practiceReady}
-                readSensors={readSensors}
-                onReady={() =>
-                  runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
-                }
-              />
-            )}
-            {worldVisible &&
-            round?.phase === 'PLAYING' &&
-            view?.self?.status === 'ACTIVE' &&
-            view.self.challenge &&
-            snapshot.interaction.mode === 'keyboard' ? (
-              <KeyChallenge
-                challenge={view.self.challenge}
-                index={snapshot.keyIndex}
-                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
-                onCancel={() =>
-                  view.self?.status === 'ACTIVE' &&
-                  view.self.challenge &&
-                  runtime.current?.send({
-                    type: 'EXIT_CANCEL',
-                    payload: { challengeId: view.self.challenge.challengeId },
-                  })
-                }
-              />
-            ) : (
-              worldVisible &&
-              round?.phase === 'PLAYING' &&
-              view && (
-                <PoseChallenge
+            <aside className="game-sidebar">
+              {worldVisible && localControls}
+              {worldVisible && view && (
+                <MiniMap
                   view={view}
+                  markers={snapshot.markers}
                   tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                  progress={snapshot.poseProgress}
-                  starting={snapshot.exitStarting}
+                  ownerNames={Object.fromEntries(
+                    snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
+                  )}
+                />
+              )}
+              {worldVisible && view && round?.phase === 'TEAM_PRACTICE' && (
+                <PracticeScreen
+                  round={round}
+                  view={view}
+                  devices={snapshot.devices}
+                  request={snapshot.requests.PRACTICE_READY}
+                  readyReported={snapshot.practiceReady}
+                  readSensors={readSensors}
+                  onReady={() =>
+                    runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
+                  }
+                />
+              )}
+              {worldVisible &&
+              round?.phase === 'PLAYING' &&
+              view?.self?.status === 'ACTIVE' &&
+              view.self.challenge &&
+              snapshot.interaction.mode === 'keyboard' ? (
+                <KeyChallenge
+                  challenge={view.self.challenge}
+                  index={snapshot.keyIndex}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
+                  onCancel={() =>
+                    view.self?.status === 'ACTIVE' &&
+                    view.self.challenge &&
+                    runtime.current?.send({
+                      type: 'EXIT_CANCEL',
+                      payload: { challengeId: view.self.challenge.challengeId },
+                    })
+                  }
+                />
+              ) : (
+                worldVisible &&
+                round?.phase === 'PLAYING' &&
+                view && (
+                  <PoseChallenge
+                    view={view}
+                    tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                    progress={snapshot.poseProgress}
+                    starting={snapshot.exitStarting}
+                    send={(command) => runtime.current?.send(command)}
+                  />
+                )
+              )}
+              {worldVisible && view && (
+                <ExchangePanel
+                  view={view}
+                  selected={snapshot.exchangeTarget}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  request={
+                    view.self?.status === 'ACTIVE' && view.self.exchange?.direction === 'incoming'
+                      ? snapshot.requests.EXCHANGE_ACCEPT
+                      : snapshot.requests.EXCHANGE_REQUEST
+                  }
+                  onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
                   send={(command) => runtime.current?.send(command)}
                 />
-              )
-            )}
-            {worldVisible && view && (
-              <ExchangePanel
-                view={view}
-                selected={snapshot.exchangeTarget}
-                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                request={
-                  view.self?.status === 'ACTIVE' && view.self.exchange?.direction === 'incoming'
-                    ? snapshot.requests.EXCHANGE_ACCEPT
-                    : snapshot.requests.EXCHANGE_REQUEST
-                }
-                onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
-                send={(command) => runtime.current?.send(command)}
-              />
-            )}
-            {worldVisible && snapshot.exchangeNotice && (
-              <p role="status">{snapshot.exchangeNotice}</p>
-            )}
-            {worldVisible && view && (
-              <RestraintHud
-                view={view}
-                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-              />
-            )}
-            {worldVisible && view && (
-              <EquipmentHud
-                view={view}
-                tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                selected={snapshot.interaction.selectedEquipment}
-                request={snapshot.requests.INSTALL}
-                onSelect={(kind) => runtime.current?.selectEquipment(kind)}
-                send={(command) => runtime.current?.send(command)}
-              />
-            )}
+              )}
+              {worldVisible && snapshot.exchangeNotice && (
+                <p role="status">{snapshot.exchangeNotice}</p>
+              )}
+              {worldVisible && view && (
+                <RestraintHud
+                  view={view}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                />
+              )}
+              {worldVisible && view && (
+                <EquipmentHud
+                  view={view}
+                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  selected={snapshot.interaction.selectedEquipment}
+                  request={snapshot.requests.INSTALL}
+                  onSelect={(kind) => runtime.current?.selectEquipment(kind)}
+                  send={(command) => runtime.current?.send(command)}
+                />
+              )}
+            </aside>
             {worldVisible && view && (
               <section className="product-stage">
                 <div className="product-canvas">
@@ -450,26 +470,9 @@ export function ProductApp({
                     renderTick={() => runtime.current?.renderTick() ?? null}
                   />
                 </div>
-                <MiniMap
-                  view={view}
-                  markers={snapshot.markers}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                  ownerNames={Object.fromEntries(
-                    snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
-                  )}
-                />
               </section>
             )}
           </div>
-          {worldVisible && round?.phase === 'PLAYING' && (
-            <p className="game-counts">
-              남은 시간{' '}
-              {round.deadlineTick === null
-                ? '확인 중'
-                : `${Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20))}초`}{' '}
-              · 탈출 {round.counts.escaped} · 포획 {round.counts.captured}
-            </p>
-          )}
           {commandFeedback(snapshot.request) && snapshot.request?.type !== 'REMATCH' && (
             <p role="status">{commandFeedback(snapshot.request)}</p>
           )}
