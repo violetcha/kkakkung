@@ -158,6 +158,28 @@ export class PreviousGenerationCleanup {
         throw error;
       }
     };
+    // Keep every historical-room check, but bound network latency and queue size.
+    // All workers settle before crossing a phase boundary or releasing this sweep.
+    const forEachRoom = async (
+      names: ReadonlySet<string>,
+      visit: (roomName: string) => Promise<void>,
+    ): Promise<void> => {
+      const iterator = names.values();
+      const worker = async () => {
+        for (;;) {
+          assertCurrent();
+          const next = iterator.next();
+          if (next.done) return;
+          await visit(next.value);
+        }
+      };
+      const settled = await Promise.allSettled(
+        Array.from({ length: Math.min(4, names.size) }, worker),
+      );
+      const failed = settled.find((result) => result.status === 'rejected');
+      if (failed?.status === 'rejected') throw failed.reason;
+      assertCurrent();
+    };
     const report = (): CleanupReport => ({
       recordedIdentities,
       observedParticipants,
@@ -254,7 +276,7 @@ export class PreviousGenerationCleanup {
       }
       remaining = rooms.size;
       // Recorded-only rooms also need participant enumeration: the global list is not exhaustive proof.
-      for (const roomName of rooms) {
+      await forEachRoom(rooms, async (roomName) => {
         try {
           const participants = await checked(() =>
             this.options.listParticipants(roomName, context),
@@ -288,7 +310,7 @@ export class PreviousGenerationCleanup {
           unresolved++;
           failedRooms.add(roomName);
         }
-      }
+      });
       for (const target of targets.values()) {
         try {
           if ((await checked(() => this.options.revoke(Object.freeze(target), context))) === true) {
@@ -303,8 +325,8 @@ export class PreviousGenerationCleanup {
           failedRooms.add(target.roomName);
         }
       }
-      for (const roomName of rooms) {
-        if (failedRooms.has(roomName)) continue;
+      await forEachRoom(rooms, async (roomName) => {
+        if (failedRooms.has(roomName)) return;
         try {
           await checked(() => this.options.deleteRoom(roomName, context));
         } catch {
@@ -312,7 +334,7 @@ export class PreviousGenerationCleanup {
           unresolved++;
           failedRooms.add(roomName);
         }
-      }
+      });
 
       const finalRooms = new Set<string>();
       try {
@@ -333,7 +355,7 @@ export class PreviousGenerationCleanup {
         unresolved++;
       }
       // Verify every known target after deletion, including rooms omitted from the final global list.
-      for (const roomName of new Set([...rooms, ...finalRooms])) {
+      await forEachRoom(new Set([...rooms, ...finalRooms]), async (roomName) => {
         try {
           const participants = await checked(() =>
             this.options.listParticipants(roomName, context),
@@ -351,7 +373,7 @@ export class PreviousGenerationCleanup {
           assertCurrent();
           unresolved++;
         }
-      }
+      });
       try {
         await checked(() => this.options.checkpoint(Object.freeze(report()), context));
       } catch {
