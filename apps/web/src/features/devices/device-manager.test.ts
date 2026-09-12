@@ -278,4 +278,38 @@ describe('createDeviceManager', () => {
     expect(base.statuses).toHaveLength(seen);
     expect(devices.disposed).toBe(true);
   });
+
+  it('retries the same output Context and rejects a resolved but still suspended resume', async () => {
+    const base = harness(vi.fn(async () => stream(track('video'))));
+    base.audio.state = 'suspended';
+    base.audio.resume.mockRejectedValueOnce(new Error('locked'));
+    const devices = manager(base);
+    expect((await devices.start({ microphone: false })).audioPlayback).toBe('failed');
+    expect((await devices.start({ microphone: false })).audioPlayback).toBe('locked');
+    base.audio.state = 'running';
+    expect((await devices.start({ microphone: false })).audioPlayback).toBe('ready');
+    expect(base.audio.resume).toHaveBeenCalledTimes(3);
+    await devices.dispose();
+    await devices.dispose();
+    expect(base.audio.close).toHaveBeenCalledOnce();
+  });
+
+  it('does not resurrect audio readiness after a late resume completes on a disposed owner', async () => {
+    const base = harness(vi.fn(async () => stream(track('video'))));
+    let resolve!: () => void;
+    base.audio.resume.mockImplementation(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    const devices = manager(base);
+    const starting = devices.start({ microphone: false });
+    await devices.dispose();
+    const seen = base.statuses.length;
+    resolve();
+    await starting;
+    expect(base.statuses).toHaveLength(seen);
+    expect(base.audio.close).toHaveBeenCalledOnce();
+  });
 });

@@ -343,6 +343,67 @@ describe('createInteractionRuntime', () => {
     }
   });
 
+  it('ignores repeated action keys and installs the equipment selected by the screen', async () => {
+    const listeners = new Map<string, (event: KeyboardEvent) => void>();
+    const base = harness({
+      keyboardTarget: {
+        addEventListener: (name, listener) => {
+          listeners.set(name, listener);
+        },
+        removeEventListener: (name) => {
+          listeners.delete(name);
+        },
+      },
+    });
+    const context = {
+      matchId: 'm',
+      selfPlayerId: 'self',
+      role: 'tagger',
+      phase: 'PLAYING',
+      status: 'ACTIVE',
+      mode: 'keyboard',
+      pageActive: true,
+      selectedEquipment: 'trap',
+    } as const;
+    const key = (code: string, repeat = false, type = 'keydown') =>
+      listeners.get(type)?.({
+        code,
+        repeat,
+        isComposing: false,
+        target: null,
+        preventDefault() {},
+      } as KeyboardEvent);
+    try {
+      base.runtime.setContext(context);
+      key('KeyF');
+      base.runtime.setContext({ ...context, installationId: 'installed' });
+      base.advance(250);
+      key('KeyF', true);
+      expect(base.deps.sendCommand).toHaveBeenCalledExactlyOnceWith({
+        type: 'INSTALL',
+        payload: { kind: 'trap' },
+      });
+      key('KeyF', false, 'keyup');
+      key('KeyF');
+      expect(base.deps.sendCommand).toHaveBeenLastCalledWith({
+        type: 'INSTALL_CANCEL',
+        payload: { installationId: 'installed' },
+      });
+      key('Digit1', true);
+      expect(base.deps.onInteractionState).not.toHaveBeenCalledWith({
+        mode: 'keyboard',
+        selectedEquipment: 'sensor',
+      });
+      key('Digit1');
+      expect(base.deps.onInteractionState).toHaveBeenLastCalledWith({
+        mode: 'keyboard',
+        selectedEquipment: 'sensor',
+      });
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
   it('assigns real effect buffers in the browser adapter and reuses PCM without reusing sources', async () => {
     const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
     const source = () => ({
@@ -354,7 +415,19 @@ describe('createInteractionRuntime', () => {
     });
     const sources: ReturnType<typeof source>[] = [];
     const buffers: AudioBuffer[] = [];
+    const contexts: AudioContextProbe[] = [];
     class AudioContextProbe {
+      state = 'suspended';
+      constructor() {
+        contexts.push(this);
+      }
+      resume = vi.fn(async () => {
+        if (this.resume.mock.calls.length === 1) throw Error('first unlock failed');
+        this.state = 'running';
+      });
+      close = vi.fn(async () => {
+        this.state = 'closed';
+      });
       sampleRate = 48000;
       destination = node();
       createGain() {
@@ -379,7 +452,22 @@ describe('createInteractionRuntime', () => {
       }
     }
     vi.stubGlobal('AudioContext', AudioContextProbe);
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: async () => stream(videoTrack()),
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    });
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        srcObject: null,
+        play: async () => {},
+        pause() {},
+      }),
+    });
     const { runtime } = harness({
+      environment: undefined,
       epochNowSeconds: () => 1000,
       createMediaRoom: () => ({
         connect: async () => {},
@@ -390,6 +478,11 @@ describe('createInteractionRuntime', () => {
     });
     const scope = { matchId: 'm', mediaInstanceId: 'media', receiverGeneration: 1 };
     try {
+      runtime.setAudioOutputLock('open');
+      expect(contexts).toHaveLength(0);
+      expect((await runtime.startDevices({ microphone: false })).audioPlayback).toBe('failed');
+      expect((await runtime.startDevices({ microphone: false })).audioPlayback).toBe('ready');
+      expect(contexts).toHaveLength(1);
       runtime.setContext({
         matchId: 'm',
         selfPlayerId: 'self',
@@ -453,6 +546,8 @@ describe('createInteractionRuntime', () => {
       expect(sources).toHaveLength(4);
       expect(buffers).toHaveLength(3);
       expect(sources[3]!.buffer).toBe(sources[0]!.buffer);
+      await runtime.retireMediaGeneration('phase-change');
+      expect(contexts[0]!.close).not.toHaveBeenCalled();
     } finally {
       await runtime.dispose();
       vi.unstubAllGlobals();
@@ -460,6 +555,8 @@ describe('createInteractionRuntime', () => {
     expect(sources[0]!.stop).not.toHaveBeenCalled();
     expect(sources[3]!.stop).toHaveBeenCalledOnce();
     expect(sources[3]!.disconnect).toHaveBeenCalledOnce();
+    expect(contexts[0]!.resume).toHaveBeenCalledTimes(2);
+    expect(contexts[0]!.close).toHaveBeenCalledOnce();
   });
 
   it('starts the vision pipeline only after the camera is ready', async () => {

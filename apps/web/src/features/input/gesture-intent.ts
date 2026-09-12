@@ -1,7 +1,7 @@
 // D-11 / IN-09. 손동작·단축키의 행동 문맥 중재.
 // C가 주입한 sendCommand만 호출하고 반환된 requestId는 식별자로만 보관한다.
 // 반환값을 envelope나 접수/실행 성공으로 해석하지 않는다.
-import { isSampleFresh, type SensorSnapshot } from '../vision/sensor-types';
+import { GESTURE_MAX_AGE_MS, isSampleFresh, type SensorSnapshot } from '../vision/sensor-types';
 import type {
   ContextStore,
   EquipmentKind,
@@ -46,7 +46,9 @@ export interface GestureIntentController {
   observe(snapshot: SensorSnapshot, nowMs: number, runtimeGeneration: number): GestureAction;
   pressKey(key: GameKey): GestureAction;
   setMode(mode: InputMode): void;
-  /** 문맥 변화·장애에서 hold를 비운다. */
+  /** C의 화면 선택을 반영한다. callback echo를 만들지 않는다. */
+  syncEquipment(kind: EquipmentKind): void;
+  /** 문맥 변화·장애에서 보류 시간만 비운다. 발동 잠금은 물리 해제까지 유지한다. */
   reset(): void;
   readonly selectedEquipment: EquipmentKind;
   readonly lastRequestId: string | null;
@@ -59,14 +61,15 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
   let lastRequestId: string | null = null;
   let heldKind: 'palm' | 'victory' | null = null;
   let heldSince: number | null = null;
-  let heldFrameId: number | null = null;
-  let firedFor: number | null = null;
+  let lastFrameId: number | null = null;
+  let lastSampleAt: number | null = null;
+  let lastObservedAt: number | null = null;
+  let observedGeneration: number | null = null;
+  let latchedKind: 'palm' | 'victory' | null = null;
 
   const clearHold = () => {
     heldKind = null;
     heldSince = null;
-    heldFrameId = null;
-    firedFor = null;
   };
 
   const dispatch = (command: CommandInput): string => {
@@ -129,34 +132,57 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
         clearHold();
         return null;
       }
+      if (observedGeneration !== runtimeGeneration) {
+        observedGeneration = runtimeGeneration;
+        lastFrameId = lastSampleAt = lastObservedAt = null;
+        latchedKind = null;
+        clearHold();
+      }
       const sample = snapshot.gesture;
-      const usable =
-        isSampleFresh(sample, 'gesture', nowMs) &&
-        sample!.status === 'valid' &&
-        sample!.data.kind !== 'none';
-      if (!usable) {
-        // 미검출·none·만료·관측 공백은 hold를 초기화한다.
+      if (
+        !sample ||
+        sample.sampledAtMs > nowMs ||
+        nowMs - sample.sampledAtMs > GESTURE_MAX_AGE_MS
+      ) {
+        // 관측 공백은 시간 누적을 끊지만 물리 해제의 증거는 아니다.
         clearHold();
         return null;
       }
-      const valid = sample!;
-      const kind = valid.data.kind as 'palm' | 'victory';
-      // 같은 Sample의 새 frameId만 유지 시간에 반영한다.
-      if (valid.frameId === heldFrameId) return null;
+      if (lastFrameId !== null && sample.frameId <= lastFrameId) return null;
+      if (lastSampleAt !== null && sample.sampledAtMs <= lastSampleAt) return null;
+      if (
+        (lastSampleAt !== null && sample.sampledAtMs - lastSampleAt > GESTURE_MAX_AGE_MS) ||
+        (lastObservedAt !== null && nowMs - lastObservedAt > GESTURE_MAX_AGE_MS)
+      )
+        clearHold();
+      lastFrameId = sample.frameId;
+      lastSampleAt = sample.sampledAtMs;
+      lastObservedAt = nowMs;
+      if (
+        !isSampleFresh(sample, 'gesture', nowMs) ||
+        sample.status !== 'valid' ||
+        sample.data.kind === 'none'
+      ) {
+        // 신선한 미검출/none만 이전 손동작을 해제한다.
+        latchedKind = null;
+        clearHold();
+        return null;
+      }
+      const kind = sample.data.kind;
+      if (latchedKind === kind) return null;
+      latchedKind = null;
+      if (!deps.context.acceptsInput || blockedByChallenge() || mode !== 'motion') {
+        clearHold();
+        return null;
+      }
       if (kind !== heldKind) {
         heldKind = kind;
-        heldSince = nowMs;
-        firedFor = null;
+        heldSince = sample.sampledAtMs;
       }
-      heldFrameId = valid.frameId;
-      heldSince ??= nowMs;
-      if (firedFor !== null) return null;
-      if (nowMs - heldSince < holdMs) return null;
-      firedFor = valid.frameId;
-
-      if (!deps.context.acceptsInput) return null;
-      if (blockedByChallenge()) return null;
-      if (mode !== 'motion') return null;
+      heldSince ??= sample.sampledAtMs;
+      if (sample.sampledAtMs - heldSince < holdMs) return null;
+      // send()가 동기적으로 문맥을 갱신하더라도 잠금은 유지된다.
+      latchedKind = kind;
       // 손바닥은 교환 요청·수락에만 쓴다.
       if (kind === 'palm') return resolveExchangeOrExit(false);
       return resolveInstall();
@@ -194,6 +220,12 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
       mode = next;
       clearHold();
       publishState();
+    },
+
+    syncEquipment(next) {
+      if (next === selectedEquipment) return;
+      selectedEquipment = next;
+      clearHold();
     },
 
     reset() {

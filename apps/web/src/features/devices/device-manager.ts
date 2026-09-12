@@ -25,7 +25,7 @@ export const MICROPHONE_CONSTRAINTS: MediaStreamConstraints = Object.freeze({
   audio: true,
 });
 
-/** 재생 잠금 해제만 확인하는 최소 인터페이스. */
+/** 실제 출력 그래프와 같은 Context의 상태·수명 포트. */
 export interface AudioUnlockPort {
   readonly state: string;
   resume(): Promise<void>;
@@ -79,6 +79,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
   let microphoneRequest: Promise<MediaStream> | null = null;
   let preview: HTMLVideoElement | null = null;
   let audioUnlock: AudioUnlockPort | null = null;
+  let audioRequest: Promise<void> | null = null;
   let unsubscribeDeviceChange: (() => void) | null = null;
 
   const publish = (patch: DeviceStatusPatch) => {
@@ -145,17 +146,26 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
   };
 
   const unlockAudio = () => {
-    if (audioUnlock || !environment.createAudioUnlock) return;
+    if (audioRequest) return audioRequest;
+    if (!environment.createAudioUnlock) return Promise.resolve();
     try {
-      audioUnlock = environment.createAudioUnlock() ?? null;
+      audioUnlock ??= environment.createAudioUnlock() ?? null;
     } catch {
       publish({ audioPlayback: 'failed' });
-      return;
+      return Promise.resolve();
     }
-    if (!audioUnlock) return;
+    if (!audioUnlock) {
+      publish({ audioPlayback: 'failed' });
+      return Promise.resolve();
+    }
     const context = audioUnlock;
-    void context
-      .resume()
+    let resume: Promise<void>;
+    try {
+      resume = context.resume();
+    } catch {
+      resume = Promise.reject(new Error('AUDIO_RESUME_FAILED'));
+    }
+    audioRequest = resume
       .then(() => {
         if (disposed || audioUnlock !== context) return;
         publish({ audioPlayback: context.state === 'running' ? 'ready' : 'locked' });
@@ -163,7 +173,11 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       .catch(() => {
         if (disposed || audioUnlock !== context) return;
         publish({ audioPlayback: 'failed' });
+      })
+      .finally(() => {
+        audioRequest = null;
       });
+    return audioRequest;
   };
 
   const watchDeviceChange = () => {
@@ -255,7 +269,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     async start(input) {
       if (disposed) return status;
       const request = generation;
-      unlockAudio();
+      const audioStep = unlockAudio();
       if (!input.microphone) {
         // 마이크를 끄면 기존 송신 트랙만 닫고 카메라/보정 상태는 유지한다.
         releaseMicrophone();
@@ -264,7 +278,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       }
       const cameraStep = acquireCamera(request);
       const microphoneStep = input.microphone ? acquireMicrophone(request) : Promise.resolve();
-      await Promise.all([cameraStep, microphoneStep]);
+      await Promise.all([cameraStep, microphoneStep, audioStep]);
       return status;
     },
 
