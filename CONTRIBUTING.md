@@ -22,7 +22,7 @@ Node.js `24.19.0`과 pnpm `11.19.0`을 사용하고 루트에서 `pnpm install -
 
 공개 계약은 [공통 원본](docs/execution/common.md)과 [검사 가능한 타입](docs/execution/contracts/types.ts), [fixture](docs/execution/contracts/fixtures.ts), [fixture 검사](docs/execution/contracts/fixtures.test.ts)에 맞춘다. 고정 리뷰 상대 외에 해당 생산자·소비자의 검토를 받으며 한 문서 사본에만 다른 필드를 추가하지 않는다. 문서용 타입을 제품 런타임 의존성으로 import하지 않고 각 소유 모듈에서 구현한다.
 
-기존 `kkakkung` wire 계약과 새 `sandbox` 계약을 섞지 않는다. `server/src/domain`의 규칙 계산 소유권과 스텁 범위, `server/src/rooms`의 Room·Schema·StateView 소유권은 `server/README.md`를 따른다. 공통 검증 진입점은 루트 `pnpm verify`이며 CI 실행 환경의 준비 절차는 [테스트 가이드](docs/testing.md)를 따른다. 검토 중인 Jenkins 운영 방식과 현재 미구축 상태는 [팀 협업 컨벤션](docs/collaboration-conventions.md#연동과-병합-운영)에서 구분한다.
+제품 `kkakkung` 0.2와 진단용 기존 0.1·`sandbox` 계약을 섞지 않는다. `server/src/domain`의 규칙 계산과 `server/src/rooms`의 Room·Schema·StateView 소유권은 `server/README.md`를 따른다. 공통 검증 진입점은 루트 `pnpm verify`이며 CI 환경 준비는 [테스트 가이드](docs/testing.md)를 따른다. Jenkinsfile·배포 러너는 구현되어 있으며 실제 원격 검사·병합·배포 상태는 각각 확인한다.
 
 ## 완료 전 검사
 

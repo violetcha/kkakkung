@@ -289,7 +289,7 @@ export class OperationsBindings {
 
   private observe(): Omit<OperationsStatus, 'admission'> {
     const readiness = this.safeReadiness();
-    const budget = this.options.usageBudget.snapshot();
+    const budget = this.options.usageBudget.readSnapshot();
     let official: OfficialBudgetCheckpoint | null = null;
     try {
       if (budget.integrity === 'ok' && budget.writable && budget.official)
@@ -308,7 +308,7 @@ export class OperationsBindings {
         0,
       ),
       this.options.journal
-        .snapshot()
+        .readSnapshot()
         .records.filter(
           ({ record }) =>
             record.state === 'UNRESOLVED' ||

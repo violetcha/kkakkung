@@ -4,7 +4,7 @@
 
 `tests/cloud/deployment-smoke.cloud.test.ts`는 실제 초대/세션 HTTP, Colyseus 6클라이언트, C 제품 런타임과 Playwright의 합성 영상·음성 6개를 사용한다. 연습의 실제 E 바인딩/가청 정책에 허용된 수신, 연습 세대 종료, 경기 발급/게시, 실제 3,600틱 경기와 입력 결과, RESULT 이후 클라이언트 정리 및 운영 drain 성공을 확인한다. drain 완료는 실제 E의 참가자·저널·예약 정리 장벽이며 `unresolvedCount=0`도 재확인한다. 성공한 경우에만 resume 후 READY/OPEN으로 복구한다. 실패하면 임의 재개하지 않는다. 카메라·제스처·공간 음향 재생·대표 장치 및 G5/G6 인수는 별도다.
 
-F가 실제로 확인한 DP-06 preflight, SSO cookie와 운영 자격이 없으면 실행할 수 없다. 이번 사용자 응답은 `아직 없음 — 로컬 검증 계속`이므로 실제 Cloud·배포 검사는 BLOCKED다. 로컬 fixture의 예산·증거 파일을 운영 승인으로 복사하면 안 된다. 비밀은 기존 환경으로만 제공하고 토큰·cookie·grant 원문을 로그/trace/스크린샷에 저장하지 않는다.
+F가 실제로 확인한 DP-06 preflight와 운영·시험 자격이 필요하다. 자동 배포는 [loopback 전용 인증](../infra/README.md#자동-배포-시험-인증)의 `SMOKE_INTERNAL_TOKEN`을 사용하며 공개 서비스 SSO는 유지한다. 자격·예산·증거가 없으면 BLOCKED다. 로컬 fixture의 예산·증거를 운영 승인으로 복사하지 않으며 토큰·cookie·grant 원문을 로그/trace/스크린샷에 저장하지 않는다.
 
 사전 승인은 게임 방 1개·참가자 6명으로 고정한다. 여기서 `maxRooms=1`은 기존 F 계약의 6좌석 게임 방 수이며, 실제 LiveKit 위상은 팀 연습 2룸을 정리한 뒤 경기 1룸이다. 하네스는 실제 발급 응답의 룸 수를 검증하고 결과에 개수만 기록한다. 실행 시간은 브라우저 준비부터 최소 300초(준비 여유 120초와 실제 경기 180초), 별도 정리 최소 30초를 예약한다. 영상 150kbps·음성 32kbps, 최대 30방향 수신과 25% 여유를 적용한 최소 330초 예약은 참가자 33분 및 281,531,250바이트다. 승인 만료가 전체 실행/정리 시각보다 빠르거나 예약/잔량이 부족하면 첫 요청 전에 거절한다. `tests/cloud/devices.deployment-synthetic.json`은 합성 소스 설명이며 사용 승인이 아니다.
 
@@ -14,7 +14,7 @@ F가 실제로 확인한 DP-06 preflight, SSO cookie와 운영 자격이 없으�
 
 기본 `pnpm verify`의 `tests/contracts/deployment-*.test.ts`는 로컬 계약 검증이다. 로컬 DP-06 통합은 실제 A/B/C/E/F 코드와 별도 서버 프로세스를 쓰되 Cloud transport·수신 카운터를 fixture로 대신하고 3,600틱을 가속한다. 보고서의 `LOCAL_CONTRACT_ONLY`를 실제 Cloud 성공으로 바꾸지 않는다. 실제 Cloud 파일은 기본 검사에서 계속 제외한다. QA strict 타입검사는 웹 소비 모듈을 포함하기 위해 QA 설정에서만 Bundler 해석을 사용하며 제품 서버 NodeNext 설정은 유지한다.
 
-기본 검증은 Node.js `24.19.0`, pnpm `11.19.0`에서 Cloud Secret 없이 수행한다. 설치는 루트 lockfile을 사용하며 로컬과 향후 Jenkins 모두 같은 `pnpm verify`를 실행한다. 현재 원격 파이프라인은 미구축이다.
+기본 검증은 Node.js `24.19.0`, pnpm `11.19.0`에서 Cloud Secret 없이 수행한다. 루트 lockfile을 사용하며 로컬과 Jenkins의 CI 진입점은 같은 `pnpm verify`를 실행한다. 해당 SHA의 원격 검사 결과와 실제 배포 결과는 각각 확인한다.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -38,11 +38,11 @@ pnpm verify
 
 단위 시험은 protocol 계약과 game-core의 결정성·입력 경계를, Room 통합 시험은 토큰·입장·이동·퇴장을, E2E는 실제 웹과 서버의 개발 흐름을 확인한다. `test:maps`는 `packages/game-core/test/match/certified-maps.test.ts`에서 실제 맵 변형·연결성·fallback·온라인 선발을 검사한다. 웹 typecheck에는 D의 Worker 전용 타입 검사도 포함한다. `verify`는 포맷, 실행계획 정합성, lint, 타입, 테스트, 빌드와 E2E를 실제로 실행해야 한다.
 
-`check:execution`은 [실행계획](execution/README.md)의 122개 ID·116개 실행/6개 결정 대기·명시적 선행 관계·파일 소유권·링크·Markdown 표·여섯 공통 블록과 공개 타입·fixture를 검사한다. 정상 fixture와 의도적으로 타입 오류가 나야 하는 입력도 확인한다. 이는 문서 자료 검사이며, 실제 제품 모듈 연결 시험은 QA-07에서 별도로 구현한다. 공통 계약을 수정했다면 `node scripts/check-execution-plan.mjs --sync`로 담당 문서의 사본을 갱신한 뒤 `pnpm check:execution`을 실행한다. 원본 기획서보다 [최신 결정 정정표](spec/decisions.md)를 우선하고 미정 아이템을 통과 처리하지 않는다.
+`check:execution`은 [실행계획](execution/README.md)의 122개 ID·116개 실행/6개 결정 대기·선행 관계·소유권·링크·표·여섯 공통 블록과 타입·fixture를 검사한다. 의도적으로 타입 오류가 나야 하는 입력도 확인한다. 실제 제품 연결 시험은 `tests/contracts`와 `server/test/media/product-integration.test.ts` 등에서 별도로 실행한다. 공통 계약 변경은 `node scripts/check-execution-plan.mjs --sync` 후 `pnpm check:execution`으로 검사한다. [최신 결정 정정표](spec/decisions.md)를 우선하고 미정 아이템을 통과 처리하지 않는다.
 
 G1~G6는 별도 제품 검증 관문이다. 특히 가짜 Gateway는 실제 Cloud의 불허 구독 차단이나 토큰 회수를 증명하지 않는다. 로컬 G1/G3/G4 회귀는 `tests/contracts`, 게임 전용 부하 도구는 `scripts/run-game-load.mjs`, Cloud 시험은 승인된 preflight를 요구하는 `scripts/run-cloud-check.mjs`를 사용한다. 시험 증거에는 소스 버전, lockfile, protocolVersion, 설정 버전, 장치·네트워크 조건을 기록하고 원본 토큰·얼굴·음성을 저장하지 않는다.
 
-`EXEC-CONTRACT-3`의 fixture는 맵 영역·변형 출처와 fallback, 논리 게임 scope 전환과 늦은 개인 데이터, 초기화/READY/입장 재개, 격리 배포 순서의 정상·거절·경계 자료를 추가로 검사한다. 합성 맵으로 실제 플레이 맵을 인증하거나 배포 순서 자료로 Jenkins를 실행한 것은 아니다. Origin 차단은 B가 실제 SDK HTTP/OPTIONS/WS 진입 경로에 구현한 뒤, 허용되지 않은 요청에서 방 생성·좌석 예약·세션 소비가 모두 0인지와 매칭 본문 2,048/2,049바이트 경계를 회귀 시험해야 완료다. 이번 문서 보완 자체는 현재 서버의 Origin 우회를 해소하지 않는다.
+`EXEC-CONTRACT-3` fixture는 맵 출처·fallback, 논리 scope 전환·늦은 개인 데이터, 초기화/READY/입장 재개, 격리 배포 순서를 검사한다. 합성 자료는 실제 맵·Jenkins 실행 증거가 아니다. Origin 차단과 HTTP/OPTIONS/WS 진입 경계는 실제 B 서버의 회귀 시험으로 확인하며 거절된 요청이 방·좌석·세션을 소비하지 않아야 한다.
 
 합성 미디어·공개 projection 시험 자료는 `tests/fixtures`에 있다. `tests/load`의 게임 진단은 실제 A 엔진·맵과 B Room을 loopback에서 실행하며 미디어를 연결하지 않는다. 기본 개발 프로필은 1방·6슬롯이며 Cloud 부하 시험은 사용량·관리 API 예산과 G1을 먼저 확인한다.
 

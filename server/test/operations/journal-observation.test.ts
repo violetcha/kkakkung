@@ -89,6 +89,7 @@ describe('current durable journal observation', () => {
   it('omits a pending append from observation and waits for its fsync before flush succeeds', async () => {
     const journal = await create();
     await journal.restore();
+    const before = journal.readSnapshot();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -103,16 +104,23 @@ describe('current durable journal observation', () => {
     });
     await Promise.resolve();
     expect(journal.snapshot()).toMatchObject({ lastSeq: 0, records: [] });
+    expect(journal.readSnapshot().records).toBe(before.records);
     expect(flushed).toBe(false);
     release();
     await Promise.all([append, flush]);
     expect(journal.snapshot()).toMatchObject({ lastSeq: 1, records: [{ seq: 1 }] });
+    expect(journal.readSnapshot().records).not.toBe(before.records);
+    expect(journal.readSnapshot()).toMatchObject({
+      lastSeq: 1,
+      records: [{ seq: 1, record: { state: 'PREPARED' } }],
+    });
   });
 
   it('rejects flush after a failed accepted append and preserves only previously durable evidence', async () => {
     const journal = await create();
     await journal.restore();
     await journal.append(record);
+    const before = journal.readSnapshot();
     vi.spyOn(await handlePrototype(journal), 'sync').mockRejectedValue(new Error('fixture fsync'));
     const append = journal.append({ ...record, state: 'REVOKED' });
     const flush = journal.flush();
@@ -123,6 +131,8 @@ describe('current durable journal observation', () => {
       writable: false,
       records: [{ record: { state: 'PREPARED' } }],
     });
+    expect(journal.readSnapshot().records).toBe(before.records);
+    expect(journal.readSnapshot().writable).toBe(false);
   });
 
   it('rejects confirmation once shutdown starts while keeping evidence observable', async () => {
@@ -141,10 +151,16 @@ describe('current durable journal observation', () => {
     await journal.restore();
     await journal.append({ ...record, state: 'REVOKED' });
     await journal.append({ ...record, generation: 2, identity: 'second-identity' });
+    const before = journal.readSnapshot();
     await journal.compact(() => true);
     await journal.flush();
     expect(journal.snapshot()).toMatchObject({
       lastSeq: 2,
+      records: [{ seq: 2, record: { state: 'PREPARED' } }],
+    });
+    expect(journal.readSnapshot().records).not.toBe(before.records);
+    expect(journal.readSnapshot()).toMatchObject({
+      lastSeq: before.lastSeq,
       records: [{ seq: 2, record: { state: 'PREPARED' } }],
     });
   });

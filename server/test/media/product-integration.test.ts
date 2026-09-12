@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 describe('local product integration with synthetic device/Cloud boundaries', () => {
-  it('connects six runtimes through practice, generation retirement, loading, result and rematch', async () => {
+  it('completes swap and same rematches, replaces a player, and recovers from host loss', async () => {
     const opsToken = randomUUID();
     const server = await startProductServerProcess(opsToken, {
       cpuProfile: process.env.KKAKKUNG_TEST_CPU_PROFILE === '1',
@@ -71,7 +71,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
       headers: operator,
       body: JSON.stringify({
         scope: { allowCreate: true, roomCodes: [] },
-        expiresAt: Date.now() + 120000,
+        expiresAt: Date.now() + 240000,
       }),
     });
     expect(inviteResponse.status).toBe(201);
@@ -90,12 +90,13 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
     const grantResults: { status: number; code: string | null }[] = [];
     let roomCode: string | undefined;
     const identityHash = (identity: string) => createHash('sha256').update(identity).digest('hex');
-    for (let i = 0; i < 6; i++) {
+    let joinedCount = 0;
+    const joinPlayer = async () => {
       const response = await fetch(`${endpoint}/api/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
         body: JSON.stringify({
-          nickname: `통합${i + 1}`,
+          nickname: `통합${++joinedCount}`,
           inviteToken,
           createRoom: !roomCode,
           ...(roomCode ? { roomCode } : {}),
@@ -162,7 +163,8 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
       room.onMessage('*', () => {});
       players.push({ session, room, runtime, grants, phases, bindingStats, mediaControl });
       closers.push(() => runtime.leave());
-    }
+    };
+    for (let i = 0; i < 6; i++) await joinPlayer();
     const timer = setInterval(() => players.forEach((player) => player.runtime.poll()), 20);
     closers.push(async () => clearInterval(timer));
     const snapshots = () => players.map((player) => player.runtime.getSnapshot());
@@ -264,6 +266,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
     expect(reports.filter((report) => report.status === 'closed').length).toBeGreaterThanOrEqual(6);
     expect(reports.every((report) => report.code === 204)).toBe(true);
     const playing = snapshots()[0]!.round!;
+    const previousRoles = snapshots().map((snapshot) => snapshot.view!.self!.role);
     expect(playing.deadlineTick! - playing.startTick!).toBe(3600);
     const recovering = players[1]!;
     const logicalScope = structuredClone(recovering.runtime.getSnapshot().view!.gameScope);
@@ -306,6 +309,95 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
     expect(snapshots().every((snapshot) => !snapshot.lost && snapshot.round?.result === null)).toBe(
       true,
     );
+    const playNextRound = async () => {
+      for (const player of players) {
+        await player.runtime.startDevices(false);
+        player.runtime.ready(true);
+      }
+      await waitPhase('TEAM_PRACTICE');
+      await expect
+        .poll(async () => (await server.inspect()).participantCount, { timeout: 8000 })
+        .toBe(6)
+        .catch(async (cause: unknown) => {
+          const inspection = await server.inspect(roomCode);
+          throw new Error(
+            JSON.stringify({
+              phase: snapshots().map((s) => s.round?.phase),
+              error: snapshots().map((s) => s.error),
+              media: snapshots().map((s) => ({ state: s.media?.state, code: s.media?.code })),
+              recentGrantResults: grantResults.slice(-6),
+              participants: inspection.participantCount,
+              readiness: inspection.readiness,
+              blockedReason: inspection.blockedReason,
+            }),
+            { cause },
+          );
+        });
+      for (const player of players)
+        player.runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } });
+      await waitPhase('PLAYING');
+    };
+    const finishRound = async () => {
+      await server.advanceTicks(roomCode!, 3650);
+      await waitPhase('RESULT');
+      expect(snapshots().every((s) => s.round?.result?.reason === 'timeout')).toBe(true);
+      await expect
+        .poll(async () => (await server.inspect()).participantCount, { timeout: 8000 })
+        .toBe(0);
+    };
+    const rematch = async (mode: 'same' | 'swap' | 'lobby') => {
+      const oldMatchId = snapshots()[0]!.round!.matchId;
+      const currentHost = snapshots()[0]!.roster!.hostId;
+      players
+        .find((player) => player.session.playerId === currentHost)!
+        .runtime.send({ type: 'REMATCH', payload: { mode } });
+      await waitPhase('DEVICE_CHECK');
+      expect(snapshots().every((s) => s.round!.matchId !== oldMatchId)).toBe(true);
+    };
+    await playNextRound();
+    expect(snapshots().map((s) => s.view!.self!.role)).toEqual(
+      previousRoles.map((role) => (role === 'runner' ? 'tagger' : 'runner')),
+    );
+    const swappedRoles = snapshots().map((s) => s.view!.self!.role);
+    await finishRound();
+    await rematch('same');
+    await playNextRound();
+    expect(snapshots().map((s) => s.view!.self!.role)).toEqual(swappedRoles);
+    await finishRound();
+
+    // A confirmed old generation must not pin the next round when a seat is replaced.
+    await rematch('lobby');
+    const replaced = players.pop()!;
+    await replaced.runtime.leave();
+    await waitPhase('LOBBY');
+    await joinPlayer();
+    await waitPhase('DEVICE_CHECK');
+    await playNextRound();
+    await finishRound();
+
+    // ACTIVE game-socket loss aborts this round; it is not media-only recovery.
+    await rematch('same');
+    await playNextRound();
+    const departedHostId = snapshots()[0]!.roster!.hostId;
+    const hostIndex = players.findIndex((player) => player.session.playerId === departedHostId);
+    const departedHost = players.splice(hostIndex, 1)[0]!;
+    await departedHost.room.leave();
+    await waitPhase('ABORTED');
+    await expect(departedHost.runtime.leave()).resolves.toBeUndefined();
+    expect(snapshots().every((s) => s.round?.abortReason === 'GAME_CONNECTION_LOST')).toBe(true);
+    await expect
+      .poll(async () => (await server.inspect()).participantCount, { timeout: 8000 })
+      .toBe(0);
+    expect(snapshots().every((s) => s.roster!.hostId !== departedHostId)).toBe(true);
+    const replacementHost = snapshots()[0]!.roster!.hostId;
+    players
+      .find((player) => player.session.playerId === replacementHost)!
+      .runtime.send({ type: 'REMATCH', payload: { mode: 'lobby' } });
+    await waitPhase('LOBBY');
+    await joinPlayer();
+    await waitPhase('DEVICE_CHECK');
+    await playNextRound();
+    await finishRound();
     expect(reports.every((report) => report.code === 204)).toBe(true);
     const finalInspection = await server.inspect(roomCode);
     expect(finalInspection.readiness).toMatchObject({ state: 'READY', reasonCodes: [] });
@@ -322,5 +414,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
         },
       }),
     );
-  }, 120000);
+    // Five complete rounds plus one aborted round run sequentially, including real countdowns.
+    // This is the aggregate test budget; phase deadlines and the 250ms server overload gate stay live.
+  }, 180_000);
 });

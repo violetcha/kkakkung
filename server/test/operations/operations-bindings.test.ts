@@ -28,7 +28,10 @@ const EPOCH = 1_800_000_000_000;
 const cleanup: (() => Promise<void>)[] = [];
 const releases: (() => void)[] = [];
 
-async function setup(overrides: Partial<MediaConfiguration> = {}) {
+async function setup(
+  overrides: Partial<MediaConfiguration> = {},
+  monotonicNow: () => number = () => performance.now(),
+) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e14-bindings-'));
   const clock = { now: EPOCH };
   const state = {
@@ -85,7 +88,7 @@ async function setup(overrides: Partial<MediaConfiguration> = {}) {
   });
   const operations = new OperationsController({
     nowEpochMs: () => clock.now,
-    monotonicNow: () => performance.now(),
+    monotonicNow,
     timeoutMs: config.operationTimeoutMs,
     setAdmission: (value) => bindings!.setAdmission(value),
     getStatus: () => bindings!.getStatus(),
@@ -257,10 +260,13 @@ describe('E-14 real local operations bindings (no Cloud calls)', () => {
   );
 
   it('times out on unknown activity and never changes the running match', async () => {
-    const f = await setup({ operationTimeoutMs: 60 });
+    let elapsed = 0;
+    const f = await setup({}, () => elapsed);
     await resume(f);
     f.state.activity.activeMatches = Number.NaN;
     f.operations.submit({ requestId: 'drain', action: 'drain' });
+    // Expire the operation clock, independently of audit fsync and host scheduling.
+    elapsed += f.config.operationTimeoutMs;
     expect(await terminal(f, 'drain')).toMatchObject({
       status: 'failed',
       code: 'OPERATION_TIMEOUT',

@@ -9,7 +9,7 @@
 
 개발 세션 토큰은 짧게 유효한 일회성 토큰이다. 로컬 sandbox 편의를 위한 장치이며 운영 인증이 아니다. 브라우저 저장소나 URL에 넣지 않는다.
 
-새 React 웹의 기본 선택인 **기존 룸 연동**은 `kkakkung`을 사용한다. 준비 버튼과 phase·role·남은 시간을 확인하고, `W/S`로 셀 전진/후진, `A/D` 키 눌림으로 한 번씩 좌/우 회전한다. 선택기의 **이동 샘플**은 `sandbox`의 연속 20Hz WASD 이동이다.
+개발 빌드의 `/`에서 초대 fragment가 없으면 **기존 룸 연동**과 **이동 샘플**을 선택할 수 있다. 기존 kkakkung 진단은 W/S 셀 전진·후진과 A/D 단발 회전, sandbox는 연속 WASD 이동이다. 개발의 `/play`·초대 링크와 배포 빌드는 제품 화면이다. 실제 6인 게임은 product 프로필과 유효한 미디어·입장 설정이 필요하며 [6인 시험 안내](six-player-test.md)를 따른다.
 
 기존 `kkakkung`은 서버의 `/playground`에서도 `move {"seq":1,"dir":"forward"}`, `turn`, `ready` 계약을 확인할 수 있다. Playground의 빈 `{}` 입장은 기존 로컬 호환을 위해 개발 모드에서만 허용하고, React 웹은 두 모드 모두 일회성 토큰을 사용한다. 서버의 현재 총 Room 용량은 하나이므로 웹 Room을 종료한 뒤 playground 시험을 실행한다. 개발 profile에서 `/health`, `/monitor`, `/playground`를 제공하며 Docker Nginx도 이 경로들을 proxy한다.
 

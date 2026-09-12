@@ -221,7 +221,7 @@ class Coordinator implements MediaCoordinatorRuntime {
             (other) =>
               other.reservationId === g.reservationId && !this.registry.wasNeverIssued(other),
           );
-        const durable = this.journal.snapshot().records.map((entry) => entry.record);
+        const durable = this.journal.readSnapshot().records.map((entry) => entry.record);
         if (
           group.length &&
           group.every(
@@ -628,10 +628,12 @@ class Coordinator implements MediaCoordinatorRuntime {
       );
   }
   private durablyRevoked(g: Generation): boolean {
+    // Issuance checks every older generation. Reuse immutable durable records instead of
+    // cloning the complete journal for each one; append/compaction invalidate this view.
     return (
       g.state === 'REVOKED' &&
       this.journal
-        .snapshot()
+        .readSnapshot()
         .records.some(
           ({ record }) =>
             record.state === 'REVOKED' &&

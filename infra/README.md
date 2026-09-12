@@ -14,21 +14,21 @@
 
 파이프라인은 각 패키지 내부를 모릅니다. 아래 항목에만 의존하니 **바꿀 땐 인프라에 미리 알려주세요.**
 
-| 항목                | 현재 값                                                                                                 | 어디서 쓰나                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                                      | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile                            |
-| 검증                | `node scripts/ci-verify.mjs` → `pnpm verify` 1회 (format·check:execution·lint·typecheck·test·build·e2e) | Jenkins Verify                                                              |
-| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                                | Jenkins Build                                                               |
-| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                            | Dockerfile                                                                  |
-| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                                     | compose healthcheck, Jenkins 배포 확인                                      |
-| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                                | `compose.production.yaml` environment                                       |
-| **NODE_ENV**        | `development` \| `test` 만 허용. **production 은 부팅 거절** (NFR-05)                                   | 배포도 `development` 로 띄움. production 프로파일 생기면 compose 한 줄 변경 |
-| **ALLOWED_ORIGINS** | 정확한 origin 목록. 없는 origin 은 **HTTP 403 / WS 거절**                                               | `https://j15c204.p.ssafy.io` 를 넣어둠. 도메인 바뀌면 여기                  |
-| 웹 빌드             | `apps/web/dist` (Vite)                                                                                  | Dockerfile.web → nginx 컨테이너                                             |
-| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                                         | 배포 빌드에 .env 를 넣지 않음                                               |
-| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                                     | `nginx/default.conf` 가 처리. 프리픽스 없음                                 |
+| 항목                | 현재 값                                                                                                 | 어디서 쓰나                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                                      | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile |
+| 검증                | `node scripts/ci-verify.mjs` → `pnpm verify` 1회 (format·check:execution·lint·typecheck·test·build·e2e) | Jenkins Verify                                   |
+| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                                | Jenkins Build                                    |
+| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                            | Dockerfile                                       |
+| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                                     | compose healthcheck, Jenkins 배포 확인           |
+| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                                | `compose.production.yaml` environment            |
+| **NODE_ENV**        | `development` \| `test`만 허용. production은 부팅 거절                                                  | 제품 선택은 별도 `SERVER_PROFILE=product`        |
+| **ALLOWED_ORIGINS** | 허용 목록 밖 Origin은 HTTP 403 / WS 거절. Origin 없는 운영·CLI 요청은 별도 인증 유지                    | 정확한 배포 출처와 HTTP/WS 경계 검사             |
+| 웹 빌드             | `apps/web/dist` (Vite)                                                                                  | Dockerfile.web → nginx 컨테이너                  |
+| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                                         | 배포 빌드에 .env 를 넣지 않음                    |
+| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                                     | `nginx/default.conf` 가 처리. 프리픽스 없음      |
 
-LiveKit 키(`LIVEKIT_*`)는 서버 스키마가 아직 읽지 않아 compose 에 넣지 않았습니다. 서버가 읽기 시작하면 Jenkins 크리덴셜에서 주입합니다.
+제품 프로필은 `LIVEKIT_*` 설정과 운영 증거를 읽는다. 실제 값은 Jenkins Secret file과 제품 Compose overlay로 주입하며 예시·이미지·소스에는 넣지 않는다. `NODE_ENV`와 `SERVER_PROFILE`은 별개다. 현재 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`를 사용한다.
 
 ## 토폴로지 (EC2 한 대)
 
@@ -47,7 +47,7 @@ LiveKit 키(`LIVEKIT_*`)는 서버 스키마가 아직 읽지 않아 compose 에
 
 ## 접근 제어 (GitLab SSO)
 
-서비스 주소는 인터넷에 열려 있지만 `/`·`/api`·WebSocket 은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 만 통과한다. 로그인 안 된 요청은 `/oauth2/start` → GitLab 인가 → 돌아와 쿠키(`_oauth2_proxy`, 7일) 를 받는다. `/health/*` 와 `/jenkins` 는 SSO 밖이다. 심사·시연 때 외부인이 접속해야 하면 그 사람을 프로젝트에 Reporter 로 초대하거나, `host.conf` 의 `auth_request` 두 줄을 주석 처리하고 reload 한다. GitLab OAuth 앱은 정호성 계정의 `kkakkung-sso`(redirect `/oauth2/callback`, scopes openid profile email read_api).
+서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 게이트를 유지한다. 로그인하지 않은 요청은 `/oauth2/start`와 GitLab 인가를 거친다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 심사·시연 참가자는 승인된 프로젝트 접근 권한으로 입장한다. 내부 6인 시험 예외는 SSO 해제를 허용하지 않는다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
 
 ## 파이프라인
 
@@ -77,11 +77,11 @@ Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 
 
 실패(교체 이후): 운영 API 가 있으면 **새 requestId 로 다시 drain** 을 완료한 뒤에만, 이전 태그의 이미지 id 가 last-good-digest 와 같을 때만 복귀하고, 복귀 이미지도 4~8 을 다시 통과해야 한다. 이전 기록 없음·digest 불일치·drain 실패·복귀 이미지 ready 실패는 **ROLLBACK_BLOCKED** 로 남기고 강제 교체하지 않는다.
 
-프로파일: `DEPLOY_PROFILE=skeleton`(현재. E 운영 API 미통합 → drain/resume 은 NOT_RUN 으로 기록, 결과 `DEPLOYED_WITHOUT_OPERATIONS`, DP-06 완료 증거가 아님) · `product`(Jenkins Secret text `kkakkung-ops-token` 과 `/opt/kkakkung/cloud-preflight.json` 필요, 결과 `READY`). 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`.
+프로필은 명시적으로 선택한다. `skeleton`은 운영·미디어 없는 진단 배포이며 drain/resume은 NOT_RUN, 결과는 `DEPLOYED_WITHOUT_OPERATIONS`로 제품 시험 완료가 아니다. `product`는 Secret file의 `OPS_TOKEN`, 실제 runtime evidence, `/opt/kkakkung/cloud-preflight.json`과 시험 인증을 사용한다. 성공 결과는 `READY`다. 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`를 따른다.
 
 ## 브랜치와 배포
 
-`develop` 에 머지 = 실서버 배포. `master` 는 발표 스냅샷(Protected). 서버가 한 대라 dev/prod 가 아직 안 나뉘어 있어요.
+`develop` 병합은 배포 파이프라인의 입력이다. 검사·이미지 생성·제품 배포 및 smoke가 성공했는지 해당 SHA의 실행 결과로 확인한다. 병합만으로 실서버 반영을 보고하지 않는다. 서버는 한 대이므로 진단/제품 배포 프로필과 last-good 기록을 확인한다.
 
 ## 롤백
 
