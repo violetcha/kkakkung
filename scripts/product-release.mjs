@@ -18,6 +18,7 @@ const keys = {
   '--base-url': 'baseUrl',
   '--state-dir': 'stateDir',
   '--operating-mode': 'operatingMode',
+  '--recover-failed-startup': 'recoverFailedStartup',
 };
 let stage = 'ARGUMENTS_OR_ENV';
 try {
@@ -31,6 +32,12 @@ try {
   }
   if (!opt.envFile || !opt.evidenceDir || !/^[a-f0-9]{40}$/.test(opt.sha ?? ''))
     throw new Error('ARGUMENTS_MISSING');
+  if (
+    opt.recoverFailedStartup &&
+    (!/^[a-f0-9]{8}$/.test(opt.recoverFailedStartup) ||
+      opt.sha.startsWith(opt.recoverFailedStartup))
+  )
+    throw new Error('FAILED_STARTUP_TAG_INVALID');
   // Parse data, never source shell code; do not print the private environment or child errors.
   if (statSync(opt.envFile).size > 64 * 1024) throw new Error('ENV_FILE_TOO_LARGE');
   const privateEnv = parseEnv(readFileSync(opt.envFile, 'utf8'));
@@ -119,6 +126,7 @@ try {
       state,
       '--preflight',
       runPreflightPath,
+      ...(opt.recoverFailedStartup ? ['--recover-failed-startup', opt.recoverFailedStartup] : []),
     ]);
   }
 } catch {
