@@ -55,7 +55,7 @@
 
 ## 연동과 실행 범위
 
-이전 프로젝트는 GitLab for Jira Cloud app으로 개발 정보를 연결하고 Jenkins로 배포·AI 리뷰를 수행했다. 이번 프로젝트도 Jenkins 사용을 검토 중이며, GitLab CI 전용 설정은 제거했다. 공통 검증 진입점은 `pnpm verify`이고 Jenkinsfile과 원격 연동은 아직 없다. [현재 상태와 기존 운영 설정](docs/collaboration-conventions.md#연동과-병합-운영)을 혼동하지 않는다.
+이전 프로젝트는 GitLab for Jira Cloud app과 Jenkins를 사용했다. 현재 저장소에는 Jenkinsfile, CI 검증 진입점과 제품 배포 러너가 구현되어 있다. 공통 검증은 `pnpm verify`다. 파일의 존재, 해당 커밋의 원격 검사 성공, MR 병합, 실제 배포 성공을 각각 확인하며 [현재 상태와 기존 운영 설정](docs/collaboration-conventions.md#연동과-병합-운영)을 혼동하지 않는다.
 
 사용자에게 승인받은 작업은 계속 진행하되, 이 문서만 근거로 요청에 없는 Jira 생성·상태 변경, 커밋·푸시·MR 생성·병합, 배포, 연동·권한 설정 변경을 실행하지 않는다. 비밀 `.env`와 토큰 원문을 커밋하거나 보고서에 기록하지 않는다.
 

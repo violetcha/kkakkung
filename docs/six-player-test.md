@@ -6,7 +6,7 @@
 
 1. Jenkins에서 검증·빌드할 최종 SHA와 `pnpm-lock.yaml`을 기준으로 F가 실제 시험 preflight를 승인한다. 실제 프로젝트 별칭, 격리 namespace, 공식 잔여 예산, 시험 시간, 기기 계획을 포함해야 한다. 기존 합성 fixture를 복사해 승인 증거로 사용하지 않는다.
 2. [E 인계의 MC-01 절차](execution/handoffs/E.md)를 실행해 권한·수신 차단·토큰 회수·정리 결과를 확인한다. 해당 preflight의 case/evidenceDir을 명령과 일치시킨다. 실패하거나 미확인인 결과를 SUPPORTED로 변경하지 않는다.
-3. Jenkins의 Secret file `kkakkung-production-env`에 [운영 환경 예시](../infra/production.env.example)의 실제 값과 정책을 설정한다. `SERVICE_NAMESPACE`는 모든 증거와 같아야 한다. 배포용 SSO 쿠키는 별도 Secret text `kkakkung-smoke-cookie`에 둔다. 운영 토큰은 private env의 `OPS_TOKEN` 하나를 서버와 배포 러너가 함께 사용한다.
+3. Jenkins의 Secret file `kkakkung-production-env`에 [운영 환경 예시](../infra/production.env.example)의 실제 값과 정책을 설정한다. `SERVICE_NAMESPACE`는 모든 증거와 같아야 한다. 자동 배포 시험은 [loopback 전용 인증](../infra/README.md#자동-배포-시험-인증)의 `SMOKE_INTERNAL_TOKEN`을 사용한다. 운영 토큰은 private env의 `OPS_TOKEN` 하나를 서버와 배포 러너가 함께 사용한다. 실제 참가자 접속의 SSO는 유지한다.
 4. 서버 `/opt/kkakkung/runtime-evidence/`에 검토한 `capability-report.json`, `official-usage-input.json`, `runtime-evidence.json`을 배치한다. 마지막 파일은 namespace 소유·초기 설치/감사 근거와 공식 checkpoint 해시를 연결한다. [증거 형식](../server/src/config/RuntimeEvidence.ts)을 따른다. 호스트 Jenkins와 컨테이너 node UID 1000이 읽을 수 있게 접근 권한을 부여한다. 세 파일은 제품 overlay가 읽기 전용으로 마운트하며 저널·회수 기록은 기존 operations 볼륨에 유지한다.
 5. `/opt/kkakkung/cloud-preflight.json`은 DP-06 승인 파일이다. 연결된 device manifest와 증거 디렉터리도 실제 실행 경로에서 접근 가능해야 한다. 1방 6명, 300초 시험과 30초 정리 예약 및 공개 시간이 필요하다. 배포·복구 시간도 고려해 승인자가 시간을 정한다. 공개 시간이 남지 않으면 사전 검사가 차단한다.
 6. 호스트 [nginx 설정](../infra/nginx/host.conf)을 검토·적용하고 LiveKit의 webhook 목적지를 `https://j15c204.p.ssafy.io/api/livekit/webhook`으로 설정한다. 이 정확한 POST 경로만 SSO를 우회하며 서버의 서명·본문 검증은 유지한다. 나머지 앱·운영 API는 SSO를 유지한다. `/api/dev-sessions`는 외부에서 차단한다.
@@ -15,7 +15,7 @@
 
 ## 읽기 전용 사전 검사와 배포
 
-배포 러너의 저장소 루트에서 Node 24.19.0, pnpm 11.19.0 및 의존성을 준비한다. `SMOKE_COOKIE`는 승인된 비밀 환경에서 주입하고 출력하지 않는다. `RELEASE_SHA`는 검증·이미지 빌드한 실제 전체 SHA다.
+배포 러너의 저장소 루트에서 Node 24.19.0, pnpm 11.19.0 및 의존성을 준비한다. 시험 자격은 승인된 비밀 환경에서 주입하고 출력하지 않는다. preflight의 자격 이름은 실제 내부 인증 방식과 일치시킨다. `RELEASE_SHA`는 검증·이미지 빌드한 실제 전체 SHA다.
 
 ```bash
 node --import tsx scripts/product-release.mjs \
@@ -28,7 +28,7 @@ node --import tsx scripts/product-release.mjs \
 
 `PREPARED`는 입력 검사 통과이며 실제 Cloud나 배포 성공이 아니다. 누락·만료·프로젝트/namespace 불일치·공식 예산 불일치는 BLOCKED다. 사전 검사는 최초 설치/감사 marker를 소비하지 않는다.
 
-Jenkins **Build with Parameters → RELEASE_PROFILE=product**로 해당 develop SHA를 실행한다. 기본값 skeleton은 계속 미디어 비활성화다. 제품 배포는 사전 검사 후 private env를 설치하고 제품 Compose overlay, 복구, resume, DP-06 Cloud smoke, 공개 상태 재검사를 수행한다. 수동 경로는 같은 러너를 사용한다.
+Jenkins **Build with Parameters → RELEASE_PROFILE=product**로 해당 develop SHA를 실행한다. 현재 Jenkinsfile 기본값도 product다. skeleton은 미디어 없는 진단 배포 선택지다. 제품 배포는 사전 검사 후 private env를 설치하고 제품 Compose overlay, 복구, resume, DP-06 Cloud smoke, 공개 상태 재검사를 수행한다. 수동 경로는 같은 러너를 사용한다.
 
 제품 배포 이후의 업데이트도 반드시 product를 선택한다. 기존 제품 서버에 skeleton 배포를 시도하면 이미지 교체 전에 `PRODUCT_PROFILE_REQUIRED`로 차단한다. 다음 커밋도 새 SHA에 맞는 시험 승인이 필요하다.
 
@@ -65,14 +65,22 @@ node scripts/issue-team-invitation.mjs \
   --output /opt/kkakkung/private/team-invitation.json
 ```
 
-방 코드가 포함된 링크는 기존 방 입장을 자동 선택한다. 초대 토큰은 URL fragment에서 읽은 즉시 주소에서 지우고 localStorage/sessionStorage에 저장하지 않는다. 링크 권한은 서버가 최종 판정한다. 새로고침 후 토큰이 없어지면 원래 초대 링크를 다시 연다.
+방 코드가 포함된 링크는 기존 방 입장을 자동 선택한다. 초대 토큰은 URL fragment에서 읽은 즉시 주소에서 지우고 localStorage/sessionStorage에 저장하지 않는다. 링크 권한은 서버가 최종 판정한다. 새로고침 후 토큰이 없어지면 유효한 원래 링크를 다시 연다. 만료·폐기·서버 재시작으로 거절되면 새 링크를 발급한다. 같은 탭에서 새 초대를 열어도 갱신되며 경기 중에는 현재 참가를 마친 뒤 새 초대를 적용한다.
+
+입장 취소·SDK 연결 실패는 자신의 미사용 예약을 반환한다. 응답 자체를 받지 못해 취소할 수 없는 예약도 60초 뒤 만료된다. 이미 연결된 참가자와 회수 중 좌석은 이 만료로 강제 해제하지 않는다.
 
 ## 실제 시험 순서와 기록
 
-1. 2명으로 먼저 입장·카메라 미리보기·보정·소리 재생·퇴장 정리를 확인한다. 실제 장치 실패를 강제로 READY 처리하지 않는다.
-2. 기존 방을 정리한 후 6명이 같은 방에 들어가 팀·준비 상태를 확인한다. 장치 검사 → 연습 → 경기 → 결과 → 재경기를 한 흐름으로 진행한다.
-3. 연습/경기에서 본인 이동, 다른 참가자 위치, 허용 상대 얼굴/음성, 금지 상대 미수신을 확인한다. 경기에서는 확정된 술래 장비·구속·포획·포즈·종료 판정을 확인한다. 미정 아이템 6개는 시험 완료 수에 포함하지 않는다.
-4. 한 명의 일시 연결 끊김과 복귀를 확인한다. 종료·퇴장 후 원격 참가자와 트랙이 남지 않고 이전 토큰으로 재입장할 수 없는지 E/F 증거와 대조한다. 토큰 값·얼굴 영상·음성 원문을 기록하지 않는다.
-5. 실패 시 정확한 단계, 참가자 익명 식별자, 브라우저/기기, 시간, 기대/실제 결과, 비밀값 없는 서버 오류 코드만 기록한다. 실패한 경계 수정 후 해당 회귀와 전체 흐름을 다시 실행한다.
+1. 1~5명으로는 로비 입장·취소·퇴장만 확인한다. **6명이 모여야 장치 검사로 진입한다.** 각자 카메라·추론·보정·소리 재생을 확인하고 준비한다. 최초 준비는 키보드 선택 여부와 무관하게 이 장벽을 통과해야 한다. 마이크는 선택이다.
+2. 장치 검사 → 연습 → 로딩 → 경기 → 결과를 완주한다. 도망자는 3분 안에 2명 탈출, 술래는 2명 포획 또는 시간 초과가 승리 조건이다. W/S 전진·후진, A/D 단발 90° 회전과 모션 중립 복귀를 확인한다.
+3. 허용 상대 얼굴·음성, 금지 상대 미수신, 개인 지도·교환·사건 표시를 확인한다. 장비 선택 후 F를 계속 눌러도 설치가 자동 취소되지 않는지, 손동작을 유지해도 한 번만 실행되는지 확인한다. 구속·자연 만료·포획·포즈를 확인하고 미정 아이템 6개는 합산하지 않는다.
+4. 결과에서 역할 교환 재경기와 같은 팀 재경기를 각각 다음 **결과까지** 진행한다. 로비로 돌아가 1명을 교체한 뒤 6인 완주를 반복한다. 매치 ID 전환, 구 미디어 회수와 새 발급, 결과 초기화를 E/F 기록으로 확인한다.
+5. 연습/경기에서 카메라를 끊으면 키보드와 기본 얼굴로 전환되는지 확인한다. 복구 후 ‘장치 다시 연결·점검’ → 새 보정 → 사용자의 모션 선택 순서를 확인한다. 마이크만 끊거나 다시 켰을 때 얼굴·게임 연결은 유지되는지, 소리 재시도가 실제 재생으로 이어지는지 확인한다.
+6. **미디어 연결 장애**는 같은 게임 참가를 유지하고 구 Identity 회수 후 새 세대로 복구하는지 확인한다. **PLAYING의 ACTIVE 참가자 게임 소켓 종료**는 GAME_CONNECTION_LOST로 경기를 중단한다. 중단 후 새 방장이 로비로 돌아가 교체 인원을 받아 새 경기를 시작할 수 있어야 한다. 연습 중 이탈은 연습 규칙에 따라 준비 단계로 돌아가는 경로를 확인한다. 종료된 게임 세션의 자동 복귀를 기대하지 않는다.
+7. 모든 참가자가 퇴장한 뒤 원격 참가자·트랙·로컬 Worker·장치가 남지 않는지 확인한다. 옛 토큰 회수는 E의 실제 Cloud 증거로 판정한다. 토큰·얼굴·음성 원문은 저장하지 않는다.
+
+연속 경기의 예산 예약은 공식 사용량 대조 전까지 유지된다. 경기 종료마다 예산이 즉시 복원된다고 가정하지 말고, 예정 경기·연습·재시도 전체와 public bucket 여유를 사전에 확인한다. BUDGET_EXHAUSTED는 임의로 우회하지 않는다.
+
+각 결과에는 소스 SHA·이미지 digest, 날짜·단계·익명 참가자, OS/브라우저·장치, 네트워크, 기대/실제 결과, 비밀값 없는 오류 코드를 기록한다. 미실행 칸은 NOT_RUN으로 남기고 실제 기기 6대의 결과만 G5에 반영한다. 실패한 경계를 수정한 뒤 해당 회귀와 전체 흐름을 다시 확인한다.
 
 로컬 회귀: `pnpm verify`. 빌드된 Worker·고정 모델의 초기화 및 빈 프레임 실제 추론: `node scripts/check-product-assets.mjs` (`pnpm build` 이후). 이 검사는 실제 카메라·얼굴 인식 품질·Cloud 수신 증거가 아니다. 대표 장치 전체 G5/G6와 장시간 부하/복구 인수는 별도 실제 결과로 완료 판단한다.

@@ -231,9 +231,9 @@ GitLab for Jira Cloud app은 키가 등장하는 위치에 따라 연결하는 �
 
 ### 이번 저장소의 현재 상태
 
-이번 프로젝트는 Jenkins 사용을 검토 중이며 GitLab CI 전용 스켈레톤은 정리했다. 공통 검증 진입점은 `pnpm verify`이고 Jenkinsfile과 Jenkins 배포·리뷰 연동은 아직 없다. 이번 프로젝트의 Jira 앱 연결, 원격 브랜치 보호·병합 설정, 실제 Jenkins 실행 상태도 이 문서 작성으로 확인되거나 변경된 것이 아니다.
+현재 저장소에는 Jenkinsfile, `scripts/ci-verify.mjs`와 제품 배포 러너가 구현되어 있다. 공통 검증 진입점은 `pnpm verify`다. 원격 검사 결과는 해당 SHA의 GitLab 파이프라인으로 확인하고, 배포는 이미지 SHA·digest와 release.json의 결과 및 운영 준비 상태로 따로 확인한다. 파일 작성이나 MR 병합만으로 배포·Jira 자동 완료·브랜치 보호 설정이 적용되었다고 판단하지 않는다.
 
-따라서 위 표는 이어 사용할 운영 기준과 기존 설정 기록이며 현재 프로젝트의 연동 완료 증거가 아니다. Jenkins 구축이나 외부 설정 적용은 해당 작업을 요청받았을 때 현재 구성을 확인하고 수행한다. CI 환경에서도 사용할 설치·검증 절차는 [테스트 가이드](testing.md)를 참고한다. GitLab MR 템플릿은 [.gitlab/merge_request_templates/default.md](../.gitlab/merge_request_templates/default.md)에 있다.
+위 표는 기존 프로젝트 설정 기록이며 현재 프로젝트의 모든 연동 완료 증거가 아니다. 외부 설정 변경은 승인된 범위에서 현재 구성을 확인하고 수행한다. 설치·검증 절차는 [테스트 가이드](testing.md), 배포는 [인프라 안내](../infra/README.md)를 참고한다. GitLab MR 템플릿은 [.gitlab/merge_request_templates/default.md](../.gitlab/merge_request_templates/default.md)에 있다.
 
 ## 기존 운영에서 관찰한 예외
 

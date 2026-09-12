@@ -422,7 +422,14 @@ export function bindProductRoom(
     if (!result) {
       result = Promise.resolve().then(async () => {
         await owner.runtime.retireMediaGeneration(reason);
-        await post(MEDIA_ROUTES.report, { ...scope, status: 'closed' });
+        // B owns retirement after game-connection loss and rejects reports from that client.
+        // Keep local cleanup mandatory; this never confirms remote retirement or permits rejoin.
+        if (snapshot.lost) return;
+        try {
+          await post(MEDIA_ROUTES.report, { ...scope, status: 'closed' });
+        } catch (cause) {
+          if (!snapshot.lost) throw cause;
+        }
       });
       retiredScopes.set(key, result);
     }

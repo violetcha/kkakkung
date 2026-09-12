@@ -51,9 +51,17 @@ export function PracticeScreen({
     <section className="game-panel" aria-label="역할 연습">
       <h2>{model.role === 'runner' ? '도망자' : '술래'} 연습</h2>
       <p>
+        {model.role === 'runner'
+          ? '3분 안에 도망자 2명이 출구의 포즈 도전에 성공하면 승리합니다.'
+          : '도망자 2명을 포획하거나, 3분 동안 도망자 2명의 탈출을 막으면 승리합니다.'}
+      </p>
+      <p>
         몸을 기울여 이동하고 고개를 돌려 방향을 바꾸세요. 가시 아군과 지도를 교환할 수 있습니다.
       </p>
-      {model.role === 'tagger' && <p>1·2로 장비를 고른 뒤 설치·취소를 연습하세요.</p>}
+      {model.role === 'tagger' && (
+        <p>1·2로 장비를 고르고 F를 한 번 눌러 설치하세요. 설치 중 F를 다시 누르면 취소합니다.</p>
+      )}
+      <p>키보드는 W/S로 전진·후진, A/D를 한 번씩 눌러 90° 회전합니다.</p>
       <p>전원 준비 또는 최대 60초 후 서버가 다음 단계를 정합니다.</p>
       <label htmlFor="practice-pose">상체 포즈 연습</label>
       <select

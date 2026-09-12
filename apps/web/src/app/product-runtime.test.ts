@@ -443,6 +443,36 @@ it('reports SDK recovery immediately but closed only after old local cleanup bef
   await f.runtime.leave();
 });
 
+it('cleans up a lost game connection without reporting from an invalidated participant', async () => {
+  const f = await mediaFixture();
+  f.close();
+  await expect(f.runtime.leave()).resolves.toBeUndefined();
+  expect(f.runtime.getSnapshot().lost).toBe(true);
+  expect(f.runtime.getSnapshot().error).toBeNull();
+  expect(f.fake.retireMediaGeneration).toHaveBeenCalledOnce();
+  expect(f.end).toHaveBeenCalledOnce();
+  expect(f.requests().filter((r) => r.body.status === 'closed')).toHaveLength(0);
+  expect(f.requests().filter((r) => r.url === MEDIA_ROUTES.grants)).toHaveLength(1);
+});
+
+it('finishes local exit if the game connection closes while its report is in flight', async () => {
+  const f = await mediaFixture();
+  let finishReport!: (response: Response) => void;
+  f.fetcher.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishReport = resolve;
+      }),
+  );
+  const leaving = f.runtime.leave();
+  await vi.waitFor(() => expect(finishReport).toBeTypeOf('function'));
+  f.close();
+  finishReport(new Response('{}', { status: 409 }));
+  await expect(leaving).resolves.toBeUndefined();
+  expect(f.end).toHaveBeenCalledOnce();
+  expect(f.runtime.getSnapshot().error).toBeNull();
+});
+
 it('does not acknowledge closed or request a replacement after local cleanup fails', async () => {
   const f = await mediaFixture();
   vi.mocked(f.fake.retireMediaGeneration).mockRejectedValueOnce(new Error('local failure'));

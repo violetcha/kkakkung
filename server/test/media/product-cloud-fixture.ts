@@ -31,7 +31,9 @@ export async function productCloudFixture() {
   const checkpoint = {
     projectAlias: config.projectAlias,
     remainingMinutes: 5000,
-    remainingBytes: 10_000_000_000,
+    // Local fixture only: five full rounds plus an aborted round retain >6 GB
+    // until an official checkpoint. Keep the real 40% public budget gate enabled.
+    remainingBytes: 20_000_000_000,
     checkedAtEpochMs: epoch,
     source: 'cloud-dashboard' as const,
     checkedBy: 'synthetic-local-integration-only',
