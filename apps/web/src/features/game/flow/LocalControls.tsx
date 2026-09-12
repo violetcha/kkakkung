@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DeviceStatus, InteractionState } from '../../input/InteractionRuntime';
+import { deviceFeedback } from './device-feedback';
 
 export function LocalControls({
   status,
@@ -7,12 +8,18 @@ export function LocalControls({
   previewHost,
   onKeyboard,
   onMotion,
+  onRecover,
+  onMicrophone,
+  canRecover = true,
 }: {
   status: DeviceStatus;
   mode: InteractionState['mode'];
   previewHost(element: HTMLDivElement | null): void;
   onKeyboard(): void;
   onMotion(): Promise<void>;
+  onRecover(): Promise<void>;
+  onMicrophone(enabled: boolean): Promise<void>;
+  canRecover?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const calibrating = busy || status.calibration === 'running';
@@ -29,32 +36,50 @@ export function LocalControls({
             : 'W/S 또는 ↑/↓: 전진·후진 · A/D 또는 ←/→: 90° 회전. 회전 키는 한 번씩 눌러 주세요.'}
         </p>
         <div className="actions">
-          <button disabled={calibrating || mode === 'keyboard'} onClick={onKeyboard}>
+          <button disabled={mode === 'keyboard'} onClick={onKeyboard}>
             키보드로 조작
           </button>
           <button
-            disabled={calibrating || status.camera !== 'ready'}
+            disabled={
+              calibrating || !canRecover || status.camera !== 'ready' || status.vision === 'failed'
+            }
             onClick={() => {
               setBusy(true);
               void onMotion().finally(() => setBusy(false));
             }}
           >
-            {calibrating ? '정면을 보고 보정 중…' : '모션 다시 보정'}
+            {calibrating ? '추적 준비·보정 중…' : '보정 후 모션으로 조작'}
+          </button>
+          <button
+            disabled={busy || !canRecover}
+            onClick={() => {
+              setBusy(true);
+              void onRecover().finally(() => setBusy(false));
+            }}
+          >
+            {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
+          </button>
+          <button
+            disabled={busy || !canRecover}
+            onClick={() => {
+              setBusy(true);
+              void onMicrophone(status.microphone !== 'ready').finally(() => setBusy(false));
+            }}
+          >
+            {status.microphone === 'ready' ? '마이크 끄기' : '마이크 연결·재시도'}
           </button>
         </div>
         {status.camera !== 'ready' && (
-          <p role="status">카메라를 켜면 내 영상이 여기에 표시됩니다.</p>
+          <p role="status">
+            장치를 다시 연결해 점검할 수 있습니다. 연습·경기에서는 키보드로 계속 조작할 수 있습니다.
+          </p>
         )}
         {status.camera === 'ready' && status.calibration !== 'ready' && (
           <p role="status">
             정면을 보고 얼굴과 양쪽 어깨·팔이 보이도록 자세를 맞춘 뒤 보정해 주세요.
           </p>
         )}
-        {status.errorCode && (
-          <p role="status">
-            추적 상태를 확인해 주세요. 키보드 조작을 사용할 수 있습니다. ({status.errorCode})
-          </p>
-        )}
+        {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}
       </div>
     </aside>
   );

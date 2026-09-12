@@ -156,6 +156,16 @@ export function createTrackPublisher(deps: TrackPublisherDeps): TrackPublisher {
         assertLive();
         if (!scope.mediaInstanceId) throw new PublishRejectedError('NO_SCOPE');
         if (track.kind !== 'audio') throw new PublishRejectedError('SCREEN_SHARE_REJECTED');
+        if (track.readyState !== 'live') throw new Error('MICROPHONE_ENDED');
+        const existing = records.get('microphone');
+        if (
+          tracks.get('microphone') === track &&
+          existing &&
+          existing.scope.matchId === scope.matchId &&
+          existing.scope.mediaInstanceId === scope.mediaInstanceId &&
+          existing.scope.receiverGeneration === scope.receiverGeneration
+        )
+          return existing.trackSid;
         await remove('microphone');
         assertLive();
         const { trackSid } = await deps.participant.publishTrack(track, {

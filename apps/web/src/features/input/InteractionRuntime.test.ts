@@ -139,6 +139,8 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
     lineTo: () => undefined,
     closePath: () => undefined,
     clip: () => undefined,
+    arc: vi.fn(),
+    fill: vi.fn(),
     drawImage: () => undefined,
   };
   const compositor: CompositorEnvironment = {
@@ -317,7 +319,7 @@ describe('createInteractionRuntime', () => {
         selectedEquipment: 'sensor',
       });
       expect(base.statuses.at(-1)?.errorCode).toBe('INFERENCE_STALLED');
-      expect(base.statuses.at(-1)?.vision).toBe('loading');
+      expect(base.statuses.at(-1)?.vision).toBe('failed');
       const event = {
         code: 'KeyW',
         repeat: false,

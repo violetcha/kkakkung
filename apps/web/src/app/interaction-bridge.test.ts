@@ -15,6 +15,51 @@ const context: InteractionContext = {
   mode: 'motion',
   pageActive: true,
 };
+it('allows device recovery during practice/play and preserves phase locks and the selected mode', async () => {
+  const runtime = {
+    startDevices: vi.fn(async () => INITIAL_DEVICES),
+    calibrate: vi.fn(async () => INITIAL_DEVICES),
+    setContext: vi.fn(),
+    dispose: vi.fn(async () => {}),
+  } as unknown as InteractionRuntime;
+  const bridge = createInteractionBridge(
+    {
+      sendCommand: vi.fn(),
+      requestMediaGrant: vi.fn(),
+      reportMediaStatus: vi.fn(),
+      requestBindingsRefresh: vi.fn(),
+      onDeviceStatus: vi.fn(),
+      onFaceTrack: vi.fn(),
+      onMediaStatus: vi.fn(),
+      onSensors: vi.fn(),
+      onInteractionState: vi.fn(),
+      onLocalPreview: vi.fn(),
+    },
+    () => runtime,
+  );
+  for (const phase of ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'] as const) {
+    bridge.setContext({ ...context, phase, mode: 'keyboard' });
+    await bridge.startDevices(false);
+  }
+  expect(runtime.startDevices).toHaveBeenCalledTimes(3);
+  expect(runtime.calibrate).toHaveBeenCalledTimes(3);
+  expect(runtime.setContext).toHaveBeenLastCalledWith(
+    expect.objectContaining({ mode: 'keyboard' }),
+  );
+  for (const phase of [
+    'MAP_FINALIZING',
+    'GAME_LOADING',
+    'COUNTDOWN',
+    'RESULT',
+    'ABORTED',
+  ] as const) {
+    bridge.setContext({ ...context, phase });
+    await bridge.startDevices(true);
+    await bridge.updateMicrophone(true);
+  }
+  expect(runtime.startDevices).toHaveBeenCalledTimes(3);
+  await bridge.dispose();
+});
 it('registers callbacks once, keeps sensor updates out of UI and ignores late disposed callbacks', async () => {
   let callbacks!: InteractionDeps;
   const runtime = {

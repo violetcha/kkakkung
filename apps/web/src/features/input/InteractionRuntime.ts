@@ -284,6 +284,8 @@ export type InteractionRuntimeOptions = Readonly<{
 
 /** 보정 수집 상한. 이 시간 안에 충분한 표본이 없으면 미보정으로 끝낸다. */
 export const CALIBRATION_WINDOW_MS = 2000;
+export const MODEL_LOAD_TIMEOUT_MS = 30_000;
+export const FIRST_INFERENCE_TIMEOUT_MS = 5000;
 
 function browserEnvironment(createAudioUnlock: () => AudioUnlockPort | null): DeviceEnvironment {
   return {
@@ -520,6 +522,8 @@ export const createInteractionRuntime = (
   let scheduler: WorkerScheduler | null = null;
   let pump: FramePump | null = null;
   let modelsLoaded = false;
+  let modelTimer: number | null = null;
+  let modelReadyAt = 0;
   let lastSnapshot: SensorSnapshot | null = null;
   let compositor: FaceCompositor | null = null;
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
@@ -702,6 +706,9 @@ export const createInteractionRuntime = (
     },
   });
   let calibrationObserver: ((snapshot: SensorSnapshot) => void) | null = null;
+  let calibrationStart: (() => void) | null = null;
+  let cancelCalibration: (() => void) | null = null;
+  let calibrationPending: Promise<DeviceStatus> | null = null;
 
   const vision = options.vision ?? browserVision();
 
@@ -741,6 +748,11 @@ export const createInteractionRuntime = (
       },
       stopVision: () => {
         stopVision();
+        if (inputWatchdog !== null) vision.clearTimer(inputWatchdog);
+        inputWatchdog = null;
+        compositor?.dispose();
+        compositor = null;
+        safeFace.reset();
         calibrator.reset();
       },
       stopDevices: async () => {
@@ -758,18 +770,63 @@ export const createInteractionRuntime = (
   };
 
   const stopVision = () => {
-    if (inputWatchdog !== null) vision.clearTimer(inputWatchdog);
-    inputWatchdog = null;
+    if (modelTimer !== null) vision.clearTimer(modelTimer);
+    modelTimer = null;
+    cancelCalibration?.();
     pump?.stop();
     pump = null;
     scheduler?.dispose();
     scheduler = null;
-    compositor?.dispose();
-    compositor = null;
-    safeFace.reset();
     modelsLoaded = false;
     lastSnapshot = null;
     calibrationObserver = null;
+  };
+
+  const failVision = (code: string) => {
+    fallback.report(code === 'INFERENCE_STALLED' ? 'INFERENCE_STALLED' : 'WORKER_ERROR');
+    patch({ vision: 'failed', calibration: 'failed', errorCode: code });
+    stopVision();
+    calibrator.reset();
+  };
+
+  const drawSafeOutput = () => {
+    if (!compositor) return;
+    const decision = safeFace.decide(lastSnapshot, vision.now(), runtimeGeneration);
+    const face = lastSnapshot?.face;
+    compositor.drawMode(decision.mode, face?.status === 'valid' ? face.data : null);
+  };
+
+  const ensureProcessedOutput = () => {
+    if (compositor) return;
+    compositor = createFaceCompositor({
+      environment: options.compositor ?? browserCompositor(),
+      // Source acquisition may change; the Canvas and its publication keep their lifetime.
+      getSource: () => {
+        const video = devices?.getPreviewElement();
+        return video && video.videoWidth > 0
+          ? { source: video, width: video.videoWidth, height: video.videoHeight }
+          : null;
+      },
+    });
+    compositor.draw(null);
+    const checkInputAndOutput = () => {
+      if (disposed || !compositor) return;
+      const now = vision.now();
+      drawSafeOutput();
+      if (scheduler) {
+        if (lastSnapshot && context.acceptsInput) {
+          const failure = fallback.observe(lastSnapshot, now, runtimeGeneration);
+          if (failure === 'INFERENCE_STALLED') failVision(failure);
+        }
+        if (modelsLoaded && !lastSnapshot && now - modelReadyAt > FIRST_INFERENCE_TIMEOUT_MS)
+          failVision('INFERENCE_STALLED');
+        if (lastStatus.vision === 'ready' && !hasFreshValidFace()) patch({ vision: 'loading' });
+      }
+      if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) move.updateMotion(null, now);
+      if (!isSampleFresh(lastSnapshot?.face ?? null, 'face', now)) turn.updateMotion(null, now);
+      inputWatchdog = vision.setTimer(checkInputAndOutput, 100);
+    };
+    inputWatchdog = vision.setTimer(checkInputAndOutput, 100);
   };
 
   const hasFreshValidFace = (): boolean => {
@@ -837,16 +894,12 @@ export const createInteractionRuntime = (
   };
 
   const publishSnapshot = (snapshot: SensorSnapshot) => {
-    if (disposed) return;
+    if (disposed || !scheduler) return;
     // 구 세대 결과는 발행하지 않는다.
     if (snapshot.runtimeGeneration !== runtimeGeneration) return;
     lastSnapshot = snapshot;
     // 가공 얼굴은 안전 프레임 정책이 정한 모드로만 그린다. raw 영상 fallback은 없다.
-    if (compositor) {
-      const decision = safeFace.decide(snapshot, vision.now(), runtimeGeneration);
-      const face = snapshot.face;
-      compositor.drawMode(decision.mode, face?.status === 'valid' ? face.data : null);
-    }
+    drawSafeOutput();
     refreshVisionStatus();
     calibrationObserver?.(snapshot);
     fallback.observe(snapshot, vision.now(), runtimeGeneration);
@@ -858,16 +911,7 @@ export const createInteractionRuntime = (
   const startVision = (video: HTMLVideoElement) => {
     if (scheduler) return;
     const generation = runtimeGeneration;
-    {
-      compositor = createFaceCompositor({
-        environment: options.compositor ?? browserCompositor(),
-        // 원본 video는 읽기만 한다. 게시 가능한 source는 compositor Canvas뿐이다.
-        getSource: () =>
-          video.videoWidth > 0
-            ? { source: video, width: video.videoWidth, height: video.videoHeight }
-            : null,
-      });
-    }
+    ensureProcessedOutput();
     const worker = vision.createWorker();
     const created = createWorkerScheduler(
       {
@@ -875,13 +919,25 @@ export const createInteractionRuntime = (
         now: vision.now,
         onSnapshot: publishSnapshot,
         onError: (code) => {
-          if (generation !== runtimeGeneration) return;
-          fallback.report('WORKER_ERROR');
-          patch({ vision: 'failed', errorCode: code });
+          if (disposed || generation !== runtimeGeneration || !scheduler) return;
+          failVision(code);
         },
-        onReady: () => {
-          if (generation !== runtimeGeneration) return;
+        onReady: (loaded) => {
+          if (disposed || generation !== runtimeGeneration || !scheduler) return;
+          if (
+            !['face', 'pose', 'gesture'].every((kind) =>
+              loaded.includes(kind as (typeof loaded)[number]),
+            )
+          ) {
+            failVision('MODEL_LOAD_FAILED');
+            return;
+          }
           modelsLoaded = true;
+          modelReadyAt = vision.now();
+          if (modelTimer !== null) vision.clearTimer(modelTimer);
+          modelTimer = null;
+          pump?.start();
+          calibrationStart?.();
           // 모델 로드만으로 vision ready로 올리지 않는다. 나머지 조건은 D-07/D-08이 채운다.
           refreshVisionStatus();
         },
@@ -890,7 +946,6 @@ export const createInteractionRuntime = (
     );
     worker.onmessage = (event) => created.handleMessage(event.data);
     worker.onerror = () => created.handleWorkerError();
-    worker.postMessage({ type: 'init', runtimeGeneration: generation, paths: PINNED_MODEL_PATHS });
 
     const models = createModelSelector();
     const frames = createFramePump({
@@ -902,26 +957,18 @@ export const createInteractionRuntime = (
       },
       selectModels: (nowMs) => models.select(nowMs),
       onError: (code) => {
-        if (generation !== runtimeGeneration) return;
-        patch({ vision: 'failed', errorCode: code });
+        if (disposed || generation !== runtimeGeneration || !scheduler) return;
+        failVision(code);
       },
     });
     scheduler = created;
     pump = frames;
     patch({ vision: 'loading', errorCode: null });
-    frames.start();
-    const checkInput = () => {
-      if (disposed || !scheduler) return;
-      const now = vision.now();
-      if (lastSnapshot && context.acceptsInput)
-        fallback.observe(lastSnapshot, now, runtimeGeneration);
-      if (lastStatus.vision === 'ready' && !hasFreshValidFace()) patch({ vision: 'loading' });
-      // A silent Worker emits no callback. Expired samples must still release held motion.
-      if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) move.updateMotion(null, now);
-      if (!isSampleFresh(lastSnapshot?.face ?? null, 'face', now)) turn.updateMotion(null, now);
-      inputWatchdog = vision.setTimer(checkInput, 100);
-    };
-    inputWatchdog = vision.setTimer(checkInput, 100);
+    modelTimer = vision.setTimer(() => {
+      if (generation === runtimeGeneration && scheduler && !modelsLoaded)
+        failVision('MODEL_LOAD_TIMEOUT');
+    }, MODEL_LOAD_TIMEOUT_MS);
+    worker.postMessage({ type: 'init', runtimeGeneration: generation, paths: PINNED_MODEL_PATHS });
   };
 
   const bindKeyboard = () => {
@@ -991,6 +1038,13 @@ export const createInteractionRuntime = (
         fallback.report('CAMERA_ENDED');
         patch({ vision: 'idle', calibration: 'idle' });
       },
+      onMicrophoneTrack: (track) => {
+        if (track) return;
+        fallback.reportMicrophoneOnly();
+        void publisher?.stopMicrophone().catch(() => {
+          patch({ microphone: 'failed', errorCode: 'MICROPHONE_UNPUBLISH_FAILED' });
+        });
+      },
     });
     return devices;
   };
@@ -1005,53 +1059,91 @@ export const createInteractionRuntime = (
       const preview = manager.getPreviewElement();
       if (status.camera === 'ready' && preview && !scheduler) {
         runtimeGeneration += 1;
-        startVision(preview);
+        try {
+          startVision(preview);
+        } catch {
+          failVision('VISION_START_FAILED');
+        }
+      }
+      const microphone = manager.getMicrophoneTrack();
+      const scope = media.getScope();
+      if (
+        microphone &&
+        publisher &&
+        scope &&
+        lifecycle.canOperate() &&
+        matchesAcceptedScope(scope)
+      ) {
+        try {
+          await publisher.publishMicrophone(microphone, scope);
+        } catch {
+          patch({ microphone: 'failed', errorCode: 'MICROPHONE_PUBLISH_FAILED' });
+        }
       }
       return lastStatus;
     },
 
-    async calibrate() {
-      if (disposed || !devices) return lastStatus;
+    calibrate() {
+      if (disposed || !devices) return Promise.resolve(lastStatus);
+      if (calibrationPending) return calibrationPending;
       if (lastStatus.camera !== 'ready') {
         patch({ calibration: 'failed', errorCode: 'CALIBRATION_NO_CAMERA' });
-        return lastStatus;
+        return Promise.resolve(lastStatus);
       }
+      if (!scheduler) return Promise.resolve(lastStatus);
       const generation = runtimeGeneration;
-      calibrator.begin(generation);
-      patch({ calibration: 'running', errorCode: null });
-
-      await new Promise<void>((resolve) => {
+      calibrator.reset();
+      clearHolds();
+      patch({
+        calibration: 'running',
+        errorCode: modelsLoaded ? null : 'CALIBRATION_WAITING_FOR_MODELS',
+      });
+      calibrationPending = new Promise<DeviceStatus>((resolve) => {
         let settled = false;
-        let timer = 0;
-        const finish = () => {
+        let timer: number | null = null;
+        const finish = (complete: boolean) => {
           if (settled) return;
           settled = true;
           calibrationObserver = null;
-          vision.clearTimer(timer);
-          resolve();
+          calibrationStart = null;
+          cancelCalibration = null;
+          calibrationPending = null;
+          if (timer !== null) vision.clearTimer(timer);
+          if (complete && !disposed && generation === runtimeGeneration) {
+            const result = calibrator.finish();
+            if (result.state === 'ready')
+              fallback.restoreMotion({
+                calibrated: true,
+                requestedMode: context.get()?.mode ?? 'motion',
+              });
+            patch(
+              result.state === 'ready'
+                ? { calibration: 'ready', errorCode: null }
+                : { calibration: 'failed', errorCode: result.errorCode },
+            );
+          }
+          resolve(lastStatus);
         };
-        calibrationObserver = (snapshot) => {
-          calibrator.observe(snapshot, vision.now());
-          if (calibrator.sampleCount >= tuning.calibrationMinSamples) finish();
+        cancelCalibration = () => finish(false);
+        calibrationStart = () => {
+          calibrationStart = null;
+          const startedAt = vision.now();
+          calibrator.begin(generation);
+          patch({ calibration: 'running', errorCode: null });
+          calibrationObserver = (snapshot) => {
+            if (
+              (snapshot.face?.sampledAtMs ?? -1) < startedAt ||
+              (snapshot.pose?.sampledAtMs ?? -1) < startedAt
+            )
+              return;
+            calibrator.observe(snapshot, vision.now());
+            if (calibrator.sampleCount >= tuning.calibrationMinSamples) finish(true);
+          };
+          timer = vision.setTimer(() => finish(true), CALIBRATION_WINDOW_MS);
         };
-        // 이미 받은 최신 표본도 한 번 확인한다.
-        if (lastSnapshot) calibrationObserver(lastSnapshot);
-        if (!settled) timer = vision.setTimer(finish, CALIBRATION_WINDOW_MS);
+        if (modelsLoaded) calibrationStart();
       });
-
-      if (disposed || generation !== runtimeGeneration) return lastStatus;
-      const result = calibrator.finish();
-      if (result.state === 'ready')
-        fallback.restoreMotion({
-          calibrated: true,
-          requestedMode: context.get()?.mode ?? 'motion',
-        });
-      patch(
-        result.state === 'ready'
-          ? { calibration: 'ready', errorCode: null }
-          : { calibration: 'failed', errorCode: result.errorCode },
-      );
-      return lastStatus;
+      return calibrationPending;
     },
 
     setContext(next: InteractionContext) {
@@ -1063,6 +1155,8 @@ export const createInteractionRuntime = (
       turn.setMode(next.mode);
       gestures.syncEquipment(next.selectedEquipment ?? 'sensor');
       gestures.setMode(next.mode);
+      if (next.mode === 'motion' && lastStatus.calibration === 'ready')
+        fallback.restoreMotion({ calibrated: true, requestedMode: next.mode });
       bindKeyboard();
     },
 
@@ -1110,7 +1204,10 @@ export const createInteractionRuntime = (
       const self = bindingStore.getSelf();
       const scope = bindingStore.getScope();
       if (publisher && scope)
-        publisher.confirmFromBindings(scope, self?.faceTrackSid ? [self.faceTrackSid] : []);
+        publisher.confirmFromBindings(
+          scope,
+          [self?.faceTrackSid, self?.audioTrackSid].filter((sid): sid is string => !!sid),
+        );
       // 바인딩이 뒤늦게 와도 이미 받은 publication을 다시 대조한다.
       remoteFaces.reconcile();
       reconcileAudio();

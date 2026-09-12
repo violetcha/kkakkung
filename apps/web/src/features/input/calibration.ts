@@ -33,7 +33,12 @@ export type CalibrationResult =
   | Readonly<{ state: 'ready'; neutral: NeutralReference; errorCode: null }>
   | Readonly<{ state: 'failed'; neutral: null; errorCode: CalibrationFailure }>;
 
-type Observation = Readonly<{ frameId: number; yawRad: number; leanRad: number }>;
+type Observation = Readonly<{
+  frameId: number;
+  poseFrameId: number;
+  yawRad: number;
+  leanRad: number;
+}>;
 
 export interface Calibrator {
   begin(runtimeGeneration: number): void;
@@ -103,11 +108,13 @@ export function createCalibrator(tuning: InputTuning = INPUT_TUNING): Calibrator
       if (pose) sawPose = true;
       if (!face || !pose) return false;
       const frameId = snapshot.face!.frameId;
+      const poseFrameId = snapshot.pose!.frameId;
       // 같은 프레임을 다시 세지 않는다.
-      if (observations.some((item) => item.frameId === frameId)) return false;
+      if (observations.some((item) => item.frameId === frameId || item.poseFrameId === poseFrameId))
+        return false;
       const lean = torsoLeanRad(pose.landmarks as readonly PoseLandmark[]);
       if (lean === null || !Number.isFinite(face.yawRad)) return false;
-      observations.push({ frameId, yawRad: face.yawRad, leanRad: lean });
+      observations.push({ frameId, poseFrameId, yawRad: face.yawRad, leanRad: lean });
       return true;
     },
 

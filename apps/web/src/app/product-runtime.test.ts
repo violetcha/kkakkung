@@ -694,7 +694,7 @@ it('locks movement while recalibrating and resumes motion after fresh calibratio
     calibration: 'ready',
   } as const;
   f.callbacks.onDeviceStatus(ready);
-  f.runtime.selectInputMode('keyboard');
+  f.runtime.selectInputMode('motion');
   let finish!: () => void;
   vi.mocked(f.fake.calibrate).mockImplementation(async () => {
     f.callbacks.onDeviceStatus({ ...ready, calibration: 'running' });
@@ -716,6 +716,64 @@ it('locks movement while recalibrating and resumes motion after fresh calibratio
     await calibration;
     expect(f.context.mock.lastCall?.[0]).toMatchObject({ pageActive: true, mode: 'motion' });
     expect(f.runtime.send({ type: 'TURN', payload: { direction: 'right' } })).not.toBe('');
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('keeps keyboard input usable during device recovery and requires explicit motion selection', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  f.runtime.selectInputMode('keyboard');
+  let finish!: () => void;
+  vi.mocked(f.fake.calibrate).mockImplementation(async () => {
+    f.callbacks.onDeviceStatus({ ...INITIAL_DEVICES, camera: 'ready', calibration: 'running' });
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const ready = {
+      ...INITIAL_DEVICES,
+      camera: 'ready',
+      vision: 'ready',
+      calibration: 'ready',
+    } as const;
+    f.callbacks.onDeviceStatus(ready);
+    return ready;
+  });
+  try {
+    const recovering = f.runtime.recoverDevices();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(f.context.mock.lastCall?.[0]).toMatchObject({ pageActive: true, mode: 'keyboard' });
+    expect(f.runtime.send({ type: 'TURN', payload: { direction: 'right' } })).not.toBe('');
+    finish();
+    await recovering;
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    expect(f.leave).not.toHaveBeenCalled();
+    expect(f.fake.retireMediaGeneration).not.toHaveBeenCalled();
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('does not overwrite a newer keyboard choice when calibration completes', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  f.callbacks.onDeviceStatus({ ...INITIAL_DEVICES, camera: 'ready' });
+  let finish!: () => void;
+  vi.mocked(f.fake.calibrate).mockImplementation(async () => {
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return { ...INITIAL_DEVICES, camera: 'ready', calibration: 'ready' };
+  });
+  try {
+    const calibration = f.runtime.calibrateMotion();
+    f.runtime.selectInputMode('keyboard');
+    finish();
+    await calibration;
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
   } finally {
     await f.runtime.leave();
   }

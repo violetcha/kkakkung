@@ -21,6 +21,11 @@ export function createInteractionBridge(
   let devices: DeviceStatus = INITIAL_DEVICES;
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   let readyRequested = false;
+  let deviceRun = 0;
+  const canCheckDevices = () =>
+    !disposed &&
+    context?.status === 'ACTIVE' &&
+    ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(context.phase);
   const detach = () => {
     if (preview && preview.parentElement === host) preview.remove();
   };
@@ -98,15 +103,21 @@ export function createInteractionBridge(
       attach();
     },
     async startDevices(microphone: boolean) {
-      if (disposed || context?.phase !== 'DEVICE_CHECK') return;
+      if (!canCheckDevices()) return;
+      const run = ++deviceRun;
       const initialContext = context;
       await runtime.startDevices({ microphone });
       if (
-        !disposed &&
-        context?.matchId === initialContext.matchId &&
-        context.phase === 'DEVICE_CHECK'
+        canCheckDevices() &&
+        run === deviceRun &&
+        context?.matchId === initialContext?.matchId &&
+        context?.phase === initialContext?.phase
       )
         await runtime.calibrate();
+    },
+    async updateMicrophone(microphone: boolean) {
+      if (!canCheckDevices()) return;
+      await runtime.startDevices({ microphone });
     },
     ready(value: boolean) {
       if (disposed || context?.phase !== 'DEVICE_CHECK' || (value && !deviceReady(devices)))

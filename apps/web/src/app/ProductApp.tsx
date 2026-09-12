@@ -224,6 +224,13 @@ export function ProductApp({
               onMotion={async () => {
                 await runtime.current?.calibrateMotion();
               }}
+              onRecover={async () => {
+                await runtime.current?.recoverDevices();
+              }}
+              onMicrophone={async (enabled) => {
+                await runtime.current?.setMicrophone(enabled);
+              }}
+              canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
             />
           )}
           {snapshot.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
