@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import { deviceReady } from './device-readiness';
+import { deviceFeedback } from './device-feedback';
 export function DeviceCheckScreen({
   status,
   ready,
@@ -73,14 +74,7 @@ export function DeviceCheckScreen({
             {ready ? '준비 취소' : '준비 완료'}
           </button>
         </div>
-        {status.errorCode && (
-          <p role="alert">
-            {status.errorCode === 'CALIBRATION_NO_POSE'
-              ? '얼굴과 양쪽 어깨·팔꿈치·손이 모두 보이도록 카메라를 조정한 뒤 다시 보정해 주세요.'
-              : '장치를 확인한 뒤 다시 점검해 주세요.'}{' '}
-            ({status.errorCode})
-          </p>
-        )}
+        {status.errorCode && <p role="alert">{deviceFeedback(status.errorCode)}</p>}
       </div>
       {previewHost && (
         <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />

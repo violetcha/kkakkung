@@ -102,8 +102,9 @@ describe('createSafeFacePolicy', () => {
 
     const repeat = policy.decide(snapshot(5, 1000), 1100, GENERATION);
 
-    expect(repeat.mode).toBe('live');
+    expect(repeat.mode).toBe('hold');
     expect(repeat.frameId).toBeNull();
+    expect(policy.decide(snapshot(5, 1000), 2301, GENERATION).mode).toBe('default');
   });
 
   it('clears the hold on reset', () => {

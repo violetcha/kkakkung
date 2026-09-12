@@ -153,7 +153,6 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       })
       .catch((error: unknown) => {
         closeModels();
-        closeModels();
         // 로딩 실패는 한 번 보고하고 무한 재시도하지 않는다.
         const code =
           error instanceof ModelHashMismatchError ? 'MODEL_HASH_MISMATCH' : 'MODEL_LOAD_FAILED';

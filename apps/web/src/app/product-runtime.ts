@@ -120,6 +120,13 @@ export function bindProductRoom(
     endedSelf: null,
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
+  let microphoneWanted = false;
+  let deviceAction = 0;
+  const canRecoverDevices = () =>
+    active &&
+    participating &&
+    !snapshot.lost &&
+    ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(snapshot.round?.phase ?? '');
   const faces = createFaceTextures(videoFaceTexture);
   let sensorGeneration = -1;
   let practiceReadyReported = false;
@@ -472,7 +479,7 @@ export function bindProductRoom(
       ...(target ? { targetPlayerId: target } : {}),
       pageActive:
         pageActive &&
-        snapshot.devices.calibration !== 'running' &&
+        (interaction.mode === 'keyboard' || snapshot.devices.calibration !== 'running') &&
         participating &&
         !snapshot.lost &&
         (round.phase === 'DEVICE_CHECK' ||
@@ -595,7 +602,8 @@ export function bindProductRoom(
     }
     if (
       ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
-      (((!pageActive || snapshot.devices.calibration === 'running') &&
+      (((!pageActive ||
+        (interaction.mode === 'motion' && snapshot.devices.calibration === 'running')) &&
         !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||
         !['PLAYING', 'TEAM_PRACTICE'].includes(snapshot.round.phase))
     )
@@ -918,36 +926,48 @@ export function bindProductRoom(
       previewHost = host;
       bridge.setPreviewHost(host);
     },
-    startDevices: (microphone: boolean) => bridge.startDevices(microphone).catch(error),
+    startDevices: (microphone: boolean) => {
+      microphoneWanted = microphone;
+      return bridge.startDevices(microphone).catch(error);
+    },
+    async recoverDevices() {
+      if (!canRecoverDevices()) return;
+      deviceAction++;
+      await bridge.startDevices(microphoneWanted).catch(error);
+    },
+    async setMicrophone(enabled: boolean) {
+      if (!canRecoverDevices()) return;
+      microphoneWanted = enabled;
+      await bridge.updateMicrophone(enabled).catch(error);
+    },
     selectInputMode(mode: InteractionState['mode']) {
       if (!active || !participating || snapshot.lost) return;
+      deviceAction++;
+      if (mode === 'motion' && snapshot.devices.calibration !== 'ready') return;
       interaction = { ...interaction, mode };
       publish({ interaction });
       updateContext();
     },
     async calibrateMotion() {
       if (
-        !active ||
-        !participating ||
-        snapshot.lost ||
+        !canRecoverDevices() ||
         snapshot.devices.camera !== 'ready' ||
         snapshot.devices.calibration === 'running'
       )
         return;
       const owner = bridge;
-      interaction = { ...interaction, mode: 'motion' };
-      publish({ interaction });
-      updateContext();
+      const run = ++deviceAction;
       try {
         const status = await owner.runtime.calibrate();
-        if (!active || !participating || owner !== bridge) return;
-        if (status.calibration !== 'ready') {
-          interaction = { ...interaction, mode: 'keyboard' };
-          publish({ interaction });
-          updateContext();
-        }
+        if (!canRecoverDevices() || owner !== bridge || run !== deviceAction) return;
+        interaction = {
+          ...interaction,
+          mode: status.calibration === 'ready' ? 'motion' : 'keyboard',
+        };
+        publish({ interaction });
+        updateContext();
       } catch {
-        if (!active || !participating || owner !== bridge) return;
+        if (!canRecoverDevices() || owner !== bridge || run !== deviceAction) return;
         interaction = { ...interaction, mode: 'keyboard' };
         publish({ interaction });
         updateContext();

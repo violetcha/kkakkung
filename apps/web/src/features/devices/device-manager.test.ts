@@ -127,6 +127,8 @@ describe('createDeviceManager', () => {
     expect(first.camera).toBe('ready');
     expect(second.camera).toBe('ready');
     expect(devices.getCameraStream()).not.toBeNull();
+    expect(video.stop).not.toHaveBeenCalled();
+    expect(video.readyState).toBe('live');
   });
 
   it('requests the camera and the microphone as separate permissions', async () => {
@@ -311,5 +313,85 @@ describe('createDeviceManager', () => {
     await starting;
     expect(base.statuses).toHaveLength(seen);
     expect(base.audio.close).toHaveBeenCalledOnce();
+  });
+
+  it('drops an ended microphone reference and acquires a fresh optional source', async () => {
+    const video = track('video');
+    const first = track('audio');
+    const second = track('audio');
+    let requests = 0;
+    const base = harness(
+      vi.fn(async (constraints: MediaStreamConstraints) =>
+        constraints.audio ? stream(requests++ === 0 ? first : second) : stream(video),
+      ),
+    );
+    const devices = manager(base);
+    await devices.start({ microphone: true });
+    first.end();
+    expect(devices.getStatus()).toMatchObject({ microphone: 'failed', camera: 'ready' });
+    expect(devices.getMicrophoneTrack()).toBeNull();
+    await devices.start({ microphone: true });
+    expect(devices.getMicrophoneTrack()).toBe(second);
+    expect(video.stop).not.toHaveBeenCalled();
+    await devices.dispose();
+  });
+
+  it('does not re-enable a microphone when permission returns after the user turns it off', async () => {
+    let finish!: (stream: MediaStream) => void;
+    const audio = track('audio');
+    const base = harness(
+      vi.fn((constraints: MediaStreamConstraints) =>
+        constraints.audio
+          ? new Promise<MediaStream>((resolve) => {
+              finish = resolve;
+            })
+          : Promise.resolve(stream(track('video'))),
+      ),
+    );
+    const devices = manager(base);
+    const pending = devices.start({ microphone: true });
+    await devices.start({ microphone: false });
+    finish(stream(audio));
+    await pending;
+    expect(devices.getMicrophoneTrack()).toBeNull();
+    expect(devices.getStatus().microphone).toBe('off');
+    expect(audio.stop).toHaveBeenCalledOnce();
+    await devices.dispose();
+  });
+
+  it('settles a pending device check on dispose and closes a later permission result', async () => {
+    let finish!: (stream: MediaStream) => void;
+    const video = track('video');
+    const base = harness(
+      vi.fn(
+        () =>
+          new Promise<MediaStream>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    );
+    const devices = manager(base);
+    const pending = devices.start({ microphone: false });
+    await devices.dispose();
+    await pending;
+    finish(stream(video));
+    await vi.waitFor(() => expect(video.stop).toHaveBeenCalledOnce());
+    expect(devices.getCameraStream()).toBeNull();
+  });
+
+  it('allows another click after an audio resume never settles', async () => {
+    vi.useFakeTimers();
+    const base = harness(vi.fn(async () => stream(track('video'))));
+    base.audio.resume.mockImplementationOnce(() => new Promise<void>(() => {}));
+    const devices = manager(base);
+    try {
+      const pending = devices.start({ microphone: false });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect((await pending).audioPlayback).toBe('failed');
+      expect((await devices.start({ microphone: false })).audioPlayback).toBe('ready');
+    } finally {
+      await devices.dispose();
+      vi.useRealTimers();
+    }
   });
 });

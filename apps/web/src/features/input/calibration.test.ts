@@ -74,6 +74,15 @@ function feed(
 }
 
 describe('createCalibrator', () => {
+  it('does not reuse one cached pose as eight independent calibration samples', () => {
+    const calibrator = createCalibrator();
+    calibrator.begin(GENERATION);
+    const pose = snapshot(1, 1000).pose;
+    for (let i = 0; i < 8; i++)
+      calibrator.observe({ ...snapshot(i + 1, 1000 + i * 30), pose }, 1000 + i * 30);
+    expect(calibrator.sampleCount).toBe(1);
+    expect(calibrator.finish().state).toBe('failed');
+  });
   it('calibrates normalized upper-body observations with no hips or legs in frame', () => {
     const calibrator = createCalibrator();
     calibrator.begin(GENERATION);

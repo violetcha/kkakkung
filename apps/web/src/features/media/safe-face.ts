@@ -39,6 +39,7 @@ export interface SafeFacePolicy {
 export function createSafeFacePolicy(holdMs: number = SAFE_FACE_HOLD_MS): SafeFacePolicy {
   let lastUsableAtMs: number | null = null;
   let lastFrameId: number | null = null;
+  let lastGeneration: number | null = null;
   let mode: SafeFaceMode = 'default';
 
   return {
@@ -55,11 +56,15 @@ export function createSafeFacePolicy(holdMs: number = SAFE_FACE_HOLD_MS): SafeFa
       if (usable) {
         // 같은 frameId를 새 검출로 다시 세지 않는다.
         const frameId = face!.frameId;
-        const isNew = frameId !== lastFrameId;
-        lastFrameId = frameId;
-        lastUsableAtMs = nowMs;
-        mode = 'live';
-        return { mode, frameId: isNew ? frameId : null };
+        const isNew =
+          lastGeneration !== runtimeGeneration || lastFrameId === null || frameId > lastFrameId;
+        if (isNew) {
+          lastGeneration = runtimeGeneration;
+          lastFrameId = frameId;
+          lastUsableAtMs = face!.sampledAtMs;
+          mode = 'live';
+          return { mode, frameId };
+        }
       }
       if (lastUsableAtMs !== null && nowMs - lastUsableAtMs <= holdMs) {
         mode = 'hold';
@@ -73,6 +78,7 @@ export function createSafeFacePolicy(holdMs: number = SAFE_FACE_HOLD_MS): SafeFa
     reset() {
       lastUsableAtMs = null;
       lastFrameId = null;
+      lastGeneration = null;
       mode = 'default';
     },
 

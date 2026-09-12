@@ -24,6 +24,7 @@ export const MICROPHONE_CONSTRAINTS: MediaStreamConstraints = Object.freeze({
   video: false,
   audio: true,
 });
+export const AUDIO_UNLOCK_TIMEOUT_MS = 3000;
 
 /** 실제 출력 그래프와 같은 Context의 상태·수명 포트. */
 export interface AudioUnlockPort {
@@ -48,6 +49,8 @@ export type DeviceManagerDeps = Readonly<{
   onLocalPreview(element: HTMLVideoElement | null): void;
   /** 카메라 트랙이 실제로 바뀌었을 때만 알린다. null은 원본 소실이다. */
   onCameraTrack?(track: MediaStreamTrack | null): void;
+  /** 선택 마이크 소스 변경. null이면 해당 송출만 정리한다. */
+  onMicrophoneTrack?(track: MediaStreamTrack | null): void;
 }>;
 
 export interface DeviceManager {
@@ -72,11 +75,18 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
   let status = INITIAL_DEVICE_STATUS;
   let generation = 0;
   let disposed = false;
+  let resolveClosed!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
 
   let camera: CameraHolding | null = null;
-  let cameraRequest: Promise<MediaStream> | null = null;
+  let cameraRequest: Promise<void> | null = null;
   let microphone: MediaStreamTrack | null = null;
-  let microphoneRequest: Promise<MediaStream> | null = null;
+  let microphoneRequest: Promise<void> | null = null;
+  let microphoneGeneration = 0;
+  let microphoneWanted = false;
+  let microphoneEnded: (() => void) | null = null;
   let preview: HTMLVideoElement | null = null;
   let audioUnlock: AudioUnlockPort | null = null;
   let audioRequest: Promise<void> | null = null;
@@ -138,6 +148,9 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     const track = microphone;
     microphone = null;
     if (!track) return;
+    if (microphoneEnded) track.removeEventListener('ended', microphoneEnded);
+    microphoneEnded = null;
+    deps.onMicrophoneTrack?.(null);
     try {
       track.stop();
     } catch {
@@ -165,7 +178,14 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     } catch {
       resume = Promise.reject(new Error('AUDIO_RESUME_FAILED'));
     }
-    audioRequest = resume
+    let timeout: ReturnType<typeof setTimeout>;
+    const timedOut = new Promise<void>((_resolve, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error('AUDIO_UNLOCK_TIMEOUT')),
+        AUDIO_UNLOCK_TIMEOUT_MS,
+      );
+    });
+    audioRequest = Promise.race([resume, timedOut, closed])
       .then(() => {
         if (disposed || audioUnlock !== context) return;
         publish({ audioPlayback: context.state === 'running' ? 'ready' : 'locked' });
@@ -175,6 +195,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
         publish({ audioPlayback: 'failed' });
       })
       .finally(() => {
+        clearTimeout(timeout);
         audioRequest = null;
       });
     return audioRequest;
@@ -183,9 +204,9 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
   const watchDeviceChange = () => {
     if (unsubscribeDeviceChange || !environment.onDeviceChange) return;
     unsubscribeDeviceChange = environment.onDeviceChange(() => {
-      if (disposed || !camera) return;
-      const track = camera.track;
-      if (track && track.readyState === 'ended') handleCameraEnded();
+      if (disposed) return;
+      if (camera?.track?.readyState === 'ended') handleCameraEnded();
+      if (microphone?.readyState === 'ended') handleMicrophoneEnded();
     });
   };
 
@@ -197,31 +218,43 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     publish({ camera: 'failed', errorCode: 'DEVICE_LOST' });
   };
 
-  const acquireCamera = async (request: number): Promise<void> => {
-    if (camera) return;
+  const handleMicrophoneEnded = () => {
+    if (disposed || !microphone) return;
+    releaseMicrophone();
+    publish({ microphone: 'failed' });
+  };
+
+  const acquireCamera = (request: number): Promise<void> => {
+    if (camera) return Promise.resolve();
+    if (cameraRequest) return cameraRequest;
+    const pending = acquireCameraOnce(request).finally(() => {
+      if (cameraRequest === pending) cameraRequest = null;
+    });
+    cameraRequest = pending;
+    return pending;
+  };
+
+  const acquireCameraOnce = async (request: number): Promise<void> => {
     publish({ camera: 'requesting' });
-    if (!cameraRequest) cameraRequest = environment.getUserMedia(CAMERA_CONSTRAINTS);
-    const pending = cameraRequest;
     let stream: MediaStream;
     try {
-      stream = await pending;
+      stream = await environment.getUserMedia(CAMERA_CONSTRAINTS);
     } catch (error) {
-      if (cameraRequest === pending) cameraRequest = null;
       if (request !== generation || disposed) return;
       publish({ camera: 'failed', errorCode: deviceErrorCode(error) });
       return;
     }
-    if (cameraRequest === pending) cameraRequest = null;
     // 폐기된 요청의 늦은 성공은 트랙을 바로 정리하고 상태를 바꾸지 않는다.
     if (request !== generation || disposed) {
       stopStream(stream);
       return;
     }
-    if (camera) {
+    const track = stream.getVideoTracks()[0] ?? null;
+    if (!track || track.readyState !== 'live') {
       stopStream(stream);
+      publish({ camera: 'failed', errorCode: 'DEVICE_LOST' });
       return;
     }
-    const track = stream.getVideoTracks()[0] ?? null;
     const onEnded = () => handleCameraEnded();
     track?.addEventListener('ended', onEnded);
     camera = { stream, track, onEnded };
@@ -231,37 +264,54 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     publish({ camera: 'ready', errorCode: null });
   };
 
-  const acquireMicrophone = async (request: number): Promise<void> => {
-    if (microphone) return;
+  const acquireMicrophone = (request: number): Promise<void> => {
+    if (microphone?.readyState === 'live') return Promise.resolve();
+    if (microphoneRequest) return microphoneRequest;
+    releaseMicrophone();
+    const pending = acquireMicrophoneOnce(request, microphoneGeneration).finally(() => {
+      if (microphoneRequest === pending) microphoneRequest = null;
+    });
+    microphoneRequest = pending;
+    return pending;
+  };
+
+  const acquireMicrophoneOnce = async (request: number, microphoneRun: number): Promise<void> => {
     publish({ microphone: 'requesting' });
-    if (!microphoneRequest) microphoneRequest = environment.getUserMedia(MICROPHONE_CONSTRAINTS);
-    const pending = microphoneRequest;
     let stream: MediaStream;
     try {
-      stream = await pending;
+      stream = await environment.getUserMedia(MICROPHONE_CONSTRAINTS);
     } catch (error) {
-      if (microphoneRequest === pending) microphoneRequest = null;
-      if (request !== generation || disposed) return;
+      if (
+        request !== generation ||
+        disposed ||
+        microphoneRun !== microphoneGeneration ||
+        !microphoneWanted
+      )
+        return;
       // 마이크 거부는 선택 기능의 실패이며 카메라 상태를 바꾸지 않는다.
       publish({ microphone: microphoneStateForError(deviceErrorCode(error)) });
       return;
     }
-    if (microphoneRequest === pending) microphoneRequest = null;
-    if (request !== generation || disposed) {
-      stopStream(stream);
-      return;
-    }
-    if (microphone) {
+    if (
+      request !== generation ||
+      disposed ||
+      microphoneRun !== microphoneGeneration ||
+      !microphoneWanted
+    ) {
       stopStream(stream);
       return;
     }
     const track = stream.getAudioTracks()[0] ?? null;
-    if (!track) {
+    if (!track || track.readyState !== 'live') {
       stopStream(stream);
       publish({ microphone: 'failed' });
       return;
     }
     microphone = track;
+    microphoneEnded = () => handleMicrophoneEnded();
+    track.addEventListener('ended', microphoneEnded);
+    deps.onMicrophoneTrack?.(track);
+    watchDeviceChange();
     publish({ microphone: 'ready' });
   };
 
@@ -270,6 +320,11 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       if (disposed) return status;
       const request = generation;
       const audioStep = unlockAudio();
+      if (microphoneWanted !== input.microphone) {
+        microphoneWanted = input.microphone;
+        microphoneGeneration++;
+        microphoneRequest = null;
+      }
       if (!input.microphone) {
         // 마이크를 끄면 기존 송신 트랙만 닫고 카메라/보정 상태는 유지한다.
         releaseMicrophone();
@@ -278,7 +333,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       }
       const cameraStep = acquireCamera(request);
       const microphoneStep = input.microphone ? acquireMicrophone(request) : Promise.resolve();
-      await Promise.all([cameraStep, microphoneStep, audioStep]);
+      await Promise.race([Promise.all([cameraStep, microphoneStep, audioStep]), closed]);
       return status;
     },
 
@@ -291,6 +346,7 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     async dispose() {
       if (disposed) return;
       disposed = true;
+      resolveClosed();
       generation += 1;
       unsubscribeDeviceChange?.();
       unsubscribeDeviceChange = null;
