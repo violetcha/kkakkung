@@ -59,6 +59,8 @@ export class MediaLifecycle {
       return;
     const key = keyOf(input);
     const previous = this.connections.get(key);
+    if (input.connected && !this.options.registry.openMatch(input.matchId)) return;
+    if (!input.connected && previous === undefined) return;
     this.connections.set(key, input.connected);
     if (!input.connected) {
       for (const generation of this.recovering.keys()) {
@@ -69,6 +71,31 @@ export class MediaLifecycle {
     }
   }
 
+  forgetMatch(matchId: string): void {
+    for (const [key] of this.connections) {
+      const [match, playerId] = JSON.parse(key);
+      if (match !== matchId) continue;
+      this.setGameConnection({ matchId, playerId, connected: false });
+      this.connections.delete(key);
+    }
+    for (const generation of this.waiters.keys())
+      if (generation.request.matchId === matchId)
+        for (const finish of this.waiters.get(generation) ?? []) finish(false);
+  }
+  forgetGeneration(generation: Generation): void {
+    this.stopRecovery(generation);
+    this.retired.delete(generation);
+    this.failed.delete(generation);
+  }
+  get retained() {
+    return {
+      connections: this.connections.size,
+      retired: this.retired.size,
+      failed: this.failed.size,
+      recovering: this.recovering.size,
+      waiters: this.waiters.size,
+    };
+  }
   isGameConnected(matchId: string, playerId: string): boolean {
     return !this.closed && this.connections.get(keyOf({ matchId, playerId })) === true;
   }

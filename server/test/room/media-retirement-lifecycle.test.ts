@@ -14,13 +14,14 @@ function fixture(
   const sessions = new ProductSessionStore({ now: () => now });
   const slots = new SlotRegistry({ maxRooms: 1 });
   const retirementRequests: any[] = [];
+  const releasedMatches: string[] = [];
   const RoomClass = createKkakkungRoom({
     serverEpoch: 'diagnostic-epoch',
     monotonicNow: () => now,
     sessions,
     slots,
     directory: { unregister() {} } as any,
-    coordinator: { rearm() {} } as any,
+    coordinator: { rearm() {}, unregister() {} } as any,
     roomExpiry: { decide: () => 'keep', remainingMs: () => null } as any,
     core: new FakeCore(),
     tuning: testTuning,
@@ -28,6 +29,9 @@ function fixture(
     layouts: null,
     media: {
       observeFrame() {},
+      releaseMatch(matchId: string) {
+        releasedMatches.push(matchId);
+      },
       lifecycle: { setGameConnection() {} },
       prepareGeneration,
       retireGeneration: async (request: any) => {
@@ -70,6 +74,7 @@ function fixture(
     sessions,
     slots,
     retirementRequests,
+    releasedMatches,
     advance: (ms: number) => {
       now += ms;
       room.heartbeat.resetForMatch(now);
@@ -83,6 +88,37 @@ function fixture(
     close: () => room.clock.clear(),
   };
 }
+
+it('keeps media ownership throughout ordinary ticks and releases it only on disposal', () => {
+  const f = fixture();
+  try {
+    const matchId = f.room.matchId;
+    for (let i = 0; i < 100; i++) f.advance(50);
+    expect(f.room.phase).toBe('TEAM_PRACTICE');
+    expect(f.releasedMatches).toEqual([]);
+    f.room.onDispose();
+    expect(f.releasedMatches).toEqual([matchId]);
+  } finally {
+    f.close();
+  }
+});
+
+it('releases the old match once on rematch and keeps the new lobby active on later ticks', () => {
+  const f = fixture();
+  try {
+    const old = f.room.matchId;
+    f.room.setPhase('RESULT');
+    f.room.startNewRound();
+    const next = f.room.matchId;
+    expect(next).not.toBe(old);
+    expect(f.releasedMatches).toEqual([old]);
+    for (let i = 0; i < 20; i++) f.advance(50);
+    expect(f.releasedMatches).toEqual([old]);
+    expect(f.room.matchId).toBe(next);
+  } finally {
+    f.close();
+  }
+});
 
 it('releases a practice leaver who never requested a media generation', () => {
   const f = fixture();

@@ -16,6 +16,7 @@ import { OperationsAudit } from '../../src/operations/OperationsAudit.js';
 import { OperationJournal } from '../../src/operations/OperationJournal.js';
 import type {
   MediaCoordinatorDeps,
+  MediaConfiguration,
   MediaGrant,
   PreparationResult,
   PrepareGenerationRequest,
@@ -47,10 +48,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function fixture(override: Partial<MediaCoordinatorServices> = {}) {
+async function fixture(
+  override: Partial<MediaCoordinatorServices> = {},
+  configuration: Partial<MediaConfiguration> = {},
+) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e16-factory-'));
   directories.push(dir);
-  const config = { ...localConfiguration(EPOCH), opsDataDir: dir };
+  const config = { ...localConfiguration(EPOCH), ...configuration, opsDataDir: dir };
   // Synthetic evidence exercises local orchestration. It is not real Cloud authorization proof.
   await fs.writeFile(path.join(dir, 'capability-report.json'), JSON.stringify(localCapability));
   await fs.writeFile(
@@ -227,14 +231,82 @@ function request(
   };
 }
 function alive(f: Fixture, current: TrustedMediaFrame) {
-  f.coordinator.observeFrame(current);
   for (const player of current.participants)
     f.coordinator.lifecycle.setGameConnection({
       matchId: current.matchId,
       playerId: player.playerId,
       connected: true,
     });
+  f.coordinator.observeFrame(current);
 }
+
+it('continuous operation forgets completed matches only after revocation, accounting and retention', async () => {
+  const f = await fixture(
+    {},
+    { operatingMode: 'continuous', publicWindow: { mode: 'continuous' } },
+  );
+  await open(f);
+  for (let i = 0; i < 6; i++) {
+    const matchId = `retention-${i}`;
+    alive(f, game(1, { matchId }));
+    const grant = await prepare(f, request('p1', { matchId, requestId: `prepare-retention-${i}` }));
+    localClosed(f, grant);
+    f.coordinator.releaseMatch(matchId);
+    expect(
+      await f.coordinator.retireGeneration({
+        requestId: `retire-retention-${i}`,
+        matchId,
+        mediaInstanceId: grant.mediaInstanceId,
+        playerId: grant.playerId,
+        receiverGeneration: grant.receiverGeneration,
+        reason: 'round-ended',
+      }),
+    ).toMatchObject({ status: 'confirmed' });
+    expect(f.coordinator.inspectRetention().generations).toBe(1);
+    f.clock.offset += 900_001;
+    await f.coordinator.reconcile();
+    expect(f.coordinator.inspectRetention()).toMatchObject({
+      generations: 0,
+      activeMatches: 0,
+      frames: 0,
+      playerScopes: 0,
+      connections: 0,
+      tracks: 0,
+      subscriptions: 0,
+      policyFrames: 0,
+      policyVersions: 0,
+    });
+    f.coordinator.observeFrame(game(1, { matchId, frameRevision: 999 }));
+    expect(f.coordinator.inspectRetention().frames).toBe(0);
+  }
+}, 60_000);
+
+it('attested usage awaiting reconciliation keeps its revoked generation after expiry', async () => {
+  const f = await fixture();
+  await open(f);
+  alive(f, game());
+  const grant = await prepare(f);
+  localClosed(f, grant);
+  f.coordinator.releaseMatch(grant.matchId);
+  expect(
+    await f.coordinator.retireGeneration({
+      requestId: 'retention-accounting',
+      matchId: grant.matchId,
+      mediaInstanceId: grant.mediaInstanceId,
+      playerId: grant.playerId,
+      receiverGeneration: grant.receiverGeneration,
+      reason: 'round-ended',
+    }),
+  ).toMatchObject({ status: 'confirmed' });
+  f.clock.offset += 900_001;
+  await f.coordinator.reconcile();
+  expect(f.coordinator.inspectRetention()).toMatchObject({
+    generations: 1,
+    activeMatches: 0,
+    connections: 0,
+    frames: 0,
+  });
+});
 async function prepare(f: Fixture, input = request()): Promise<Ready> {
   const value = await f.coordinator.prepareGeneration(input);
   expect(value).toMatchObject({ status: 'ready', code: null });
@@ -482,6 +554,7 @@ describe('E-16 actual coordinator factory with real local disk and synthetic Clo
         ),
     ).toBe(false);
     f.coordinator.lifecycle.setGameConnection({ matchId: 'm', playerId: 'p1', connected: true });
+    f.coordinator.observeFrame(game());
     const issued = await prepare(f, request('p1', { requestId: 'connected-prepare' }));
     const payload = JSON.parse(
       Buffer.from(issued.grant.token.split('.')[1]!, 'base64url').toString('utf8'),

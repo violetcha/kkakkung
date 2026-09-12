@@ -447,6 +447,6 @@ export type ProductMediaRuntime = MediaCoordinator &
   Partial<
     Pick<
       import('../media/MediaCoordinator.js').MediaCoordinatorRuntime,
-      'lifecycle' | 'canIssue' | 'isInitialized' | 'createOperationsHandlers'
+      'lifecycle' | 'canIssue' | 'isInitialized' | 'createOperationsHandlers' | 'releaseMatch'
     >
   >;

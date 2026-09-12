@@ -533,6 +533,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.slots.beginClose(this.roomCode);
       this.invalidateLayout();
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
+      deps.media?.releaseMatch?.(this.matchId);
       for (const mediaInstanceId of this.mediaFrameWaiters.keys())
         this.settleMediaFrameWaiters(mediaInstanceId, false);
       deps.coordinator.unregister(this.roomId);
@@ -1142,6 +1143,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       for (const instance of this.driver.attached())
         this.retireInstance(instance.gameInstanceId, 'round-ended');
       this.driver.cancelAllPending('ROUND_ENDED');
+      deps.media?.releaseMatch?.(this.matchId);
       this.context.startNewRound();
       this.queue.reset();
       this.heartbeat.resetForMatch(now);

@@ -134,6 +134,13 @@ export class SubscriptionController {
     target.uncertainty.dispose();
     // inFlight is consumed below; retirement is free to perform exceptional remote cleanup.
   }
+  forget(key: SubscriptionKey): void {
+    this.retire(key);
+    this.targets.delete(this.id(key));
+  }
+  get retained() {
+    return this.targets.size;
+  }
   checkDeadlines(): void {
     for (const target of this.targets.values()) target.uncertainty.check();
   }
