@@ -85,6 +85,11 @@ Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 
 
 실패(교체 이후): 운영 API 가 있으면 **새 requestId 로 다시 drain** 을 완료한 뒤에만, 이전 태그의 이미지 id 가 last-good-digest 와 같을 때만 복귀하고, 복귀 이미지도 4~8 을 다시 통과해야 한다. 이전 기록 없음·digest 불일치·drain 실패·복귀 이미지 ready 실패는 **ROLLBACK_BLOCKED** 로 남기고 강제 교체하지 않는다.
 
+이전 drain 이후 새 서버가 한 번도 입장을 열지 못한 최초 기동 실패는
+[제한된 복구 절차](../docs/failed-startup-recovery.md)를 따른다. 명시적 옵션과 실행 이미지·
+신규 발급 없음·기록 불변·정상 종료·writer 해제·백업 검사를 모두 요구하고,
+수정 이미지의 4~8을 다시 통과한다. 이 경로는 일반 rollback의 drain 검사를 없애지 않는다.
+
 프로필은 명시적으로 선택한다. `skeleton`은 운영·미디어 없는 진단 배포이며 drain/resume은 NOT_RUN, 결과는 `DEPLOYED_WITHOUT_OPERATIONS`다. `product`는 Secret file의 OPS_TOKEN, 검증된 운영 설정과 시험 인증을 사용한다. continuous DP-06 계획은 자동 생성하며 `/opt/kkakkung/cloud-preflight.json`은 attested에서만 필요하다. 성공 결과는 READY다. 단계 기록은 `/opt/kkakkung/releases/<tag>/release.json`, 계약 시험은 `tests/contracts/deployment-sequence.test.ts`를 따른다.
 
 ## 브랜치와 배포
