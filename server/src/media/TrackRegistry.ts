@@ -77,6 +77,14 @@ export class TrackRegistry {
     entry.bindings = [];
     this.deps.onChanged(entry.owner);
   }
+  /** Retirement latches the captured query before its lookup entry is removed. */
+  forget(owner: TrackOwner): void {
+    this.retire(owner);
+    this.entries.delete(this.key(owner));
+  }
+  get retained() {
+    return this.entries.size;
+  }
   markDirty(owner: TrackOwner): void {
     const entry = this.entries.get(this.key(owner));
     if (!entry || entry.terminal) return;

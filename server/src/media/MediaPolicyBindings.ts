@@ -165,11 +165,11 @@ export class MediaPolicyBindings {
     if (!lifetime) return;
     this.registered.delete(generation);
     lifetime.abort();
-    this.subscriptions.retire(this.receiver(generation));
+    this.subscriptions.forget(this.receiver(generation));
     this.projection.forget(this.receiver(generation), generation.request.playerId);
     this.bindingVersions.delete(generation);
     this.participantSids.delete(generation);
-    this.tracks.retire(this.owner(generation));
+    this.tracks.forget(this.owner(generation));
     const { matchId, mediaInstanceId } = generation.request;
     if (
       ![...this.registered.keys()].some(
@@ -181,6 +181,30 @@ export class MediaPolicyBindings {
     }
   }
 
+  forgetMatch(matchId: string): void {
+    for (const generation of [...this.registered.keys()])
+      if (generation.request.matchId === matchId) this.retire(generation);
+    for (const key of this.frames.keys()) {
+      const [match, instance] = JSON.parse(key);
+      if (match !== matchId) continue;
+      this.frames.delete(key);
+      this.audibility.forget(matchId, instance);
+    }
+    for (const key of this.publishVersions.keys())
+      if (JSON.parse(key)[0] === matchId) this.publishVersions.delete(key);
+    for (const generation of this.failed)
+      if (generation.request.matchId === matchId) this.failed.delete(generation);
+  }
+  get retained() {
+    return {
+      registered: this.registered.size,
+      failed: this.failed.size,
+      frames: this.frames.size,
+      versions: this.publishVersions.size,
+      tracks: this.tracks.retained,
+      subscriptions: this.subscriptions.retained,
+    };
+  }
   async reconcile(): Promise<void> {
     if (this.closed) return;
     this.subscriptions.checkDeadlines();

@@ -166,6 +166,28 @@ export class RevocationRetryBindings {
     return this.retries.restore([...this.intents.values()]);
   }
 
+  pruneRequestHistory(): void {
+    this.retirement.prune();
+  }
+  /** Retry checkpoints are shared with recovery; they require separate durable compaction.
+   * Never orphan an intent or an unreconciled reservation by dropping its Generation. */
+  canForgetGeneration(generation: Generation): boolean {
+    if (
+      this.closed ||
+      this.failed ||
+      this.finalizing.has(generation) ||
+      !this.durableRevoked.has(generation) ||
+      !this.ended.has(generation) ||
+      this.retirementIds.has(generation)
+    )
+      return false;
+    try {
+      return this.reservations(generation.reservationId).every((r) => r.status === 'RELEASED');
+    } catch {
+      return false;
+    }
+  }
+
   retire(input: RetireGenerationRequest): ReturnType<RetirementBarrier['retire']> {
     if (this.closed) return Promise.reject(new Error('RETRY_BINDINGS_CLOSED'));
     if (this.failed) return Promise.reject(new Error('RETRY_STORAGE_FAILED'));

@@ -26,19 +26,81 @@ export class MediaGenerationRegistry {
   private readonly frames = new Map<string, TrustedMediaFrame>();
   private readonly playerInstances = new Map<string, string>();
   private readonly obsoleteScopes = new Set<string>();
+  private readonly openMatches = new Set<string>();
   private closed = false;
 
-  constructor(readonly namespace: string) {
+  constructor(
+    readonly namespace: string,
+    private readonly requireOpenMatch = false,
+  ) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(namespace) || namespace.includes('--')) {
       throw new Error('INVALID_NAMESPACE');
     }
   }
 
+  /** Only authenticated Room ownership may open a match; a frame cannot reopen it. */
+  openMatch(matchId: string): boolean {
+    if (
+      this.closed ||
+      !matchId ||
+      (!this.openMatches.has(matchId) && this.openMatches.size >= 4096)
+    )
+      return false;
+    this.openMatches.add(matchId);
+    return true;
+  }
+  isMatchOpen(matchId: string): boolean {
+    return !this.closed && this.openMatches.has(matchId);
+  }
+  endMatch(matchId: string): void {
+    this.openMatches.delete(matchId);
+    const belongs = (key: string) => JSON.parse(key)[0] === matchId;
+    for (const key of this.frames.keys()) if (belongs(key)) this.frames.delete(key);
+    for (const key of this.rooms.keys()) if (belongs(key)) this.rooms.delete(key);
+    for (const key of this.current.keys()) if (belongs(key)) this.current.delete(key);
+    for (const key of this.playerInstances.keys())
+      if (belongs(key)) this.playerInstances.delete(key);
+    for (const key of this.obsoleteScopes)
+      if (belongs(JSON.parse(key)[0])) this.obsoleteScopes.delete(key);
+    // Keep objects until remote revocation and durable accounting have been confirmed.
+    for (const generation of this.generations)
+      if (generation.request.matchId === matchId) generation.terminal = true;
+  }
+  prune(canForget: (generation: Generation) => boolean): Generation[] {
+    const removed: Generation[] = [];
+    for (let i = this.generations.length - 1; i >= 0; i--) {
+      const generation = this.generations[i]!;
+      if (
+        !generation.terminal ||
+        generation.state !== 'REVOKED' ||
+        this.get(generation.request.matchId, generation.request.playerId) === generation ||
+        !canForget(generation)
+      )
+        continue;
+      this.generations.splice(i, 1);
+      removed.push(generation);
+    }
+    return removed;
+  }
+  get retained() {
+    return {
+      generations: this.generations.length,
+      current: this.current.size,
+      rooms: this.rooms.size,
+      frames: this.frames.size,
+      players: this.playerInstances.size,
+      obsoleteScopes: this.obsoleteScopes.size,
+      openMatches: this.openMatches.size,
+    };
+  }
+
   observe(frame: TrustedMediaFrame): boolean {
     if (this.closed || !Number.isSafeInteger(frame.frameRevision) || frame.frameRevision < 0)
       return false;
+    if (this.requireOpenMatch && !this.isMatchOpen(frame.matchId)) return false;
     const key = instanceKey(frame.matchId, frame.mediaInstanceId);
     const old = this.frames.get(key);
+    if (!old && this.frames.size >= 4096) return false;
     if (old && frame.frameRevision <= old.frameRevision) return false;
     if (old && old.instancePurpose !== frame.instancePurpose) return false;
     for (const participant of frame.participants) {
@@ -56,7 +118,13 @@ export class MediaGenerationRegistry {
 
   eligible(input: PrepareGenerationRequest): boolean {
     const frame = this.frames.get(instanceKey(input.matchId, input.mediaInstanceId));
-    if (this.closed || !frame || frame.instancePurpose !== input.purpose) return false;
+    if (
+      this.closed ||
+      (this.requireOpenMatch && !this.isMatchOpen(input.matchId)) ||
+      !frame ||
+      frame.instancePurpose !== input.purpose
+    )
+      return false;
     if (
       this.playerInstances.get(playerKey(input.matchId, input.playerId)) !== input.mediaInstanceId
     )
@@ -96,6 +164,7 @@ export class MediaGenerationRegistry {
 
   allocate(input: PrepareGenerationRequest, nowEpochMs: number): Generation {
     if (!this.eligible(input)) throw new Error('WRONG_SCOPE');
+    if (this.generations.length >= 4096) throw new Error('NOT_READY');
     if (!Number.isSafeInteger(nowEpochMs) || nowEpochMs <= 0) throw new Error('INVALID_CLOCK');
     const old = this.get(input.matchId, input.playerId);
     if (
@@ -142,5 +211,6 @@ export class MediaGenerationRegistry {
     this.frames.clear();
     this.playerInstances.clear();
     this.obsoleteScopes.clear();
+    this.openMatches.clear();
   }
 }

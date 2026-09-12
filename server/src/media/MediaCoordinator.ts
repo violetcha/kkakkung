@@ -21,6 +21,7 @@ import { LiveKitGateway, type GatewayOptions } from './LiveKitGateway.js';
 import { MediaGenerationRegistry, type Generation } from './MediaGenerationRegistry.js';
 import { MediaLifecycle } from './MediaLifecycle.js';
 import { MediaPolicyBindings } from './MediaPolicyBindings.js';
+import { RequestHistory } from './RequestHistory.js';
 import type { GrantIssuerDeps } from './GrantIssuer.js';
 import type {
   MediaCoordinator,
@@ -58,6 +59,10 @@ export interface MediaCoordinatorRuntime extends MediaCoordinator {
   ): ReturnType<typeof createOperationsHandlers>;
   /** Also driven outside the game tick by the owner's bounded maintenance loop. */
   reconcile(): Promise<void>;
+  /** Only invoked by Room disposal or successful rematch, never by the ordinary tick. */
+  releaseMatch(matchId: string): void;
+  /** Aggregate local diagnostics only; no identifiers, grants or private game information. */
+  inspectRetention(): Readonly<Record<string, number>>;
 }
 
 /** The public EXEC-CONTRACT-3 factory remains structurally compatible. No routes or env IO. */
@@ -84,13 +89,14 @@ class Coordinator implements MediaCoordinatorRuntime {
   private readonly pendingRetirements = new Map<Generation, number>();
   private readonly retirements = new Map<Generation, Promise<RetirementResult>>();
   private readonly roomCleanups = new Map<string, Promise<void>>();
-  private readonly failures = new Set<string>();
-  private readonly published = new Set<string>();
-  private readonly publishedRetirements = new Set<string>();
-  private readonly recoveryRequests = new Map<
-    string,
-    { recovery: boolean; recoveryStartedAt?: number }
-  >();
+  private readonly failures = new WeakMap<Generation, Set<MediaFailureCode>>();
+  private readonly published: RequestHistory<{ matchId: string }>;
+  private readonly publishedRetirements: RequestHistory<{ matchId: string }>;
+  private readonly recoveryRequests: RequestHistory<{
+    matchId: string;
+    recovery: boolean;
+    recoveryStartedAt?: number;
+  }>;
   private readonly active = new Set<Promise<unknown>>();
   private capability: CapabilityReport | null = null;
   private initialized = false;
@@ -105,6 +111,9 @@ class Coordinator implements MediaCoordinatorRuntime {
     services: MediaCoordinatorServices,
   ) {
     deps = this.deps = { ...deps, config: structuredClone(deps.config) };
+    this.published = new RequestHistory(deps.monotonicNow);
+    this.publishedRetirements = new RequestHistory(deps.monotonicNow);
+    this.recoveryRequests = new RequestHistory(deps.monotonicNow);
     const { config } = deps;
     if (
       !Number.isSafeInteger(config.maxConcurrentParticipants) ||
@@ -112,7 +121,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     )
       throw new Error('INVALID_MEDIA_CAPACITY');
     const nowEpochMs = () => Math.floor(deps.epochNowSeconds() * 1000);
-    this.registry = new MediaGenerationRegistry(config.namespace);
+    this.registry = new MediaGenerationRegistry(config.namespace, true);
     this.apiBudget = new ApiBudget({
       monotonicNow: deps.monotonicNow,
       maxNormalCallsPer60s: config.maxNormalApiCallsPer60s,
@@ -443,14 +452,25 @@ class Coordinator implements MediaCoordinatorRuntime {
         !this.registry.wasNeverIssued(old) &&
         old.request.mediaInstanceId === captured.mediaInstanceId;
       recovery = {
+        matchId: captured.matchId,
         recovery: replacing,
         recoveryStartedAt: replacing
           ? (this.lifecycle.recoveryStartedAt(old) ?? this.deps.monotonicNow())
           : undefined,
       };
-      this.recoveryRequests.set(captured.requestId, recovery);
+      if (!this.recoveryRequests.set(captured.requestId, recovery))
+        return this.finishPreparation({
+          ...captured,
+          status: 'rejected',
+          receiverGeneration: null,
+          grant: null,
+          code: 'NOT_READY',
+        });
     }
-    const result = await this.transition.replace(captured, recovery);
+    const history = recovery;
+    const result = await this.transition
+      .replace(captured, history)
+      .finally(() => this.recoveryRequests.settle(captured.requestId, history));
     if (result.status === 'ready') {
       const generation = this.registry.get(result.matchId, result.playerId);
       const current = () =>
@@ -519,10 +539,67 @@ class Coordinator implements MediaCoordinatorRuntime {
     this.policy.observeFrame(frame);
   }
 
+  releaseMatch(matchId: string): void {
+    if (this.closed) return;
+    this.registry.endMatch(matchId);
+    this.lifecycle.forgetMatch(matchId);
+    this.transition.forgetMatch(matchId);
+    this.policy.forgetMatch(matchId);
+    this.recoveryRequests.forgetCompleted((value) => value.matchId === matchId);
+    this.published.forgetCompleted((value) => value.matchId === matchId);
+    this.publishedRetirements.forgetCompleted((value) => value.matchId === matchId);
+    for (const generation of this.registry.all())
+      if (generation.request.matchId === matchId && generation.state !== 'REVOKED')
+        this.track(this.rawRetire(this.retirement(generation, 'round-ended')));
+  }
+
   retireGeneration(input: RetireGenerationRequest): Promise<RetirementResult> {
     if (!this.isInitialized())
       return Promise.resolve({ ...input, status: 'unknown', code: 'NOT_READY' });
     return this.transition.retire(input);
+  }
+
+  inspectRetention() {
+    const registry = this.registry.retained;
+    const policy = this.policy.retained;
+    return {
+      generations: registry.generations,
+      activeMatches: registry.openMatches,
+      frames: registry.frames,
+      playerScopes: registry.players,
+      connections: this.lifecycle.retained.connections,
+      retiredLocally: this.lifecycle.retained.retired,
+      tracks: policy.tracks,
+      subscriptions: policy.subscriptions,
+      policyFrames: policy.frames,
+      policyVersions: policy.versions,
+      recoveryRequests: this.recoveryRequests.retained.entries,
+      preparationNotifications: this.published.retained.entries,
+      retirementNotifications: this.publishedRetirements.retained.entries,
+      transitionRequests: this.transition.retained.requests.entries,
+      transitionRetirements: this.transition.retained.retirements.entries,
+    };
+  }
+
+  private pruneCompletedHistory(): void {
+    this.pruneGrantRequests();
+    this.transition.prune();
+    this.currentCleanup.pruneRequestHistory();
+    this.recoveryRequests.prune();
+    this.published.prune();
+    this.publishedRetirements.prune();
+    const now = this.deps.epochNowSeconds() * 1000;
+    const removed = this.registry.prune(
+      (generation) =>
+        !this.retirements.has(generation) &&
+        !this.roomCleanups.has(generation.roomName) &&
+        now - generation.expiresAtEpochMs >= 600_000 &&
+        (this.registry.wasNeverIssued(generation) ||
+          this.currentCleanup.canForgetGeneration(generation)) &&
+        (!this.registry.isMatchOpen(generation.request.matchId) ||
+          this.lifecycle.hasLocalRetirement(generation)),
+    );
+    for (const generation of removed) this.lifecycle.forgetGeneration(generation);
   }
 
   handleWebhook(rawBody: string, authorization: string) {
@@ -535,7 +612,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     if (!this.isInitialized()) return Promise.resolve();
     if (this.maintenance) return this.maintenance;
     this.maintenance = (async () => {
-      this.pruneGrantRequests();
+      this.pruneCompletedHistory();
       await this.policy.reconcile();
       if (this.closed) return;
       this.lifecycle.reconcile();
@@ -734,7 +811,9 @@ class Coordinator implements MediaCoordinatorRuntime {
       result.code,
     ]);
     if (this.closed || this.published.has(key)) return result;
-    this.published.add(key);
+    const recorded = { matchId: result.matchId };
+    this.published.set(key, recorded);
+    this.published.settle(key, recorded);
     try {
       this.deps.enqueueControl({ type: 'MEDIA_PREPARED', result });
     } catch {
@@ -766,7 +845,9 @@ class Coordinator implements MediaCoordinatorRuntime {
       result.code,
     ]);
     if (!this.closed && !this.publishedRetirements.has(key)) {
-      this.publishedRetirements.add(key);
+      const recorded = { matchId: result.matchId };
+      this.publishedRetirements.set(key, recorded);
+      this.publishedRetirements.settle(key, recorded);
       try {
         this.deps.enqueueControl({ type: 'MEDIA_RETIRED', result });
       } catch {
@@ -787,9 +868,10 @@ class Coordinator implements MediaCoordinatorRuntime {
     if (code === 'POLICY_UNKNOWN') this.runtime.lock('READINESS_UNCONFIRMED');
   }
   private emitFailure(g: Generation, code: MediaFailureCode): void {
-    const key = JSON.stringify([g.identity, code]);
-    if (this.failures.has(key) || this.closed) return;
-    this.failures.add(key);
+    const failures = this.failures.get(g) ?? new Set<MediaFailureCode>();
+    if (failures.has(code) || this.closed) return;
+    failures.add(code);
+    this.failures.set(g, failures);
     try {
       this.deps.enqueueControl({
         type: 'MEDIA_FAILED',

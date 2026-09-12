@@ -2,6 +2,7 @@ import type { CapabilityReport } from './CloudCapabilityProbe.js';
 import type { Generation } from './MediaGenerationRegistry.js';
 import { confirmRemoteRevocation } from './RemoteRevocation.js';
 import type { RetireGenerationRequest, RetirementResult } from './types.js';
+import { RequestHistory } from './RequestHistory.js';
 
 export type RetirementBarrierDeps = {
   find: (input: RetireGenerationRequest) => Generation | undefined;
@@ -32,8 +33,16 @@ const fingerprint = (input: RetireGenerationRequest) =>
 export class RetirementBarrier {
   private readonly pending = new Map<Generation, Promise<RetirementResult>>();
   private readonly attempted = new WeakSet<Generation>();
-  private readonly requests = new Map<string, Request>();
-  constructor(private readonly deps: RetirementBarrierDeps) {}
+  private readonly requests: RequestHistory<Request>;
+  constructor(private readonly deps: RetirementBarrierDeps) {
+    this.requests = new RequestHistory(() => deps.nowEpochSeconds() * 1000);
+  }
+  prune(): void {
+    this.requests.prune();
+  }
+  get retained() {
+    return { ...this.requests.retained, pendingGenerations: this.pending.size };
+  }
 
   retire(input: RetireGenerationRequest, retry = false): Promise<RetirementResult> {
     const captured = { ...input };
@@ -85,8 +94,9 @@ export class RetirementBarrier {
     void promise.then(
       (result) => {
         request.result = result;
+        this.requests.settle(input.requestId, request);
       },
-      () => {},
+      () => this.requests.settle(input.requestId, request),
     );
     return promise;
   }

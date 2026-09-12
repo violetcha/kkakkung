@@ -1,4 +1,5 @@
 import { nodePolicyTimer, type PolicyTimer } from './PolicyUncertainty.js';
+import { RequestHistory } from './RequestHistory.js';
 import type {
   MediaFailureCode,
   PreparationResult,
@@ -63,14 +64,42 @@ function rejected(input: PrepareGenerationRequest, code: MediaFailureCode): Prep
 /** Serializes only media replacement. Logical game scope remains owned by B. */
 export class GenerationTransition {
   private readonly queues = new Map<string, Promise<unknown>>();
-  private readonly requests = new Map<string, RequestEntry<PreparationResult>>();
-  private readonly retirements = new Map<string, RequestEntry<RetirementResult>>();
+  private readonly requests: RequestHistory<RequestEntry<PreparationResult>>;
+  private readonly retirements: RequestHistory<RequestEntry<RetirementResult>>;
   private readonly pending = new Set<Pending>();
   private readonly revisions = new Map<string, number>();
   private readonly ended = new Set<string>();
   private closed = false;
 
-  constructor(private readonly deps: GenerationTransitionDeps) {}
+  constructor(private readonly deps: GenerationTransitionDeps) {
+    this.requests = new RequestHistory(deps.monotonicNow);
+    this.retirements = new RequestHistory(deps.monotonicNow);
+  }
+
+  prune(): void {
+    this.requests.prune();
+    this.retirements.prune();
+  }
+
+  get retained() {
+    return {
+      requests: this.requests.retained,
+      retirements: this.retirements.retained,
+      queues: this.queues.size,
+      revisions: this.revisions.size,
+      ended: this.ended.size,
+    };
+  }
+
+  /** The owner has closed authoritative admission for this match before invoking this. */
+  forgetMatch(matchId: string): void {
+    const match = (key: string) => JSON.parse(key)[0] === matchId;
+    for (const pending of this.pending) if (match(pending.key)) pending.cancel('STALE_GENERATION');
+    for (const key of this.revisions.keys()) if (match(key)) this.revisions.delete(key);
+    for (const key of this.ended) if (match(key)) this.ended.delete(key);
+    this.requests.forgetCompleted((entry) => entry.result?.matchId === matchId);
+    this.retirements.forgetCompleted((entry) => entry.result?.matchId === matchId);
+  }
 
   isAllowed(matchId: string, playerId: string): boolean {
     return !this.closed && !this.ended.has(keyOf({ matchId, playerId }));
@@ -121,6 +150,8 @@ export class GenerationTransition {
         );
     }
 
+    if (!this.requests.canAdd(input.requestId))
+      return Promise.resolve(rejected(input, 'NOT_READY'));
     const key = keyOf(input);
     const revision = this.revisions.get(key) ?? 0;
     const receivedAt = this.deps.monotonicNow();
@@ -256,10 +287,12 @@ export class GenerationTransition {
       if (result.status === 'unknown') this.blocked(input, result.code);
       return result;
     });
-    void work.then(finish, () => {
-      this.blocked(input, 'RETIREMENT_UNCONFIRMED');
-      finish(rejected(input, 'RETIREMENT_UNCONFIRMED'));
-    });
+    void work
+      .then(finish, () => {
+        this.blocked(input, 'RETIREMENT_UNCONFIRMED');
+        finish(rejected(input, 'RETIREMENT_UNCONFIRMED'));
+      })
+      .finally(() => this.requests.settle(input.requestId, entry));
     return promise;
   }
 
@@ -316,7 +349,17 @@ export class GenerationTransition {
         return failure('RETIREMENT_UNCONFIRMED');
       }
     });
-    this.retirements.set(input.requestId, { fingerprint, promise });
+    const entry: RequestEntry<RetirementResult> = { fingerprint, promise };
+    // A full retry cache must never suppress remote revocation. The coordinator/barrier
+    // still deduplicates in-flight work by Generation when this request is uncached.
+    this.retirements.set(input.requestId, entry);
+    void promise.then(
+      (result) => {
+        entry.result = result;
+        this.retirements.settle(input.requestId, entry);
+      },
+      () => this.retirements.settle(input.requestId, entry),
+    );
     return promise;
   }
 
