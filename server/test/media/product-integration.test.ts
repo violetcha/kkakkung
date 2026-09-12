@@ -414,5 +414,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
         },
       }),
     );
-  }, 120000);
+    // Five complete rounds plus one aborted round run sequentially, including real countdowns.
+    // This is the aggregate test budget; phase deadlines and the 250ms server overload gate stay live.
+  }, 180_000);
 });
