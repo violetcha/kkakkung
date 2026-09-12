@@ -37,6 +37,8 @@ function publicSnapshot(value: OperationSnapshot): OperationSnapshot {
 function publicStatus(value: OperationsStatus): OperationsStatus {
   if (
     !value ||
+    (value.operatingMode !== undefined &&
+      !oneOf(value.operatingMode, ['attested', 'continuous'])) ||
     !oneOf(value.admission, ['OPEN', 'DRAINING', 'LOCKED']) ||
     !oneOf(value.readiness, ['READY', 'RECOVERING', 'LOCKED']) ||
     !count(value.unresolvedCount) ||
@@ -52,6 +54,7 @@ function publicStatus(value: OperationsStatus): OperationsStatus {
     remainingMinutes: value.remainingMinutes,
     remainingBytes: value.remainingBytes,
     checkedAtEpochMs: value.checkedAtEpochMs,
+    ...(value.operatingMode ? { operatingMode: value.operatingMode } : {}),
   };
 }
 

@@ -632,6 +632,7 @@ export type MediaCoordinatorDeps = Readonly<{
   }>;
 }>;
 export type MediaConfiguration = Readonly<{
+  operatingMode?: 'attested' | 'continuous';
   httpUrl: string;
   wsUrl: string;
   apiKey: string;
@@ -639,7 +640,10 @@ export type MediaConfiguration = Readonly<{
   namespace: string;
   opsDataDir: string;
   projectAlias: string;
-  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  publicWindow:
+    | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
+    | Readonly<{ mode: 'continuous' }>
+    | null;
   officialBudgetMaxAgeMs: number;
   operationTimeoutMs: number;
   productSecurityReady: boolean;
@@ -768,6 +772,8 @@ export type OperationSnapshot = Readonly<{
   updatedAtEpochMs: number;
 }>;
 export type OperationsStatus = Readonly<{
+  /** Absent means legacy attested operation; continuous balances remain unknown (null). */
+  operatingMode?: 'attested' | 'continuous';
   admission: 'OPEN' | 'DRAINING' | 'LOCKED';
   readiness: Readiness['state'];
   unresolvedCount: number;

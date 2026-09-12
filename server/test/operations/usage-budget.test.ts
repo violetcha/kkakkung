@@ -24,16 +24,17 @@ const request: UsageRequest = {
   expectedBytes: 1000,
   margin: 0.2,
 };
-async function setup(confirmed = true) {
+async function setup(confirmed = true, providerQuota = false) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e-usage-'));
   directories.push(dir);
   let now = 1000;
   let allowed = true;
-  const store = new UsageCheckpoint({ opsDataDir: dir });
+  const store = new UsageCheckpoint({ opsDataDir: dir, providerQuota });
   const options = {
     store,
     projectAlias: 'project-204',
     officialBudgetMaxAgeMs: 10000,
+    providerQuota,
     now: () => now,
     canIssue: () => ({ allowed }),
   };
@@ -237,4 +238,72 @@ it('reuses frozen accounting until persistence and observes close immediately', 
   expect(next.reservations).toHaveLength(1);
   await s.budget.close();
   expect(s.budget.readSnapshot().writable).toBe(false);
+});
+describe('provider quota with durable local accounting', () => {
+  it('survives a month and checkpoint reload, releasing only after remote retirement confirmation', async () => {
+    const f = await setup(false, true);
+    expect(f.budget.snapshot()).toMatchObject({
+      integrity: 'ok',
+      official: null,
+      budgetPolicy: 'provider-quota',
+    });
+    expect((await f.budget.reserve(request)).status).toBe('reserved');
+    expect(await f.budget.markRemoteConfirmed(request.reservationId)).toBe(false);
+    expect(await f.budget.markRetiring(request.reservationId)).toBe(true);
+    expect(await f.budget.reserve({ ...request, reservationId: 'blocked' })).toMatchObject({
+      code: 'UNRESOLVED_RETIREMENT',
+    });
+    f.setNow(30 * 86400000);
+    const restored = new UsageBudget(f.options);
+    await restored.restore();
+    expect(restored.snapshot().reservations[0]?.status).toBe('RETIRING');
+    expect(await restored.markRemoteConfirmed(request.reservationId)).toBe(true);
+    expect(restored.snapshot()).toMatchObject({ activeMinutes: 0, official: null });
+    expect((await restored.reserve({ ...request, reservationId: 'next-round' })).status).toBe(
+      'reserved',
+    );
+    expect(
+      (await restored.reconcileOfficial(official, { version: 2, periodId: '2026-10' })).status,
+    ).toBe('rejected');
+    f.setAllowed(false);
+    expect(await restored.reserve({ ...request, reservationId: 'closed' })).toMatchObject({
+      code: 'ISSUANCE_BLOCKED',
+    });
+    const again = new UsageBudget(f.options);
+    expect((await again.restore()).reservations.map((r) => r.status)).toEqual([
+      'RELEASED',
+      'ACTIVE',
+    ]);
+  });
+  it('never recreates missing/corrupt history without the one-use initialization proof', async () => {
+    const f = await setup(false, true);
+    await fs.unlink(path.join(f.dir, 'usage-checkpoint.json'));
+    const missing = new UsageBudget(f.options);
+    expect((await missing.restore()).integrity).toBe('missing');
+    expect(await missing.reserve(request)).toMatchObject({ code: 'BUDGET_UNCONFIRMED' });
+    await fs.writeFile(path.join(f.dir, 'usage-checkpoint.json'), '{}');
+    const corrupt = new UsageBudget(f.options);
+    expect((await corrupt.restore({ allowInitializeMissing: true })).integrity).toBe('corrupt');
+    expect(await corrupt.reserve(request)).toMatchObject({ code: 'STORAGE_FAILURE' });
+  });
+  it('migrates existing official and awaiting records without rewriting the official report', async () => {
+    const f = await setup();
+    await f.budget.reserve(request);
+    await f.budget.markRetiring(request.reservationId);
+    await f.budget.markRemoteConfirmed(request.reservationId);
+    f.setNow(30 * 86400000);
+    const migrated = new UsageBudget({
+      ...f.options,
+      providerQuota: true,
+      store: new UsageCheckpoint({ opsDataDir: f.dir, providerQuota: true }),
+    });
+    const before = await migrated.restore();
+    expect(before.reservations[0]?.status).toBe('AWAITING_OFFICIAL');
+    expect(await migrated.markRemoteConfirmed(request.reservationId)).toBe(true);
+    expect(migrated.snapshot().official).toEqual(before.official);
+    expect(migrated.snapshot().reservations[0]?.status).toBe('RELEASED');
+    expect((await migrated.reserve({ ...request, reservationId: 'after-migration' })).status).toBe(
+      'reserved',
+    );
+  });
 });

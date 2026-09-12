@@ -119,7 +119,7 @@ export function validateUsageRequest(value: unknown): UsageRequest {
   return request;
 }
 
-export function validateUsageState(value: unknown): UsageState {
+export function validateUsageState(value: unknown, providerQuota = false): UsageState {
   const o = strictObject(value, ['official', 'reservations']);
   let official: UsageState['official'] = null;
   if (o.official !== null) {
@@ -213,13 +213,22 @@ export function validateUsageState(value: unknown): UsageState {
       throw new Error('INVALID_RELEASED_RESERVATION');
     return { ...record, request } as UsageReservation;
   });
-  if (!official && reservations.length) throw new Error('RESERVATIONS_WITHOUT_OFFICIAL_HISTORY');
+  if (!providerQuota && !official && reservations.length)
+    throw new Error('RESERVATIONS_WITHOUT_OFFICIAL_HISTORY');
   return { official, reservations };
 }
 
 export class UsageCheckpoint extends CheckpointStore<UsageState> {
-  constructor(options: { opsDataDir: string; isWritable?: () => boolean }) {
-    super({ ...options, fileName: 'usage-checkpoint.json', validate: validateUsageState });
+  constructor(options: {
+    opsDataDir: string;
+    isWritable?: () => boolean;
+    providerQuota?: boolean;
+  }) {
+    super({
+      ...options,
+      fileName: 'usage-checkpoint.json',
+      validate: (value) => validateUsageState(value, options.providerQuota === true),
+    });
   }
 }
 

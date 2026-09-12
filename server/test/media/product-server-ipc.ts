@@ -24,6 +24,7 @@ export const productServerRequestSchema = z.discriminatedUnion('action', [
     action: z.literal('boot'),
     opsToken: z.string().uuid(),
     cpuProfile: z.literal(true).optional(),
+    operatingMode: z.enum(['attested', 'continuous']).optional(),
   }),
   z.strictObject({
     ...envelope,

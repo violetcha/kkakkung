@@ -16,7 +16,7 @@ const childEntry = fileURLToPath(new URL('./product-server-child.ts', import.met
 /** Actual server process isolated from Vitest's six C/SDK clients; no public debug endpoints. */
 export async function startProductServerProcess(
   opsToken: string,
-  options: { cpuProfile?: boolean } = {},
+  options: { cpuProfile?: boolean; operatingMode?: 'attested' | 'continuous' } = {},
 ) {
   const child = spawn(process.execPath, ['--import', 'tsx', childEntry], {
     cwd: root,
@@ -128,7 +128,12 @@ export async function startProductServerProcess(
   };
   try {
     const started = await request(
-      { action: 'boot', opsToken, ...(options.cpuProfile ? { cpuProfile: true } : {}) },
+      {
+        action: 'boot',
+        opsToken,
+        operatingMode: options.operatingMode,
+        ...(options.cpuProfile ? { cpuProfile: true } : {}),
+      },
       30000,
     );
     if (!('port' in started)) throw new Error('PRODUCT_SERVER_INVALID_BOOT_REPLY');

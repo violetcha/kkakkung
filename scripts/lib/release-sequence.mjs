@@ -53,6 +53,10 @@ export function validateManifest(manifest) {
     issues.push('verifiedSha differs from releaseSha (deploy only the commit Jenkins verified)');
   if (m.profile !== 'product' && m.profile !== 'skeleton')
     issues.push("profile must be 'product' or 'skeleton'");
+  if (m.operatingMode !== undefined && !['attested', 'continuous'].includes(m.operatingMode))
+    issues.push('operatingMode invalid');
+  if (m.operatingMode === 'continuous' && m.profile !== 'product')
+    issues.push('continuous mode requires product profile');
   for (const key of IMAGE_KEYS) {
     const image = m.images?.[key];
     if (!image) {
@@ -68,6 +72,13 @@ export function validateManifest(manifest) {
   }
   if (m.previous !== null && m.previous !== undefined) {
     const p = m.previous;
+    if (p.operatingMode !== undefined && !['attested', 'continuous'].includes(p.operatingMode))
+      issues.push('previous.operatingMode invalid');
+    if (
+      p.officialBudgetMaxAgeMs !== undefined &&
+      (!Number.isSafeInteger(p.officialBudgetMaxAgeMs) || p.officialBudgetMaxAgeMs <= 0)
+    )
+      issues.push('previous.officialBudgetMaxAgeMs invalid');
     if (p.profile !== undefined && !['skeleton', 'product'].includes(p.profile))
       issues.push('previous.profile invalid');
     if (!TAG8.test(p.tag ?? '')) issues.push('previous.tag must be 8-hex');
@@ -79,7 +90,8 @@ export function validateManifest(manifest) {
   if (m.officialBudgetMaxAgeMs !== undefined && m.officialBudgetMaxAgeMs !== null) {
     if (!Number.isSafeInteger(m.officialBudgetMaxAgeMs) || m.officialBudgetMaxAgeMs <= 0)
       issues.push('officialBudgetMaxAgeMs must be a positive integer when present');
-  } else if (m.profile === 'product') issues.push('product requires officialBudgetMaxAgeMs');
+  } else if (m.profile === 'product' && m.operatingMode !== 'continuous')
+    issues.push('product requires officialBudgetMaxAgeMs');
   return issues;
 }
 
@@ -248,15 +260,24 @@ export async function runRelease(input, adapters) {
     ok('smoke', `${mode} smoke passed`);
   };
 
-  const publicationChecks = async () => {
+  const publicationChecks = async (operatingMode, budgetMaxAgeMs) => {
     const status = await operationsStatus();
     const problems = [];
     if (status.readiness !== 'READY') problems.push(`readiness=${status.readiness}`);
     if (status.admission !== 'OPEN') problems.push(`admission=${status.admission}`);
     if (status.unresolvedCount !== 0) problems.push(`unresolvedCount=${status.unresolvedCount}`);
-    const maxAge = manifest.officialBudgetMaxAgeMs ?? null;
+    const maxAge = budgetMaxAgeMs ?? null;
     const now = input.nowEpochMs();
-    if (maxAge === null) problems.push('officialBudgetMaxAgeMs not provided');
+    if (operatingMode === 'continuous') {
+      if (status.operatingMode !== 'continuous') problems.push('continuous policy not active');
+      if (
+        status.remainingMinutes !== null ||
+        status.remainingBytes !== null ||
+        status.checkedAtEpochMs !== null
+      )
+        problems.push('provider quota must not claim an official balance');
+    } else if (status.operatingMode === 'continuous') problems.push('unexpected operating policy');
+    else if (maxAge === null) problems.push('officialBudgetMaxAgeMs not provided');
     else if (status.checkedAtEpochMs === null) problems.push('official budget never checked');
     else if (
       !Number.isSafeInteger(now) ||
@@ -268,13 +289,30 @@ export async function runRelease(input, adapters) {
     else if (now - status.checkedAtEpochMs > maxAge)
       problems.push(`official budget check older than ${maxAge}ms`);
     if (problems.length) fail('PUBLISH_BLOCKED', 'PUBLICATION_CONDITIONS', problems.join(', '));
-    ok('publication re-check', 'READY/OPEN, unresolved 0, official budget fresh');
+    ok(
+      'publication re-check',
+      operatingMode === 'continuous'
+        ? 'READY/OPEN, unresolved 0, provider quota policy active'
+        : 'READY/OPEN, unresolved 0, official budget fresh',
+    );
   };
 
   /** Post-swap barrier shared by the release and by a rollback. */
-  const barrier = async (label, tag, images, useOperations) => {
+  const barrier = async (
+    label,
+    tag,
+    images,
+    useOperations,
+    operatingMode = 'attested',
+    budgetMaxAgeMs = manifest.officialBudgetMaxAgeMs,
+  ) => {
     setPhase('DEPLOYING');
-    const composed = await adapters.compose(tag, useOperations ? 'product' : 'skeleton', images);
+    const composed = await adapters.compose(
+      tag,
+      useOperations ? 'product' : 'skeleton',
+      images,
+      operatingMode,
+    );
     if (composed.code !== 0) fail('FAILED', `${label}_COMPOSE_FAILED`, `exit ${composed.code}`);
     ok(`${label} compose up`, `tag=${tag}`);
     const ready = await waitReady(label);
@@ -312,7 +350,7 @@ export async function runRelease(input, adapters) {
       );
     }
     await smoke(useOperations);
-    if (useOperations) await publicationChecks();
+    if (useOperations) await publicationChecks(operatingMode, budgetMaxAgeMs);
   };
 
   const rollback = async (cause, useOperations) => {
@@ -335,7 +373,14 @@ export async function runRelease(input, adapters) {
       const previousUsesOperations = previous.profile
         ? previous.profile === 'product'
         : useOperations;
-      await barrier('ROLLBACK', previous.tag, images, previousUsesOperations);
+      await barrier(
+        'ROLLBACK',
+        previous.tag,
+        images,
+        previousUsesOperations,
+        previous.operatingMode ?? 'attested',
+        previous.officialBudgetMaxAgeMs ?? manifest.officialBudgetMaxAgeMs,
+      );
       setPhase('READY');
       return finish('ROLLED_BACK', cause, `previous ${previous.tag} passed the barrier again`);
     } catch (error) {
@@ -438,6 +483,7 @@ export async function runRelease(input, adapters) {
         manifest.tag,
         manifest.images,
         manifest.profile === 'product' || useOperations,
+        manifest.operatingMode ?? 'attested',
       );
     } catch (error) {
       if (!(error instanceof ReleaseStop)) throw error;

@@ -152,7 +152,7 @@ export class RecoveryState {
   restore(
     journal: JournalRestore,
     usage: { integrity: 'ok' | 'missing' | 'corrupt'; writable: boolean; budgetConfirmed: boolean },
-    options: { firstInstallConfirmed?: boolean } = {},
+    options: { firstInstallConfirmed?: boolean; usageInitializedMissing?: boolean } = {},
   ): void {
     // Restore is a process-lifetime boundary. It cannot discard a failure or reuse old cleanup.
     if (this.restored) return;
@@ -178,7 +178,8 @@ export class RecoveryState {
       (integrity === 'missing' || integrity === 'ok') &&
       journal.lastSeq === 0 &&
       journal.records.length === 0 &&
-      usage.integrity === 'missing';
+      (usage.integrity === 'missing' ||
+        (usage.integrity === 'ok' && options.usageInitializedMissing === true));
     const historyComplete =
       !this.localReasons.has('JOURNAL_INTEGRITY') &&
       (firstInstall || (integrity === 'ok' && usage.integrity === 'ok'));

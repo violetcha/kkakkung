@@ -35,7 +35,7 @@ pnpm dev:server
 
 미디어 발급은 인증된 `POST /api/media/grants`가 서버 requestId를 생성·재사용한다. 새 인스턴스의 첫 실제 프레임을 E가 관측할 때까지 발급을 대기시키며, 재시도도 E의 현재 권한·예산·토큰 만료 검사에 들어간다. B는 E의 control/bindings/audio 결과를 다음 tick에서 현재 인스턴스에만 적용하고, `/api/media/report`는 현재 인스턴스 및 정확한 발급 세대를 E lifecycle에 확인한다. 이전 인스턴스의 `closed` 보고와 원격 회수 확인은 단계 전환·재경기 장벽에 연결한다. 연습→경기 발급에는 이전 receiverGeneration이 필요하다. 모든 현재 연습 세대의 준비 결과를 tick에 적용하고 진행 중 발급이 끝나야 연습을 종료한다. 발급 결과가 불명인 상태로 기존 60초 기한을 넘거나 미디어 준비가 실패하면 `ABORTED/MEDIA_UNAVAILABLE`로 종료하며 같은 match의 세대를 추측해 재발급하지 않는다. 일반 장치 미준비·맵 준비 실패로 DEVICE_CHECK에 돌아가면 기존 READY를 지우고 다시 신고받는다.
 
-운영 증거는 F의 `RuntimeEvidence`가 `OPS_DATA_DIR/runtime-evidence.json`에서 검증해 E에 공급한다. 증거 없음·만료·변경·불일치는 잠금을 유지하며, 앱 종료나 기동 실패 시 증거 감시 자원도 종료한다. 준비·예산·감사 파일에 값을 임의로 채워 성공으로 만들지 않는다.
+운영 설정은 F의 `RuntimeEvidence`가 검증해 E에 공급한다. 상시 서비스는 명시적 `OPS_OPERATING_MODE=continuous`와 `service-operations.json`을 사용하며 날짜 경과로 잠그지 않는다. 기존 attested 모드는 `runtime-evidence.json`의 유효기간·공식 잔량 확인을 유지한다. 두 모드 모두 파일 없음·변경·scope 불일치, 기록 손상과 미확인 회수는 차단한다. 앱 종료나 기동 실패 시 감시 자원도 종료한다. 준비·예산·감사 파일에 값을 임의로 채워 성공으로 만들지 않는다. [상시 운영 절차](../docs/continuous-operations.md)를 따른다.
 
 ## 구조
 

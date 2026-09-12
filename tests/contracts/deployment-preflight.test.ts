@@ -101,3 +101,53 @@ it('derivation cannot refresh expiry or bypass a changed dependency lock', () =>
   writeFileSync(join(input.root, 'pnpm-lock.yaml'), 'changed');
   expect(() => deriveDeploymentPreflight(input)).toThrow();
 });
+it('builds a bounded continuous DP06 plan for the actual SHA and lock without any expiring base file', () => {
+  const input = setup();
+  mkdirSync(join(input.root, 'tests/cloud'), { recursive: true });
+  writeFileSync(
+    join(input.root, 'tests/cloud/devices.deployment-synthetic.json'),
+    JSON.stringify(localDeploymentDevices),
+  );
+  rmSync(input.preflightPath);
+  const continuous = {
+    ...input,
+    env: {
+      ...input.env,
+      OPS_OPERATING_MODE: 'continuous',
+      LIVEKIT_PROJECT_ALIAS: 'fixture-project',
+      SERVICE_NAMESPACE: 'fixture-namespace',
+      LIVEKIT_API_KEY: 'synthetic-key',
+      LIVEKIT_API_SECRET: 'synthetic-secret',
+    },
+  };
+  const plan = deriveDeploymentPreflight(continuous);
+  expect(plan).toMatchObject({
+    sourceCommit: input.sourceCommit,
+    budgetPolicy: 'provider-quota',
+    remainingMinutes: null,
+    remainingBytes: null,
+    allowedCases: ['DP-06'],
+    maxRooms: 1,
+    maxParticipants: 6,
+    maxDurationSeconds: 600,
+    cleanupAllowanceSeconds: 60,
+  });
+  writeFileSync(input.preflightPath, JSON.stringify(plan));
+  expect(prepareDeploymentSmoke(continuous).evidenceDir).toBe(
+    resolve(input.root, plan.evidenceDir),
+  );
+  expect(() => prepareDeploymentSmoke({ ...continuous, env: input.env })).toThrow();
+  expect(() =>
+    prepareDeploymentSmoke({ ...continuous, nowEpochMs: plan.expiresAtEpochMs + 1 }),
+  ).toThrow();
+  writeFileSync(join(input.root, 'pnpm-lock.yaml'), 'next verified lock');
+  expect(() => prepareDeploymentSmoke(continuous)).toThrow();
+  const next = deriveDeploymentPreflight({
+    ...continuous,
+    sourceCommit: 'd'.repeat(40),
+    nowEpochMs: input.nowEpochMs + 86400000,
+  });
+  expect(next.lockfileHash).not.toBe(plan.lockfileHash);
+  expect(next.sourceCommit).toBe('d'.repeat(40));
+  expect(next.checkedAtEpochMs).toBe(input.nowEpochMs + 86400000);
+});

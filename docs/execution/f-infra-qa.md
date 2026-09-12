@@ -258,6 +258,20 @@ C만 `App.tsx`·`SessionRuntime.ts`·room store·`main.tsx`·화면과 CSS를 �
 
 ## 운영 HTTP 계약
 
+2026-09-12 사용자 승인에 따라 상시 서비스는 명시적 `OPS_OPERATING_MODE=continuous`를 사용한다.
+이 모드의 `publicWindow={mode:'continuous'}`에는 종료 날짜가 없고,
+`officialBudgetMaxAgeMs=0`은 사용하지 않는 필드다. 기존 유효기간·공식 잔량 조건은
+`attested` 시험 모드에 적용한다. 설정 파서 기본값은 기존 호환성을 위해 attested이며,
+제품 배포 러너는 continuous를 기본 선택하고 매니페스트와 Compose에서 일치시킨다.
+프로젝트·namespace·Cloud origin은 `service-operations.json`의 고정 운영 설정으로 검증하고,
+실제 capability·인증·저널 무결성·단일 writer·회수·API/인원 제한은 계속 검사한다.
+공식 잔량을 추정해 채우지 않는다. 공급자 할당량 정책을 사용할 때 운영 상태는
+`operatingMode='continuous'`, remainingMinutes/remainingBytes/checkedAtEpochMs 모두 null이다.
+로컬 예약은 기록 후 발급하고 실제 회수가 확인되어야 RELEASED가 된다.
+checkpoint-budget는 이 모드에서 로컬 기록 flush와 쓰기 가능 여부를 확인하며 공식 대시보드
+갱신을 요구하지 않는다. 사용량 파일이나 최초 설치·감사 marker를 삭제하여 재초기화하지 않는다.
+상세 운영 절차와 기존 시험 정책의 적용 경계는 [상시 운영](../continuous-operations.md)을 따른다.
+
 B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
 
 F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 실제 운영 입력에서 검증하고 B가 factory에 전달한다. publicWindow=null은 공개 창 미정으로 잠금이며 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·예산·창 조건을 함께 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 F의 시작 절차를 따르며 다른 담당은 F의 config export를 읽는다.
@@ -974,6 +988,7 @@ export type MediaCoordinatorDeps = Readonly<{
   }>;
 }>;
 export type MediaConfiguration = Readonly<{
+  operatingMode?: 'attested' | 'continuous';
   httpUrl: string;
   wsUrl: string;
   apiKey: string;
@@ -981,7 +996,10 @@ export type MediaConfiguration = Readonly<{
   namespace: string;
   opsDataDir: string;
   projectAlias: string;
-  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  publicWindow:
+    | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
+    | Readonly<{ mode: 'continuous' }>
+    | null;
   officialBudgetMaxAgeMs: number;
   operationTimeoutMs: number;
   productSecurityReady: boolean;
@@ -1110,6 +1128,8 @@ export type OperationSnapshot = Readonly<{
   updatedAtEpochMs: number;
 }>;
 export type OperationsStatus = Readonly<{
+  /** Absent means legacy attested operation; continuous balances remain unknown (null). */
+  operatingMode?: 'attested' | 'continuous';
   admission: 'OPEN' | 'DRAINING' | 'LOCKED';
   readiness: Readiness['state'];
   unresolvedCount: number;

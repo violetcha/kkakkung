@@ -76,6 +76,7 @@ const environment = z.object({
   OPS_TOKEN: nonEmpty,
 
   // Public window and budget policy (E operations).
+  OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
   OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: positiveSafeInt,
   OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: positiveSafeInt,
   OPS_OFFICIAL_BUDGET_MAX_AGE_MS: positiveSafeInt,
@@ -185,8 +186,11 @@ export function parseConfig(input: Record<string, string | undefined>) {
       ['LiveKit', livekit],
       ['LIVEKIT_PROJECT_ALIAS', raw.LIVEKIT_PROJECT_ALIAS],
       ['OPS_TOKEN', raw.OPS_TOKEN],
-      ['public window', publicWindow],
-      ['OPS_OFFICIAL_BUDGET_MAX_AGE_MS', raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS],
+      ['public window', raw.OPS_OPERATING_MODE === 'continuous' || publicWindow],
+      [
+        'OPS_OFFICIAL_BUDGET_MAX_AGE_MS',
+        raw.OPS_OPERATING_MODE === 'continuous' || raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS,
+      ],
       ['OPS_OPERATION_TIMEOUT_MS', raw.OPS_OPERATION_TIMEOUT_MS],
       ['media API limits', apiLimits],
     ] as const;
@@ -233,14 +237,19 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
+    operatingMode: raw.OPS_OPERATING_MODE,
     subscriptionMode: raw.MEDIA_SUBSCRIPTION_MODE,
-    publicWindow: publicWindow
-      ? {
-          opensAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS,
-          closesAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS,
-        }
-      : null,
-    officialBudgetMaxAgeMs: raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS ?? null,
+    publicWindow:
+      raw.OPS_OPERATING_MODE === 'continuous'
+        ? { mode: 'continuous' as const }
+        : publicWindow
+          ? {
+              opensAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS,
+              closesAtEpochMs: publicWindow.OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS,
+            }
+          : null,
+    officialBudgetMaxAgeMs:
+      raw.OPS_OPERATING_MODE === 'continuous' ? 0 : (raw.OPS_OFFICIAL_BUDGET_MAX_AGE_MS ?? null),
     operationTimeoutMs: raw.OPS_OPERATION_TIMEOUT_MS ?? null,
     mediaApiLimits: apiLimits
       ? {

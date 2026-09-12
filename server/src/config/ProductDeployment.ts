@@ -30,11 +30,16 @@ export async function checkProductDeployment(input: {
   } catch {
     return { status: 'BLOCKED' as const, failures: ['PRODUCT_ENV_INVALID'] };
   }
-  if (!config.livekit?.projectAlias || !config.officialBudgetMaxAgeMs || !config.publicWindow)
+  if (
+    !config.livekit?.projectAlias ||
+    (config.operatingMode !== 'continuous' && !config.officialBudgetMaxAgeMs) ||
+    !config.publicWindow
+  )
     return { status: 'BLOCKED' as const, failures: ['PRODUCT_POLICY_MISSING'] };
   if (
-    input.nowEpochMs < config.publicWindow.opensAtEpochMs ||
-    input.nowEpochMs + 330_000 >= config.publicWindow.closesAtEpochMs
+    !('mode' in config.publicWindow) &&
+    (input.nowEpochMs < config.publicWindow.opensAtEpochMs ||
+      input.nowEpochMs + 330_000 >= config.publicWindow.closesAtEpochMs)
   )
     failures.push('PUBLIC_WINDOW_TOO_SHORT');
   const options = {
@@ -43,7 +48,9 @@ export async function checkProductDeployment(input: {
     projectAlias: config.livekit.projectAlias,
     namespace: config.namespace,
     nowEpochMs: input.nowEpochMs,
-    maxAgeMs: config.officialBudgetMaxAgeMs,
+    maxAgeMs: config.officialBudgetMaxAgeMs ?? 0,
+    operatingMode: config.operatingMode,
+    cloudHttpOrigin: config.livekit.httpUrl,
   };
   const capability = await loadCapabilityReport(options);
   if (capability.status !== 'supported') failures.push(...capability.reasons);
@@ -53,12 +60,13 @@ export async function checkProductDeployment(input: {
   });
   try {
     if (!evidence.namespaceOwnershipConfirmed()) failures.push('RUNTIME_EVIDENCE_INVALID');
-    try {
-      const official = await readOfficialUsageInput(options.opsDataDir, options);
-      if (!evidence.getOfficialRevision(official)) failures.push('OFFICIAL_EVIDENCE_MISMATCH');
-    } catch {
-      failures.push('OFFICIAL_USAGE_INVALID');
-    }
+    if (config.operatingMode !== 'continuous')
+      try {
+        const official = await readOfficialUsageInput(options.opsDataDir, options);
+        if (!evidence.getOfficialRevision(official)) failures.push('OFFICIAL_EVIDENCE_MISMATCH');
+      } catch {
+        failures.push('OFFICIAL_USAGE_INVALID');
+      }
   } finally {
     await evidence.close();
   }

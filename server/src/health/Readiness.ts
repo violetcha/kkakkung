@@ -233,7 +233,10 @@ export class ReadinessGate {
           official: usage.official,
           reservations: usage.reservations,
           value: freezeSnapshot(
-            validateUsageState({ official: usage.official, reservations: usage.reservations }),
+            validateUsageState(
+              { official: usage.official, reservations: usage.reservations },
+              this.config.operatingMode === 'continuous' && usage.budgetPolicy === 'provider-quota',
+            ),
           ),
         };
       }
@@ -252,18 +255,23 @@ export class ReadinessGate {
       codes.add('USAGE_INTEGRITY');
     }
     try {
-      if (usage.integrity !== 'ok' || !usage.official) throw new Error('UNCONFIRMED_BUDGET');
-      const official = validateOfficialBudget(usage.official.checkpoint, {
-        projectAlias: this.config.projectAlias,
-        nowEpochMs: now,
-        maxAgeMs: this.config.officialBudgetMaxAgeMs,
-      });
-      if (
-        ![usage.activeMinutes, usage.activeBytes].every((v) => Number.isFinite(v) && v >= 0) ||
-        usage.activeMinutes > official.remainingMinutes ||
-        usage.activeBytes > official.remainingBytes
-      )
-        codes.add('BUDGET_OVERCOMMITTED');
+      if (usage.integrity !== 'ok') throw new Error('UNCONFIRMED_BUDGET');
+      if (this.config.operatingMode === 'continuous') {
+        if (usage.budgetPolicy !== 'provider-quota') throw new Error('UNCONFIRMED_BUDGET');
+      } else {
+        if (!usage.official) throw new Error('UNCONFIRMED_BUDGET');
+        const official = validateOfficialBudget(usage.official.checkpoint, {
+          projectAlias: this.config.projectAlias,
+          nowEpochMs: now,
+          maxAgeMs: this.config.officialBudgetMaxAgeMs,
+        });
+        if (
+          ![usage.activeMinutes, usage.activeBytes].every((v) => Number.isFinite(v) && v >= 0) ||
+          usage.activeMinutes > official.remainingMinutes ||
+          usage.activeBytes > official.remainingBytes
+        )
+          codes.add('BUDGET_OVERCOMMITTED');
+      }
     } catch {
       codes.add('BUDGET_UNCONFIRMED');
     }

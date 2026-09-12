@@ -17,6 +17,7 @@ const keys = {
   '--sha': 'sha',
   '--base-url': 'baseUrl',
   '--state-dir': 'stateDir',
+  '--operating-mode': 'operatingMode',
 };
 let stage = 'ARGUMENTS_OR_ENV';
 try {
@@ -28,7 +29,7 @@ try {
     if (!keys[args[i]] || !args[i + 1]) throw new Error('ARGUMENTS_INVALID');
     opt[keys[args[i]]] = args[++i];
   }
-  if (!opt.envFile || !opt.evidenceDir || !opt.preflight || !/^[a-f0-9]{40}$/.test(opt.sha ?? ''))
+  if (!opt.envFile || !opt.evidenceDir || !/^[a-f0-9]{40}$/.test(opt.sha ?? ''))
     throw new Error('ARGUMENTS_MISSING');
   // Parse data, never source shell code; do not print the private environment or child errors.
   if (statSync(opt.envFile).size > 64 * 1024) throw new Error('ENV_FILE_TOO_LARGE');
@@ -37,6 +38,11 @@ try {
     /^(LIVEKIT_|OPS_|MEDIA_|INVITE_|SESSION_|ROOM_IDLE_|SERVICE_NAMESPACE$|SMOKE_INTERNAL_TOKEN$|SMOKE_INTERNAL_BASE_URL$)/;
   const env = { ...process.env };
   for (const [key, value] of Object.entries(privateEnv)) if (allowed.test(key)) env[key] = value;
+  // New product releases use persistent service configuration. Legacy trial operation remains
+  // explicit for old installations; no environment file's date is renewed by this runner.
+  env.OPS_OPERATING_MODE = opt.operatingMode ?? privateEnv.OPS_OPERATING_MODE ?? 'continuous';
+  if (!['attested', 'continuous'].includes(env.OPS_OPERATING_MODE))
+    throw new Error('OPERATING_MODE_INVALID');
   env.OPS_EVIDENCE_DIR = resolve(opt.evidenceDir);
   env.SMOKE_PUBLIC_BASE_URL = opt.baseUrl;
   stage = 'PRODUCT_EVIDENCE';
@@ -50,12 +56,14 @@ try {
     console.error(JSON.stringify(prepared));
     process.exit(3);
   }
-  const preflight = JSON.parse(readFileSync(opt.preflight, 'utf8'));
-  if (
-    preflight.namespace !== (env.SERVICE_NAMESPACE || 'kkakkung-ec2') ||
-    preflight.projectAlias !== env.LIVEKIT_PROJECT_ALIAS
-  )
-    throw new Error('SCOPE_MISMATCH');
+  if (env.OPS_OPERATING_MODE !== 'continuous') {
+    const preflight = JSON.parse(readFileSync(opt.preflight, 'utf8'));
+    if (
+      preflight.namespace !== (env.SERVICE_NAMESPACE || 'kkakkung-ec2') ||
+      preflight.projectAlias !== env.LIVEKIT_PROJECT_ALIAS
+    )
+      throw new Error('SCOPE_MISMATCH');
+  }
   stage = 'PREFLIGHT';
   const runPreflight = deriveDeploymentPreflight({
     root: process.cwd(),
@@ -93,8 +101,11 @@ try {
       state,
       '--output',
       manifest,
-      '--official-budget-max-age-ms',
-      env.OPS_OFFICIAL_BUDGET_MAX_AGE_MS,
+      '--operating-mode',
+      env.OPS_OPERATING_MODE,
+      ...(env.OPS_OPERATING_MODE === 'continuous'
+        ? []
+        : ['--official-budget-max-age-ms', env.OPS_OFFICIAL_BUDGET_MAX_AGE_MS]),
     ]);
     run([
       'scripts/deploy-release.mjs',

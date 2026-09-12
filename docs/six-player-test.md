@@ -1,14 +1,14 @@
 # 실제 6인 시험 실행
 
-제품 코드는 `SERVER_PROFILE=product`, 미디어는 `MEDIA_MODE=livekit`로 실행한다. `NODE_ENV`는 현재 허용된 `development`를 유지한다. `skeleton` 배포의 health 200은 게임 준비 완료가 아니다. 실제 Cloud 예산·자격·장치 증거가 준비되기 전에는 로컬 검증만 가능하다.
+제품 코드는 `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`, `NODE_ENV=development`로 실행한다. skeleton health 200은 게임 준비 완료가 아니다. 실제 Cloud 자격·권한·장치 검증은 로컬 fixture 통과와 구분한다. 상시 서비스 기본값 continuous의 비용 정책과 운영 파일은 [상시 운영](continuous-operations.md)을 따른다.
 
 ## 배포 전 준비
 
-1. Jenkins에서 검증·빌드할 최종 SHA와 `pnpm-lock.yaml`을 기준으로 F가 실제 시험 preflight를 승인한다. 실제 프로젝트 별칭, 격리 namespace, 공식 잔여 예산, 시험 시간, 기기 계획을 포함해야 한다. 기존 합성 fixture를 복사해 승인 증거로 사용하지 않는다.
+1. Jenkins에서 검증·빌드할 최종 SHA와 pnpm-lock.yaml을 확정한다. continuous의 DP-06 계획은 자동 생성된다. MC-01 등 다른 Cloud/실기기/부하 시험과 attested 모드에는 기존 승인 preflight가 필요하며 합성 fixture를 실제 검증 결과로 사용하지 않는다.
 2. [E 인계의 MC-01 절차](execution/handoffs/E.md)를 실행해 권한·수신 차단·토큰 회수·정리 결과를 확인한다. 해당 preflight의 case/evidenceDir을 명령과 일치시킨다. 실패하거나 미확인인 결과를 SUPPORTED로 변경하지 않는다.
 3. Jenkins의 Secret file `kkakkung-production-env`에 [운영 환경 예시](../infra/production.env.example)의 실제 값과 정책을 설정한다. `SERVICE_NAMESPACE`는 모든 증거와 같아야 한다. 자동 배포 시험은 [loopback 전용 인증](../infra/README.md#자동-배포-시험-인증)의 `SMOKE_INTERNAL_TOKEN`을 사용한다. 운영 토큰은 private env의 `OPS_TOKEN` 하나를 서버와 배포 러너가 함께 사용한다. 실제 참가자 접속의 SSO는 유지한다.
-4. 서버 `/opt/kkakkung/runtime-evidence/`에 검토한 `capability-report.json`, `official-usage-input.json`, `runtime-evidence.json`을 배치한다. 마지막 파일은 namespace 소유·초기 설치/감사 근거와 공식 checkpoint 해시를 연결한다. [증거 형식](../server/src/config/RuntimeEvidence.ts)을 따른다. 호스트 Jenkins와 컨테이너 node UID 1000이 읽을 수 있게 접근 권한을 부여한다. 세 파일은 제품 overlay가 읽기 전용으로 마운트하며 저널·회수 기록은 기존 operations 볼륨에 유지한다.
-5. `/opt/kkakkung/cloud-preflight.json`은 DP-06 승인 파일이다. 연결된 device manifest와 증거 디렉터리도 실제 실행 경로에서 접근 가능해야 한다. 1방 6명, 300초 시험과 30초 정리 예약 및 공개 시간이 필요하다. 배포·복구 시간도 고려해 승인자가 시간을 정한다. 공개 시간이 남지 않으면 사전 검사가 차단한다.
+4. 서버 `/opt/kkakkung/runtime-evidence/`에 실제 capability-report.json과 service-operations.json을 준비한다. [설정 형식](../server/src/config/RuntimeEvidence.ts)을 따르고 호스트 Jenkins와 컨테이너 node UID 1000이 읽을 수 있게 한다. 기존 operations 볼륨의 저널·회수·사용량·최초 사용 marker와 attested 롤백용 official-usage-input.json/runtime-evidence.json을 보존한다.
+5. continuous DP-06은 실행마다 검증된 SHA/lock에 맞춰 1방 6명·최대 600초+60초 정리 계획을 생성한다. 30분 유효기간은 해당 자동 시험만 제한하며 다음 배포에서 자동 재생성한다. attested에서는 `/opt/kkakkung/cloud-preflight.json`과 승인된 공개 시간이 필요하다.
 6. 호스트 [nginx 설정](../infra/nginx/host.conf)을 검토·적용하고 LiveKit의 webhook 목적지를 `https://j15c204.p.ssafy.io/api/livekit/webhook`으로 설정한다. 이 정확한 POST 경로만 SSO를 우회하며 서버의 서명·본문 검증은 유지한다. 나머지 앱·운영 API는 SSO를 유지한다. `/api/dev-sessions`는 외부에서 차단한다.
 
 설정·배포는 운영자가 별도로 적용해야 한다. 이 구현 변경만으로 원격 Jenkins, nginx, LiveKit 설정이 바뀌지 않는다.
@@ -22,15 +22,15 @@ node --import tsx scripts/product-release.mjs \
   --check-only \
   --env-file /opt/kkakkung/production.env \
   --evidence-dir /opt/kkakkung/runtime-evidence \
-  --preflight /opt/kkakkung/cloud-preflight.json \
+  --operating-mode continuous \
   --sha "$RELEASE_SHA"
 ```
 
-`PREPARED`는 입력 검사 통과이며 실제 Cloud나 배포 성공이 아니다. 누락·만료·프로젝트/namespace 불일치·공식 예산 불일치는 BLOCKED다. 사전 검사는 최초 설치/감사 marker를 소비하지 않는다.
+`PREPARED`는 입력 검사 통과이며 실제 Cloud나 배포 성공이 아니다. 누락·프로젝트/namespace/origin 불일치는 BLOCKED다. 만료·공식 예산 대조는 attested에 적용한다. 사전 검사는 최초 설치/감사 marker를 소비하지 않는다.
 
 Jenkins **Build with Parameters → RELEASE_PROFILE=product**로 해당 develop SHA를 실행한다. 현재 Jenkinsfile 기본값도 product다. skeleton은 미디어 없는 진단 배포 선택지다. 제품 배포는 사전 검사 후 private env를 설치하고 제품 Compose overlay, 복구, resume, DP-06 Cloud smoke, 공개 상태 재검사를 수행한다. 수동 경로는 같은 러너를 사용한다.
 
-제품 배포 이후의 업데이트도 반드시 product를 선택한다. 기존 제품 서버에 skeleton 배포를 시도하면 이미지 교체 전에 `PRODUCT_PROFILE_REQUIRED`로 차단한다. 다음 커밋도 새 SHA에 맞는 시험 승인이 필요하다.
+제품 배포 이후의 업데이트도 반드시 product를 선택한다. 기존 제품 서버에 skeleton 배포를 시도하면 이미지 교체 전에 `PRODUCT_PROFILE_REQUIRED`로 차단한다. 다음 커밋은 새 SHA에 맞는 DP-06을 자동 실행한다.
 
 ```bash
 DEPLOY_PROFILE=product ./infra/deploy.sh "$RELEASE_SHA"
@@ -38,13 +38,13 @@ DEPLOY_PROFILE=product ./infra/deploy.sh "$RELEASE_SHA"
 
 첫 제품 전환은 이전 last-good 이미지 digest와 skeleton 프로파일 및 실제 health 상태가 일치할 때만 허용한다. 이전 운영 API가 503인 제품 서버를 skeleton으로 간주하지 않는다. 이전 프로파일 기록이 없으면 과거 release manifest로 검증하며, 그것도 없으면 기존 skeleton 배포를 먼저 정상 검증해 기록한다. 승인 기록을 임의 작성하지 않는다.
 
-병합·코드 빌드와 배포 성공을 구분한다. `release.json`이 READY이고 운영 API가 OPEN/READY, 미해결 회수 0, 공식 예산 최신 상태인 것을 확인한다. `ROLLED_BACK`은 새 배포 성공이 아니다. 실패 시 이전 기록의 프로파일로 복귀하며 `ROLLBACK_BLOCKED`는 운영자 확인이 필요하다.
+병합·코드 빌드와 배포 성공을 구분한다. release.json=READY, 운영 API=OPEN/READY, 미해결 회수 0, 매니페스트와 동일한 운영 모드를 확인한다. continuous 공식 잔량은 null이다. ROLLED_BACK은 새 배포 성공이 아니다. 실패 시 이전 프로필·운영 모드로 복귀하며 ROLLBACK_BLOCKED는 운영자 확인이 필요하다.
 
 ## 방장과 나머지 5명 입장
 
 6명 모두 **먼저 서비스에 접속해 GitLab SSO 로그인을 완료**한다. 이후 새 초대 링크를 연다. 각자 별도 PC·카메라·이어폰을 준비하고 카메라 권한과 소리 재생을 허용한다. 여러 탭을 6개 실제 기기로 계산하지 않는다.
 
-운영자만 서버에서 다음 명령을 실행한다. `OPS_TOKEN`은 비밀 환경으로 주입한다. `INVITE_EXPIRES_AT_MS`는 승인된 공개 시간 및 INVITE_MAX_TTL_MS 안의 실제 만료 epoch ms다. 로컬 주소는 SSO를 거치지 않지만 운영 토큰 인증은 필수다. 출력 파일은 새 이름을 사용하고 저장소·MR·로그에 넣지 않는다.
+운영자만 서버에서 다음 명령을 실행한다. OPS_TOKEN은 비밀 환경으로 주입한다. INVITE_EXPIRES_AT_MS는 INVITE_MAX_TTL_MS 안의 실제 만료 epoch ms이며 attested에서는 공개 시간 안이어야 한다. 로컬 주소에서도 운영 토큰 인증은 필수다. 출력 파일은 새 이름을 사용하고 저장소·MR·로그에 넣지 않는다.
 
 ```bash
 node scripts/issue-team-invitation.mjs \

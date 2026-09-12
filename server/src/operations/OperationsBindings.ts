@@ -20,6 +20,7 @@ export type OperationsBindingsOptions = Readonly<{
     | 'projectAlias'
     | 'publicWindow'
     | 'officialBudgetMaxAgeMs'
+    | 'operatingMode'
     | 'productSecurityReady'
   >;
   journal: OperationJournal;
@@ -55,8 +56,9 @@ export class OperationsBindings {
     this.config = structuredClone(options.config);
     if (
       !safeIdentifier(this.config.projectAlias) ||
-      !Number.isSafeInteger(this.config.officialBudgetMaxAgeMs) ||
-      this.config.officialBudgetMaxAgeMs <= 0 ||
+      (this.config.operatingMode !== 'continuous' &&
+        (!Number.isSafeInteger(this.config.officialBudgetMaxAgeMs) ||
+          this.config.officialBudgetMaxAgeMs <= 0)) ||
       typeof this.config.productSecurityReady !== 'boolean' ||
       new Set(options.retries).size !== options.retries.length
     )
@@ -64,10 +66,17 @@ export class OperationsBindings {
     const window = this.config.publicWindow;
     if (
       window !== null &&
+      !('mode' in window) &&
       (![window.opensAtEpochMs, window.closesAtEpochMs].every(
         (value) => Number.isSafeInteger(value) && value >= 0,
       ) ||
         window.closesAtEpochMs <= window.opensAtEpochMs)
+    )
+      throw new Error('INVALID_PUBLIC_WINDOW');
+    if (
+      window &&
+      'mode' in window &&
+      (window.mode !== 'continuous' || this.config.operatingMode !== 'continuous')
     )
       throw new Error('INVALID_PUBLIC_WINDOW');
   }
@@ -92,10 +101,11 @@ export class OperationsBindings {
     return (
       status.readiness === 'READY' &&
       status.unresolvedCount === 0 &&
-      status.remainingMinutes !== null &&
-      status.remainingMinutes > 0 &&
-      status.remainingBytes !== null &&
-      status.remainingBytes > 0
+      (this.config.operatingMode === 'continuous' ||
+        (status.remainingMinutes !== null &&
+          status.remainingMinutes > 0 &&
+          status.remainingBytes !== null &&
+          status.remainingBytes > 0))
     );
   }
 
@@ -197,6 +207,13 @@ export class OperationsBindings {
   }
 
   private async checkpoint(guard: () => void, allowed: () => boolean): Promise<void> {
+    if (this.config.operatingMode === 'continuous') {
+      guard();
+      await this.options.journal.flush();
+      guard();
+      if (!this.options.usageBudget.readSnapshot().writable) throw new Error('USAGE_WRITE_FAILED');
+      return;
+    }
     const input = await readOfficialUsageInput(this.config.opsDataDir, {
       projectAlias: this.config.projectAlias,
       nowEpochMs: this.options.nowEpochMs(),
@@ -290,9 +307,14 @@ export class OperationsBindings {
   private observe(): Omit<OperationsStatus, 'admission'> {
     const readiness = this.safeReadiness();
     const budget = this.options.usageBudget.readSnapshot();
+    const providerQuota =
+      this.config.operatingMode === 'continuous' &&
+      budget.budgetPolicy === 'provider-quota' &&
+      budget.integrity === 'ok' &&
+      budget.writable;
     let official: OfficialBudgetCheckpoint | null = null;
     try {
-      if (budget.integrity === 'ok' && budget.writable && budget.official)
+      if (!providerQuota && budget.integrity === 'ok' && budget.writable && budget.official)
         official = validateOfficialBudget(budget.official.checkpoint, {
           projectAlias: this.config.projectAlias,
           nowEpochMs: this.options.nowEpochMs(),
@@ -320,13 +342,15 @@ export class OperationsBindings {
         this.closed ||
         this.locked ||
         !this.options.journal.writable ||
-        !official ||
+        (this.config.operatingMode === 'continuous' && !providerQuota) ||
+        (!providerQuota && !official) ||
         !this.config.productSecurityReady ||
         !readiness.historyComplete ||
         unresolvedCount > 0
           ? 'LOCKED'
           : readiness.state,
       unresolvedCount,
+      ...(providerQuota ? { operatingMode: 'continuous' as const } : {}),
       remainingMinutes: official ? budget.availableMinutes : null,
       remainingBytes: official ? budget.availableBytes : null,
       checkedAtEpochMs: official?.checkedAtEpochMs ?? null,
@@ -351,6 +375,13 @@ export class OperationsBindings {
 
   private inWindow(): boolean {
     const window = this.config.publicWindow;
+    if (window && 'mode' in window)
+      return (
+        this.config.operatingMode === 'continuous' &&
+        window.mode === 'continuous' &&
+        Number.isSafeInteger(this.options.nowEpochMs()) &&
+        this.options.nowEpochMs() >= 0
+      );
     const now = this.options.nowEpochMs();
     return (
       Number.isSafeInteger(now) &&

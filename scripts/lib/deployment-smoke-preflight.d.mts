@@ -8,7 +8,7 @@ export function prepareDeploymentSmoke(input: {
 
 export function deriveDeploymentPreflight(input: {
   root: string;
-  preflightPath: string;
+  preflightPath?: string;
   sourceCommit: string;
   env: Record<string, string | undefined>;
   nowEpochMs: number;

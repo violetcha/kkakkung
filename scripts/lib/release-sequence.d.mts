@@ -15,10 +15,13 @@ export type ReleaseManifest = Readonly<{
   tag: string;
   verifiedSha: string;
   profile: 'product' | 'skeleton';
+  operatingMode?: 'attested' | 'continuous';
   images: Readonly<{ game: ReleaseImage; web: ReleaseImage }>;
   previous: Readonly<{
     tag: string;
     profile?: 'product' | 'skeleton';
+    operatingMode?: 'attested' | 'continuous';
+    officialBudgetMaxAgeMs?: number | null;
     images: Readonly<{ game: { digest: string }; web: { digest: string } }>;
   }> | null;
   officialBudgetMaxAgeMs?: number | null;
@@ -36,6 +39,7 @@ export type ReleaseAdapters = Readonly<{
     tag: string,
     profile: 'product' | 'skeleton',
     images: Readonly<Record<'game' | 'web', { digest: string }>>,
+    operatingMode?: 'attested' | 'continuous',
   ) => Promise<Readonly<{ code: number }>>;
   runSmoke: (mode: 'cloud' | 'http') => Promise<Readonly<{ code: number }>>;
   writeState: (name: string, text: string) => Promise<void> | void;

@@ -70,7 +70,10 @@ export type ProductProfile<State = unknown> = Readonly<{
   random?: () => number;
   maxRooms: number;
   inviteMaxTtlMs: number | null;
-  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  publicWindow:
+    | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
+    | Readonly<{ mode: 'continuous' }>
+    | null;
   sessionAttempts: Readonly<{ windowMs: number; perInvite: number; perIp: number }> | null;
   roomIdleTtlMs: number | null;
   trustProxy: boolean;

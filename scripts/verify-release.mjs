@@ -64,7 +64,23 @@ export function readPrevious(readState) {
       /* Missing/invalid history never grants migration permission. */
     }
   }
-  return { tag, images: digests, ...(profile ? { profile } : {}) };
+  let policy = {};
+  try {
+    const old = JSON.parse(readState(`releases/${tag}.json`) ?? 'null');
+    if (
+      old?.tag === tag &&
+      old.images?.game?.digest === digests.game.digest &&
+      old.images?.web?.digest === digests.web.digest
+    ) {
+      if (['attested', 'continuous'].includes(old.operatingMode))
+        policy.operatingMode = old.operatingMode;
+      if (Number.isSafeInteger(old.officialBudgetMaxAgeMs) && old.officialBudgetMaxAgeMs > 0)
+        policy.officialBudgetMaxAgeMs = old.officialBudgetMaxAgeMs;
+    }
+  } catch {
+    /* Only matched release history can select rollback policy. */
+  }
+  return { tag, images: digests, ...(profile ? { profile } : {}), ...policy };
 }
 
 /**
@@ -84,6 +100,7 @@ export function buildManifest(inputs, inspect, readState) {
     tag: inputs.tag,
     verifiedSha: inputs.verifiedSha,
     profile: inputs.profile,
+    ...(inputs.operatingMode ? { operatingMode: inputs.operatingMode } : {}),
     images,
     previous: readPrevious(readState),
     officialBudgetMaxAgeMs: inputs.officialBudgetMaxAgeMs ?? null,
@@ -106,6 +123,7 @@ function parseArgs(argv) {
     else if (a === '--state-dir') out.stateDir = argv[++i];
     else if (a === '--output') out.output = argv[++i];
     else if (a === '--official-budget-max-age-ms') out.officialBudgetMaxAgeMs = Number(argv[++i]);
+    else if (a === '--operating-mode') out.operatingMode = argv[++i];
     else {
       console.error(`unknown argument ${a}${v ? '' : ''}`);
       process.exit(2);

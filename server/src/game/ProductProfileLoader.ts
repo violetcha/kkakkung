@@ -47,7 +47,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
   const cloudConfigured = Boolean(
     config.mediaMode === 'livekit' &&
     cloud?.projectAlias &&
-    config.officialBudgetMaxAgeMs &&
+    (config.operatingMode === 'continuous' || config.officialBudgetMaxAgeMs) &&
     config.operationTimeoutMs &&
     config.mediaApiLimits,
   );
@@ -58,7 +58,9 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
           projectAlias: cloud.projectAlias,
           namespace: config.namespace,
           nowEpochMs: Date.now,
-          maxAgeMs: config.officialBudgetMaxAgeMs!,
+          maxAgeMs: config.officialBudgetMaxAgeMs ?? 0,
+          operatingMode: config.operatingMode,
+          cloudHttpOrigin: cloud.httpUrl,
         })
       : null;
   return {
@@ -121,6 +123,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
             namespace: config.namespace,
             opsDataDir: resolve(repositoryRoot, config.opsDataDir),
             publicWindow: config.publicWindow,
+            operatingMode: config.operatingMode,
             officialBudgetMaxAgeMs: config.officialBudgetMaxAgeMs!,
             operationTimeoutMs: config.operationTimeoutMs!,
             subscriptionMode: config.subscriptionMode,

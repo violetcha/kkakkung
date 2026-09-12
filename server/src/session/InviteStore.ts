@@ -18,7 +18,10 @@ export type InviteStoreOptions = Readonly<{
   /** F configuration `inviteMaxTtlMs`; null means the operations profile is not configured. */
   maxTtlMs: number | null;
   /** Approved public window in epoch ms; null locks issuance. */
-  publicWindow: Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }> | null;
+  publicWindow:
+    | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
+    | Readonly<{ mode: 'continuous' }>
+    | null;
   /** Room codes the server currently knows. Invitations may only reference these. */
   knownRoomCodes: () => ReadonlySet<string>;
   /** Operations gate: issuance requires readiness READY and admission OPEN. */
@@ -43,7 +46,12 @@ export class InviteStore implements InvitationPort {
     if (!this.options.operationsReady() || this.options.maxTtlMs === null)
       return { status: 'rejected', code: 'NOT_READY' };
     const window = this.options.publicWindow;
-    if (!window || now < window.opensAtEpochMs || input.expiresAt > window.closesAtEpochMs)
+    if (
+      !window ||
+      ('mode' in window
+        ? window.mode !== 'continuous'
+        : now < window.opensAtEpochMs || input.expiresAt > window.closesAtEpochMs)
+    )
       return { status: 'rejected', code: 'OUTSIDE_PUBLIC_WINDOW' };
     if (
       !Number.isSafeInteger(input.expiresAt) ||
