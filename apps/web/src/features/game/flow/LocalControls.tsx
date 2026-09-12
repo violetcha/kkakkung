@@ -11,6 +11,7 @@ export function LocalControls({
   onRecover,
   onMicrophone,
   canRecover = true,
+  compact = false,
 }: {
   status: DeviceStatus;
   mode: InteractionState['mode'];
@@ -20,13 +21,15 @@ export function LocalControls({
   onRecover(): Promise<void>;
   onMicrophone(enabled: boolean): Promise<void>;
   canRecover?: boolean;
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const calibrating = busy || status.calibration === 'running';
   return (
     <aside className="local-controls" aria-label="내 카메라와 조작">
       <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
-      <div>
+      <details open={!compact}>
+        <summary>조작 안내 · 장치 설정</summary>
         <p>
           <strong>{mode === 'motion' ? '얼굴·상체 조작' : '키보드 조작'}</strong>
         </p>
@@ -80,7 +83,7 @@ export function LocalControls({
           </p>
         )}
         {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}
-      </div>
+      </details>
     </aside>
   );
 }

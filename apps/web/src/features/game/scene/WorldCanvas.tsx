@@ -8,6 +8,9 @@ import { VisibleTerrain } from './VisibleTerrain';
 import { QUALITY_PRESETS, type QualityPreset } from './quality-presets';
 import type { OwnerNames } from './ExitOwnerLabel';
 import type { FaceTextures } from './face-textures';
+import { FacilityLighting } from './FacilityLighting';
+import { FACILITY } from './facility-theme';
+import { FrameMetricsProbe, type FrameMetrics } from './FrameMetrics';
 
 export function WorldCanvas({
   scene,
@@ -16,6 +19,7 @@ export function WorldCanvas({
   faces,
   quality = 'medium',
   renderTick = () => null,
+  onMetrics,
 }: {
   scene?: ComponentProps<typeof ScenePrimitives>;
   view?: PrivateView;
@@ -23,6 +27,7 @@ export function WorldCanvas({
   faces?: FaceTextures;
   quality?: QualityPreset;
   renderTick?(): number | null;
+  onMetrics?(metrics: FrameMetrics): void;
 } = {}) {
   const players = useAppStore((state) => state.players);
   const sessionId = useAppStore((state) => state.sessionId);
@@ -34,13 +39,16 @@ export function WorldCanvas({
         camera={{ position: [0, 0.8, 0], near: 0.03, far: 3.5 }}
         aria-label="까꿍 미로"
       >
-        <color attach="background" args={['#141413']} />
-        <fog attach="fog" args={['#141413', 2.2, 3]} />
-        <ambientLight intensity={1.5} />
+        <color attach="background" args={[FACILITY.background]} />
+        <fog attach="fog" args={[FACILITY.background, FACILITY.fogNear, FACILITY.fogFar]} />
         {view.self?.status === 'ACTIVE' && (
-          <FirstPersonCamera self={view.self} renderTick={renderTick} />
+          <>
+            <FirstPersonCamera self={view.self} renderTick={renderTick} />
+            <FacilityLighting self={view.self} renderTick={renderTick} quality={quality} />
+          </>
         )}
-        <VisibleTerrain view={view} ownerNames={ownerNames} faces={faces} />
+        <VisibleTerrain view={view} ownerNames={ownerNames} faces={faces} renderTick={renderTick} />
+        {onMetrics && <FrameMetricsProbe report={onMetrics} />}
       </Canvas>
     );
   if (scene)

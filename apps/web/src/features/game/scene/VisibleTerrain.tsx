@@ -10,17 +10,19 @@ export function VisibleTerrain({
   view,
   ownerNames,
   faces,
+  renderTick,
 }: {
   view: PrivateView;
   ownerNames?: OwnerNames;
   faces?: FaceTextures;
+  renderTick?(): number | null;
 }) {
   return (
     <>
-      <ScenePrimitives {...visibilityMask(view)} />
+      <ScenePrimitives {...visibilityMask(view)} players={[]} />
       <VisibleExits view={view} ownerNames={ownerNames} />
       <EquipmentObjects view={view} />
-      <FaceAvatars view={view} faces={faces} />
+      <FaceAvatars view={view} faces={faces} renderTick={renderTick} />
     </>
   );
 }

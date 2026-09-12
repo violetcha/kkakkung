@@ -23,13 +23,34 @@ export function VisibleExits({
             <ExitOwnerLabel text={exitOwnerLabel(exit.ownerId, view.self?.playerId, ownerNames)} />
             <mesh>
               <planeGeometry args={[0.65, 0.95]} />
-              <meshBasicMaterial
-                color={exit.ownerId === view.self?.playerId ? '#b8ebca' : '#dfbb79'}
-              />
+              <meshStandardMaterial color="#80928b" metalness={0.5} roughness={0.6} />
             </mesh>
             <mesh position={[0, 0, 0.002]}>
               <planeGeometry args={[0.48, 0.79]} />
-              <meshBasicMaterial color="#161615" />
+              <meshStandardMaterial color="#183230" metalness={0.3} roughness={0.8} />
+            </mesh>
+            {[-1, 1].map((side) => (
+              <mesh key={side} position={[side * 0.29, 0, 0.026]}>
+                <boxGeometry args={[0.026, 0.94, 0.035]} />
+                <meshStandardMaterial
+                  color="#61756d"
+                  emissive={exit.ownerId === view.self?.playerId ? '#39765d' : '#705c30'}
+                  emissiveIntensity={0.55}
+                  roughness={0.5}
+                  metalness={0.5}
+                />
+              </mesh>
+            ))}
+            <mesh position={[0.175, -0.04, 0.022]}>
+              <boxGeometry args={[0.024, 0.15, 0.03]} />
+              <meshStandardMaterial color="#b8c3b5" roughness={0.45} metalness={0.75} />
+            </mesh>
+            <mesh position={[0, 0.22, 0.012]}>
+              <boxGeometry args={[0.14, 0.016, 0.01]} />
+              <meshBasicMaterial
+                color={exit.ownerId === view.self?.playerId ? '#b8ebca' : '#dfbb79'}
+                toneMapped={false}
+              />
             </mesh>
           </group>
         );
