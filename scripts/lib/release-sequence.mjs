@@ -467,8 +467,23 @@ export async function runRelease(input, adapters) {
         : `unavailable (${status.status}); skeleton barrier`,
     );
 
-    // 4. Drain before touching the image.
-    if (useOperations) await drain('DRAIN', manifest.tag);
+    // 4. Ordinary releases always drain. A never-admitted failed first start may reuse its
+    // predecessor's proven drain only through the explicit host/state recovery guard.
+    if (input.recoverFailedStartup) {
+      if (
+        !useOperations ||
+        manifest.profile !== 'product' ||
+        manifest.operatingMode !== 'continuous' ||
+        !adapters.recoverFailedStartup
+      )
+        fail('BLOCKED', 'STARTUP_RECOVERY_UNAVAILABLE');
+      const recovered = await adapters.recoverFailedStartup();
+      if (recovered.code !== 0) fail('BLOCKED', 'STARTUP_RECOVERY_UNCONFIRMED');
+      ok(
+        'failed startup recovery',
+        'prior drain, no new grants, normal stop, writer released, state archived',
+      );
+    } else if (useOperations) await drain('DRAIN', manifest.tag);
     else
       record(
         'drain',

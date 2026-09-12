@@ -42,6 +42,7 @@ export type ReleaseAdapters = Readonly<{
     operatingMode?: 'attested' | 'continuous',
   ) => Promise<Readonly<{ code: number }>>;
   runSmoke: (mode: 'cloud' | 'http') => Promise<Readonly<{ code: number }>>;
+  recoverFailedStartup?: () => Promise<Readonly<{ code: number }>>;
   writeState: (name: string, text: string) => Promise<void> | void;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
@@ -62,6 +63,7 @@ export type ReleaseInput = Readonly<{
   opsTokenPresent: boolean;
   smokePreflightPresent: boolean;
   nowEpochMs: () => number;
+  recoverFailedStartup?: boolean;
   deadlines?: Partial<
     Readonly<{ drainMs: number; readyMs: number; recoverMs: number; resumeMs: number }>
   >;

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,7 +65,7 @@ function resources(dir: string, clock: { ms: number }) {
   return { journal, usage, usageStore, retry, cleanupCheckpoint };
 }
 
-async function seed(state: 'PREPARED' | 'REVOKED' = 'PREPARED') {
+async function seed(state: 'PREPARED' | 'REVOKED' = 'PREPARED', historicalRooms = 1) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e13-bindings-'));
   directories.push(dir);
   const stores = resources(dir, { ms: 0 });
@@ -114,6 +115,13 @@ async function seed(state: 'PREPARED' | 'REVOKED' = 'PREPARED') {
     atEpochMs: EPOCH,
   };
   await stores.journal.append(record);
+  for (let index = 1; index < historicalRooms; index++) {
+    await stores.journal.append({
+      ...record,
+      roomName: `e-fixture--${record.serverEpoch}--${randomUUID()}`,
+      identity: randomUUID(),
+    });
+  }
   await Promise.all([stores.usage.close(), stores.retry.close(), stores.cleanupCheckpoint.close()]);
   await stores.journal.close();
   return { dir, record };
@@ -698,6 +706,79 @@ describe('E-13 real local composition with mock Cloud transport; no Cloud eviden
     expect(s.remove).not.toHaveBeenCalled();
     expect(s.deleteRoom).not.toHaveBeenCalled();
   });
+
+  it('completes all 78 historical-room checks across the production 180-call rolling limit', async () => {
+    const s = fixture(await seed('REVOKED', 78), { normalLimit: 120, totalLimit: 180 });
+    await s.bootstrap.initialize();
+    await vi.waitFor(() => expect(s.api.getSnapshot().pendingCleanup).toBe(4));
+    expect(s.api.getSnapshot()).toMatchObject({ total60s: 180, normal60s: 0 });
+    expect(s.events).toHaveLength(180);
+    expect(s.reports).not.toHaveBeenCalled();
+
+    // Actual bindings must wait for shared capacity; the pool fixture alone misses their deadline.
+    s.advance(60_000);
+    expect(await s.bootstrap.completion()).toMatchObject({
+      unresolved: 0,
+      historyComplete: true,
+      ownedRoomsRemaining: 0,
+    });
+    expect(s.events).toHaveLength(236);
+    expect(s.listRooms).toHaveBeenCalledTimes(2);
+    expect(s.listParticipants).toHaveBeenCalledTimes(156);
+    expect(s.deleteRoom).toHaveBeenCalledTimes(78);
+    expect(s.remove).not.toHaveBeenCalled();
+    expect(s.api.getSnapshot()).toMatchObject({ total60s: 56, normal60s: 0, pendingCleanup: 0 });
+    expect(s.bootstrap.getReadiness()).toMatchObject({ state: 'READY', unresolvedCount: 0 });
+    expect(await s.cleanupCheckpoint.read()).toMatchObject({
+      integrity: 'ok',
+      checkpoint: { state: { report: { unresolved: 0, historyComplete: true } } },
+    });
+  });
+
+  it('rechecks ownership after waiting for a rolling window without dispatching queued queries', async () => {
+    const s = fixture(await seed('REVOKED'), { normalLimit: 1, totalLimit: 1 });
+    await s.api.dispatch({
+      requestId: 'consumed',
+      method: 'fixture',
+      target: 'fixture',
+      kind: 'query',
+      priority: 'cleanup',
+      deadlineMs: 1000,
+      run: async () => {},
+    });
+    await s.bootstrap.initialize();
+    await vi.waitFor(() => expect(s.api.getSnapshot().pendingCleanup).toBe(1));
+    s.setOwnership(false);
+    s.advance(60_000);
+    expect(await s.bootstrap.completion()).toMatchObject({ historyComplete: false });
+    expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+    expect(s.events).toEqual([]);
+    expect(s.api.getSnapshot().pendingCleanup).toBe(0);
+  });
+
+  it.each([2, 3])(
+    'keeps revocation and its absence confirmation bounded at total limit %i',
+    async (totalLimit) => {
+      const s = fixture(await seed(), { normalLimit: 1, totalLimit });
+      await s.bootstrap.initialize();
+      await vi.waitFor(() => expect(s.api.getSnapshot().pendingCleanup).toBe(1));
+      expect(s.api.getSnapshot().total60s).toBe(totalLimit);
+      // Limit 2 queues RemoveParticipant; limit 3 queues its mandatory absence confirmation.
+      expect(s.remove).toHaveBeenCalledTimes(totalLimit - 2);
+      s.advance(1000);
+      await vi.waitFor(() => expect(s.bindings.retries.snapshot()[0]?.status).toBe('REVOKING'));
+      s.advance(9000);
+      await vi.waitFor(() => expect(s.bindings.retries.snapshot()[0]?.status).toBe('UNRESOLVED'));
+      expect(s.usage.snapshot().reservations[0]?.status).toBe('ACTIVE');
+      expect(s.remove).toHaveBeenCalledTimes(totalLimit - 2);
+      expect((await s.records()).at(-1)?.record.state).toBe('UNRESOLVED');
+      await s.bootstrap.close();
+      s.advance(60_000);
+      expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+      expect(s.api.getSnapshot().pendingCleanup).toBe(0);
+      expect(s.remove).toHaveBeenCalledTimes(totalLimit - 2);
+    },
+  );
 
   it('retains the writer while an unknown-target checkpoint rename is pending and prevents removal after close', async () => {
     const seeded = await seed('REVOKED');
