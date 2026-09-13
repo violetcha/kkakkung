@@ -12,7 +12,14 @@ export type MediaScope = Readonly<{
 
 export type MediaGrant = MediaScope &
   Readonly<{
-    subscriptionMode?: 'publisher-permissions';
+    subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    /** Only server-forwarding: CAMERA-only source, distinct from the MIC/receive room. */
+    facePublication?: Readonly<{
+      url: string;
+      token: string;
+      roomName: string;
+      mediaIdentity: string;
+    }>;
     url: string;
     token: string;
     roomName: string;
@@ -85,14 +92,17 @@ export interface MediaRoomPort {
   connect(
     url: string,
     token: string,
-    options: { autoSubscribe: false; subscriptionMode?: 'publisher-permissions' },
+    options: {
+      autoSubscribe: boolean;
+      subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    },
   ): Promise<void>;
   disconnect(): Promise<void>;
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeAllListeners(): void;
 }
 
-export type MediaRoomFactory = () => MediaRoomPort;
+export type MediaRoomFactory = (grant?: MediaGrant) => MediaRoomPort;
 
 /** livekit-client 2.22.2의 RoomEvent 이름. D의 RoomEvent와 서버 Webhook 이름을 섞지 않는다. */
 export const ROOM_EVENTS = Object.freeze({

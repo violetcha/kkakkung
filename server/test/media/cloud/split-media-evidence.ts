@@ -1,5 +1,6 @@
 /** Synthetic transport evidence is never permission to change the product audience. */
 export const SPLIT_MEDIA_CHECKS = [
+  'productTransportUsed',
   'separatedSourcePermissions',
   'faceOnlyReceived',
   'directAudioBlocked',

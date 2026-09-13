@@ -11,9 +11,10 @@
 // stop하지 않도록 disconnect·unpublish·replaceTrack의 stop 인수를 모두 D 소유 쪽으로 준다.
 // retireMediaGeneration이 원본 장치를 살려 두는 계약이 여기에 걸려 있다.
 import type { AudioPolicy } from './audio-policy';
-import { ROOM_EVENTS, type MediaRoomPort } from './media-types';
+import { ROOM_EVENTS, type MediaGrant, type MediaRoomPort } from './media-types';
 import type { RemoteTrack } from './remote-faces';
 import type { PublishOptions, PublisherPort } from './track-publisher';
+import { createSplitLiveKitConnection } from './split-livekit-connection';
 
 /** SDK Track.Source 중 D가 쓰는 두 개. 문자열 리터럴을 만들지 않고 모듈 enum을 읽는다. */
 export type SdkTrackSourceEnum = Readonly<{ Camera: string; Microphone: string }>;
@@ -92,7 +93,7 @@ export interface LiveKitAdapter {
   applyPublisherPermissions(policy: AudioPolicy): void;
   clearPublisherPermissions(): void;
   /** media-session이 세대마다 부른다. 이 Room이 현재 세대의 유일한 Room이 된다. */
-  createRoom(): MediaRoomPort;
+  createRoom(grant?: MediaGrant): MediaRoomPort;
   /** 현재 Room의 LocalParticipant 기반 게시 port. Room이 없으면 null이다. */
   getPublisher(): PublisherPort | null;
   /** 검증되지 않은 트랙의 구독을 실제로 멈춘다. */
@@ -132,6 +133,7 @@ export function createLiveKitAdapter(
   hooks: LiveKitAdapterHooks,
 ): LiveKitAdapter {
   let current: RoomState | null = null;
+  let split: ReturnType<typeof createSplitLiveKitConnection> | null = null;
 
   const applyPermissions = (state: RoomState) => {
     if (!state.publisherMode) return;
@@ -246,8 +248,30 @@ export function createLiveKitAdapter(
   };
 
   return {
-    createRoom() {
+    createRoom(grant) {
+      if (split) {
+        split.port.removeAllListeners();
+        void split.port.disconnect().catch(() => {});
+        split = null;
+      }
       if (current) clearPermissions(current);
+      if (grant?.subscriptionMode === 'server-forwarding') {
+        current = null;
+        const next = createSplitLiveKitConnection(
+          sdk,
+          {
+            onRemoteTrack: (track) => {
+              if (split === next) hooks.onRemoteTrack(track);
+            },
+            onRemoteTrackRemoved: (sid) => {
+              if (split === next) hooks.onRemoteTrackRemoved(sid);
+            },
+          },
+          grant,
+        );
+        split = next;
+        return next.port;
+      }
       const room = new sdk.Room();
       const state: RoomState = {
         room,
@@ -304,15 +328,21 @@ export function createLiveKitAdapter(
       if (current) clearPermissions(current);
     },
     getPublisher() {
+      if (split) return split.getPublisher();
       if (!current) return null;
       return createPublisher(current);
     },
 
     unsubscribeTrack(track) {
+      if (split) {
+        split.unsubscribeTrack(track);
+        return;
+      }
       current?.remotePublications.get(track.trackSid)?.setSubscribed(false);
     },
 
     getAudioTrack(trackSid) {
+      if (split) return split.getAudioTrack(trackSid);
       const track = current?.remoteTracks.get(trackSid);
       if (!track || track.kind !== 'audio') return null;
       return track.mediaStreamTrack;

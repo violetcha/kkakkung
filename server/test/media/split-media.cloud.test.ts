@@ -42,6 +42,7 @@ it(
   'MC-PUBLIC-02 keeps faces while blocking and reallowing isolated audio on the same destination',
   async () => {
     const evidence: SplitMediaEvidence = {
+      productTransportUsed: false,
       separatedSourcePermissions: false,
       faceOnlyReceived: false,
       directAudioBlocked: false,
@@ -72,6 +73,7 @@ it(
     let vite: ViteDevServer | undefined;
     let failure: string | null = null;
     let issuedIdentities = 0;
+    const grantExpiresAt = Math.floor(Date.now() / 1000) + 300;
     const calls = { normal: 0, cleanup: 0 };
     const budget = new ApiBudget({
       monotonicNow: () => performance.now(),
@@ -125,6 +127,7 @@ it(
       const identity = preflight.namespace + '--' + randomUUID();
       remember(room, identity);
       const token = new AccessToken(config.apiKey, config.apiSecret, { identity, ttl: 300 });
+      token.ttl = grantExpiresAt;
       token.addGrant({
         roomJoin: true,
         room,
@@ -138,15 +141,6 @@ it(
         roomList: false,
       });
       return { identity, token: await token.toJwt() };
-    };
-    const connect = async (page: Page, token: string, publisherMode = false) => {
-      guard();
-      const result = await page.evaluate(
-        ({ url, token, publisherMode }) =>
-          window.capabilityProbe.connect(url, token, publisherMode),
-        { url: config.wsUrl, token, publisherMode },
-      );
-      if (result.outcome !== 'connected') throw new Error('SPLIT_PROBE_CONNECT_UNCONFIRMED');
     };
     const sleep = async () => {
       guard();
@@ -241,14 +235,16 @@ it(
         args: ['--autoplay-policy=no-user-gesture-required'],
       });
       const pages: Page[] = [];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 2; i++) {
         const page = await browser.newPage();
         page.setDefaultTimeout(8000);
         await page.goto(local + 'capability.html');
         await page.waitForFunction(() => !!window.capabilityProbe);
         pages.push(page);
       }
-      const [faceA, voiceA, faceB, voiceB] = pages as [Page, Page, Page, Page];
+      const [voiceA, voiceB] = pages as [Page, Page];
+      const faceA = voiceA;
+      const faceB = voiceB;
       const faceRoom = await createRoom();
       const receiverA = await createRoom();
       const receiverB = await createRoom();
@@ -256,17 +252,42 @@ it(
       const va = await mint(receiverA, 'audio');
       const fb = await mint(faceRoom, 'face');
       const vb = await mint(receiverB, 'audio');
-      for (const [page, credential] of [
-        [faceA, fa],
-        [voiceA, va],
-        [faceB, fb],
-        [voiceB, vb],
-      ] as const)
-        await connect(page, credential.token);
-      const faceASids = await faceA.evaluate(() => window.capabilityProbe.publish('face'));
-      const audioASids = await voiceA.evaluate(() => window.capabilityProbe.publish('audio'));
-      const faceBSids = await faceB.evaluate(() => window.capabilityProbe.publish('face'));
-      const audioBSids = await voiceB.evaluate(() => window.capabilityProbe.publish('audio'));
+      for (const [index, page, source, receiver, privateRoom] of [
+        [0, voiceA, fa, va, receiverA],
+        [1, voiceB, fb, vb, receiverB],
+      ] as const) {
+        guard();
+        const grant = {
+          matchId: 'synthetic-split-match',
+          mediaInstanceId: 'synthetic-split-instance',
+          receiverGeneration: 1,
+          subscriptionMode: 'server-forwarding',
+          url: config.wsUrl,
+          token: receiver.token,
+          roomName: privateRoom,
+          mediaIdentity: receiver.identity,
+          expiresAt: grantExpiresAt,
+          facePublication: {
+            url: config.wsUrl,
+            token: source.token,
+            roomName: faceRoom,
+            mediaIdentity: source.identity,
+          },
+        } as const;
+        const result = await page.evaluate(
+          (value) => window.capabilityProbe.connectSplit(value),
+          grant,
+        );
+        if (result.outcome !== 'connected' || result.connections !== 2)
+          throw new Error('SPLIT_PROBE_PRODUCT_TRANSPORT_UNCONFIRMED');
+        if (index === 1) evidence.productTransportUsed = true;
+      }
+      const publishedA = await voiceA.evaluate(() => window.capabilityProbe.publish('both'));
+      const publishedB = await voiceB.evaluate(() => window.capabilityProbe.publish('both'));
+      const faceASids = publishedA.slice(0, 1);
+      const audioASids = publishedA.slice(1);
+      const faceBSids = publishedB.slice(0, 1);
+      const audioBSids = publishedB.slice(1);
       if (
         [faceASids, audioASids, faceBSids, audioBSids].some((sids) => sids.length !== 1 || !sids[0])
       )
@@ -459,6 +480,9 @@ it(
       JSON.stringify(
         {
           case: 'MC-PUBLIC-02',
+          transportDriver: 'product-split-adapter',
+          browserPages: 2,
+          sdkConnections: 4,
           sourceCommit: preflight.sourceCommit,
           lockfileHash: preflight.lockfileHash,
           namespace: preflight.namespace,
@@ -474,7 +498,8 @@ it(
           samples,
           limitations: [
             'isolated synthetic transport probe only',
-            'not product integration, G1 acceptance, capacity, or permission to open production',
+            'product browser transport used; product grant issuance, durable cleanup and usage not integrated',
+            'not full G1 acceptance, device or capacity evidence, or permission to open production',
           ],
         },
         null,

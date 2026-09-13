@@ -7,6 +7,8 @@ export type MediaBinding = Readonly<{
   publisherGeneration: number;
   mediaIdentity: string;
   participantSid: string;
+  /** Present when the face has a distinct, server-verified publisher in this receiver room. */
+  facePublisher?: Readonly<{ mediaIdentity: string; participantSid: string }>;
   faceTrackSid?: string;
   audioTrackSid?: string;
 }>;
@@ -47,6 +49,18 @@ function isBindingShape(value: unknown): value is MediaBinding {
   if (typeof binding.participantSid !== 'string' || binding.participantSid.length === 0)
     return false;
   if (!Number.isFinite(binding.publisherGeneration)) return false;
+  if (binding.facePublisher !== undefined) {
+    const face = binding.facePublisher as Record<string, unknown> | null;
+    if (
+      !face ||
+      typeof face !== 'object' ||
+      typeof face.mediaIdentity !== 'string' ||
+      !face.mediaIdentity ||
+      typeof face.participantSid !== 'string' ||
+      !face.participantSid
+    )
+      return false;
+  }
   if (binding.faceTrackSid !== undefined && typeof binding.faceTrackSid !== 'string') return false;
   if (binding.audioTrackSid !== undefined && typeof binding.audioTrackSid !== 'string')
     return false;

@@ -97,3 +97,12 @@ Billing은 Build 포함5,000분/50GB, 사용293분/약1GB, 다음 청구0달러�
 합성 Canvas/오실레이터와4개 브라우저 연결의 실제 Cloud 전달 결과다.
 실제 게임 Runtime의 두 연결 수명, 전체 G1, 실제6대·10방·요금제 용량은 후속 인수다.
 MR·배포 상태는 [구현 기록](mvp-implementation-progress.md)에 기록한다.
+
+## 제품 웹 소비자를 사용한 후속 실행
+
+위211의 네 페이지/아홉 조건 결과는 당시 구조 검증 기록이다.
+215에서 실제 `MediaSession → LiveKitAdapter`를 사용하는 두 페이지/네 SDK 연결로
+MC-PUBLIC-02를 갱신하고 `productTransportUsed`를 포함한 열 조건을 검사한다.
+2026-09-13 19:20 KST 소스 `8e11d0b1`의 실제 Cloud23,967ms/exit0·열 조건을 통과했다.
+최종 자원 부재와 호출 정상15/정리16을 확인했다. 실제 제품 서버 생산자는 아직 미통합이며
+현재 브라우저 수명·계약·증거 해시·측정 한계는 [제품 연결 기록](split-media-runtime.md)을 따른다.

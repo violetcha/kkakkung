@@ -8,6 +8,33 @@
 
 ## 2026-09-13 구현 재개
 
+### 공개 미디어 분리 연결 — 215 진행 중
+
+- [215](https://ssafy.atlassian.net/browse/S15P21C204-215),
+  `feat/S15P21C204-215-split-media-runtime`, 시작 `f79726c4`, 선행214 병합 `1cb41f05` 동기화.
+- 웹 Runtime의 두 연결 수명·CAMERA/MIC 게시 분리·개별 송출 조회·취소·부분 실패와
+  얼굴/음성의 별도 게시자 대조를 구현했다. 관련6파일90개·루트 타입·계약33/도구11 통과.
+- MC-PUBLIC-02를 실제 제품 어댑터의 두 브라우저/네 연결로 갱신했다.
+  첫 단계 전체254파일·2,614개·22 E2E(58.5초), 계약33/도구11·lint·타입·빌드·
+  실제 Worker/자산 검사 통과.
+  소스 `8e11d0b1`의 실제 Cloud는19:20 KST,23,967ms/exit0·열 조건 모두 통과,
+  정상15/정리16호출·최종 자원 부재를 확인했다. 허용267ms·재허용263ms,
+  차단/2초 안정 구간2,359ms는 G1의1초 인수가 아니다. CI/MR은 후속이며,
+  제품 서버 발급·전달·내구 회수·사용량은 미통합으로 Jira215를 진행 중에 유지한다.
+  [단계와 서버 미통합 조건](split-media-runtime.md)을 따른다.
+
+### 214 최종 병합·배포 — 19:07 KST
+
+- [MR !138](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/138):
+  소스 `730d0a5833415f1a914e4cd47f9acf38dfd85169`의 Jenkins MR #117/GitLab #191643
+  PASS(252파일·2,590개·22 E2E/2.1분·이미지 검사), develop `1cb41f05b966740ad88dcc0d3b21c4540ecb9713`
+  병합·소스 삭제·Jira214 완료를 확인했다.
+- 배포 #109/GitLab #191649 SUCCESS, 실제 Cloud DP-06 PASS(217.91초),
+  READY/OPEN·미해결0·last-good·게임/웹 동일 revision, 팀 SSO302·익명 운영403 확인.
+- 실제 web-proxy의 고지 HTML2412/CSS582/원문11358bytes는 모두200·정확한 MIME·manifest 해시
+  일치, 누락 파일404다. compose up 완료→readiness 약3.02초는 최대 규모 성능 인수가 아니다.
+  미확인 모델/SDK 번들 고지는 pending이며 전체 권리 승인으로 계산하지 않는다.
+
 ### 비전 자산의 근거·제품 고지 — 214
 
 - [214](https://ssafy.atlassian.net/browse/S15P21C204-214),
@@ -108,10 +135,10 @@
   Jira211 완료·배포 #107 SUCCESS(17:46 KST), 실제 Cloud DP-06 PASS(74.54초),
   READY/OPEN·미해결0·last-good·게임/웹 같은 revision과 SSO302/운영403을 확인했다.
 
-### 현재 기준 — 18:30 KST
+### 현재 기준 — 19:07 KST
 
-- 운영 develop/game/web `f79726c4ec72332cda515d5e0d6ea85f85dd4355`.
-  Jenkins 배포 #108 SUCCESS, 실제 Cloud DP-06 PASS(시험119.48초), READY/OPEN·미해결0·
+- 운영 develop/game/web `1cb41f05b966740ad88dcc0d3b21c4540ecb9713`.
+  Jenkins 배포 #109 SUCCESS, 실제 Cloud DP-06 PASS(시험217.91초), READY/OPEN·미해결0·
   last-good·SSO302/익명 운영403 확인. 팀원 제한과 도망자 아이템 제외를 유지한다.
 - #107의 compose up 완료→readiness 관측은 약3.02초이며 최대 규모 성능 인수가 아니다.
 - 210 친구 초대의 정확한 소스 CI·MR !135·배포 #106과 Jira 완료를 확인했다.

@@ -11,6 +11,9 @@ import {
   LogLevel,
   type RemoteTrack,
 } from 'livekit-client';
+import { mediaGrantSchema } from '@kkakkung/protocol/game-messages';
+import { createLiveKitAdapter } from '../../../../apps/web/src/features/media/livekit-adapter';
+import { createMediaSession } from '../../../../apps/web/src/features/media/media-session';
 
 // QA only, no real devices. No tokens, URLs, raw SDK errors, traces or media are persisted.
 setLogLevel(LogLevel.silent);
@@ -33,6 +36,9 @@ export type ConnectionResult = {
 const colors = { 1: [0, 255, 0], 2: [0, 0, 255], 3: [255, 255, 0] } as const;
 export const frequencies = { 1: 660, 2: 880, 3: 1100 } as const;
 let room: Room | null = null;
+let splitAdapter: ReturnType<typeof createLiveKitAdapter> | null = null;
+let splitSession: ReturnType<typeof createMediaSession> | null = null;
+let splitRooms: Room[] = [];
 let initialToken = '';
 let refreshedToken = '';
 let endpoint = '';
@@ -90,7 +96,11 @@ function detach(sid: string) {
 async function disconnect() {
   stopSynthetic?.();
   stopSynthetic = undefined;
-  if (room) await room.disconnect();
+  if (splitSession) await splitSession.dispose();
+  else if (room) await room.disconnect();
+  splitSession = null;
+  splitAdapter = null;
+  splitRooms = [];
   room = null;
   for (const sid of received.keys()) detach(sid);
 }
@@ -149,6 +159,56 @@ async function reconnect(kind: 'original' | 'refreshed') {
   }
   return connect(endpoint, token);
 }
+async function connectSplit(value: unknown): Promise<ConnectionResult & { connections: number }> {
+  await disconnect();
+  const grant = mediaGrantSchema.parse(value);
+  if (grant.subscriptionMode !== 'server-forwarding')
+    return { outcome: 'unconfirmed', status: null, connections: 0 };
+  class ProbeRoom extends Room {
+    constructor() {
+      super({
+        adaptiveStream: false,
+        dynacast: false,
+        reconnectPolicy: { nextRetryDelayInMs: () => null },
+      });
+      splitRooms.push(this);
+    }
+  }
+  splitAdapter = createLiveKitAdapter(
+    { Room: ProbeRoom, Track: { Source: Track.Source } },
+    {
+      onRemoteTrack: (incoming) => {
+        const participant = [...(room?.remoteParticipants.values() ?? [])].find(
+          (value) => value.sid === incoming.participantSid,
+        );
+        const actual = participant?.getTrackPublicationBySid(incoming.trackSid)?.track;
+        if (actual) attach(actual);
+      },
+      onRemoteTrackRemoved: detach,
+    },
+  );
+  splitSession = createMediaSession({
+    createRoom: (approved) => {
+      const port = splitAdapter!.createRoom(approved);
+      room = splitRooms[0] ?? null;
+      return port;
+    },
+    onStatus: () => {},
+    epochNowSeconds: () => Math.floor(Date.now() / 1000),
+    getPhase: () => 'GAME_LOADING',
+  });
+  try {
+    await audio.resume();
+    await splitSession.connect(grant);
+    return {
+      outcome: splitSession.getStatus().state === 'connected' ? 'connected' : 'unconfirmed',
+      status: null,
+      connections: splitRooms.length,
+    };
+  } catch {
+    return { outcome: 'unconfirmed', status: null, connections: splitRooms.length };
+  }
+}
 async function publish(kind: 'both' | 'face' | 'audio' = 'both') {
   if (!room) throw new Error('MC01_NOT_CONNECTED');
   const canvas = document.createElement('canvas');
@@ -179,6 +239,30 @@ async function publish(kind: 'both' | 'face' | 'audio' = 'both') {
     microphone.stop();
   };
   const sids: string[] = [];
+  if (splitAdapter) {
+    const publisher = splitAdapter.getPublisher();
+    if (!publisher) throw new Error('SPLIT_PROBE_NOT_CONNECTED');
+    if (kind !== 'audio')
+      sids.push(
+        (
+          await publisher.publishTrack(video.mediaStreamTrack, {
+            source: 'camera',
+            simulcast: false,
+            videoEncoding: { maxBitrate: 150_000, maxFramerate: 10 },
+          })
+        ).trackSid,
+      );
+    if (kind !== 'face')
+      sids.push(
+        (
+          await publisher.publishTrack(microphone.mediaStreamTrack, {
+            source: 'microphone',
+            simulcast: false,
+          })
+        ).trackSid,
+      );
+    return sids;
+  }
   if (kind !== 'audio') {
     const face = await room.localParticipant.publishTrack(video, {
       source: Track.Source.Camera,
@@ -240,7 +324,9 @@ async function measure(): Promise<Measurement> {
     ...p.trackPublications.values(),
   ]);
   return {
-    connected: room?.state === 'connected',
+    connected: splitSession
+      ? splitSession.getStatus().state === 'connected'
+      : room?.state === 'connected',
     refreshReceived: !!refreshedToken,
     publications: publications.length,
     subscribed: publications.filter((p) => p.isSubscribed).length,
@@ -261,12 +347,14 @@ export const probe = {
   },
   restrictSubscribers: (identities: string[]) => {
     if (!room) throw new Error('MC01_NOT_CONNECTED');
-    room.localParticipant.setTrackSubscriptionPermissions(
-      false,
-      identities.map((participantIdentity) => ({ participantIdentity, allowAll: true })),
-    );
+    for (const target of splitRooms.length ? splitRooms : [room])
+      target.localParticipant.setTrackSubscriptionPermissions(
+        false,
+        identities.map((participantIdentity) => ({ participantIdentity, allowAll: true })),
+      );
   },
   connect,
+  connectSplit,
   reconnect,
   disconnect,
   publish,
