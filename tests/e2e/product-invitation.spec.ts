@@ -1,5 +1,43 @@
 import { expect, test } from '@playwright/test';
 
+test('home opens the real shipped notices and license text without a camera or game session', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/api/sessions/access', (route) =>
+    route.fulfill({ json: { method: 'gitlab-sso' } }),
+  );
+  const sessions: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/sessions'))
+      sessions.push(request.url());
+  });
+  await page.goto('/play');
+  await page.getByRole('link', { name: '오픈소스 고지', exact: true }).click();
+  await expect(page).toHaveURL(/\/licenses\/index\.html$/);
+  await expect(page.getByRole('heading', { name: '오픈소스 고지', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: '추가 확인 중인 항목', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('GestureRecognizer의 gesture embedder', { exact: false }),
+  ).toBeVisible();
+  const stylesheet = await page.request.get('/licenses/notices.css');
+  expect(stylesheet.ok()).toBe(true);
+  expect(stylesheet.headers()['content-type']).toContain('text/css');
+  await page.screenshot({ path: testInfo.outputPath('asset-notices.png'), fullPage: true });
+  const licenseResponse = page.waitForResponse((response) =>
+    response.url().endsWith('/licenses/Apache-2.0.txt'),
+  );
+  await page.getByRole('link', { name: 'Apache License 2.0 원문', exact: true }).click();
+  const license = await licenseResponse;
+  expect(license.ok()).toBe(true);
+  expect(license.headers()['content-type']).toContain('text/plain');
+  const text = await license.text();
+  expect(text).toContain('TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION');
+  expect(text).toContain('END OF TERMS AND CONDITIONS');
+  expect(sessions).toEqual([]);
+});
+
 test('guest creation works without a link while friend admission still requires its scoped link', async ({
   page,
 }) => {

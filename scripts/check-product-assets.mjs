@@ -6,6 +6,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { verifyVisionAssetNotices } from './lib/vision-asset-notices.mjs';
 
 const root = fileURLToPath(new URL('../apps/web/dist/', import.meta.url));
 const mime = {
@@ -31,6 +32,11 @@ const server = createServer((req, res) => {
 });
 let browser;
 try {
+  if (process.argv.slice(2).some((arg) => arg !== '--require-reviewed-rights'))
+    throw new Error('INVALID_ASSET_CHECK_ARGUMENT');
+  const notices = await verifyVisionAssetNotices(root, {
+    requireReviewedRights: process.argv.includes('--require-reviewed-rights'),
+  });
   const workers = (await readdir(resolve(root, 'assets'))).filter((name) =>
     /^vision\.worker-.*\.js$/.test(name),
   );
@@ -104,10 +110,15 @@ try {
       syntheticBlankFrame: true,
       actualCamera: false,
       cloudExecuted: false,
+      ...notices,
     }),
   );
-} catch {
-  console.error('BUILT_PRODUCT_ASSETS_FAILED');
+} catch (error) {
+  console.error(
+    error instanceof Error && error.message === 'VISION_ASSET_RIGHTS_PENDING'
+      ? error.message
+      : 'BUILT_PRODUCT_ASSETS_FAILED',
+  );
   process.exitCode = 1;
 } finally {
   await browser?.close();

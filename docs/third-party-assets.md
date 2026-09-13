@@ -1,17 +1,45 @@
 # 제3자 자산
 
-2026-09-13 · 코드 기준 `99f90baa`. 저장소에는 고정한 MediaPipe 모델 3개와 SDK WASM 관련 파일 6개가 포함되어 있다. 정확한 파일별 출처·sha256·bytes·취득일의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json), 취득 경위와 라이선스 확인 상태는 [비전 자산 README](../apps/web/public/models/README.md)를 따른다. 제품 범위와 공개 전 확인 사항은 [현행 기획서](spec/current.md)에 연결한다.
+2026-09-13 · S15P21C204-214, 시작 `efe358ee`, 선행 !137 병합 `f79726c4` 동기화.
+저장소의 고정 MediaPipe 모델3개·SDK WASM/로더6개와 실제 내부 구성 모델을 대조했다.
+파일 출처·sha256·bytes·취득일과 구성별 모델 카드의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json),
+취득 경위는 [비전 자산 README](../apps/web/public/models/README.md)를 따른다.
+제품 범위와 공개 전 확인 사항은 [현행 기획서](spec/current.md)에 연결한다.
 
-| 경로                                                     | 자산                        | 버전·크기                                                 | 현재 라이선스 기록                                          |
-| -------------------------------------------------------- | --------------------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
-| `apps/web/public/models/face/face_landmarker.task`       | FaceLandmarker float16      | release 1 · 3,758,596 bytes                               | pending — 공식 모델 카드 확인 필요                          |
-| `apps/web/public/models/pose/pose_landmarker.task`       | PoseLandmarker Lite float16 | release 1 · 5,777,746 bytes                               | pending — 공식 모델 카드 확인 필요                          |
-| `apps/web/public/models/gesture/gesture_recognizer.task` | GestureRecognizer float16   | release 1 · 8,373,440 bytes                               | pending — 공식 모델 카드 확인 필요                          |
-| `apps/web/public/models/mediapipe/1.0.1/wasm/`           | SDK의 WASM·로더 JS 6개      | `@mediapipe/tasks-vision` 1.0.1 · 파일별 bytes는 manifest | Apache-2.0 — 취득 당시 SDK package.json의 license 필드 기록 |
+| 경로                                                     | 자산                        | 버전·크기                                                 | 현재 라이선스 기록                                 |
+| -------------------------------------------------------- | --------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| `apps/web/public/models/face/face_landmarker.task`       | FaceLandmarker float16      | release 1 · 3,758,596 bytes                               | Apache-2.0 — 구성3종의 공식 카드 확인              |
+| `apps/web/public/models/pose/pose_landmarker.task`       | PoseLandmarker Lite float16 | release 1 · 5,777,746 bytes                               | Apache-2.0 — 공식 Lite 배포표의 모델 카드 확인     |
+| `apps/web/public/models/gesture/gesture_recognizer.task` | GestureRecognizer float16   | release 1 · 8,373,440 bytes                               | pending — 손 추적2종 확인, 임베더/분류기2종 미확인 |
+| `apps/web/public/models/mediapipe/1.0.1/wasm/`           | SDK의 WASM·로더 JS 6개      | `@mediapipe/tasks-vision` 1.0.1 · 파일별 bytes는 manifest | Apache-2.0 선언 확인, 번들 제3자 고지 검토 pending |
 
-모델 라이선스의 pending은 실제 자산이 없다는 뜻이 아니라 재배포 조건의 확인이 끝나지 않았다는 뜻이다. SDK의 Apache-2.0을 모델에 그대로 적용하지 않는다. 이번 문서 갱신에서는 공식 모델 카드의 라이선스를 새로 검증하거나 승인하지 않았다. 기존 취득 담당은 D이며, 모델 갱신과 공개 전 라이선스 확인의 인계는 해당 README를 따른다.
+pending은 실제 자산 부재가 아닌 권리 검토 미완료다. 이번 확인은 SDK 선언과 모델 카드의
+별도 근거를 사용한다. 공식 가이드의 배포표와 아래 카드의 라이선스 항목을 확인했다.
 
-시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 위 비전 모델의 기존 pending 확인은 별도 작업에 남는다.
+- 얼굴: [공식 배포표](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models),
+  [BlazeFace short range](<https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Short%20Range).pdf>),
+  [Face Mesh V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf),
+  [Blendshape V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf): Apache-2.0 표기.
+- 자세: [공식 Lite 배포표](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker#models)의
+  [BlazePose GHUM 3D](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf): Apache-2.0 표기.
+- 손: [공식 배포표](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/index#models)의
+  [Hand Tracking](<https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20(Lite_Full)%20with%20Fairness%20Oct%202021.pdf>): Apache-2.0 표기.
+  별도 [gesture 분류 카드](https://storage.googleapis.com/mediapipe-assets/gesture_recognizer/model_card_hand_gesture_classification_with_faireness_2022.pdf)에는
+  임베더/분류기의 라이선스 항목이 없어 gesture 번들의 pending을 유지한다.
+
+[Apache 원문](../apps/web/public/licenses/Apache-2.0.txt)은
+[Apache Software Foundation](https://www.apache.org/licenses/LICENSE-2.0.txt)에서 그대로 취득했다.
+11,358bytes·SHA256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`이다.
+홈의 “오픈소스 고지”는 [실제 배포 페이지](../apps/web/public/licenses/index.html)로 연결한다.
+페이지·스타일·원문의 해시와 모델/SDK9개 바이트는 `pnpm check:product-assets`에서 검사한다.
+NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회하고 누락 시404를 반환한다.
+
+`visionRightsReviewed`는 비전 자산의 기록상 검토 상태이며 전체 서비스의 권리나 공개 준비
+완료 상태가 아니다. `--require-reviewed-rights`는 현재 `VISION_ASSET_RIGHTS_PENDING`으로
+실패한다. W20 공개 승격 연결과 미확인 gesture/SDK 번들 고지, 다른 배포 의존성의 고지는 남는다.
+모델 갱신 시 버전·바이트·카드 연결을 다시 확인하며, 라이선스 기록의 날짜만으로 만료시키지 않는다.
+
+시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다.
 
 자산을 추가할 때 다음을 기록한다.
 

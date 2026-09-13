@@ -8,6 +8,37 @@
 
 ## 2026-09-13 구현 재개
 
+### 비전 자산의 근거·제품 고지 — 214
+
+- [214](https://ssafy.atlassian.net/browse/S15P21C204-214),
+  `chore/S15P21C204-214-vision-asset-notices`, 시작 `efe358ee`, 선행 !137 병합 `f79726c4` 동기화.
+- 실제 고정 번들의 구성과 공식 모델 카드를 대조해 얼굴3종·자세2종·손 추적2종의
+  Apache-2.0 근거를 기록했다. 손동작 임베더/분류기2종과 SDK 번들 제3자 고지는 pending이다.
+  공급한 모델·WASM9개 원본 바이트를 바꾸지 않았다.
+- 홈의 고지 페이지·Apache 원문·파일별 근거를 연결하고 NGINX 정적 경로를 분리했다.
+  실제 파일 누락/변조·경로 이탈·미확인 구성 삭제를 검사하며 엄격한 권리 검사에서는
+  현재 pending을 성공으로 처리하지 않는다. 전체 서비스의 권리 완료를 뜻하지 않는다.
+- 실제 파일과 합성 fixture의14개 단위 회귀 통과. 첫 브라우저 검사의 디렉터리 주소는
+  Vite SPA로 연결되어 실패했고 `/licenses/index.html`의 명시 파일 경로로 수정했다.
+  수정 후 브라우저1개(4.4초)와 실제 스크린샷을 확인했다. 최종 `pnpm verify`는
+  252파일·2,590개·E2E22개(54.4초), 포맷·계약32/도구11·lint·타입·빌드·실제 모델
+  Worker/자산 무결성 검사를 통과했다. 엄격 옵션은 예상대로 exit1/
+  `VISION_ASSET_RIGHTS_PENDING`을 반환했다. CI·MR·배포 결과는 후속 기록한다.
+  [자산별 근거와 남은 조건](third-party-assets.md)을 따른다.
+
+### 212·213 최종 병합·배포 — 18:30 KST
+
+- [MR !137](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/137)의
+  소스 `efe358eed782bb72c2cbdf6885d7b4739c0ee653` 로컬 전체251파일·2,576개·
+  E2E21개(53.1초), Jenkins MR #116/GitLab #191611(동일 수·E2E2.0분) PASS.
+  develop `f79726c4ec72332cda515d5e0d6ea85f85dd4355` 병합과 두 원격 소스 삭제를 확인했다.
+- 배포 #108/GitLab #191625 SUCCESS, 실제 Cloud DP-06 PASS(119.48초),
+  READY/OPEN·미해결0·last-good·게임/웹 동일 revision 확인. 팀 SSO302·익명 운영403 유지.
+  compose up 완료→readiness 약3.02초는 최대 규모 성능 인수가 아니다.
+- 212/213의 완료 범위는 게스트 세션·홈과 재검증 복구다. W02 공개 미디어, ingress/릴리스
+  audience·동일 이미지 격리 전환과 실제6대/10방은 남는다. 아래 대기 문구는 당시 이력이다.
+  Jira212·213 완료 상태를 각각 확인했다.
+
 ### 212·213 통합 검증
 
 212의 게스트 입장과213의 운영 설정 확인 복구를 같은 MR로 통합한다.
@@ -77,10 +108,10 @@
   Jira211 완료·배포 #107 SUCCESS(17:46 KST), 실제 Cloud DP-06 PASS(74.54초),
   READY/OPEN·미해결0·last-good·게임/웹 같은 revision과 SSO302/운영403을 확인했다.
 
-### 현재 기준 — 17:46 KST
+### 현재 기준 — 18:30 KST
 
-- 운영 develop/game/web `280809d84764e2635c018a0d397fb049b800ebbf`.
-  Jenkins 배포 #107 SUCCESS, 실제 Cloud DP-06 PASS(시험74.54초), READY/OPEN·미해결0·
+- 운영 develop/game/web `f79726c4ec72332cda515d5e0d6ea85f85dd4355`.
+  Jenkins 배포 #108 SUCCESS, 실제 Cloud DP-06 PASS(시험119.48초), READY/OPEN·미해결0·
   last-good·SSO302/익명 운영403 확인. 팀원 제한과 도망자 아이템 제외를 유지한다.
 - #107의 compose up 완료→readiness 관측은 약3.02초이며 최대 규모 성능 인수가 아니다.
 - 210 친구 초대의 정확한 소스 CI·MR !135·배포 #106과 Jira 완료를 확인했다.
