@@ -35,6 +35,30 @@ const journal = (value = record) => {
   const payload = { version: 1, seq: 1, record: value };
   return JSON.stringify({ ...payload, checksum: checksum(payload) }) + '\n';
 };
+const emptyAbort = (): JournalRecord => ({
+  ...record,
+  state: 'ABORTED',
+  reservationId: 'never-issued',
+  splitOwnership: {
+    faceRoomName: `fixture--${record.serverEpoch}--cccccccc-cccc-4ccc-8ccc-cccccccccccc`,
+    faceIdentity: 'face-only',
+    receiverRoomNames: [`fixture--${record.serverEpoch}--dddddddd-dddd-4ddd-8ddd-dddddddddddd`],
+  },
+  reservationIntent: {
+    phase: 'RESERVING',
+    requests: [
+      {
+        reservationId: 'never-issued',
+        matchId: record.matchId,
+        purpose: 'public',
+        slots: 6,
+        expectedMinutes: 5,
+        expectedBytes: 1000,
+        margin: 1,
+      },
+    ],
+  },
+});
 const released = {
   request: {
     reservationId: 'reservation',
@@ -143,6 +167,106 @@ function fixture() {
 }
 
 describe('explicit failed first-start recovery, without Cloud or Docker evidence', () => {
+  it('accepts a proven empty aborted issuance without counting it as a revoked identity', () => {
+    const { input, observed } = fixture();
+    expect(
+      confirmFailedStartup(input, {
+        ...observed,
+        journal: journal(emptyAbort()),
+        usage: envelope({ official: null, reservations: [] }),
+      }),
+    ).toMatchObject({ identities: 0, abortedIssuances: 1, lastSeq: 1 });
+  });
+
+  it('rejects an aborted issuance if any root or unexpected child reservation exists', () => {
+    const { input, observed } = fixture();
+    for (const reservationId of ['never-issued', 'never-issued:1', 'never-issued:foreign']) {
+      expect(() =>
+        confirmFailedStartup(input, {
+          ...observed,
+          journal: journal(emptyAbort()),
+          usage: envelope({
+            official: null,
+            reservations: [
+              {
+                ...released,
+                request: { ...released.request, reservationId },
+              },
+            ],
+          }),
+        }),
+      ).toThrow('FAILED_STARTUP_UNCONFIRMED');
+    }
+  });
+
+  it('rejects abort records without a pre-signing phase and explicit terminal evidence', () => {
+    const { input, observed } = fixture();
+    const owner = emptyAbort();
+    const cases: JournalRecord[] = [
+      { ...owner, reservationIntent: { ...owner.reservationIntent!, phase: 'COMMITTED' } },
+      { ...owner, atEpochMs: undefined },
+      { ...owner, atEpochMs: owner.issuedAtEpochMs - 1 },
+      { ...owner, retirementId: 'unproven-revocation' },
+    ];
+    for (const candidate of cases) {
+      expect(() =>
+        confirmFailedStartup(input, {
+          ...observed,
+          journal: journal(candidate),
+          usage: envelope({ official: null, reservations: [] }),
+        }),
+      ).toThrow('FAILED_STARTUP_UNCONFIRMED');
+    }
+  });
+
+  it('rejects reopening a terminal aborted issuance even if its final record is revoked', () => {
+    const { input, observed } = fixture();
+    const owner = emptyAbort();
+    const terminal = { ...owner, state: 'REVOKED' as const };
+    const payload = { version: 1, seq: 2, record: terminal };
+    expect(() =>
+      confirmFailedStartup(input, {
+        ...observed,
+        journal:
+          journal(owner) + JSON.stringify({ ...payload, checksum: checksum(payload) }) + '\n',
+      }),
+    ).toThrow('FAILED_STARTUP_UNCONFIRMED');
+  });
+
+  it.each(['downgrade', 'late-intent', 'changed-plan'] as const)(
+    'rejects forged pre-signing history even when the final empty abort is valid: %s',
+    (kind) => {
+      const { input, observed } = fixture();
+      const final = emptyAbort();
+      const first: JournalRecord = { ...final, state: 'PREPARED' };
+      if (kind === 'downgrade')
+        Object.assign(first, {
+          reservationIntent: { ...final.reservationIntent, phase: 'COMMITTED' },
+        });
+      if (kind === 'late-intent')
+        delete (first as { reservationIntent?: unknown }).reservationIntent;
+      if (kind === 'changed-plan')
+        Object.assign(first, {
+          reservationIntent: {
+            ...final.reservationIntent,
+            requests: final.reservationIntent!.requests.map((request) => ({
+              ...request,
+              expectedBytes: request.expectedBytes + 1,
+            })),
+          },
+        });
+      const payload = { version: 1, seq: 2, record: final };
+      expect(() =>
+        confirmFailedStartup(input, {
+          ...observed,
+          journal:
+            journal(first) + JSON.stringify({ ...payload, checksum: checksum(payload) }) + '\n',
+          usage: envelope({ official: null, reservations: [] }),
+        }),
+      ).toThrow('FAILED_STARTUP_UNCONFIRMED');
+    },
+  );
+
   it('rejects a remote status endpoint or another host state directory before any IO', () => {
     const http = vi.fn(async () => ({ status: 503, json: null }));
     for (const change of [

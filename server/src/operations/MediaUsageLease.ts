@@ -2,6 +2,7 @@ import type { Generation } from '../media/MediaGenerationRegistry.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { createUsageReservationId } from './UsageReservationId.js';
 import { ownedMediaTargets } from './SplitMediaOwnership.js';
+import type { UsageRequest } from './UsageCheckpoint.js';
 
 type Lease = {
   id: string;
@@ -28,12 +29,12 @@ export class MediaUsageLease {
     private readonly now: () => number,
   ) {}
 
-  reserve(generation: Generation): Promise<boolean> {
+  private leaseFor(generation: Generation): Lease {
     const split = generation.splitOwnership;
     // Keep the durable UsageRequest's existing six-slot block format. Split generations
     // reserve enough blocks for both originals and every possible clone, at the SAME time.
     const units = split ? Math.ceil(ownedMediaTargets(generation).length / 6) : 1;
-    if (units < 1 || units > 2) return Promise.reject(new Error('INVALID_LEASE_CAPACITY'));
+    if (units < 1 || units > 2) throw new Error('INVALID_LEASE_CAPACITY');
     const profile = JSON.stringify([
       generation.request.matchId,
       generation.request.mediaInstanceId,
@@ -58,8 +59,25 @@ export class MediaUsageLease {
       };
       this.leases.set(generation.roomName, lease);
     }
-    if (lease.profile !== profile) return Promise.reject(new Error('LEASE_OWNERSHIP_CHANGED'));
+    if (lease.profile !== profile) throw new Error('LEASE_OWNERSHIP_CHANGED');
     generation.reservationId = lease.id;
+    return lease;
+  }
+
+  prepareReservation(generation: Generation): readonly UsageRequest[] {
+    const lease = this.leaseFor(generation);
+    if (!generation.splitOwnership || lease.sequence !== 0 || lease.pending || lease.retiring)
+      throw new Error('RESERVATION_ALREADY_STARTED');
+    return Array.from({ length: lease.units }, (_, unit) => this.request(lease, unit, 5));
+  }
+
+  reserve(generation: Generation): Promise<boolean> {
+    let lease: Lease;
+    try {
+      lease = this.leaseFor(generation);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     if (lease.retiring) return Promise.resolve(false);
     if (lease.until - this.now() > 60_000) return Promise.resolve(true);
     if (lease.pending) return lease.pending;
@@ -70,20 +88,24 @@ export class MediaUsageLease {
     return current.pending;
   }
 
+  private request(current: Lease, sequence: number, minutes: number): UsageRequest {
+    return {
+      reservationId: sequence === 0 ? current.id : `${current.id}:${sequence}`,
+      matchId: current.matchId,
+      purpose: 'public',
+      slots: 6,
+      expectedMinutes: minutes,
+      expectedBytes: Math.ceil((current.bytesPerMinute * minutes) / current.units),
+      margin: 1,
+    };
+  }
+
   private async reserveSlice(current: Lease): Promise<boolean> {
     const minutes = current.sequence === 0 ? 5 : 1;
     let reserved = 0;
     for (let unit = 0; unit < current.units; unit++) {
       const id = current.sequence === 0 ? current.id : `${current.id}:${current.sequence}`;
-      const result = await this.budget.reserve({
-        reservationId: id,
-        matchId: current.matchId,
-        purpose: 'public',
-        slots: 6,
-        expectedMinutes: minutes,
-        expectedBytes: Math.ceil((current.bytesPerMinute * minutes) / current.units),
-        margin: 1,
-      });
+      const result = await this.budget.reserve(this.request(current, current.sequence, minutes));
       if (result.status === 'rejected') {
         const persisted = this.budget
           .snapshot()
@@ -113,6 +135,24 @@ export class MediaUsageLease {
 
   remaining(generation: Generation): number {
     return (this.leases.get(generation.roomName)?.until ?? 0) - this.now();
+  }
+  abandonUnreserved(generation: Generation): void {
+    const lease = this.leases.get(generation.roomName);
+    if (
+      !lease ||
+      lease.id !== generation.reservationId ||
+      lease.pending ||
+      lease.reservations.length ||
+      this.budget
+        .snapshot()
+        .reservations.some(
+          ({ request }) =>
+            request.reservationId === lease.id || request.reservationId.startsWith(lease.id + ':'),
+        )
+    )
+      throw new Error('LEASE_NOT_EMPTY');
+    lease.retiring = true;
+    this.leases.delete(generation.roomName);
   }
   async markRetiring(roomName: string): Promise<void> {
     const lease = this.leases.get(roomName);

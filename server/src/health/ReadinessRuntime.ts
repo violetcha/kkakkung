@@ -7,6 +7,7 @@ import type {
   Readiness,
 } from '../media/types.js';
 import { MediaUsageLease } from '../operations/MediaUsageLease.js';
+import type { JournalRecord } from '../operations/OperationJournal.js';
 import {
   OperationsBindings,
   type OperationsBindingsOptions,
@@ -173,7 +174,23 @@ export class ReadinessRuntime {
             this.pending.delete(generation);
             return false;
           }
+          if (generation.splitOwnership) {
+            const requests = this.usageLease.prepareReservation(generation);
+            await this.options.journal.prepareReservation(this.preparationRecord(generation), {
+              phase: 'RESERVING',
+              requests,
+            });
+          }
           const reserved = await this.usageLease.reserve(generation);
+          if (!reserved && generation.splitOwnership) {
+            await this.options.journal.abortUnreserved(
+              this.preparationRecord(generation),
+              this.options.usageBudget.snapshot(),
+              this.options.nowEpochMs(),
+            );
+            this.usageLease.abandonUnreserved(generation);
+            this.options.registry.abandonUnissued(generation);
+          }
           if (!reserved) this.pending.delete(generation);
           return reserved;
         } catch (error) {
@@ -185,27 +202,37 @@ export class ReadinessRuntime {
         try {
           if (!this.isInitialized() || !this.pending.has(generation))
             throw new Error('PREPARATION_NOT_ACTIVE');
-          await this.options.journal.append({
-            state: 'PREPARED',
-            namespace: this.options.config.namespace,
-            matchId: generation.request.matchId,
-            mediaInstanceId: generation.request.mediaInstanceId,
-            roomName: generation.roomName,
-            serverEpoch: generation.serverEpoch,
-            identity: generation.identity,
-            generation: generation.generation,
-            issuedAtEpochMs: generation.issuedAtEpochMs,
-            expiresAtEpochMs: generation.expiresAtEpochMs,
-            ...(generation.splitOwnership ? { splitOwnership: generation.splitOwnership } : {}),
-            reservationId: generation.reservationId,
-            requestId: generation.request.requestId,
-          });
+          const record = this.preparationRecord(generation);
+          if (generation.splitOwnership)
+            await this.options.journal.commitReservation(
+              record,
+              this.options.usageBudget.snapshot(),
+            );
+          else await this.options.journal.append(record);
         } finally {
           this.pending.delete(generation);
         }
       },
     });
     return this.issuer;
+  }
+
+  private preparationRecord(generation: Generation): JournalRecord {
+    return {
+      state: 'PREPARED',
+      namespace: this.options.config.namespace,
+      matchId: generation.request.matchId,
+      mediaInstanceId: generation.request.mediaInstanceId,
+      roomName: generation.roomName,
+      serverEpoch: generation.serverEpoch,
+      identity: generation.identity,
+      generation: generation.generation,
+      issuedAtEpochMs: generation.issuedAtEpochMs,
+      expiresAtEpochMs: generation.expiresAtEpochMs,
+      ...(generation.splitOwnership ? { splitOwnership: generation.splitOwnership } : {}),
+      reservationId: generation.reservationId,
+      requestId: generation.request.requestId,
+    };
   }
 
   /** Seal grants/commands first. Owner then closes E-11/E-13 and RecoveryBootstrap (journal last). */

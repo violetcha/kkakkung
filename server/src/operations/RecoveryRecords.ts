@@ -1,6 +1,7 @@
 import { checksum, safeIdentifier, strictObject, type CheckpointRead } from './CheckpointStore.js';
 import {
   validateJournalRecord,
+  terminalJournalRecord,
   type JournalEntry,
   type JournalRecord,
   type JournalRestore,
@@ -10,6 +11,11 @@ import { validateRetryIntent, type RetryIntent } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { validateUsageState, type UsageReservation } from './UsageCheckpoint.js';
 import { sameMediaOwnership } from './SplitMediaOwnership.js';
+import {
+  reservationGroupFor,
+  reservationIntentMatches,
+  validReservationTransition,
+} from './ReservationIntent.js';
 
 export type RecoveryRecordReason =
   | 'JOURNAL_INTEGRITY'
@@ -113,7 +119,8 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
       if (
         previous &&
         (!sameGeneration(previous, record) ||
-          (previous.state === 'REVOKED' && record.state !== 'REVOKED'))
+          !validReservationTransition(previous, record) ||
+          (terminalJournalRecord(previous) && previous.state !== record.state))
       )
         reasons.add('JOURNAL_IDENTITY_CONFLICT');
       const copy = structuredClone(entry);
@@ -124,7 +131,7 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
     }
   }
   const records = [...latest.values()].sort((left, right) => left.seq - right.seq);
-  const pendingRecords = records.filter((entry) => entry.record.state !== 'REVOKED');
+  const pendingRecords = records.filter((entry) => !terminalJournalRecord(entry.record));
   let reservations: readonly UsageReservation[] = [];
   if (input.usage.integrity === 'corrupt') reasons.add('USAGE_INTEGRITY');
   else if (input.usage.integrity === 'ok') {
@@ -157,10 +164,17 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
     const group = root
       ? reservations.filter((r) => belongsToRoot(r.request.reservationId, root))
       : [];
+    const emptyPreparation =
+      record.reservationIntent?.phase === 'RESERVING' &&
+      ['PREPARED', 'ABORTED'].includes(record.state) &&
+      input.usage.integrity === 'ok' &&
+      input.usage.writable &&
+      reservationGroupFor(record, reservations).length === 0;
     if (
       !root ||
-      !group.some((r) => r.request.reservationId === root) ||
+      (!emptyPreparation && !group.some((r) => r.request.reservationId === root)) ||
       group.some((r) => r.request.matchId !== record.matchId) ||
+      !reservationIntentMatches(record, reservations) ||
       (record.state !== 'REVOKED' && group.some((r) => r.status === 'RELEASED'))
     )
       reasons.add('RESERVATION_HISTORY_MISMATCH');
@@ -254,6 +268,7 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
     } else {
       if (
         entry.record.state === 'PREPARED' ||
+        entry.record.state === 'ABORTED' ||
         intent.status === 'REVOKED' ||
         (entry.record.state === 'UNRESOLVED' && intent.status === 'REVOKING')
       )
