@@ -51,7 +51,10 @@
         "copiedFrom": "apps/web/node_modules/@mediapipe/tasks-vision/wasm",
         "acquiredAt": "2026-09-08"
       }
-    ]
+    ],
+    "licenseReviewedAt": "2026-09-13",
+    "bundledNoticesReview": "pending",
+    "licenseNote": "The installed 1.0.1 package declares Apache-2.0 but does not include LICENSE/NOTICE files. The SDK license text is supplied here; bundled third-party notices require further review."
   },
   "models": {
     "face": {
@@ -63,9 +66,33 @@
       "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
       "bytes": 3758596,
       "acquiredAt": "2026-09-08",
-      "license": "pending",
+      "license": "Apache-2.0",
       "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models",
-      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+      "licenseNote": "Official model table links the component model cards listed in licenseEvidence. Those cards state Apache-2.0; this is separate from the SDK license. Supplied model bytes are unchanged.",
+      "licenseEvidence": [
+        {
+          "component": "face_detector.tflite",
+          "sha256": "b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f",
+          "bytes": 229746,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Short%20Range).pdf"
+        },
+        {
+          "component": "face_landmarks_detector.tflite",
+          "sha256": "c7d54204ce0448474c7f3fa9af494787c0965cbdd6f20fc72867e43046bd43d5",
+          "bytes": 2553590,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf"
+        },
+        {
+          "component": "face_blendshapes.tflite",
+          "sha256": "4f36dded049db18d76048567439b2a7f58f1daabc00d78bfe8f3ad396a2d2082",
+          "bytes": 955312,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf"
+        }
+      ],
+      "licenseReviewedAt": "2026-09-13"
     },
     "pose": {
       "publicPath": "/models/pose/pose_landmarker.task",
@@ -76,9 +103,26 @@
       "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
       "bytes": 5777746,
       "acquiredAt": "2026-09-08",
-      "license": "pending",
+      "license": "Apache-2.0",
       "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker#models",
-      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+      "licenseNote": "Official model table links the component model cards listed in licenseEvidence. Those cards state Apache-2.0; this is separate from the SDK license. Supplied model bytes are unchanged.",
+      "licenseEvidence": [
+        {
+          "component": "pose_detector.tflite",
+          "sha256": "46837eb883e6ec75b52c5f5ff6a9b78bd35e66c13f95e8c3566c582d146cb1d9",
+          "bytes": 2959078,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf"
+        },
+        {
+          "component": "pose_landmarks_detector.tflite",
+          "sha256": "ad6cfd3c903eb31a4ee788b809e45ecf9fa69923b69b9f3f2d9ae616ff433e58",
+          "bytes": 2818390,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf"
+        }
+      ],
+      "licenseReviewedAt": "2026-09-13"
     },
     "gesture": {
       "publicPath": "/models/gesture/gesture_recognizer.task",
@@ -91,7 +135,60 @@
       "acquiredAt": "2026-09-08",
       "license": "pending",
       "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer#models",
-      "licenseNote": "Model card license not verified in this run. Do not inherit the SDK license."
+      "licenseNote": "Hand detection/landmark cards state Apache-2.0. The gesture classification card does not state a license for the embedder/classifier. Bundle redistribution review remains pending.",
+      "licenseEvidence": [
+        {
+          "component": "hand_landmarker.task/hand_detector.tflite",
+          "sha256": "60d1bf8d70a80aba35b36290bb2a0e52e784ca2e524937d49ea80e8161a8a384",
+          "bytes": 2339878,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20(Lite_Full)%20with%20Fairness%20Oct%202021.pdf"
+        },
+        {
+          "component": "hand_landmarker.task/hand_landmarks_detector.tflite",
+          "sha256": "6acda74af3fbf40e68265c20c7394b2bad81a16a481dcd79ad7a081887c3d6b9",
+          "bytes": 5478949,
+          "license": "Apache-2.0",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20(Lite_Full)%20with%20Fairness%20Oct%202021.pdf"
+        },
+        {
+          "component": "hand_gesture_recognizer.task/gesture_embedder.tflite",
+          "sha256": "54abe78de1d1cd5e3cdaa0dab01db18e3ec7e09a76e7c3b5fa278572f7a60977",
+          "bytes": 546000,
+          "license": "pending",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/gesture_recognizer/model_card_hand_gesture_classification_with_faireness_2022.pdf"
+        },
+        {
+          "component": "hand_gesture_recognizer.task/canned_gesture_classifier.tflite",
+          "sha256": "62a87ded76da05155f6a59c8babb4c537c138c25138b29450fb030e207a5c0e9",
+          "bytes": 7773,
+          "license": "pending",
+          "sourceUrl": "https://storage.googleapis.com/mediapipe-assets/gesture_recognizer/model_card_hand_gesture_classification_with_faireness_2022.pdf"
+        }
+      ],
+      "licenseReviewedAt": "2026-09-13"
     }
+  },
+  "notices": {
+    "reviewedAt": "2026-09-13",
+    "files": [
+      {
+        "publicPath": "/licenses/index.html",
+        "sha256": "bec7e882a595851c1a25889c660a5ad434fcc73b7d5a9bcb33bce391ff272e43",
+        "bytes": 2412
+      },
+      {
+        "publicPath": "/licenses/notices.css",
+        "sha256": "b55da49cde85d511f92d0f58f4b2c5dc840a628d7637fa3824dde9056d4ac29e",
+        "bytes": 582
+      },
+      {
+        "publicPath": "/licenses/Apache-2.0.txt",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "bytes": 11358,
+        "license": "Apache-2.0",
+        "sourceUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+      }
+    ]
   }
 }

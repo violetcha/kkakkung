@@ -173,6 +173,10 @@
   background: #dfbb79;
   color: #17211e;
 }
+.product-shell .asset-notices-link {
+  color: #b7d9ff;
+  text-underline-offset: 0.2em;
+}
 .product-shell .notice {
   color: #b6c9cf;
 }

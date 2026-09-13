@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>오픈소스 고지 · 까꿍</title>
+    <link rel="stylesheet" href="/licenses/notices.css" />
+  </head>
+  <body>
+    <main>
+      <a href="/">까꿍으로 돌아가기</a>
+      <h1>오픈소스 고지</h1>
+      <p>까꿍의 얼굴·자세·손동작 인식에는 Google의 MediaPipe 비전 자산을 사용합니다.</p>
+      <p>이 페이지는 비전 자산의 출처와 확인한 라이선스를 안내합니다. 확인일: 2026-09-13.</p>
+      <section aria-labelledby="verified">
+        <h2 id="verified">확인한 라이선스</h2>
+        <ul>
+          <li>MediaPipe Tasks Vision SDK 1.0.1: 패키지에 명시된 Apache-2.0.</li>
+          <li>
+            FaceLandmarker float16 release 1: BlazeFace, Face Mesh V2, Blendshape V2 모델 카드의
+            Apache-2.0.
+          </li>
+          <li>PoseLandmarker Lite float16 release 1: BlazePose GHUM 3D 모델 카드의 Apache-2.0.</li>
+          <li>
+            GestureRecognizer의 손 검출·랜드마크 구성 모델: Hand Tracking 모델 카드의 Apache-2.0.
+          </li>
+        </ul>
+        <p><a href="/licenses/Apache-2.0.txt">Apache License 2.0 원문</a></p>
+        <p>
+          공급한 모델과 WASM·로더 파일은 고정한 원본 파일 그대로입니다. 파일별 해시와 구성 모델의
+          공식 근거는 <a href="/models/manifest.json">자산 목록</a>에서 확인할 수 있습니다.
+        </p>
+      </section>
+      <section aria-labelledby="pending">
+        <h2 id="pending">추가 확인 중인 항목</h2>
+        <p>
+          GestureRecognizer의 gesture embedder·canned gesture classifier는 공식 분류 모델 카드에
+          라이선스 항목이 없어 재배포 조건 확인이 남아 있습니다. SDK의 라이선스를 해당 모델의 권리로
+          대신하지 않습니다.
+        </p>
+        <p>
+          SDK에 포함된 제3자 구성 요소의 고지도 추가 확인 중입니다. 이 페이지는 서비스 전체의 권리
+          검토 완료를 뜻하지 않습니다.
+        </p>
+      </section>
+      <footer>
+        모델: Google MediaPipe ·
+        <a href="https://github.com/google-ai-edge/mediapipe">공식 저장소</a>
+      </footer>
+    </main>
+  </body>
+</html>

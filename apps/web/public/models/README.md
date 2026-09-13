@@ -27,13 +27,23 @@ D-02 / IN-02에서 고정한 MediaPipe 자산이다. 런타임은 외부 `latest
 
 ## 라이선스 상태
 
-| 대상      | license      | 근거                                                                |
-| --------- | ------------ | ------------------------------------------------------------------- |
-| SDK 1.0.1 | `Apache-2.0` | 설치된 패키지 `package.json`의 license 필드에서 확인했다.           |
-| 모델 3개  | **pending**  | 공식 모델 카드에서 확인하지 못했다. SDK 라이선스를 전용하지 않는다. |
+2026-09-13 / S15P21C204-214에서 공식 배포표의 모델 카드와 실제 번들 구성을 대조했다.
+구성 모델별 카드 URL·내부 파일 해시/크기·검토일은 manifest의 `licenseEvidence`에 있다.
 
-모델 라이선스는 각 공식 모델 표(manifest.json의 `licenseSource`)에서 확인한 뒤 채운다.
-확인 전에는 `pending`으로 남기며 SDK의 Apache-2.0을 모델에 자동 적용하지 않는다.
+| 대상 | 기록 | 근거와 남은 범위 |
+| --- | --- | --- |
+| SDK 1.0.1 | `Apache-2.0` | package.json 선언. 설치 패키지에 LICENSE/NOTICE가 없어 원문을 보충했다. 번들 제3자 고지 검토는 pending. |
+| FaceLandmarker | `Apache-2.0` | BlazeFace short range, Face Mesh V2, Blendshape V2의 공식 카드 모두 확인. |
+| PoseLandmarker Lite | `Apache-2.0` | 공식 Lite 배포표가 연결한 BlazePose GHUM 3D 카드 확인. |
+| GestureRecognizer | **pending** | 손 검출/랜드마크 카드의 Apache-2.0은 확인. gesture embedder/canned classifier의 공식 카드에는 라이선스 항목이 없어 번들 권리는 미확인. |
+
+SDK의 Apache-2.0을 모델에 자동 적용하지 않는다. 별도 모델 카드를 근거로 기록하며
+모델 내부에 라이선스 원문이 들어 있다는 주장은 하지 않는다. 모델·WASM/로더 바이트는 바꾸지 않았다.
+[배포 고지](../licenses/index.html)와 [Apache 원문](../licenses/Apache-2.0.txt)을 함께 공급한다.
+일반 자산 검사는 모든 실제 파일·고지 SHA와 검토 목록의 일관성을 확인하며
+`visionRightsReviewed=false`와 남은 항목을 반환한다. 자동 검사는 법적 권리를 새로 승인하지 않는다.
+엄격한 검토 조건은 `node scripts/check-product-assets.mjs --require-reviewed-rights`로 검사한다.
+현재 gesture·SDK 번들 고지가 미확인이므로 이 명령은 의도적으로 실패한다. W20 공개 승격 연결은 후속이다.
 
 ## F에게 요청한 작업
 

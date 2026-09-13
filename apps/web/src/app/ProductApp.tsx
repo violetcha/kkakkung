@@ -370,6 +370,11 @@ export function ProductApp({
               </button>
             </p>
           )}
+          <p className="notice">
+            <a className="asset-notices-link" href="/licenses/index.html">
+              오픈소스 고지
+            </a>
+          </p>
         </section>
       ) : snapshot.lost ? (
         <ConnectionLostScreen
