@@ -37,7 +37,8 @@ const environment = z.object({
   NODE_ENV: z.enum(['development', 'test']).default('development'),
   SERVER_PROFILE: z.enum(['development', 'product']).default('development'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(1).default(0),
-  SESSION_ADMISSION_MODE: z.enum(['invitation', 'gitlab-sso']).default('invitation'),
+  SERVICE_AUDIENCE: z.enum(['team', 'public']).optional(),
+  SESSION_ADMISSION_MODE: z.enum(['invitation', 'gitlab-sso', 'guest']).optional(),
   PRODUCT_ASSET_VERSION: z.string().min(1).default('c-primitives-1'),
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
   PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
@@ -120,11 +121,26 @@ export function parseConfig(input: Record<string, string | undefined>) {
     );
   }
   const raw = parsed.data;
+  const audienceMode =
+    raw.SERVICE_AUDIENCE === 'team'
+      ? 'gitlab-sso'
+      : raw.SERVICE_AUDIENCE === 'public'
+        ? 'guest'
+        : null;
+  if (audienceMode && raw.SESSION_ADMISSION_MODE && raw.SESSION_ADMISSION_MODE !== audienceMode)
+    throw new Error('SERVICE_AUDIENCE conflicts with SESSION_ADMISSION_MODE');
+  const sessionAdmissionMode = audienceMode ?? raw.SESSION_ADMISSION_MODE ?? 'invitation';
+  if (sessionAdmissionMode === 'guest' && raw.SERVICE_AUDIENCE !== 'public')
+    throw new Error('Guest admission requires explicit SERVICE_AUDIENCE public');
   if (
-    raw.SESSION_ADMISSION_MODE === 'gitlab-sso' &&
+    (raw.SERVICE_AUDIENCE !== undefined || sessionAdmissionMode === 'gitlab-sso') &&
     (raw.SERVER_PROFILE !== 'product' || raw.TRUST_PROXY_HOPS !== 1)
   )
-    throw new Error('GitLab SSO admission requires the product profile and trusted proxy');
+    throw new Error('Audience admission requires the product profile and trusted proxy');
+  // W02 must supply an accepted product authority path before public LiveKit can start.
+  // MC-PUBLIC-02 validates a transport candidate, not these legacy product modes.
+  if (raw.SERVICE_AUDIENCE === 'public' && raw.MEDIA_MODE === 'livekit')
+    throw new Error('PUBLIC_MEDIA_AUTHORITY_NOT_IMPLEMENTED');
   const allowedOrigins = raw.ALLOWED_ORIGINS.split(',').map((s) => s.trim());
   if (
     !allowedOrigins.length ||
@@ -243,7 +259,8 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
-    sessionAdmissionMode: raw.SESSION_ADMISSION_MODE,
+    serviceAudience: raw.SERVICE_AUDIENCE ?? null,
+    sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,
     subscriptionMode: raw.MEDIA_SUBSCRIPTION_MODE,
     publicWindow:

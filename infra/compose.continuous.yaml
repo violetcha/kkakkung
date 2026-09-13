@@ -9,6 +9,7 @@ services:
       # D-2026-09-13-01: overrides legacy private env files on every product release.
       ROOM_IDLE_TTL_MS: '600000'
       # Requires the loopback-only web proxy and host GitLab auth_request boundary.
+      SERVICE_AUDIENCE: team
       SESSION_ADMISSION_MODE: gitlab-sso
       OPS_OPERATING_MODE: continuous
     volumes:

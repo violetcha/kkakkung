@@ -1,5 +1,67 @@
 import { expect, test } from '@playwright/test';
 
+test('guest creation works without a link while friend admission still requires its scoped link', async ({
+  page,
+}) => {
+  const attempts: unknown[] = [];
+  await page.route('**/api/sessions/access', (route) =>
+    route.fulfill({ json: { method: 'guest' } }),
+  );
+  await page.route('**/api/sessions', async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await route.fulfill({ status: 503, json: { error: 'ADMISSION_CLOSED' } });
+  });
+  await page.goto('/play');
+  await expect(page.getByText('가입 없이 시작해요.', { exact: false })).toBeVisible();
+  await expect(page.getByText('팀원 로그인이 확인됐습니다.', { exact: false })).toHaveCount(0);
+  await page.getByLabel('닉네임').fill('guest');
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect(page.getByText('지금은 입장을 받고 있지 않습니다.')).toBeVisible();
+  expect(attempts).toEqual([{ nickname: 'guest', createRoom: true }]);
+  await page.getByRole('radio', { name: '친구 방 참가' }).check();
+  await page.getByLabel('방 코드').fill('ABCDEF');
+  await expect(page.getByRole('button', { name: '방 참가', exact: true })).toBeDisabled();
+  await expect(page.getByText('친구 방은 방장이 보낸 초대 링크로 열어 주세요.')).toBeVisible();
+  await page.evaluate(() => {
+    location.hash = 'invite=synthetic-guest-invitation&room=ABCDEF';
+  });
+  await expect(page.getByRole('button', { name: '방 참가', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(2);
+  expect(attempts[1]).toEqual({
+    nickname: 'guest',
+    createRoom: false,
+    roomCode: 'ABCDEF',
+    inviteToken: 'synthetic-guest-invitation',
+  });
+  await expect(page).toHaveURL(/\/play$/);
+});
+
+test('guest access never silently replaces a rejected invitation with a new room', async ({
+  page,
+}) => {
+  const attempts: unknown[] = [];
+  await page.route('**/api/sessions/access', (route) =>
+    route.fulfill({ json: { method: 'guest' } }),
+  );
+  await page.route('**/api/sessions', async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } });
+  });
+  await page.goto('/play#invite=synthetic-expired-invitation&room=ABCDEF');
+  await page.getByLabel('닉네임').fill('guest');
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect(page.getByText('유효한 초대 링크가 필요합니다.')).toBeVisible();
+  await page.getByRole('radio', { name: '새 방 만들기' }).check();
+  await page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(2);
+  expect(attempts[1]).toEqual({
+    nickname: 'guest',
+    createRoom: true,
+    inviteToken: 'synthetic-expired-invitation',
+  });
+});
+
 test('team login enables creation and room-code admission without an invitation', async ({
   page,
 }) => {

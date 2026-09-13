@@ -2,6 +2,10 @@ import { z } from 'zod';
 import type { Readiness } from '../../src/game/ports.js';
 import { PHASES } from '@kkakkung/protocol/game-schema';
 import type { ProductServerProbe } from './product-server-probe.js';
+import {
+  RUNTIME_EVIDENCE_FAILURES,
+  type RuntimeEvidenceDiagnostic,
+} from '../../src/config/RuntimeEvidence.js';
 
 // Test-owned IPC only. No HTTP debug route, process environment or runtime clock override.
 // Publication messages intentionally omit the grant JWT and all provider credentials.
@@ -62,6 +66,7 @@ export type ProductServerInspection = Readonly<{
   blockedReason: string | null;
   maxTickMs: number;
   participantCount: number;
+  runtimeEvidence: RuntimeEvidenceDiagnostic | null;
   removedIdentityHashes: readonly string[];
   probe: ProductServerProbe;
 }>;
@@ -105,6 +110,17 @@ export const productServerReplySchema = z.discriminatedUnion('ok', [
         blockedReason: z.string().max(512).nullable(),
         maxTickMs: z.number().nonnegative(),
         participantCount: z.number().int().nonnegative(),
+        runtimeEvidence: z
+          .strictObject({
+            reason: z.enum(RUNTIME_EVIDENCE_FAILURES).nullable(),
+            firstFailureReason: z.enum(RUNTIME_EVIDENCE_FAILURES).nullable(),
+            refreshCount: z.number().int().nonnegative(),
+            leaseRecoveryCount: z.number().int().nonnegative(),
+            refreshPending: z.boolean(),
+            maxRefreshDurationMs: z.number().nonnegative(),
+            clockRollbackMs: z.number().int().nonnegative(),
+          })
+          .nullable(),
         removedIdentityHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(1000),
         probe: z.strictObject({
           intervalMs: z.literal(10),

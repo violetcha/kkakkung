@@ -32,6 +32,49 @@ const productMedia = {
 };
 
 describe('explicit local product configuration', () => {
+  it('derives admission from one explicit audience and keeps legacy defaults closed', () => {
+    const base = { ...admission, SERVER_PROFILE: 'product', TRUST_PROXY_HOPS: '1' };
+    expect(parseConfig({}).serviceAudience).toBeNull();
+    expect(parseConfig({ ...base, SERVICE_AUDIENCE: 'team' })).toMatchObject({
+      serviceAudience: 'team',
+      sessionAdmissionMode: 'gitlab-sso',
+    });
+    expect(parseConfig({ ...base, SERVICE_AUDIENCE: 'public' })).toMatchObject({
+      serviceAudience: 'public',
+      sessionAdmissionMode: 'guest',
+      mediaMode: 'disabled',
+    });
+    for (const [audience, mode] of [
+      ['team', 'guest'],
+      ['team', 'invitation'],
+      ['public', 'gitlab-sso'],
+      ['public', 'invitation'],
+    ])
+      expect(() =>
+        parseConfig({ ...base, SERVICE_AUDIENCE: audience, SESSION_ADMISSION_MODE: mode }),
+      ).toThrow('conflicts');
+    expect(() => parseConfig({ ...base, SESSION_ADMISSION_MODE: 'guest' })).toThrow(
+      'explicit SERVICE_AUDIENCE',
+    );
+    expect(() =>
+      parseConfig({ ...base, SERVICE_AUDIENCE: 'public', TRUST_PROXY_HOPS: '0' }),
+    ).toThrow('trusted proxy');
+    expect(() =>
+      parseConfig({ ...base, SERVICE_AUDIENCE: 'public', SERVER_PROFILE: 'development' }),
+    ).toThrow('product profile');
+    expect(() => parseConfig({ ...base, SERVICE_AUDIENCE: 'unknown' })).toThrow('SERVICE_AUDIENCE');
+  });
+  it('refuses public Cloud in both legacy media modes without weakening the team profile', () => {
+    for (const mode of ['server-controlled', 'publisher-permissions']) {
+      const base = { ...productMedia, TRUST_PROXY_HOPS: '1', MEDIA_SUBSCRIPTION_MODE: mode };
+      expect(() => parseConfig({ ...base, SERVICE_AUDIENCE: 'public' })).toThrow(
+        'PUBLIC_MEDIA_AUTHORITY_NOT_IMPLEMENTED',
+      );
+      expect(parseConfig({ ...base, SERVICE_AUDIENCE: 'team' }).sessionAdmissionMode).toBe(
+        'gitlab-sso',
+      );
+    }
+  });
   it('requires an explicit product ingress before accepting GitLab identity headers', () => {
     expect(parseConfig({}).sessionAdmissionMode).toBe('invitation');
     expect(() => parseConfig({ SESSION_ADMISSION_MODE: 'gitlab-sso' })).toThrow('trusted proxy');

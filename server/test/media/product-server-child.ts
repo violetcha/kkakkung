@@ -58,6 +58,7 @@ function inspect(roomCode?: string): ProductServerInspection {
     blockedReason: typeof diagnostic === 'string' ? diagnostic.slice(0, 512) : null,
     maxTickMs,
     participantCount: cloud?.participants.size ?? 0,
+    runtimeEvidence: cloud?.runtimeEvidenceDiagnostic() ?? null,
     removedIdentityHashes: (cloud?.removed ?? []).map((identity) =>
       createHash('sha256').update(identity).digest('hex'),
     ),

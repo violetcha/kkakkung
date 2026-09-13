@@ -9,7 +9,7 @@ export type Role = 'runner' | 'tagger';
 export type SessionRequest = Readonly<{ nickname: string; inviteToken?: string }> &
   ({ createRoom: true; roomCode?: never } | { createRoom: false; roomCode: string });
 export const SESSION_ACCESS_ROUTE = '/api/sessions/access' as const;
-export type SessionAccessResponse = Readonly<{ method: 'invitation' | 'gitlab-sso' }>;
+export type SessionAccessResponse = Readonly<{ method: 'invitation' | 'gitlab-sso' | 'guest' }>;
 export type SessionResponse = Readonly<{
   sessionToken: string;
   playerId: string;

@@ -33,6 +33,8 @@ import {
   planningMetricFixture,
   teamSessionFixture,
   teamAccessFixture,
+  guestAccessFixture,
+  guestSessionFixture,
   roomExpiryFixture,
   preparationFeedbackFixture,
   rematchFeedbackFixture,
@@ -69,6 +71,12 @@ test('team admission omits invitation data but requires server-side SSO authenti
   assert.equal(teamAccessFixture.method, 'gitlab-sso');
   assert.equal(teamSessionFixture.createRoom, true);
   assert.equal('inviteToken' in teamSessionFixture, false);
+});
+
+test('guest handoff carries no caller identity or session credential', () => {
+  assert.deepEqual(guestAccessFixture, { method: 'guest' });
+  assert.deepEqual(Object.keys(guestSessionFixture).sort(), ['createRoom', 'nickname']);
+  assert.equal(guestSessionFixture.createRoom, true);
 });
 
 test('operator handoff fixes the invite endpoint, scoped request and failure union', () => {

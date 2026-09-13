@@ -4,7 +4,7 @@
  * admission re-check → session issue. Rejections never reveal hidden room content and never
  * leave a reservation behind.
  */
-import { createHash, randomInt } from 'node:crypto';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import {
@@ -50,8 +50,8 @@ export type SessionRouteDeps = Readonly<{
   monotonicNow: () => number;
   /** Only honour proxy headers when F's trusted proxy path is configured. */
   trustProxy: boolean;
-  /** Enabled only behind the private ingress that overwrites X-SSO-User after GitLab auth. */
-  admissionMode?: 'invitation' | 'gitlab-sso';
+  /** SSO requires a trusted private ingress. Guest selection is guarded by parseConfig. */
+  admissionMode?: 'invitation' | 'gitlab-sso' | 'guest';
   /** Reclaim expired reservations before a new admission checks capacity. */
   cleanupReservations?: () => void;
   roomInvitations?: RoomInvitations;
@@ -104,7 +104,10 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
   router.get(SESSION_ACCESS_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     res.vary('X-SSO-User');
-    res.json({ method: ssoPrincipal(req) ? 'gitlab-sso' : 'invitation' });
+    res.json({
+      method:
+        deps.admissionMode === 'guest' ? 'guest' : ssoPrincipal(req) ? 'gitlab-sso' : 'invitation',
+    });
   });
   const manageInvitation = (req: Request, res: Response, revoke: boolean) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -180,6 +183,15 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       return fail(res, 503, 'ADMISSION_CLOSED');
     const body = parsed.data;
     const principal = ssoPrincipal(req);
+    const guestCreate = deps.admissionMode === 'guest' && body.createRoom && !body.inviteToken;
+    const ip = clientIp(req, deps.trustProxy);
+    // A new random session is not a new attempt budget. Guest creation shares its IP bucket.
+    const guestLimiter = guestCreate
+      ? 'guest:' +
+        createHash('sha256')
+          .update(ip ?? 'unknown-peer')
+          .digest('hex')
+      : null;
     // An explicitly supplied link must pass its own scope/expiry checks, including for SSO.
     const verified: Readonly<{ inviteId: string; expiresAt?: number }> | null = body.inviteToken
       ? deps.invites.verify(
@@ -189,10 +201,12 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
         )
       : principal
         ? { inviteId: principal }
-        : null;
+        : guestCreate
+          ? { inviteId: 'guest:' + randomUUID() }
+          : null;
     if (!verified) return fail(res, 403, 'INVALID_INVITATION');
     const verdict = deps.limiter.attempt(
-      { inviteId: principal ?? verified.inviteId, ip: clientIp(req, deps.trustProxy) },
+      { inviteId: principal ?? guestLimiter ?? verified.inviteId, ip },
       deps.monotonicNow(),
     );
     if (verdict !== 'allowed') return fail(res, 429, 'RATE_LIMITED');

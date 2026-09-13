@@ -54,6 +54,9 @@ continuous/attested 제품 Compose overlay가 `ROOM_IDLE_TTL_MS=600000`을 적�
 ## 접근 제어 (GitLab SSO)
 
 continuous 제품 배포는 `SESSION_ADMISSION_MODE=gitlab-sso`로 팀원 직접 입장을 연결한다.
+같은 overlay의 `SERVICE_AUDIENCE=team`과 일치해야 한다. 서버의 public/guest 준비 코드는
+별도 [게스트 입장](../docs/guest-admission.md)을 따르며 현재 운영 ingress와 릴리스는 팀 제한을
+유지한다. public+livekit은 W02 제품 통합 전 부팅을 거절한다.
 사이트의 GitLab 프로젝트 멤버 검사를 통과하면 별도 초대 없이 방 생성·방 코드 참가가 가능하다.
 SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested 입장 방식은 invitation이다.
 호스트가 `X-SSO-User`를 인증 응답 값으로 덮어쓰고 내부 smoke 프록시는 제거해야 한다.
