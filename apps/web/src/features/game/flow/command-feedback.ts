@@ -13,6 +13,8 @@ export function commandFeedback(request: RequestDisplay | undefined | null): str
   if (request.code === 'EXPIRED' || request.code === 'STALE_REQUEST')
     return '요청 시간이 지났습니다. 현재 상태를 확인하고 새로 요청해 주세요.';
   if (request.status === 'canceled') return '요청이 취소되었습니다.';
+  if (request.type === 'ROOM_LOCK' || request.type === 'ROOM_KICK')
+    return '방 관리를 처리하지 못했습니다. 현재 방장과 참가자, 대기 단계를 확인해 주세요.';
   if (request.type === 'EXCHANGE_REQUEST' || request.type === 'EXCHANGE_ACCEPT')
     return '지도를 교환하지 못했습니다. 바로 옆 도망자 아군과 서로 다른 지도 정보가 있어야 하며, 구속·탈출 동작 중에는 교환할 수 없습니다.';
   if (request.type === 'INSTALL')

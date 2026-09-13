@@ -26,6 +26,7 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
     endParticipation: end,
     dispose,
     startDevices: vi.fn(async () => INITIAL_DEVICES),
+    setMicrophone: vi.fn(async () => INITIAL_DEVICES),
     calibrate: vi.fn(async () => INITIAL_DEVICES),
     connectMedia: vi.fn(async () => {}),
     applyAudioPolicy: vi.fn(),
@@ -112,6 +113,68 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
     },
   };
 }
+
+it('keeps the waiting lock across phase changes, clears it on rematch and rejects old access/rosters', async () => {
+  const f = fixture();
+  const roster = (matchId: string, hostId = 'self') => ({
+    matchId,
+    stateVersion: 10,
+    phase: 'DEVICE_CHECK',
+    hostId,
+    players: ['self', 'friend'].map((playerId) => ({
+      playerId,
+      nickname: playerId,
+      ready: false,
+      connected: true,
+    })),
+  });
+  f.messages.get('room-roster')!(roster('m'));
+  f.runtime.send({ type: 'ROOM_LOCK', payload: { locked: true } });
+  expect(f.send.mock.calls.filter((c) => c[0] === 'command')).toHaveLength(0);
+  f.messages.get('room-access')!({ matchId: 'm', revision: 3, locked: true });
+  f.messages.get('room-access')!({ matchId: 'm', revision: 2, locked: false });
+  f.state({ phase: 'LOBBY', stateVersion: 11 });
+  expect(f.runtime.getSnapshot().roomAccess?.locked).toBe(true);
+  for (const targetPlayerId of ['self', 'foreign'])
+    f.runtime.send({ type: 'ROOM_KICK', payload: { targetPlayerId } });
+  expect(f.send.mock.calls.filter((c) => c[0] === 'command')).toHaveLength(0);
+  f.runtime.send({ type: 'ROOM_LOCK', payload: { locked: false } });
+  f.runtime.send({ type: 'ROOM_LOCK', payload: { locked: false } });
+  expect(f.send.mock.calls.filter((c) => c[0] === 'command')).toHaveLength(1);
+  f.state({ matchId: 'next', phase: 'LOBBY', stateVersion: 0 });
+  expect(f.runtime.getSnapshot().roomAccess).toBeNull();
+  expect(f.runtime.getSnapshot().roster).toBeNull();
+  f.messages.get('room-roster')!(roster('next', 'friend'));
+  f.messages.get('room-access')!({ matchId: 'next', revision: 3, locked: true });
+  f.messages.get('room-roster')!(roster('m'));
+  f.messages.get('room-access')!({ matchId: 'm', revision: 100, locked: false });
+  f.runtime.send({ type: 'ROOM_LOCK', payload: { locked: false } });
+  expect(f.runtime.getSnapshot().roomAccess).toEqual({
+    matchId: 'next',
+    revision: 3,
+    locked: true,
+  });
+  expect(f.runtime.getSnapshot().roster?.hostId).toBe('friend');
+  expect(f.send.mock.calls.filter((c) => c[0] === 'command')).toHaveLength(1);
+  await f.runtime.leave();
+});
+
+it('reports host removal and disposes devices and the media bridge once', async () => {
+  const f = fixture();
+  f.close(4002);
+  f.close(4002);
+  expect(f.runtime.getSnapshot()).toMatchObject({
+    lost: true,
+    removedByHost: true,
+    roomExpired: false,
+  });
+  await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
+  f.runtime.send({ type: 'ROOM_LOCK', payload: { locked: false } });
+  expect(f.send.mock.calls.filter((c) => c[0] === 'command')).toHaveLength(0);
+  await f.runtime.leave();
+  expect(f.dispose).toHaveBeenCalledOnce();
+  expect(f.end).toHaveBeenCalledOnce();
+});
 async function mediaFixture(options: { failInitial?: boolean; missingFace?: boolean } = {}) {
   const f = fixture();
   if (options.missingFace) vi.mocked(f.fake.publishMedia).mockResolvedValue(null);
@@ -1041,6 +1104,27 @@ it('recreates a disposed runtime for new match and rejects old view and command 
   f.messages.get('private-view')!(viewFixture({ stateVersion: 500 }));
   expect(f.runtime.getSnapshot().view).toBeNull();
   await f.runtime.leave();
+});
+
+it('reapplies the selected low quality to every new runtime across three rematches', async () => {
+  const f = fixture();
+  try {
+    f.runtime.quality('low');
+    const initial = vi.mocked(f.fake.setQualityPreset).mock.calls.length;
+    for (let i = 0; i < 3; i++) {
+      f.state({ matchId: i === 0 ? 'm' : `rematch-${i}`, phase: 'RESULT', stateVersion: 11 });
+      f.state({ matchId: `rematch-${i + 1}`, phase: 'DEVICE_CHECK', stateVersion: 0 });
+      await vi.waitFor(() =>
+        expect(f.fake.setQualityPreset).toHaveBeenCalledTimes(initial + i + 1),
+      );
+      expect(f.fake.setQualityPreset).toHaveBeenLastCalledWith('low');
+      expect(f.runtime.getSnapshot().quality).toBe('low');
+      f.runtime.quality('low');
+      expect(f.fake.setQualityPreset).toHaveBeenCalledTimes(initial + i + 1);
+    }
+  } finally {
+    await f.runtime.leave();
+  }
 });
 
 it('reports and retires an empty face publication without requesting bindings', async () => {

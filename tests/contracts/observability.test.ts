@@ -312,6 +312,41 @@ describe('alert policy', () => {
     expect(policy.isLocked()).toBe(false);
   });
 
+  it.each([
+    [180, 162],
+    [181, 163],
+    [900, 810],
+  ])('warns at 90 percent of the configured %i-call ceiling', (limit, threshold) => {
+    const events: StructuredEvent[] = [];
+    const policy = createAlertPolicy({
+      now: () => 1,
+      mediaApiTotalLimit: limit,
+      onEvent: (event) => events.push(event),
+    });
+    const observe = (value: number) =>
+      policy.observe(at(1, { name: 'media.api.total60s', value, unit: 'count' }));
+    observe(threshold - 1);
+    expect(policy.active()).toEqual([]);
+    observe(threshold);
+    expect(policy.active()).toMatchObject([
+      {
+        id: 'MEDIA_API_BUDGET_NEAR_LIMIT',
+        reason: `total60s=${threshold}; warning=${threshold}; limit=${limit}`,
+      },
+    ]);
+    expect(policy.isLocked()).toBe(false);
+    observe(limit);
+    observe(threshold - 1);
+    expect(policy.active()).toEqual([]);
+    expect(events.map((event) => event.event)).toEqual(['alert.raised', 'alert.cleared']);
+  });
+
+  it.each([0, -1, 1.5, 901, NaN, Infinity])('rejects an invalid API ceiling %s', (limit) => {
+    expect(() => createAlertPolicy({ now: () => 1, mediaApiTotalLimit: limit })).toThrow(
+      'INVALID_ALERT_API_BUDGET',
+    );
+  });
+
   it('a permission response slower than 1 s is an uncertain policy outcome', () => {
     const policy = createAlertPolicy({ now: () => 1 });
     policy.observe(at(1, { name: 'media.policy.responseLatency', value: 1000, unit: 'ms' }));

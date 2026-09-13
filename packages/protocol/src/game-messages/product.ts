@@ -21,6 +21,7 @@ export const PRODUCT_SERVER_MESSAGES = {
   commandOutcome: 'command-outcome',
   requestStatusResult: 'request-status-result',
   roomRoster: 'room-roster',
+  roomAccess: 'room-access',
   privateView: 'private-view',
   privateEvent: 'private-event',
   heartbeat: 'game-heartbeat',
@@ -64,6 +65,8 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
   envelope('MOVE_INTENT', { direction: z.enum(['forward', 'back']).nullable() }),
   envelope('TURN', { direction: z.enum(['left', 'right']) }),
   envelope('READY', { ready: z.boolean() }),
+  envelope('ROOM_LOCK', { locked: z.boolean() }),
+  envelope('ROOM_KICK', { targetPlayerId: playerIdSchema }),
   envelope('PRACTICE_READY', { ready: z.boolean() }),
   envelope('LOAD_READY', {
     loadId: opaqueIdSchema,
@@ -94,7 +97,14 @@ export const COMMAND_TYPES = commandEnvelopeSchema.options.map(
 ) as readonly CommandType[];
 
 /** Commands the game core processes. The rest are room phase commands handled by the server. */
-export const PHASE_COMMAND_TYPES = ['READY', 'PRACTICE_READY', 'LOAD_READY', 'REMATCH'] as const;
+export const PHASE_COMMAND_TYPES = [
+  'READY',
+  'ROOM_LOCK',
+  'ROOM_KICK',
+  'PRACTICE_READY',
+  'LOAD_READY',
+  'REMATCH',
+] as const;
 export type PhaseCommandType = (typeof PHASE_COMMAND_TYPES)[number];
 export type CoreCommandType = Exclude<CommandType, PhaseCommandType>;
 export type CoreCommandEnvelope = Extract<CommandEnvelope, { type: CoreCommandType }>;

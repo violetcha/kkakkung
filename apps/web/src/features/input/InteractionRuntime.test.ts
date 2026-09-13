@@ -219,6 +219,19 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
       workerHandler?.({
         data: { type: 'ready', runtimeGeneration: generation, loaded: ['face', 'pose', 'gesture'] },
       }),
+    emitMissing: (frameId: number) =>
+      workerHandler?.({
+        data: {
+          type: 'result',
+          runtimeGeneration: 1,
+          frameId,
+          sampledAtMs: clock,
+          outcomes: {
+            face: { status: 'missing', data: null },
+            pose: { status: 'missing', data: null },
+          },
+        },
+      }),
     fireTimers: () => {
       const due = [...timers.values()];
       timers.clear();
@@ -228,6 +241,56 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
 }
 
 describe('createInteractionRuntime', () => {
+  it('preserves the calibration failure while subsequent missing faces switch input to keyboard', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const calibrating = base.runtime.calibrate();
+      base.emitMissing(1);
+      base.fireTimers();
+      expect((await calibrating).errorCode).toBe('CALIBRATION_NO_FACE');
+      base.advance(1600);
+      base.emitMissing(2);
+      expect(base.statuses.at(-1)?.errorCode).toBe('CALIBRATION_NO_FACE');
+      const retry = base.runtime.calibrate();
+      for (let i = 0; i < INPUT_TUNING.calibrationMinSamples; i++) {
+        base.advance(40);
+        base.emit(3 + i);
+      }
+      expect((await retry).calibration).toBe('ready');
+      expect(base.statuses.at(-1)?.errorCode).toBeNull();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('enables microphone without starting camera, preview or vision and closes a late permission result', async () => {
+    let finish!: (stream: MediaStream) => void;
+    const audio = { ...videoTrack(), kind: 'audio' };
+    const getUserMedia = vi.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const preview = vi.fn(() => {
+      throw new Error('UNEXPECTED_CAMERA');
+    });
+    const base = harness({ environment: { getUserMedia, createPreviewElement: preview } });
+    const pending = base.runtime.setMicrophone(true);
+    await base.runtime.dispose();
+    finish({
+      getTracks: () => [audio],
+      getAudioTracks: () => [audio],
+      getVideoTracks: () => [],
+    } as unknown as MediaStream);
+    await pending;
+    expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ video: false, audio: true });
+    expect(preview).not.toHaveBeenCalled();
+    expect(base.posted).toHaveLength(0);
+    expect(audio.stop).toHaveBeenCalledOnce();
+  });
   it.each(['phase', 'muted', 'disposed'] as const)(
     'rechecks %s after a delayed audio unlock without acquiring a camera or Cloud connection',
     async (boundary) => {

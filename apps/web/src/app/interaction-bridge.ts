@@ -117,7 +117,7 @@ export function createInteractionBridge(
     },
     async updateMicrophone(microphone: boolean) {
       if (!canCheckDevices()) return;
-      await runtime.startDevices({ microphone });
+      await runtime.setMicrophone(microphone);
     },
     ready(value: boolean) {
       if (disposed || context?.phase !== 'DEVICE_CHECK' || (value && !deviceReady(devices)))

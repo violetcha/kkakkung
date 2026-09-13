@@ -31,6 +31,8 @@ describe('product command envelope', () => {
         'MOVE_INTENT',
         'TURN',
         'READY',
+        'ROOM_LOCK',
+        'ROOM_KICK',
         'PRACTICE_READY',
         'LOAD_READY',
         'EXCHANGE_REQUEST',
@@ -45,7 +47,14 @@ describe('product command envelope', () => {
       ].sort(),
     );
     expect(COMMAND_TYPES).not.toContain('USE_ITEM');
-    expect(PHASE_COMMAND_TYPES).toEqual(['READY', 'PRACTICE_READY', 'LOAD_READY', 'REMATCH']);
+    expect(PHASE_COMMAND_TYPES).toEqual([
+      'READY',
+      'ROOM_LOCK',
+      'ROOM_KICK',
+      'PRACTICE_READY',
+      'LOAD_READY',
+      'REMATCH',
+    ]);
   });
 
   it('accepts documented envelopes and classifies phase commands', () => {
@@ -67,6 +76,29 @@ describe('product command envelope', () => {
         payload: { installationId: 'install-1' },
       }).type,
     ).toBe('INSTALL_CANCEL');
+  });
+
+  it('classifies host commands as phase commands and rejects spoofed identity or malformed targets', () => {
+    for (const [type, payload] of [
+      ['ROOM_LOCK', { locked: true }],
+      ['ROOM_KICK', { targetPlayerId: 'friend' }],
+    ]) {
+      expect(isPhaseCommand(commandEnvelopeSchema.parse({ ...move, type, payload }))).toBe(true);
+      expect(
+        commandEnvelopeSchema.safeParse({ ...move, type, payload, actorId: 'host' }).success,
+      ).toBe(false);
+    }
+    expect(
+      commandEnvelopeSchema.safeParse({
+        ...move,
+        type: 'ROOM_KICK',
+        payload: { targetPlayerId: '' },
+      }).success,
+    ).toBe(false);
+    expect(
+      commandEnvelopeSchema.safeParse({ ...move, type: 'ROOM_LOCK', payload: { locked: 'true' } })
+        .success,
+    ).toBe(false);
   });
 
   it.each([

@@ -5,6 +5,7 @@ import { createApplication } from '../../src/bootstrap.js';
 import { parseConfig } from '../../src/config/env.js';
 import { LayoutLoader } from '../../src/game/LayoutLoader.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
+import { localConfiguration } from '../media/generation-fixtures.js';
 
 const config = () => ({
   ...parseConfig({
@@ -74,6 +75,34 @@ describe('real product profile assembly without Cloud', () => {
       });
       expect(profile.core!.getFrame(state).phase).toBe('TEAM_PRACTICE');
       expect(profile.core!.getPlayerSelf(state, members[0]!.playerId)?.status).toBe('ACTIVE');
+    }
+  });
+
+  it('wires the configured media ceiling into the running alert sampler', async () => {
+    const runtimeConfig = config();
+    const profile = await loadProductProfile(runtimeConfig);
+    const application = createApplication(runtimeConfig, {
+      ...profile,
+      // Local configuration fixture only; no Cloud coordinator or admission is enabled.
+      mediaConfig: {
+        ...localConfiguration(),
+        maxNormalApiCallsPer60s: 120,
+        maxTotalApiCallsPer60s: 180,
+      },
+    });
+    await application.listen();
+    try {
+      application.metrics.emitMetric({
+        name: 'media.api.total60s',
+        value: 162,
+        unit: 'count',
+        atMs: performance.now(),
+      });
+      await expect
+        .poll(() => application.alerts.active().map((alert) => alert.id), { timeout: 5000 })
+        .toContain('MEDIA_API_BUDGET_NEAR_LIMIT');
+    } finally {
+      await application.close();
     }
   });
 

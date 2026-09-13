@@ -20,6 +20,8 @@ type RoomEntry = {
   lastActivityMs: number;
   phaseStartedAtMs: number;
   closing: boolean;
+  joinLocked: boolean;
+  accessRevision: number;
 };
 
 export const JOINABLE_PHASES: readonly Phase[] = ['LOBBY', 'DEVICE_CHECK'];
@@ -48,6 +50,24 @@ export class SlotRegistry {
 
   phaseOf(roomCode: string): Phase | null {
     return this.rooms.get(roomCode)?.phase ?? null;
+  }
+
+  access(roomCode: string): { locked: boolean; revision: number } | null {
+    const room = this.rooms.get(roomCode);
+    return room ? { locked: room.joinLocked, revision: room.accessRevision } : null;
+  }
+
+  setJoinLocked(roomCode: string, locked: boolean): boolean {
+    const room = this.rooms.get(roomCode);
+    if (!room || room.closing || !JOINABLE_PHASES.includes(room.phase)) return false;
+    if (room.joinLocked !== locked) room.accessRevision++;
+    room.joinLocked = locked;
+    return true;
+  }
+
+  canJoin(roomCode: string): boolean {
+    const room = this.rooms.get(roomCode);
+    return !!room && !room.closing && !room.joinLocked && JOINABLE_PHASES.includes(room.phase);
   }
 
   setPhase(roomCode: string, phase: Phase, nowMs: number) {
@@ -111,10 +131,12 @@ export class SlotRegistry {
         lastActivityMs: nowMs,
         phaseStartedAtMs: nowMs,
         closing: false,
+        joinLocked: false,
+        accessRevision: 0,
       };
       this.rooms.set(roomCode, room);
     }
-    if (room.closing) return 'ROOM_CLOSED';
+    if (room.closing || room.joinLocked) return 'ROOM_CLOSED';
     if (room.slots.has(playerId)) return 'reserved';
     if (!JOINABLE_PHASES.includes(room.phase)) return 'ROOM_CLOSED';
     if (room.slots.size >= this.roomCapacity) return 'ROOM_FULL';
@@ -126,7 +148,7 @@ export class SlotRegistry {
 
   markJoined(roomCode: string, playerId: string, nowMs: number): boolean {
     const room = this.rooms.get(roomCode);
-    if (room?.closing) return false;
+    if (room?.closing || room?.joinLocked) return false;
     const slot = room?.slots.get(playerId);
     if (!slot || slot.state === 'RETIRING') return false;
     slot.state = 'JOINED';

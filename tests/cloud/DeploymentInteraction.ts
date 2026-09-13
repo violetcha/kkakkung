@@ -138,6 +138,10 @@ export function createDeploymentInteractionFactory(
         if (!disposed) deps.onDeviceStatus(devices);
         return devices;
       },
+      async setMicrophone() {
+        // This probe publishes its fixed synthetic tracks; it cannot certify device toggles.
+        throw new Error('PROBE_MICROPHONE_CONTROL_UNSUPPORTED');
+      },
       async calibrate() {
         if (!disposed) deps.onDeviceStatus(devices);
         return devices;

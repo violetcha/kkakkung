@@ -82,6 +82,8 @@ export type CommandPayloads = {
   MOVE_INTENT: { direction: 'forward' | 'back' | null };
   TURN: { direction: 'left' | 'right' };
   READY: { ready: boolean };
+  ROOM_LOCK: { locked: boolean };
+  ROOM_KICK: { targetPlayerId: string };
   PRACTICE_READY: { ready: boolean };
   LOAD_READY: { loadId: string; mediaInstanceId: string; receiverGeneration: number };
   EXCHANGE_REQUEST: { targetPlayerId: string };
@@ -249,6 +251,8 @@ export type PublicRoundState = Readonly<{
   rematchState?: RematchState;
 }>;
 export const ROOM_EXPIRED_CLOSE_CODE = 4001;
+export const ROOM_REMOVED_CLOSE_CODE = 4002;
+export type RoomAccess = Readonly<{ matchId: string; revision: number; locked: boolean }>;
 export type RoomRoster = Readonly<{
   matchId: string;
   stateVersion: number;
@@ -301,7 +305,7 @@ export type ClockReply = ClockProbe &
 export type ViewResync = Readonly<{ matchId: string; lastStateVersion: number }>;
 export type CoreCommandType = Exclude<
   CommandType,
-  'READY' | 'PRACTICE_READY' | 'LOAD_READY' | 'REMATCH'
+  'READY' | 'ROOM_LOCK' | 'ROOM_KICK' | 'PRACTICE_READY' | 'LOAD_READY' | 'REMATCH'
 >;
 export type CoreCommand = CommandEnvelope<CoreCommandType> & Readonly<{ actorId: string }>;
 export type ControlIntent =
@@ -775,6 +779,8 @@ export type LocalAudioStatus = Readonly<{
 export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  /** Changes only microphone permission/source/publication; never acquires a camera. */
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;
@@ -839,6 +845,7 @@ export type ServerMessages = {
   'command-outcome': CommandOutcome;
   'request-status-result': RequestStatusResult;
   'room-roster': RoomRoster;
+  'room-access': RoomAccess;
   'private-view': PrivateView;
   'private-event': PrivateEvent;
   'game-heartbeat': GameHeartbeat;
