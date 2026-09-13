@@ -108,6 +108,9 @@ export async function productCloudFixture(operatingMode: 'attested' | 'continuou
   const removed: string[] = [];
   const subscriptions: unknown[] = [];
   const client: GatewayClient = {
+    forwardParticipant: async () => {
+      throw new Error('UNEXPECTED_FORWARD_IN_LEGACY_FIXTURE');
+    },
     listRooms: async () => [...rooms.values()],
     createRoom: async (input) => {
       const room = new Room({ name: input.name });

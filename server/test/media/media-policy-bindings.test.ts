@@ -117,6 +117,9 @@ function setup(players = 2, extra: Partial<MediaPolicyBindingsOptions> = {}) {
     ): Promise<void> => undefined,
   );
   const client: GatewayClient = {
+    forwardParticipant: async () => {
+      throw new Error('UNEXPECTED_FORWARD_IN_LEGACY_FIXTURE');
+    },
     createRoom: vi.fn(async () => new Room()),
     listRooms: vi.fn(async () => []),
     listParticipants: vi.fn(async () => []),

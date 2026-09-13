@@ -83,6 +83,7 @@ describe('vitest discovery keeps Cloud cases out of the default suite', () => {
         'DP-06',
         'MC-01',
         'MC-PUBLIC-01',
+        'MC-PUBLIC-02',
         'QA-02',
         'QA-03',
         'QA-04',

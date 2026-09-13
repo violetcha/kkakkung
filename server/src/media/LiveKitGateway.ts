@@ -19,6 +19,7 @@ export type GatewayClient = Pick<
   | 'getParticipant'
   | 'updateSubscriptions'
   | 'updateParticipant'
+  | 'forwardParticipant'
   | 'removeParticipant'
   | 'deleteRoom'
 >;
@@ -91,6 +92,7 @@ function safeError(error: unknown): GatewayError {
     'invalid_argument',
     'already_exists',
     'failed_precondition',
+    'unimplemented',
   ];
   const code =
     typeof candidateCode === 'string' && safeCodes.includes(candidateCode)
@@ -222,6 +224,22 @@ export class LiveKitGateway {
   ) {
     return this.call('removeParticipant', `${room}/${identity}`, 'revoke', 'cleanup', context, () =>
       this.client.removeParticipant(room, identity, options),
+    );
+  }
+
+  forwardParticipant(
+    room: string,
+    identity: string,
+    destinationRoom: string,
+    context?: GatewayCallContext,
+  ) {
+    return this.call(
+      'forwardParticipant',
+      JSON.stringify([room, identity, destinationRoom]),
+      'grant',
+      'normal',
+      context,
+      () => this.client.forwardParticipant(room, identity, destinationRoom),
     );
   }
 
