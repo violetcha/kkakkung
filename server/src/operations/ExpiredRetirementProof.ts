@@ -1,6 +1,7 @@
 import type { JournalEntry } from './OperationJournal.js';
 import type { RetryIntent } from './RevocationRetries.js';
 import type { UsageReservation } from './UsageCheckpoint.js';
+import { ownedMediaRooms } from './SplitMediaOwnership.js';
 
 // LiveKit refreshes connected clients' tokens for at least 10 minutes. Original JWT expiry
 // alone cannot retire a room. Require durable revocation, accounting and this refresh horizon.
@@ -25,8 +26,12 @@ export function expiredRetirementIsProven(input: {
     clockBufferMs >= 61_000
   )
     return false;
-  const records = input.records.filter(({ record }) => record.roomName === input.roomName);
-  const live = input.liveRecords.filter(({ record }) => record.roomName === input.roomName);
+  const records = input.records.filter(({ record }) =>
+    ownedMediaRooms(record).includes(input.roomName),
+  );
+  const live = input.liveRecords.filter(({ record }) =>
+    ownedMediaRooms(record).includes(input.roomName),
+  );
   if (
     records.length === 0 ||
     live.length !== records.length ||

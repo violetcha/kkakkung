@@ -70,6 +70,23 @@ const input = () => ({
 });
 
 describe('server proof required before reusing retired-room absence', () => {
+  it('requires the complete bundle proof for face and forwarded rooms as well as the root', () => {
+    const data = input();
+    const split = entry({
+      ...record,
+      splitOwnership: {
+        faceRoomName: 'face',
+        faceIdentity: 'face-identity',
+        receiverRoomNames: ['receiver'],
+      },
+    });
+    for (const roomName of ['r', 'face', 'receiver']) {
+      const observed = { ...data, roomName, records: [split], liveRecords: [split] };
+      expect(expiredRetirementIsProven(observed)).toBe(true);
+      expect(expiredRetirementIsProven({ ...observed, reservations: [] })).toBe(false);
+      expect(expiredRetirementIsProven({ ...observed, liveRecords: [entry(record)] })).toBe(false);
+    }
+  });
   it('waits for the original and refreshed token horizons plus the verified clock buffer', () => {
     const data = input();
     expect(expiredRetirementIsProven({ ...data, now: record.expiresAtEpochMs + 1 })).toBe(false);

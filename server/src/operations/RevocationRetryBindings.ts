@@ -23,6 +23,7 @@ import {
   type RevocationRetryOptions,
 } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { ownedMediaRooms, ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
 
 export function validateRetryCheckpoint(value: unknown): readonly RetryIntent[] {
   if (!Array.isArray(value)) throw new Error('INVALID_RETRY_CHECKPOINT');
@@ -98,19 +99,32 @@ export class RevocationRetryBindings {
       persist: (generation) => this.persistGeneration(generation),
       stopPermissions: options.stopPermissions,
       remove: async (generation, cutoff) => {
-        await options.gateway.removeParticipant(
-          generation.roomName,
-          generation.identity,
-          cutoff === undefined ? undefined : { revokeTokenTs: cutoff },
-          this.context(generation),
-        );
+        for (const member of ownedMediaTargets(generation))
+          await options.gateway.removeParticipant(
+            member.roomName,
+            member.identity,
+            cutoff === undefined ? undefined : { revokeTokenTs: cutoff },
+            this.context(generation),
+          );
       },
       absent: async (generation) => {
-        const participants = await options.gateway.listParticipants(
-          generation.roomName,
-          this.context(generation),
-        );
-        return !participants.some((participant) => participant.identity === generation.identity);
+        const targets = ownedMediaTargets(generation);
+        for (const roomName of ownedMediaRooms(generation)) {
+          const participants = await options.gateway.listParticipants(
+            roomName,
+            this.context(generation),
+          );
+          if (
+            participants.some((participant) =>
+              targets.some(
+                (target) =>
+                  target.roomName === roomName && target.identity === participant.identity,
+              ),
+            )
+          )
+            return false;
+        }
+        return true;
       },
       onFailure: (generation, error) => this.failures.set(generation, error),
       onUnresolved: () => options.lockIssuance('RETIREMENT_UNRESOLVED'),
@@ -343,6 +357,7 @@ export class RevocationRetryBindings {
       generation: generation.generation,
       issuedAtEpochMs: generation.issuedAtEpochMs,
       expiresAtEpochMs: generation.expiresAtEpochMs,
+      ...(generation.splitOwnership ? { splitOwnership: generation.splitOwnership } : {}),
       reservationId: generation.reservationId,
       atEpochMs: this.options.epochNowMs(),
     };
@@ -488,7 +503,8 @@ export class RevocationRetryBindings {
             value.request.matchId === record.matchId &&
             value.request.mediaInstanceId === record.mediaInstanceId &&
             value.issuedAtEpochMs === record.issuedAtEpochMs &&
-            value.expiresAtEpochMs === record.expiresAtEpochMs,
+            value.expiresAtEpochMs === record.expiresAtEpochMs &&
+            sameMediaOwnership(value, record),
         );
       if (generation) records.set(generation, record);
     }

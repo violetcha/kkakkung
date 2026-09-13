@@ -9,6 +9,10 @@ import {
 } from '../operations/OperationJournal.js';
 import { ownsMediaRoom } from '../operations/PreviousGenerationCleanup.js';
 import type { UsageReservation } from '../operations/UsageCheckpoint.js';
+import {
+  sameMediaOwnership,
+  validateSplitMediaOwnership,
+} from '../operations/SplitMediaOwnership.js';
 
 export type ReservationReadinessInput = Readonly<{
   namespace: string;
@@ -81,7 +85,8 @@ export function sameJournalGeneration(record: JournalRecord, generation: Generat
     record.mediaInstanceId === generation.request.mediaInstanceId &&
     record.reservationId === generation.reservationId &&
     record.issuedAtEpochMs === generation.issuedAtEpochMs &&
-    record.expiresAtEpochMs === generation.expiresAtEpochMs
+    record.expiresAtEpochMs === generation.expiresAtEpochMs &&
+    sameMediaOwnership(record, generation)
   );
 }
 
@@ -124,6 +129,11 @@ function inspect(input: ReservationReadinessInput) {
   }
   if (generationObjects.size !== input.generations.length) consistent = false;
   for (const generation of input.generations) {
+    if (generation.splitOwnership !== undefined)
+      validateSplitMediaOwnership(generation.splitOwnership, {
+        ...generation,
+        namespace: input.namespace,
+      });
     if (
       !ownsMediaRoom(input.namespace, generation.roomName) ||
       generation.serverEpoch !== generation.roomName.split('--')[1] ||
@@ -183,12 +193,14 @@ function inspect(input: ReservationReadinessInput) {
       record.serverEpoch !== record.roomName.split('--')[1] ||
       !record.reservationId ||
       records.has(key(record)) ||
-      identities.has(record.identity)
+      identities.has(record.identity) ||
+      (record.splitOwnership !== undefined && identities.has(record.splitOwnership.faceIdentity))
     )
       throw new Error('INVALID_JOURNAL_OBSERVATION');
     previousSeq = entry.seq;
     records.set(key(record), record);
     identities.add(record.identity);
+    if (record.splitOwnership) identities.add(record.splitOwnership.faceIdentity);
     const generation = generations.get(key(record));
     if (generation && !sameJournalGeneration(record, generation)) consistent = false;
     if (record.state !== 'REVOKED') {

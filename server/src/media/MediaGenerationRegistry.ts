@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { SplitMediaOwnership } from '../operations/SplitMediaOwnership.js';
 import type { PrepareGenerationRequest, TrustedMediaFrame } from './types.js';
 
 export type Generation = {
@@ -10,6 +11,7 @@ export type Generation = {
   reservationId: string;
   issuedAtEpochMs: number;
   expiresAtEpochMs: number;
+  splitOwnership?: SplitMediaOwnership;
   terminal: boolean;
   state: 'PREPARED' | 'REVOKING' | 'REVOKED' | 'UNRESOLVED';
 };
