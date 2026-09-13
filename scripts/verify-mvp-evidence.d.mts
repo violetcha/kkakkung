@@ -7,6 +7,7 @@ export type GateInput = Readonly<{
   sourceCommitIsFeatureBranch?: boolean;
   environmentRef?: string;
   evidenceRefs?: readonly string[];
+  evidenceSha256?: Record<string, string>;
   measuredLimits?: Record<string, string | number>;
   defects?: readonly string[];
 }>;
@@ -16,6 +17,8 @@ export type GateManifest = Readonly<{
   capacity?: Readonly<{ gameOnlyRooms: number; withMediaRooms: number }>;
   gates: readonly GateInput[];
   publication?: Readonly<{
+    evidenceRef?: string;
+    evidenceSha256?: Record<string, string>;
     isolationVerified?: boolean;
     unresolvedRetirements?: number;
     officialBudgetCheckedAt?: string | null;
@@ -49,16 +52,26 @@ export type Evaluation = Readonly<{
     mvpComplete: boolean;
     featureState: string;
     capacity: Readonly<{ gameOnlyRooms: number; withMediaRooms: number }>;
+    declaredCapacity: Readonly<{ gameOnlyRooms: number; withMediaRooms: number }> | null;
+    manifestProblems: string[];
+  }>;
+  release: Readonly<{
+    ready: boolean;
+    audience: string;
+    operatingMode: string;
+    problems: string[];
   }>;
   publication: Readonly<{ allowed: boolean; problems: string[] }>;
 }>;
 export const GATE_STATUSES: readonly GateStatus[];
 export const REQUIRED_GATES: readonly string[];
 export const PENDING_GATES: readonly string[];
+export type EvidenceReader = (ref: string) => { document: unknown; sha256: string } | null;
 export function evaluateGates(
   manifest: GateManifest,
-  exists: (ref: string) => boolean,
+  read: EvidenceReader,
   headCommit: string | null,
+  options?: { lockfileHash?: string; nowEpochMs?: number },
 ): Evaluation;
 export function renderReport(
   result: Evaluation,
