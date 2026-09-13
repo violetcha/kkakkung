@@ -29,6 +29,7 @@ import {
   type RevocationRetryOptions,
 } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
 
 export type CleanupCheckpointState = Readonly<{
   namespace: string;
@@ -399,6 +400,7 @@ export class RecoveryCleanupBindings {
           prior.mediaInstanceId !== record.mediaInstanceId ||
           prior.issuedAtEpochMs !== record.issuedAtEpochMs ||
           prior.expiresAtEpochMs !== record.expiresAtEpochMs ||
+          !sameMediaOwnership(prior, record) ||
           (prior.state === 'REVOKED' && record.state !== 'REVOKED'))
       )
         throw new Error('RECOVERY_RECORD_CONFLICT');
@@ -492,10 +494,14 @@ export class RecoveryCleanupBindings {
     // A restored retry may finish after the sweep captured its pending target. Check again:
     // an observed identity could also have reappeared after that retry's absence confirmation.
     if (stored?.state === 'REVOKED' && target.record?.state !== 'REVOKED') {
-      const participants = await this.participants(target.roomName, context);
-      this.assertOpen(context);
-      if (!participants.some((participant) => participant.identity === target.identity))
-        return true;
+      let absent = true;
+      for (const member of ownedMediaTargets(stored)) {
+        const participants = await this.participants(member.roomName, context);
+        this.assertOpen(context);
+        if (participants.some((participant) => participant.identity === member.identity))
+          absent = false;
+      }
+      if (absent) return true;
     }
     if (!stored || stored.state === 'REVOKED') {
       // A reappearing participant is new untrusted observation. Preserve the terminal journal
@@ -565,26 +571,33 @@ export class RecoveryCleanupBindings {
     }
   }
 
-  private remote(target: CleanupTarget, context: CleanupCallContext): Promise<void> {
-    return confirmRemoteRevocation({
-      capability: this.options.capability,
-      nowEpochSeconds: () => this.options.epochNowMs() / 1000,
-      beforeDispatch: () => this.canDispatch(context),
-      remove: async (cutoff) => {
-        await this.cancellable(() =>
-          this.options.gateway.removeParticipant(
-            target.roomName,
-            target.identity,
-            cutoff === undefined ? undefined : { revokeTokenTs: cutoff },
-            this.context(context),
+  private async remote(target: CleanupTarget, context: CleanupCallContext): Promise<void> {
+    const members =
+      target.record && target.record.state !== 'REVOKED'
+        ? ownedMediaTargets(target.record)
+        : [target];
+    // A bundle can become REVOKED only after every token origin and every possible
+    // forwarded identity ACKs revocation and is absent. A partial pass remains one retry.
+    for (const member of members)
+      await confirmRemoteRevocation({
+        capability: this.options.capability,
+        nowEpochSeconds: () => this.options.epochNowMs() / 1000,
+        beforeDispatch: () => this.canDispatch(context),
+        remove: async (cutoff) => {
+          await this.cancellable(() =>
+            this.options.gateway.removeParticipant(
+              member.roomName,
+              member.identity,
+              cutoff === undefined ? undefined : { revokeTokenTs: cutoff },
+              this.context(context),
+            ),
+          );
+        },
+        absent: async () =>
+          !(await this.participants(member.roomName, context, REVOCATION_QUEUE_WAIT_MS)).some(
+            (p) => p.identity === member.identity,
           ),
-        );
-      },
-      absent: async () =>
-        !(await this.participants(target.roomName, context, REVOCATION_QUEUE_WAIT_MS)).some(
-          (p) => p.identity === target.identity,
-        ),
-    });
+      });
   }
 
   private async participants(

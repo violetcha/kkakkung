@@ -5,6 +5,14 @@ import {
   type JournalRecord,
 } from './OperationJournal.js';
 import type { CleanupInput, CleanupReport } from './RecoveryState.js';
+import {
+  ownsMediaRoom,
+  validMediaEpoch as validEpoch,
+  validMediaNamespace as validNamespace,
+} from '../media/MediaRoomOwnership.js';
+import { ownedMediaRooms, ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
+
+export { ownsMediaRoom } from '../media/MediaRoomOwnership.js';
 
 export type { CleanupInput, CleanupReport } from './RecoveryState.js';
 export type CleanupTarget = Readonly<{
@@ -25,25 +33,20 @@ export type CleanupRunInput = CleanupInput &
     observedTargets?: readonly CleanupObservedTarget[];
   }>;
 
-const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
-const validEpoch = (value: string) => new RegExp(`^${uuid}$`).test(value);
-const validNamespace = (value: string) =>
-  /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value) && !value.includes('--');
-
-export function ownsMediaRoom(namespace: string, roomName: string): boolean {
-  return (
-    validNamespace(namespace) &&
-    typeof roomName === 'string' &&
-    new RegExp(`^${namespace}--${uuid}--${uuid}$`).test(roomName)
-  );
-}
-
 function recordKey(record: JournalRecord): string {
   return JSON.stringify([record.namespace, record.roomName, record.identity, record.generation]);
 }
 
 function remoteKey(roomName: string, identity: string): string {
   return JSON.stringify([roomName, identity]);
+}
+
+function observedRecordKey(record: JournalRecord, roomName: string, identity: string): string {
+  // A pending bundle is revoked as one group. After REVOKED, preserve each reappearing
+  // participant as a separate untrusted observation instead of overwriting its siblings.
+  return record.state === 'REVOKED'
+    ? JSON.stringify([recordKey(record), roomName, identity])
+    : recordKey(record);
 }
 
 function replay(records: readonly JournalEntry[], namespace: string): readonly JournalRecord[] {
@@ -74,6 +77,7 @@ function replay(records: readonly JournalEntry[], namespace: string): readonly J
         previous.reservationId !== record.reservationId ||
         previous.issuedAtEpochMs !== record.issuedAtEpochMs ||
         previous.expiresAtEpochMs !== record.expiresAtEpochMs ||
+        !sameMediaOwnership(previous, record) ||
         (previous.state === 'REVOKED' && record.state !== 'REVOKED'))
     )
       throw new Error('INVALID_CLEANUP_RECORDS');
@@ -211,7 +215,7 @@ export class PreviousGenerationCleanup {
         throw new Error('INVALID_CLEANUP_INPUT');
       const records = replay(input.records, namespace);
       const targets = new Map<string, CleanupTarget>();
-      const recordedRooms = new Set(records.map((record) => record.roomName));
+      const recordedRooms = new Set(records.flatMap(ownedMediaRooms));
       const rooms = new Set<string>();
       const failedRooms = new Set<string>();
       const ambiguousRooms = new Set<string>();
@@ -232,10 +236,12 @@ export class PreviousGenerationCleanup {
         return true;
       };
       for (const record of records) {
-        if (!safeRoom(record.roomName)) continue;
-        rooms.add(record.roomName);
-        const key = remoteKey(record.roomName, record.identity);
-        byRemote.set(key, [...(byRemote.get(key) ?? []), record]);
+        if (!ownedMediaRooms(record).every(safeRoom)) continue;
+        for (const target of ownedMediaTargets(record)) {
+          rooms.add(target.roomName);
+          const key = remoteKey(target.roomName, target.identity);
+          byRemote.set(key, [...(byRemote.get(key) ?? []), record]);
+        }
         if (record.state !== 'REVOKED') {
           targets.set(recordKey(record), {
             roomName: record.roomName,
@@ -244,7 +250,10 @@ export class PreviousGenerationCleanup {
           });
         }
       }
-      recordedIdentities = targets.size;
+      recordedIdentities = [...targets.values()].reduce(
+        (count, target) => count + (target.record ? ownedMediaTargets(target.record).length : 1),
+        0,
+      );
 
       if (input.observedTargets !== undefined) {
         if (!Array.isArray(input.observedTargets)) throw new Error('INVALID_OBSERVED_TARGETS');
@@ -258,7 +267,11 @@ export class PreviousGenerationCleanup {
           const key = remoteKey(target.roomName, target.identity);
           const known = byRemote.get(key);
           if (known) {
-            for (const record of known) targets.set(recordKey(record), { ...target, record });
+            for (const record of known)
+              targets.set(observedRecordKey(record, target.roomName, target.identity), {
+                ...target,
+                record,
+              });
           } else targets.set(key, { ...target, record: null });
         }
       }
@@ -290,7 +303,9 @@ export class PreviousGenerationCleanup {
         for (const name of rooms) {
           if (
             initiallyObservedRooms.has(name) ||
-            records.some((record) => record.roomName === name && record.state !== 'REVOKED')
+            records.some(
+              (record) => ownedMediaRooms(record).includes(name) && record.state !== 'REVOKED',
+            )
           )
             continue;
           if (this.options.canReuseRetiredRoom?.(name) !== true) continue;
@@ -318,7 +333,7 @@ export class PreviousGenerationCleanup {
             if (recorded) {
               for (const record of recorded) {
                 // Reappearance invalidates a previous REVOKED confirmation.
-                targets.set(recordKey(record), {
+                targets.set(observedRecordKey(record, roomName, participant.identity), {
                   roomName,
                   identity: participant.identity,
                   record,
@@ -338,15 +353,22 @@ export class PreviousGenerationCleanup {
       for (const target of targets.values()) {
         try {
           if ((await checked(() => this.options.revoke(Object.freeze(target), context))) === true) {
-            revoked++;
+            revoked +=
+              target.record && target.record.state !== 'REVOKED'
+                ? ownedMediaTargets(target.record).length
+                : 1;
           } else {
             unresolved++;
             failedRooms.add(target.roomName);
+            if (target.record)
+              ownedMediaRooms(target.record).forEach((room) => failedRooms.add(room));
           }
         } catch {
           assertCurrent();
           unresolved++;
           failedRooms.add(target.roomName);
+          if (target.record)
+            ownedMediaRooms(target.record).forEach((room) => failedRooms.add(room));
         }
       }
       await forEachRoom(rooms, async (roomName) => {

@@ -1,4 +1,9 @@
 import { freezeSnapshot } from './ImmutableSnapshot.js';
+import {
+  sameMediaOwnership,
+  validateSplitMediaOwnership,
+  type SplitMediaOwnership,
+} from './SplitMediaOwnership.js';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
@@ -25,6 +30,7 @@ export type JournalRecord = Readonly<{
   generation: number;
   issuedAtEpochMs: number;
   expiresAtEpochMs: number;
+  splitOwnership?: SplitMediaOwnership;
   reservationId?: string;
   retirementId?: string;
   requestId?: string;
@@ -149,7 +155,15 @@ export function validateJournalRecord(value: unknown): JournalRecord {
       'issuedAtEpochMs',
       'expiresAtEpochMs',
     ],
-    ['reservationId', 'retirementId', 'requestId', 'atEpochMs', 'attempt', 'firstRetireAtEpochMs'],
+    [
+      'reservationId',
+      'retirementId',
+      'requestId',
+      'atEpochMs',
+      'attempt',
+      'firstRetireAtEpochMs',
+      'splitOwnership',
+    ],
   );
   if (!['PREPARED', 'REVOKING', 'REVOKED', 'UNRESOLVED'].includes(object.state as string))
     throw new Error('INVALID_JOURNAL_STATE');
@@ -186,7 +200,10 @@ export function validateJournalRecord(value: unknown): JournalRecord {
     (object.expiresAtEpochMs as number) < (object.issuedAtEpochMs as number)
   )
     throw new Error('INVALID_JOURNAL_LIFETIME');
-  return { ...object } as JournalRecord;
+  const record = { ...object } as JournalRecord;
+  return object.splitOwnership === undefined
+    ? record
+    : { ...record, splitOwnership: validateSplitMediaOwnership(object.splitOwnership, record) };
 }
 
 export class OperationJournal {
@@ -349,6 +366,9 @@ export class OperationJournal {
           const entry = validateEntry(value);
           if (entry.seq !== expected) throw new Error('SEQUENCE_GAP');
           if (entry.seq > checkpointSeq) {
+            const previous = this.latest.get(recordKey(entry.record));
+            if (previous && !sameMediaOwnership(previous.record, entry.record))
+              throw new Error('JOURNAL_OWNERSHIP_CHANGED');
             this.immutableRecords = null;
             this.latest.set(recordKey(entry.record), structuredClone(entry));
             if (entry.seq > afterSeq) records.push(entry);
@@ -462,6 +482,9 @@ export class OperationJournal {
     const run = this.queue.then(async () => {
       await this.restored;
       if (!this.enabled || this.closed) throw new Error('JOURNAL_NOT_WRITABLE');
+      const previous = this.latest.get(recordKey(record));
+      if (previous && !sameMediaOwnership(previous.record, record))
+        throw new Error('JOURNAL_OWNERSHIP_CHANGED');
       const payload = { version: 1 as const, seq: this.seq + 1, record };
       try {
         const created = this.handle === null;
@@ -504,7 +527,8 @@ export class OperationJournal {
       const entries = [...this.latest.values()].sort((a, b) => a.seq - b.seq);
       const retained = entries.filter(
         (entry) =>
-          entry.record.state !== 'REVOKED' || !isEligible(Object.freeze({ ...entry.record })),
+          entry.record.state !== 'REVOKED' ||
+          !isEligible(freezeSnapshot(structuredClone(entry.record))),
       );
       const removed = entries.length - retained.length;
       const result = {

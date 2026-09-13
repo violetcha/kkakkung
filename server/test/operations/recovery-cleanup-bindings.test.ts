@@ -27,6 +27,7 @@ import type { RetryIntent } from '../../src/operations/RevocationRetries.js';
 import { validateRetryCheckpoint } from '../../src/operations/RevocationRetryBindings.js';
 import { UsageBudget } from '../../src/operations/UsageBudget.js';
 import { UsageCheckpoint } from '../../src/operations/UsageCheckpoint.js';
+import { ownedMediaRooms, ownedMediaTargets } from '../../src/operations/SplitMediaOwnership.js';
 import {
   deferred,
   localCapability,
@@ -74,6 +75,7 @@ async function seed(
   state: 'PREPARED' | 'REVOKED' = 'PREPARED',
   historicalRooms = 1,
   released = false,
+  split = false,
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e13-bindings-'));
   directories.push(dir);
@@ -123,6 +125,18 @@ async function seed(
     expiresAtEpochMs: generation.expiresAtEpochMs,
     reservationId: generation.reservationId,
     atEpochMs: EPOCH,
+    ...(split
+      ? {
+          splitOwnership: {
+            faceRoomName: `e-fixture--${generation.serverEpoch}--${randomUUID()}`,
+            faceIdentity: `face-${randomUUID()}`,
+            receiverRoomNames: Array.from(
+              { length: 5 },
+              () => `e-fixture--${generation.serverEpoch}--${randomUUID()}`,
+            ),
+          },
+        }
+      : {}),
   };
   await stores.journal.append(record);
   for (let index = 1; index < historicalRooms; index++) {
@@ -347,6 +361,101 @@ function holdRename(filePath: string) {
   });
   return { entered: entered.promise, release: () => gate.resolve() };
 }
+
+describe('split ownership through actual journal recovery and shared gateway', () => {
+  it('waits for both origins and every possible clone before REVOKED or usage confirmation', async () => {
+    const s = fixture(await seed('PREPARED', 1, false, true));
+    const targets = ownedMediaTargets(s.record);
+    for (const target of targets) {
+      const identities = s.rooms.get(target.roomName) ?? new Set<string>();
+      identities.add(target.identity);
+      s.rooms.set(target.roomName, identities);
+      s.listed.add(target.roomName);
+    }
+    const entered = deferred<void>();
+    const gate = deferred<void>();
+    releases.push(() => gate.resolve());
+    const last = targets.at(-1)!;
+    s.remove.mockImplementation(async (room, identity) => {
+      if (room === last.roomName && identity === last.identity) {
+        entered.resolve();
+        await gate.promise;
+      }
+      s.rooms.get(room)?.delete(identity);
+    });
+    const run = s.run();
+    await entered.promise;
+    expect(s.journal.snapshot().records.at(-1)?.record.state).not.toBe('REVOKED');
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+    expect(s.bootstrap.getReadiness().state).not.toBe('READY');
+    expect(s.deleteRoom).not.toHaveBeenCalled();
+    gate.resolve();
+    expect(await run).toMatchObject({
+      recordedIdentities: 12,
+      revoked: 12,
+      unresolved: 0,
+      ownedRoomsRemaining: 0,
+      historyComplete: true,
+    });
+    expect(s.remove.mock.calls.map(([roomName, identity]) => ({ roomName, identity }))).toEqual(
+      targets,
+    );
+    expect(s.journal.snapshot().records.at(-1)?.record).toMatchObject({
+      state: 'REVOKED',
+      splitOwnership: s.record.splitOwnership,
+    });
+    expect(s.deleteRoom.mock.calls.map(([name]) => name).sort()).toEqual(
+      [...ownedMediaRooms(s.record)].sort(),
+    );
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).not.toBeNull();
+  });
+
+  it('keeps the entire bundle and reservation unresolved when a clone revocation fails', async () => {
+    const s = fixture(await seed('PREPARED', 1, false, true));
+    const failed = ownedMediaTargets(s.record)[3]!;
+    s.remove.mockImplementation(async (room, identity) => {
+      if (room === failed.roomName && identity === failed.identity)
+        throw new Error('simulated-remote-failure');
+    });
+    const report = await s.run();
+    expect(report?.unresolved).toBeGreaterThan(0);
+    expect(report?.historyComplete).toBe(true);
+    expect(s.journal.snapshot().records.at(-1)?.record.state).not.toBe('REVOKED');
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+    expect(s.deleteRoom).not.toHaveBeenCalled();
+    expect(s.bindings.retries.snapshot()).toHaveLength(1);
+    expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+  });
+
+  it('does not use an absent global inventory or never-joined destinations as revocation proof', async () => {
+    const s = fixture(await seed('PREPARED', 1, false, true));
+    expect(s.listed.size).toBe(0); // No original or clone is currently joined.
+    expect(await s.run()).toMatchObject({ historyComplete: true, unresolved: 0, revoked: 12 });
+    expect(s.remove).toHaveBeenCalledTimes(12);
+    expect(new Set(s.listParticipants.mock.calls.map(([room]) => room)).size).toBe(7);
+  });
+
+  it('preserves every reappearing member after a bundle was durably revoked', async () => {
+    const s = fixture(await seed('REVOKED', 1, false, true));
+    const destination = s.record.splitOwnership!.receiverRoomNames[0]!;
+    s.rooms.set(destination, new Set([s.record.identity, s.record.splitOwnership!.faceIdentity]));
+    s.listed.add(destination);
+    const report = await s.run();
+    expect(report?.historyComplete).toBe(false);
+    expect(s.remove.mock.calls.map(([, identity]) => identity).sort()).toEqual(
+      [s.record.identity, s.record.splitOwnership!.faceIdentity].sort(),
+    );
+    expect(s.journal.snapshot().records.at(-1)?.record.state).toBe('REVOKED');
+    const checkpoint = await s.cleanupCheckpoint.read();
+    expect(checkpoint).toMatchObject({
+      integrity: 'ok',
+      checkpoint: { state: { historyComplete: false } },
+    });
+    if (checkpoint.integrity === 'ok')
+      expect(checkpoint.checkpoint.state.observedTargets).toHaveLength(2);
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+  });
+});
 
 async function operationsFor(s: ReturnType<typeof fixture>) {
   const activity = { activeMatches: 0, activePractices: 0, pendingAdmissions: 0 };

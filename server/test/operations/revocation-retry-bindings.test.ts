@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ import {
 import type { RetryIntent } from '../../src/operations/RevocationRetries.js';
 import { UsageBudget } from '../../src/operations/UsageBudget.js';
 import { UsageCheckpoint } from '../../src/operations/UsageCheckpoint.js';
+import { ownedMediaRooms, ownedMediaTargets } from '../../src/operations/SplitMediaOwnership.js';
 import {
   deferred,
   localCapability,
@@ -195,6 +197,54 @@ afterEach(async () => {
 });
 
 describe('E-11 composition with real local storage; no Cloud network calls', () => {
+  it.each(['success', 'clone-failure', 'clone-remains'] as const)(
+    'retires a complete split generation before confirming its occupancy: %s',
+    async (outcome) => {
+      const s = await setup();
+      const generation = s.generations[0]!;
+      const room = () => `e-fixture--${generation.serverEpoch}--${randomUUID()}`;
+      generation.splitOwnership = {
+        faceRoomName: room(),
+        faceIdentity: randomUUID(),
+        receiverRoomNames: [room(), room()],
+      };
+      const targets = ownedMediaTargets(generation);
+      const last = targets.at(-1)!;
+      s.remove.mockImplementation(async (roomName, identity) => {
+        expect(s.journal.snapshot().records.at(-1)?.record.splitOwnership).toEqual(
+          generation.splitOwnership,
+        );
+        expect(s.ended).not.toHaveBeenCalled();
+        if (outcome === 'clone-failure' && roomName === last.roomName && identity === last.identity)
+          throw new Error('clone-failure');
+      });
+      if (outcome === 'clone-remains')
+        s.list.mockImplementation(
+          async (roomName) =>
+            (roomName === last.roomName ? [{ identity: last.identity }] : []) as Awaited<
+              ReturnType<GatewayClient['listParticipants']>
+            >,
+        );
+      const result = await s.bindings.retire(s.request());
+      expect(s.remove.mock.calls.map(([roomName, identity]) => ({ roomName, identity }))).toEqual(
+        targets,
+      );
+      if (outcome === 'success') {
+        expect(result.status).toBe('confirmed');
+        expect(s.ended).toHaveBeenCalledTimes(1);
+        expect(s.list.mock.calls.map(([roomName]) => roomName)).toEqual(
+          ownedMediaRooms(generation),
+        );
+        expect(generation.state).toBe('REVOKED');
+      } else {
+        expect(result.status).toBe('unknown');
+        expect(s.ended).not.toHaveBeenCalled();
+        expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+        expect(generation.state).toBe('UNRESOLVED');
+        expect(s.lock).toHaveBeenCalled();
+      }
+    },
+  );
   it('persists each attempt before dispatch, computes a fresh cutoff, and keeps usage until official reconciliation', async () => {
     const s = await setup();
     s.remove.mockRejectedValueOnce(new Error('local transport timeout'));

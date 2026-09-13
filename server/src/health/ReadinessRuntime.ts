@@ -195,6 +195,7 @@ export class ReadinessRuntime {
             generation: generation.generation,
             issuedAtEpochMs: generation.issuedAtEpochMs,
             expiresAtEpochMs: generation.expiresAtEpochMs,
+            ...(generation.splitOwnership ? { splitOwnership: generation.splitOwnership } : {}),
             reservationId: generation.reservationId,
             requestId: generation.request.requestId,
           });

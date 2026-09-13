@@ -9,6 +9,7 @@ import { canCompact } from './RetentionPolicy.js';
 import { validateRetryIntent, type RetryIntent } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { validateUsageState, type UsageReservation } from './UsageCheckpoint.js';
+import { sameMediaOwnership } from './SplitMediaOwnership.js';
 
 export type RecoveryRecordReason =
   | 'JOURNAL_INTEGRITY'
@@ -60,7 +61,8 @@ function sameGeneration(left: JournalRecord, right: JournalRecord): boolean {
     left.serverEpoch === right.serverEpoch &&
     left.reservationId === right.reservationId &&
     left.issuedAtEpochMs === right.issuedAtEpochMs &&
-    left.expiresAtEpochMs === right.expiresAtEpochMs
+    left.expiresAtEpochMs === right.expiresAtEpochMs &&
+    sameMediaOwnership(left, right)
   );
 }
 
