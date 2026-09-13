@@ -61,16 +61,19 @@ D3 결함 수정은 원본 122개 작업의 후속 처리다. 별도 스토리 �
 
 # 공통 실행 계약 원본
 
-버전: **EXEC-CONTRACT-3** · 적용 결정: **D-2026-09-08-01** · 갱신일: 2026-09-08
+버전: **EXEC-CONTRACT-3** · 원본 적용 결정: **D-2026-09-08-01** · 실행 기준 갱신: 2026-09-13
 
-이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. EXEC-CONTRACT-3은 이전 계약의 맵 영역 입력·게임 논리 인스턴스·미디어 초기화·격리 배포 순서를 보완한다. 기존 작업 번호와 제품 범위는 유지하며, 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다. 계약 타입·fixture·문서를 바꾼 것만으로 Origin 보안이나 제품 기능의 런타임 수정이 완료된 것은 아니다.
+이 파일은 여섯 담당 문서에 자동 삽입하는 유일한 공통 원본이다. EXEC-CONTRACT-3은 이전 계약의 맵 영역 입력·게임 논리 인스턴스·미디어 초기화·격리 배포 순서를 보완한다. 원본 작업 번호와 추적 범위는 유지하며, 기획서 원본을 새 승인 내용으로 소급 수정하지 않는다. [최신 결정 정정표](../spec/decisions.md)가 v0.0.8과 충돌하는 부분에 우선한다. 계약 타입·fixture·문서를 바꾼 것만으로 Origin 보안이나 제품 기능의 런타임 수정이 완료된 것은 아니다.
+
+현재 재개 기준은 [2026-09-13 코드·계획 재검토](../mvp-plan-review-2026-09-13.md), [최신 기획서](../spec/current.md), [구현 진행 기록](../mvp-implementation-progress.md)이다. 역할별 본문의 스켈레톤·미구현·지난 일정과 인계의 검증 수·차단 사유는 해당 작성 시점의 기록이다. 현재 코드·병합 SHA·실제 검증과 대조하여 남은 결함과 연결만 수행하며, 이미 구현된 모듈을 다시 만들지 않는다. 과거 본문과 현행 실행 기준이 충돌하면 최신 사용자 결정과 이 갱신 내용을 우선한다. 문서의 번호와 소유권은 유지하며, 재개 승인·원격 작업 범위는 현재 사용자 요청을 따른다.
 
 ## 이 문서로 실행하는 방법
 
 담당자가 작업 번호의 실행을 요청하면 구현·검증·작업별 로컬 커밋·MR 본문 작성까지 수행한다. 푸시·GitLab MR 생성·원격 병합은 담당자가 직접 한다. 문서를 검토하거나 읽는 요청만으로 제품 구현을 시작하지 않는다.
 
 ```text
-내 담당 실행 문서와 docs/spec/decisions.md, v0.0.8 기획서를 기준으로
+내 담당 실행 문서와 docs/spec/current.md, docs/spec/decisions.md,
+docs/mvp-plan-review-2026-09-13.md의 최신 재개 기준으로
 내 담당의 고정 번호 01번부터 05번까지 진행해줘.
 결정 대기 작업은 구현하지 말고 해당 번호를 보류한 뒤 다음 번호를 진행해줘.
 검증된 중간 산출물과 완료 작업은 내 Git 신원으로 각각 로컬 커밋해줘.
@@ -82,14 +85,15 @@ D3 결함 수정은 원본 122개 작업의 후속 처리다. 별도 스토리 �
 - 코드·지침·설치된 SDK 타입·계약 파일은 AI가 직접 읽는다. 사람에게 함수명·파일 위치를 찾아 전달하도록 요구하지 않는다.
 - **MP-06, EQ-06, EQ-07, EQ-08, EQ-09, EQ-12는 PRODUCT_DECISION_PENDING**이다. 종류·효과·수량·획득·소지·사용이 정해지기 전 구현·가짜 완료·대체 아이템 설계를 하지 않는다.
 - EQ-11은 구속 상태 HUD만 진행한다. 술래 감지기·덫, 자연 구속 만료·유예, 회전·포획, 공통 후보 우선순위는 유지한다.
-- 제품 계약에 아이템 종류·인벤토리·아이템 사용 명령·아이템 엔티티를 추가하지 않는다. 결정 대기 상태는 완료나 승인된 범위 제외로 바꾸지 않는다.
-- 목표는 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 금요일 오전 인수다. 확정 범위의 G1–G6 증거와 미정 아이템의 상태를 함께 보고한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
+- 이번 MVP에서는 사용자 결정에 따라 도망자 아이템과 아이템 전용 G3-C·G5 행동을 구현·인수 범위에서 제외한다. 원본 6개 ID의 `PRODUCT_DECISION_PENDING` 이력은 유지하되 이번 MVP 완료를 기다리게 하는 선행 조건으로 사용하지 않는다. 원본 아이템을 구현·통과한 것으로 바꾸거나 제품 계약에 종류·인벤토리·사용 명령·엔티티를 추가하지 않는다. 술래 장비·구속·자연 만료·포획·포즈는 계속 인수한다.
+- 9/8–9 핵심 구현, 9/10 통합·검증·수정, 9/11 오전 인수는 원본 목표 일정이다. 현재 실행 순서와 미완료 범위는 최신 재검토 문서를 따르며, 확정 범위의 실제 증거와 이번 MVP 제외 항목을 구분한다. 기존 v0.0.8 전체 요구가 완료됐다고 선언하지 않는다.
+- 이번 완료 목표는 GitLab 프로젝트 팀원 접속 제한을 유지한 상태에서 남은 MVP 구현과 실제 검증을 끝내는 것이다. 제한 없는 공개 전환은 별도 사용자 요청으로 수행한다. 팀 제한 유지가 공개 전 필요한 미디어 권한·회수·부하 검증을 면제하거나 내부 송신 허용 목록 시험을 공개 운영 통과로 바꾸지는 않는다.
 
 ## 설치와 공통 검사
 
 ### 담당 문서만으로 시작하는 읽기 경로
 
-공통 필수 자료는 `AGENTS.md`, `CONTRIBUTING.md`, `requirements.md`, `docs/architecture.md`, `docs/spec/decisions.md`다. 이후 자기 담당 문서의 시작 절차와 지정 작업만 읽고, 각 작업의 기획 근거 장을 원본 HTML에서 확인한다. 이 공통 블록과 타입은 자기 담당 문서에도 들어 있으므로 다른 다섯 역할의 전체 문서를 읽을 필요는 없다. 다른 역할의 **공개 타입·실제 export·시험 fixture·인계 기록**은 연결 근거로 직접 확인한다. SDK 사실은 설치된 버전의 타입·구현을 확인한다.
+공통 필수 자료는 `AGENTS.md`, `CONTRIBUTING.md`, `requirements.md`, `docs/architecture.md`, `docs/spec/decisions.md`와 위의 최신 재개 기준이다. 이후 자기 담당 문서의 시작 절차와 지정 작업을 읽고, 원본 HTML은 현재 기획서에서 보존한 규칙의 근거를 확인할 때 사용한다. 이 공통 블록과 타입은 자기 담당 문서에도 들어 있으므로 다른 다섯 역할의 전체 문서를 읽을 필요는 없다. 다른 역할의 **공개 타입·실제 export·시험 fixture·인계 기록**은 연결 근거로 직접 확인한다. SDK 사실은 설치된 버전의 타입·구현을 확인한다.
 
 ```bash
 node scripts/prepare-execution.mjs --role A --tasks 1-5
@@ -220,7 +224,7 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 1. E의 동기 factory는 즉시 RECOVERING/readiness와 DRAINING/admission을 제공하고 발급·입장을 잠근다. B는 `await coordinator.initialize()`를 호출하며 중복 호출은 같은 진행 Promise/최초 결과를 공유한다.
 2. initialized 결과는 writer lock과 저널/체크포인트의 복원 판단, 관찰 가능한 RECOVERING 또는 LOCKED 상태를 준비했다는 뜻이다. 안전하게 잠긴 손상/미확인 상태도 reasonCodes와 함께 initialized/LOCKED로 관찰 가능하다. Cloud 회수·예산 확인 완료를 의미하지 않는다.
 3. 중복 writer 등 안전한 인스턴스를 유지할 수 없는 오류는 fatal(WRITER_CONFLICT 또는 INITIALIZATION_FAILED)이다. B는 HTTP listen을 시작하지 않고 close로 자원을 정리한다. 예상하지 못한 Promise 거절도 같은 부팅 실패로 처리한다. 초기화 중에는 listen이 0회여야 한다.
-4. initialized 이후 B가 HTTP를 열어 `/health/live`, 503인 `/health/ready`, 인증된 운영 경로와 서명 검증 Webhook으로 상태를 관찰·복구할 수 있게 한다. E는 이후 Cloud 잔존 정리·공식 예산·저널 쓰기 상태를 확인한다. 완료 전 새 입장·grant·자동 시작은 0이며 복구 실패는 LOCKED로 남겨 관찰한다.
+4. initialized 이후 B가 HTTP를 열어 `/health/live`, 503인 `/health/ready`, 인증된 운영 경로와 서명 검증 Webhook으로 상태를 관찰·복구할 수 있게 한다. E는 이후 Cloud 잔존 정리·선택 운영 모드의 예산 정책·저널 쓰기 상태를 확인한다. attested는 공식 잔량과 확인 기한을 검사하고 continuous는 공급자 할당량 정책과 로컬 예약·회수 기록을 검사한다. 완료 전 새 입장·grant·자동 시작은 0이며 복구 실패는 LOCKED로 남겨 관찰한다.
 5. 조건이 충족되면 readiness만 READY로 바뀐다. admission은 DRAINING을 유지하고 운영 resume의 terminal 성공 후에만 OPEN이 된다. 첫 설치·재시작 모두 자동 OPEN하지 않는다. initialize를 다시 호출하여 복구 실패나 잠금을 초기화하지 않는다.
 
 - E는 내부 Gateway·Journal·예산 큐를 소유한다. B가 주입하는 deps/config와 요청·trusted frame·비동기 결과는 아래 정확한 타입을 따른다. E 콜백은 B의 큐로만 들어가며 Tick 상태를 직접 변경하지 않는다.
@@ -276,9 +280,11 @@ checkpoint-budget는 이 모드에서 로컬 기록 flush와 쓰기 가능 여�
 갱신을 요구하지 않는다. 사용량 파일이나 최초 설치·감사 marker를 삭제하여 재초기화하지 않는다.
 상세 운영 절차와 기존 시험 정책의 적용 경계는 [상시 운영](../continuous-operations.md)을 따른다.
 
+이 모드 구분은 A–F 본문과 과거 인계의 공식 잔량·공개 시간 창·checkpoint 지시에도 적용한다. attested 시험의 기한과 증거를 continuous의 정기 수동 갱신 의무로 가져오지 않는다. 반대로 continuous라는 이유로 capability·인증·저널·회수·API/참가자 상한이나 실제 Cloud 시험의 범위·비용 확인을 생략하지 않는다. 아래 설명의 checkpoint-budget는 운영 도구 이름이며 HTTP `OperationsCommand.action`은 기존 `checkpoint`를 유지한다.
+
 B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
 
-F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 실제 운영 입력에서 검증하고 B가 factory에 전달한다. publicWindow=null은 공개 창 미정으로 잠금이며 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·예산·창 조건을 함께 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 F의 시작 절차를 따르며 다른 담당은 F의 config export를 읽는다.
+F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 선택 운영 모드와 함께 검증하고 B가 factory에 전달한다. publicWindow=null은 운영 범위 미정으로 잠금이며, continuous의 명시적 `{mode:'continuous'}`와 구분한다. 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·해당 모드의 예산·운영 범위 조건을 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 현재 F config export와 상시 운영 문서를 대조한다.
 
 관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
 
@@ -297,18 +303,20 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - GET /api/operations/status: OPS_TOKEN → OperationsStatus. remaining 값이 null이면 미확인이고 0으로 바꾸지 않는다.
 - /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
-- checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
+- attested의 checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. continuous에서는 같은 명령이 로컬 기록 flush와 쓰기 가능 여부를 확인하며 공식 사용량 파일 갱신을 요구하지 않는다. 어느 모드도 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
 
 ## 격리 상태의 배포 검증 — B/E/F
 
 외부 공개 여부는 F의 네트워크/프록시 접근 경계이고 admission은 E의 게임 입장 상태다. 서로 다른 두 조건을 하나의 boolean으로 합치지 않는다. 외부 접근 차단은 진행 중 게임의 정상 종료·회수를 방해하지 않도록 기존 연결과 인증된 운영/검증 경로를 유지하면서 일반 이용자의 새 접속을 차단한다.
 
-1. F가 외부 일반 참가자는 새 HTTP 세션·매칭·WS 접속을 못 하고 지정 검증 참가자 6명과 운영자만 접근 가능한 격리를 확인한다. 모든 앱 진입 경로에 적용하고 이름뿐인 smoke 플래그나 클라이언트 claim으로 우회하지 않는다. 격리 수단/검증 참가자/공식 예산·검증 시간 창이 준비되지 않으면 BLOCKED다.
+현재 배포의 최종 접근 상태는 **GitLab 프로젝트 팀원 제한 유지**다. 아래의 배포·복구·검증 절차와 나중의 제한 없는 공개 전환을 구분한다. 과거 배포 fixture의 마지막 `publish`는 별도 공개 전환 사례이며, 이번 팀 테스트 배포마다 프로젝트 멤버 제한을 해제하라는 지시가 아니다.
+
+1. F가 외부 일반 참가자는 새 HTTP 세션·매칭·WS 접속을 못 하고 승인된 팀 검증 참가자와 운영자만 접근 가능한 경계를 확인한다. 6인 검증에는 실제 6명의 접근과 환경이 필요하다. 모든 앱 진입 경로에 적용하고 이름뿐인 smoke 플래그나 클라이언트 claim으로 우회하지 않는다. 접근 제한·검증 환경·선택 운영 모드의 필수 설정이 준비되지 않으면 해당 검증은 BLOCKED다. 공식 잔량·유효 시간 창은 attested에만 필수이며 continuous의 배포 종료 시각을 새로 만들지 않는다.
 2. OPS drain의 terminal succeeded와 진행 경기/연습/입장 대기 0, 회수·저널 반영 및 미해결 0을 확인한 뒤 같은 검증 SHA/digest로 교체한다. 격리는 재시작·롤백 동안 유지한다.
 3. B/E의 initialize→HTTP 관찰→RECOVERING 정리→READY를 확인한다. 이때 admission은 여전히 DRAINING이다. READY만 보고 공개하거나 자동 입장시키지 않는다.
-4. 격리를 다시 확인한 후 승인된 검증 시간 창/실제 잔량 조건으로 resume을 요청하고 terminal succeeded 및 READY/OPEN을 확인한다. 일반 이용자는 계속 차단된 상태에서 검증 참가자만 입장하여 6인 smoke를 수행한다. DRAINING에서 입장하는 시험용 예외 API는 만들지 않는다.
-5. 시험 성공 후 검증 참가자 퇴장, 진행 활동 0, 시험 미디어 회수·저널 반영·미해결 0을 확인한다. 공개 시간 창·잔량·READY/OPEN을 다시 검사하고 F가 외부 격리를 해제한다. 격리 해제 전에 하나라도 실패하면 공개하지 않는다.
-6. smoke 실패나 resume 이후 실패에는 격리를 유지한 채 별도 requestId로 다시 drain하고 회수·활동 0을 확인한 뒤 이전 digest로 복귀한다. 회수가 불명확하면 이미지를 교체하여 미해결 상태를 숨기지 않고 ROLLBACK_BLOCKED로 남긴다. 롤백 후에도 같은 초기화·복구·격리 시험 순서를 통과해야 공개할 수 있다.
+4. 접근 제한과 선택 운영 모드의 조건을 다시 확인한 후 resume을 요청하고 terminal succeeded 및 READY/OPEN을 확인한다. 일반 이용자는 계속 차단된 상태에서 검증 참가자만 입장하여 6인 smoke를 수행한다. attested는 승인된 시간 창·공식 잔량을, continuous는 고정 운영 설정·로컬 예약·회수 상태와 현재 적용 상한을 검사한다. DRAINING에서 입장하는 시험용 예외 API는 만들지 않는다.
+5. 시험 성공 후 검증 참가자 퇴장, 진행 활동 0, 시험 미디어 회수·저널 반영·미해결 0과 READY/OPEN을 확인한다. 해당 모드의 운영 조건을 다시 검사하고 GitLab 프로젝트 팀원 제한의 허용·거절 경로를 확인한 상태로 팀 테스트 배포를 마친다. 제한 없는 공개는 별도 사용자 요청과 공개 준비 증거 검토 뒤 수행하며, 그때만 F가 지정한 접근 제한을 해제하고 실제 공개 상태를 검사한다.
+6. smoke 실패나 resume 이후 실패에는 접근 제한을 유지한 채 별도 requestId로 다시 drain하고 회수·활동 0을 확인한 뒤 이전 digest로 복귀한다. 회수가 불명확하면 이미지를 교체하여 미해결 상태를 숨기지 않고 ROLLBACK_BLOCKED로 남긴다. 롤백 후에도 같은 초기화·복구·접근 제한·검증 순서를 통과해야 팀 테스트를 재개할 수 있다.
 
 F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배포 순서를 구현하며 QA-13이 인계 증거를 확인한다. Jenkins·nginx·배포 스크립트의 실제 구현과 원격 적용은 F 작업이다. 공통 문서와 fixture의 순서 검사만으로 해당 구현·원격 시험을 완료 처리하지 않는다.
 
@@ -354,7 +362,7 @@ F의 기존 DP-03이 격리 수단과 검증 접근을 준비하고 DP-06이 배
 
 아래 타입은 [검사 가능한 원본](contracts/types.ts)에서 자동 삽입한다. [fixture](contracts/fixtures.ts)는 정상/실패·순서 교차 입력과 기대 상태를 제공하고 [검사](contracts/fixtures.test.ts)는 계약 자료의 정합성을 확인한다. 제품 타입·serializer·reducer·Room·Coordinator 구현과 실제 연결은 각 담당 작업에서 수행한다. 문서용 타입을 제품 런타임 의존성으로 import하지 않는다. 필요한 공개 타입은 해당 소유 모듈에 옮기고 원본과 소비자 호환을 검사한다.
 
-필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 영역별 맵 입력과 다른 출처 fallback 거절, 같은 match의 연습→none→본경기와 구 scope 지연 데이터 폐기, initialize 완료/READY/OPEN 분리와 fatal 기동 차단, 격리 유지 resume→6인 시험→회수→공개 및 실패 rollback, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단, 매칭 Origin 거절 뒤 예약 0. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
+필수 계약 연결 사례: accepted 후 core 거절, 요청 중 매치 종료/중복/조회, 영역별 맵 입력과 다른 출처 fallback 거절, 같은 match의 연습→none→본경기와 구 scope 지연 데이터 폐기, initialize 완료/READY/OPEN 분리와 fatal 기동 차단, 접근 제한 유지 resume→6인 시험→회수→팀 테스트 재개 및 실패 rollback, 한 명만 미디어 세대 교체, 트랙/바인딩 양쪽 순서와 오디오 세 입력 순열, 같은 SID/새 SID 구분, 얼굴만 새 결과와 오래된 pose, 양손 충돌, 요청자/수락자 다른 UI, READY false 취소, 비소유자 가시 sensor.wall, 관찰 출구 표시/폐쇄, 5→6→7 음성 차단, 매칭 Origin 거절 뒤 예약 0. 나중의 공개 전환은 별도 사례로 검증한다. F가 실제 모듈을 연결하되 생산자와 소비자가 자기 계약 시험을 먼저 제공한다.
 
 <!-- BEGIN CONTRACT-TYPES -->
 

@@ -1,5 +1,7 @@
 # 담당 AI에 복사할 실행 프롬프트
 
+아래 번호 프롬프트는 원본 작업을 식별하는 양식이다. 현재 재개에는 [2026-09-13 코드·계획 재검토](../mvp-plan-review-2026-09-13.md)와 [구현 진행 기록](../mvp-implementation-progress.md)을 먼저 읽고 남은 범위만 지정한다. 구현 중단·검토 요청을 아래 예제의 구현·커밋 요청으로 바꾸지 않는다. 이번 MVP의 도망자 아이템 제외와 팀원 접속 제한 유지, 운영 모드별 조건은 [공통 원본](common.md)을 따른다.
+
 ## 고정 번호 1–5를 시작할 때
 
 아래에서 담당 글자와 경로를 함께 바꾼다. 날짜를 쓰지 않으면 **담당 고정 번호**를 뜻한다. C는 D1에 네 개뿐이므로 C-01–C-05에는 D2의 C-05가 포함된다. 당일 작업만 원하면 `D1 오늘 1–4번`처럼 존재하는 범위를 지정한다.
@@ -7,12 +9,14 @@
 ```text
 내 담당은 A야. docs/execution/a-game-core.md 기준 고정 번호 A-01부터 A-05까지 진행해줘.
 먼저 AGENTS.md, CONTRIBUTING.md, requirements.md, docs/architecture.md,
-docs/spec/decisions.md와 내 담당 문서의 시작 절차를 읽어줘.
+docs/spec/decisions.md, docs/spec/current.md, docs/mvp-plan-review-2026-09-13.md,
+docs/mvp-implementation-progress.md와 내 담당 문서의 시작 절차를 읽어줘.
 node scripts/prepare-execution.mjs --role A --tasks 1-5 출력으로 작업 번호,
 기획서의 해당 장, 수정 파일, 범위 밖 선행을 확인해줘.
 공통 계약 EXEC-CONTRACT-3와 contracts/types.ts·fixtures.ts·fixtures.test.ts를 대조하고
 다른 담당의 전체 계획 대신 필요한 공개 export·시험·handoffs/<역할>.md를 직접 확인해줘.
 현재 브랜치·시작 SHA·미커밋 변경·Git 신원을 확인하고 내 파일 소유권을 지켜줘.
+과거 미구현·차단 기록은 현재 코드와 대조하고 완료된 기능을 다시 만들지 마.
 PRODUCT_DECISION_PENDING 번호는 구현하지 않고 보류를 기록한 뒤 범위의 다음 번호로 진행해줘.
 선행 코드나 외부 환경이 없으면 가능한 단위 구현·시험을 먼저 끝내고 localStage와 blockedOn을 나눠 기록해줘.
 범위 밖 작업과 소유권 원본에서 내 담당이 아닌 파일은 대신 고치지 말고

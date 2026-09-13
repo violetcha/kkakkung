@@ -98,7 +98,7 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOUR
 ## 알고 있어야 할 것
 
 - 빌드가 컨트롤러(built-in node)에서 돕니다. 서버 한 대라 에이전트 분리 실익이 적어 안 나눕니다. 서버가 늘면 노드 추가 + `agent { label }`.
-- e2e(Playwright) 는 CI 에서 아직 안 돌립니다. 브라우저 이미지(`mcr.microsoft.com/playwright`) 를 붙이면 추가 가능.
+- 현재 Verify는 Chromium을 준비하고 `pnpm verify`의 Playwright E2E까지 실행한다. 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
 
 ## 8. GitLab SSO 게이트 (2026-09-09 적용)
 
@@ -143,7 +143,7 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 | 실패         | 러너가 이전 이미지로 복귀를 시도한다. `ROLLBACK_BLOCKED` 면 사람이 확인: `release.json` 의 reason(NO_PREVIOUS_RELEASE, PREVIOUS_DIGEST_MISMATCH, ROLLBACK_DRAIN_TIMEOUT, ROLLBACK_READY_TIMEOUT …)              |
 | 수동         | `DEPLOY_PROFILE=product ./infra/deploy.sh <SHA>`는 같은 product-release 러너를 호출한다. 내부 시험 키는 제품 환경 파일에서 읽는다.                                                                              |
 
-첫 실제 실행(develop 머지 → Jenkins Deploy)은 이 MR 이 머지된 뒤다. 그 결과를 docs/verification.md F-16 에 기록한다.
+초기 F-16 실행 이력은 docs/verification.md에 보존한다. 최신 확인은 #96 `dab788ac` 정상 배포이며 [재검토](../../docs/mvp-plan-review-2026-09-13.md)에 SHA·장벽·이전 실패를 구분해 기록했다.
 
 ### 제품 배포 재실행과 이미지 보존
 

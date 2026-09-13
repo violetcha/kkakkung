@@ -1,5 +1,7 @@
 # QA-09 · 대표 장치 6대 5판 수동 기록 양식 (F-15)
 
+2026-09-13 재검토: 현재 집계기는 얼굴0·음성false·잘못된 시각을 거절하지 않는 허점이 있다. 아래 형식/목표를 유지하되 [K03 수정 및 증거 인수](../../docs/mvp-plan-review-2026-09-13.md)를 선행한다. 현재 도구의 PASS만으로 G5 완료를 선언하지 않는다.
+
 G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.local/qa/six-device/` 기록이다.
 자동 브라우저(QA-09-browser)는 보조 증거일 뿐이며, 이 기록이 없으면 G5 는 PASS 가 될 수 없다.
 `node scripts/collect-six-device-results.mjs --input .local/qa/six-device --output .local/qa/QA-09.json` 이
@@ -111,9 +113,9 @@ G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.
 
 MP-06 · EQ-06 · EQ-07 · EQ-08 · EQ-09 · EQ-12 · G3-C (아이템 종류·효과·획득·사용·전용 음향·해제 사건). 사용하지 않았어도 실패 항목이 아니다.
 
-## 판정 규칙 (collect-six-device-results)
+## 판정 목표와 현재 검사 한계 (collect-six-device-results)
 
-- 장치 6·판 5·coverage 전부·누수 없음·FPS 목표(mid ≥45 평균, low ≥30 평균) → `PASS`
+- 장치6·판5·coverage·누수/FPS 목표뿐 아니라 실제 허용 관계의 영상/음성 대조·유효한 순차 시간·같은 배포 SHA까지 확인해야 G5를 인수한다. 이 추가 검사는 K03의 후속 구현이며 현재 자동화됐다고 보고하지 않는다.
 - 어느 하나라도 빈 칸 → `INCOMPLETE` (PASS 아님)
 - `realDevice:false` 포함, coverage 누락, 누수 증가, FPS 미달 → `FAIL`
 - 결정 대기 항목 미사용은 어떤 경우에도 실패가 아니다
