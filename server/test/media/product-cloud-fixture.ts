@@ -150,6 +150,7 @@ export async function productCloudFixture(operatingMode: 'attested' | 'continuou
     participants,
     removed,
     subscriptions,
+    runtimeEvidenceDiagnostic: () => evidence.getDiagnostic(),
     publish(grant: PublicationTarget) {
       const participant = new ParticipantInfo({
         identity: grant.mediaIdentity,
