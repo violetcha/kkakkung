@@ -19,6 +19,16 @@ import {
 } from '../../src/media/LiveKitGateway.js';
 import { validateCapabilityPlan } from './cloud/capability-evidence.js';
 import {
+  confirmRoomSnapshot,
+  createdRoomSnapshot,
+  probeTokenWindow,
+  requireValidProbeToken,
+  verifyRecreatedRoomAccess,
+  waitForDeletionWindow,
+  type LifecycleObservation,
+  type ProbeRoom,
+} from './cloud/room-lifecycle-proof.js';
+import {
   UNJOINED_REVOCATION_CHECKS,
   unjoinedRevocationVerdict,
   type UnjoinedRevocationEvidence,
@@ -53,6 +63,9 @@ it(
       UNJOINED_REVOCATION_CHECKS.map((key) => [key, false]),
     ) as UnjoinedRevocationEvidence;
     const observations: GatewayObservation[] = [];
+    const roomLifecycle: LifecycleObservation[] = [];
+    let tokenWindowChecks = 0;
+    let deletionStabilizationMs: number | null = null;
     const samples: { phase: string; target: number; outcome: string; status: number | null }[] = [];
     const missingRoomInventories: {
       roomIndex: number;
@@ -180,7 +193,8 @@ it(
         roomCreate: false,
         roomList: false,
       });
-      return token.toJwt();
+      const jwt = await token.toJwt();
+      return { jwt, window: probeTokenWindow(jwt) };
     };
     const deleteRoom = async (roomName: string) => {
       scoped(roomName);
@@ -195,6 +209,32 @@ it(
       void browser?.close().catch(() => {});
     }, preflight.maxDurationSeconds * 1000);
     let cleanupWatchdog: ReturnType<typeof setTimeout> | undefined;
+    const clock = {
+      now: () => performance.now(),
+      guard,
+      sleep: (milliseconds: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
+    };
+    const confirmRooms = (
+      options: Pick<
+        Parameters<typeof confirmRoomSnapshot>[0],
+        'phase' | 'expected' | 'previous' | 'attempts'
+      >,
+    ) =>
+      confirmRoomSnapshot({
+        ...options,
+        clock,
+        read: () => gateway.listRooms(rooms, context()),
+        record: (observation) => roomLifecycle.push(observation),
+      });
+    const createRooms = async () => {
+      const created: ProbeRoom[] = [];
+      for (const name of rooms)
+        created.push(
+          await gateway.createRoom({ name, emptyTimeout: 300, departureTimeout: 300 }, context()),
+        );
+      return created;
+    };
     try {
       await mkdir(resolve(root, preflight.evidenceDir), { recursive: true });
       vite = await createServer({
@@ -256,10 +296,14 @@ it(
         let all = true;
         for (let i = 0; i < tokens.length; i++) {
           guard();
+          requireValidProbeToken(tokens[i]!.window, Date.now(), 10_000);
           const result = await page.evaluate(
             ({ url, token }) => window.capabilityProbe.connect(url, token),
-            { url: config.wsUrl, token: tokens[i]! },
+            { url: config.wsUrl, token: tokens[i]!.jwt },
           );
+          guard();
+          requireValidProbeToken(tokens[i]!.window, Date.now());
+          tokenWindowChecks++;
           samples.push({ phase, target: i, ...result });
           all &&= result.outcome === 'denied' && (result.status === 401 || result.status === 403);
           await page.evaluate(() => window.capabilityProbe.disconnect());
@@ -270,6 +314,7 @@ it(
       // Independent fresh identities verify that network failure or an unusable minimum grant
       // did not produce the negative result. The old identities are never reminted.
       let controls = true;
+      const freshControls: { target: number; token: Awaited<ReturnType<typeof mint>> }[] = [];
       for (const target of targets.slice(0, 2)) {
         const identity = `${preflight.namespace}--${registry.serverEpoch}--${randomUUID()}`;
         cleanupTargets.push({ roomName: target.roomName, identity });
@@ -278,28 +323,64 @@ it(
           identity,
           target.identity === generation.splitOwnership!.faceIdentity,
         );
+        freshControls.push({ target: targets.indexOf(target), token });
+        requireValidProbeToken(token.window, Date.now(), 10_000);
         const result = await page.evaluate(
           ({ url, token }) => window.capabilityProbe.connect(url, token),
-          { url: config.wsUrl, token },
+          { url: config.wsUrl, token: token.jwt },
         );
+        guard();
+        requireValidProbeToken(token.window, Date.now());
+        tokenWindowChecks++;
         samples.push({ phase: 'fresh-control', target: targets.indexOf(target), ...result });
         controls &&= result.outcome === 'connected';
         await page.evaluate(() => window.capabilityProbe.disconnect());
       }
       evidence.freshControlsConnected = controls;
-      for (const name of rooms)
-        await gateway.createRoom({ name, emptyTimeout: 300, departureTimeout: 300 }, context());
-      if ((await gateway.listRooms(rooms, context())).length !== rooms.length)
-        throw new Error('UNJOINED_PROBE_CREATION_UNCONFIRMED');
+      const initialRooms = createdRoomSnapshot(rooms, await createRooms());
+      await confirmRooms({ phase: 'creation', expected: initialRooms });
       evidence.creationPreservedCutoffs = await rejected('created-room');
       for (const name of rooms) await deleteRoom(name);
-      if ((await gateway.listRooms(rooms, context())).length !== 0)
-        throw new Error('UNJOINED_PROBE_DELETION_UNCONFIRMED');
-      for (const name of rooms)
-        await gateway.createRoom({ name, emptyTimeout: 300, departureTimeout: 300 }, context());
-      if ((await gateway.listRooms(rooms, context())).length !== rooms.length)
-        throw new Error('UNJOINED_PROBE_RECREATION_UNCONFIRMED');
-      evidence.recreationPreservedCutoffs = await rejected('recreated-room');
+      const deletedAt = performance.now();
+      await confirmRooms({ phase: 'deletion', expected: new Map() });
+      // The provider can retain a draining SID even after ListRooms reports absence.
+      // Keep the original token TTL and global deadline; waiting never establishes proof itself.
+      await waitForDeletionWindow(deletedAt, clock);
+      deletionStabilizationMs = performance.now() - deletedAt;
+      await confirmRooms({ phase: 'stabilized-deletion', expected: new Map(), attempts: 1 });
+      const recreatedRooms = createdRoomSnapshot(rooms, await createRooms(), initialRooms);
+      await confirmRooms({ phase: 'recreation', expected: recreatedRooms, previous: initialRooms });
+      evidence.recreationPreservedCutoffs = await verifyRecreatedRoomAccess({
+        rejectedTokens: () => rejected('recreated-room'),
+        connectedControls: async () => {
+          // Reuse the two original positive-control JWTs: no extra mint/refreshed credentials.
+          // The new incarnation must remain connectable while rejecting revoked identities.
+          let connected = true;
+          for (const { target, token } of freshControls) {
+            guard();
+            requireValidProbeToken(token.window, Date.now(), 10_000);
+            const result = await page.evaluate(
+              ({ url, token }) => window.capabilityProbe.connect(url, token),
+              { url: config.wsUrl, token: token.jwt },
+            );
+            guard();
+            requireValidProbeToken(token.window, Date.now());
+            tokenWindowChecks++;
+            samples.push({ phase: 'recreated-fresh-control', target, ...result });
+            connected &&= result.outcome === 'connected';
+            await page.evaluate(() => window.capabilityProbe.disconnect());
+          }
+          evidence.freshControlsConnected &&= connected;
+          return connected;
+        },
+        finalRooms: () =>
+          confirmRooms({
+            phase: 'final',
+            expected: recreatedRooms,
+            previous: initialRooms,
+            attempts: 1,
+          }),
+      });
     } catch (error) {
       failure =
         error instanceof GatewayError
@@ -374,6 +455,9 @@ it(
             calls,
             samples,
             observations,
+            roomLifecycle,
+            deletionStabilizationMs,
+            tokenWindowChecks,
             missingRoomInventories,
             rawInventoriesAreEmpty:
               missingRoomInventories.length === rooms.length &&
