@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page } from '@playwright/test';
-import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
+import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { createServer, type ViteDevServer } from 'vite';
 import { it } from 'vitest';
 import { caseTimeoutMs, requireCloudPreflight } from '../../../tests/cloud/CloudPreflight.js';
@@ -81,11 +81,6 @@ it(
       monotonicNow: () => performance.now(),
       requestTimeoutMs: 10_000,
       observe: (value) => observations.push(value),
-    });
-    // Test-only SDK method outside the product adapter. Same budget, finite transport wait, no failover.
-    const forwardClient = new RoomServiceClient(config.httpUrl, config.apiKey, config.apiSecret, {
-      requestTimeout: 10,
-      failover: false,
     });
     const guard = () => {
       if (
@@ -206,16 +201,7 @@ it(
     };
     const forward = async (from: string, identity: string, to: string) => {
       remember(to, identity);
-      const ctx = context();
-      await budget.dispatch({
-        ...ctx,
-        method: 'forwardParticipant',
-        target: createHash('sha256')
-          .update(from + identity + to)
-          .digest('hex'),
-        kind: 'grant',
-        run: () => forwardClient.forwardParticipant(from, identity, to),
-      });
+      await gateway.forwardParticipant(from, identity, to, context());
     };
     const revoke = async (room: string, identity: string) => {
       try {

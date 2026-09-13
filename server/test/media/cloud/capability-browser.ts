@@ -149,7 +149,7 @@ async function reconnect(kind: 'original' | 'refreshed') {
   }
   return connect(endpoint, token);
 }
-async function publish() {
+async function publish(kind: 'both' | 'face' | 'audio' = 'both') {
   if (!room) throw new Error('MC01_NOT_CONNECTED');
   const canvas = document.createElement('canvas');
   canvas.width = 64;
@@ -178,16 +178,23 @@ async function publish() {
     video.stop();
     microphone.stop();
   };
-  const face = await room.localParticipant.publishTrack(video, {
-    source: Track.Source.Camera,
-    simulcast: false,
-    videoEncoding: { maxBitrate: 150_000, maxFramerate: 10 },
-  });
-  const voice = await room.localParticipant.publishTrack(microphone, {
-    source: Track.Source.Microphone,
-    audioPreset: { maxBitrate: 32_000 },
-  });
-  return [face.trackSid, voice.trackSid];
+  const sids: string[] = [];
+  if (kind !== 'audio') {
+    const face = await room.localParticipant.publishTrack(video, {
+      source: Track.Source.Camera,
+      simulcast: false,
+      videoEncoding: { maxBitrate: 150_000, maxFramerate: 10 },
+    });
+    sids.push(face.trackSid);
+  }
+  if (kind !== 'face') {
+    const voice = await room.localParticipant.publishTrack(microphone, {
+      source: Track.Source.Microphone,
+      audioPreset: { maxBitrate: 32_000 },
+    });
+    sids.push(voice.trackSid);
+  }
+  return sids;
 }
 function directSubscribe() {
   let count = 0;
@@ -263,6 +270,16 @@ export const probe = {
   reconnect,
   disconnect,
   publish,
+  publications: () =>
+    [...(room?.remoteParticipants.values() ?? [])].flatMap((participant) =>
+      [...participant.trackPublications.values()].map((publication) => ({
+        mediaIdentity: participant.identity,
+        participantSid: participant.sid,
+        trackSid: publication.trackSid,
+        source: publication.source,
+        kind: publication.kind,
+      })),
+    ),
   directSubscribe,
   measure,
   clearRefresh: () => {

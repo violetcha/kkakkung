@@ -239,6 +239,7 @@ function fixture(
           getParticipant: unsupported,
           updateSubscriptions: unsupported,
           updateParticipant: unsupported,
+          forwardParticipant: unsupported,
         };
       },
     },

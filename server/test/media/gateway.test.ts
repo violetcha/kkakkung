@@ -143,7 +143,7 @@ describe('installed SDK gateway with intercepted transport (no Cloud)', () => {
     expect(urls.filter((url) => url.includes('/settings/regions'))).toHaveLength(1);
   });
 
-  it('routes all eight methods through one budget and produces no sensitive observations', async () => {
+  it('routes all nine methods through one budget and produces no sensitive observations', async () => {
     const fetch = vi.fn(async (input: URL) => {
       if (input.pathname.endsWith('/ListRooms')) return Response.json({ rooms: [] });
       if (input.pathname.endsWith('/ListParticipants')) return Response.json({ participants: [] });
@@ -169,16 +169,22 @@ describe('installed SDK gateway with intercepted transport (no Cloud)', () => {
       revokeTokenTs: 2_000n,
     });
     await gateway.deleteRoom('synthetic-room-private');
-    expect(fetch).toHaveBeenCalledTimes(8);
-    expect(budget.getSnapshot()).toMatchObject({ total60s: 8, normal60s: 6 });
-    expect(observations.filter((event) => event.result === 'sent')).toHaveLength(8);
-    expect(observations.filter((event) => event.result === 'succeeded')).toHaveLength(8);
+    await gateway.forwardParticipant(
+      'synthetic-room-private',
+      'synthetic-identity-private',
+      'synthetic-destination-private',
+    );
+    expect(fetch).toHaveBeenCalledTimes(9);
+    expect(budget.getSnapshot()).toMatchObject({ total60s: 9, normal60s: 7 });
+    expect(observations.filter((event) => event.result === 'sent')).toHaveLength(9);
+    expect(observations.filter((event) => event.result === 'succeeded')).toHaveLength(9);
     const text = JSON.stringify(observations);
     for (const privateValue of [
       config.apiKey,
       config.apiSecret,
       'synthetic-room-private',
       'synthetic-identity-private',
+      'synthetic-destination-private',
     ]) {
       expect(text).not.toContain(privateValue);
     }
@@ -213,6 +219,56 @@ describe('installed SDK gateway with intercepted transport (no Cloud)', () => {
         beforeDispatch: () => false,
       }),
     ).rejects.toMatchObject({ code: 'SUPERSEDED' });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(budget.getSnapshot().total60s).toBe(0);
+    budget.close();
+  });
+
+  it('sends forwarding with the destination grant and sanitizes errors without replay', async () => {
+    const fetch = vi.fn(async (_input: URL, _init?: RequestInit) =>
+      Response.json({ code: 'unimplemented', msg: 'token=private' }, { status: 501 }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const { gateway, budget } = createGateway();
+    await expect(gateway.forwardParticipant('from', 'publisher', 'to')).rejects.toMatchObject({
+      message: 'unimplemented',
+      outcomeUnknown: true,
+      status: 501,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url.pathname).toMatch(/\/ForwardParticipant$/);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      room: 'from',
+      identity: 'publisher',
+      destinationRoom: 'to',
+    });
+    const authorization = new Headers(init?.headers).get('authorization')!;
+    const payload = JSON.parse(Buffer.from(authorization.split('.')[1]!, 'base64url').toString());
+    expect(payload.video).toEqual({ roomAdmin: true, room: 'from', destinationRoom: 'to' });
+    budget.close();
+  });
+
+  it('rejects canceled and superseded forwarding before dispatch and counts no Cloud calls', async () => {
+    const fetch = vi.fn(async () => Response.json({}));
+    vi.stubGlobal('fetch', fetch);
+    const { gateway, budget } = createGateway();
+    await expect(
+      gateway.forwardParticipant('from', 'publisher', 'to', {
+        requestId: 'stale-forward',
+        deadlineMs: 1000,
+        beforeDispatch: () => false,
+      }),
+    ).rejects.toMatchObject({ code: 'SUPERSEDED' });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      gateway.forwardParticipant('from', 'publisher', 'to', {
+        requestId: 'canceled-forward',
+        deadlineMs: 1000,
+        signal: controller.signal,
+      }),
+    ).rejects.toBeDefined();
     expect(fetch).not.toHaveBeenCalled();
     expect(budget.getSnapshot().total60s).toBe(0);
     budget.close();

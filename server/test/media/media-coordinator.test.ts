@@ -88,6 +88,9 @@ async function fixture(
   });
   const updateSubscriptions = vi.fn(async (): Promise<void> => {});
   const client: GatewayClient = {
+    forwardParticipant: async () => {
+      throw new Error('UNEXPECTED_FORWARD_IN_LEGACY_FIXTURE');
+    },
     listRooms,
     listParticipants,
     getParticipant,

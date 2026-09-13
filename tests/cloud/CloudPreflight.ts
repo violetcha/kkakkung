@@ -13,6 +13,7 @@ import { resolve } from 'node:path';
 export const CLOUD_CASES = Object.freeze({
   'MC-01': 'server/test/media/capability.cloud.test.ts',
   'MC-PUBLIC-01': 'server/test/media/public-authority.cloud.test.ts',
+  'MC-PUBLIC-02': 'server/test/media/split-media.cloud.test.ts',
   'QA-02': 'tests/cloud/performance.cloud.test.ts',
   'QA-03': 'tests/cloud/g1-a.cloud.test.ts',
   'QA-04': 'tests/cloud/g1-d.cloud.test.ts',
