@@ -69,6 +69,7 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
   private mergeClosing: Promise<void> | null = null;
   private loaded = false;
   private current: Checkpoint<RetryState> | null = null;
+  private readonly compactingRoots = new Set<string>();
 
   constructor(private readonly retryOptions: SharedRetryCheckpointOptions) {
     super({
@@ -81,6 +82,14 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
 
   override get writable(): boolean {
     return !this.sealed && !this.mergeFailed && super.writable;
+  }
+
+  snapshot(): Readonly<{ loaded: boolean; writable: boolean; intents: RetryState }> {
+    return {
+      loaded: this.loaded,
+      writable: this.writable,
+      intents: structuredClone(this.current?.state ?? []),
+    };
   }
 
   override read(): Promise<CheckpointRead<RetryState>> {
@@ -145,6 +154,47 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
     return this.mergeClosing;
   }
 
+  /** Both local owners must first remove their terminal snapshots. The on-disk format stays an array. */
+  compactConfirmed(roots: ReadonlySet<string>, beforeCommit: () => boolean): Promise<number> {
+    if (!this.writable) return Promise.reject(new Error('CHECKPOINT_NOT_WRITABLE'));
+    const captured = new Set(roots);
+    const result = this.mergeQueue
+      .then(async () => {
+        if (!this.writable || !beforeCommit()) throw new Error('RETENTION_RETRY_UNCONFIRMED');
+        if (!this.loaded) {
+          const restored = await this.readCurrent();
+          if (restored.integrity === 'corrupt') throw new Error('RETRY_CHECKPOINT_CORRUPT');
+        }
+        const previous = this.current;
+        if (!previous) {
+          for (const root of captured) this.compactingRoots.add(root);
+          return 0;
+        }
+        const removed = previous.state.filter((intent) => captured.has(intent.reservationId));
+        if (removed.some((intent) => intent.status !== 'REVOKED'))
+          throw new Error('RETENTION_RETRY_UNCONFIRMED');
+        const next = {
+          ...previous,
+          state: previous.state.filter((intent) => !captured.has(intent.reservationId)),
+        };
+        this.assertReservations(next.state);
+        for (const root of captured) this.compactingRoots.add(root);
+        if (removed.length > 0) await super.write(next);
+        if (!beforeCommit()) throw new Error('RETENTION_OWNERSHIP_LOST');
+        this.current = next;
+        return removed.length;
+      })
+      .catch((error: unknown) => {
+        this.mergeFailed = true;
+        throw error;
+      });
+    this.mergeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
   private async readCurrent(): Promise<CheckpointRead<RetryState>> {
     if (this.mergeFailed) return { integrity: 'corrupt', checkpoint: null };
     const result = await super.read();
@@ -172,7 +222,16 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
   }
 
   private assertReservations(intents: RetryState): void {
-    if (intents.some((intent) => this.retryOptions.isRetiredReservation?.(intent.reservationId)))
+    for (const root of this.compactingRoots) {
+      if (this.retryOptions.isRetiredReservation?.(root)) this.compactingRoots.delete(root);
+    }
+    if (
+      intents.some(
+        (intent) =>
+          this.compactingRoots.has(intent.reservationId) ||
+          this.retryOptions.isRetiredReservation?.(intent.reservationId),
+      )
+    )
       throw new Error('RETRY_RESERVATION_COMPACTED');
   }
 }

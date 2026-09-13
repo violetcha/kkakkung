@@ -44,6 +44,7 @@ type Entry = {
   retryTimer: unknown;
   alarmTimer: unknown;
   sending: boolean;
+  pendingWrites: number;
   writes: Promise<void>;
 };
 
@@ -266,6 +267,30 @@ export class RevocationRetries {
     return [...this.entries.values()].map((entry) => entry.intent);
   }
 
+  canPruneConfirmed(roots: ReadonlySet<string>): boolean {
+    return (
+      !this.closed &&
+      !this.failed &&
+      [...this.entries.values()].every(
+        (entry) =>
+          !roots.has(entry.intent.reservationId) ||
+          (entry.intent.status === 'REVOKED' &&
+            !entry.sending &&
+            entry.pendingWrites === 0 &&
+            entry.retryTimer === undefined &&
+            entry.alarmTimer === undefined),
+      )
+    );
+  }
+
+  /** Owner queues and the shared durable compactor coordinate deletion; omission alone never does. */
+  pruneConfirmed(roots: ReadonlySet<string>): void {
+    if (!this.canPruneConfirmed(roots)) throw new Error('RETENTION_RETRY_BUSY');
+    for (const [id, entry] of this.entries) {
+      if (roots.has(entry.intent.reservationId)) this.entries.delete(id);
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     for (const entry of this.entries.values()) this.cancelTimers(entry);
@@ -294,6 +319,7 @@ export class RevocationRetries {
       retryTimer: undefined,
       alarmTimer: undefined,
       sending: false,
+      pendingWrites: 0,
       writes: Promise.resolve(),
     };
   }
@@ -479,6 +505,7 @@ export class RevocationRetries {
     update: (current: RetryIntent) => RetryIntent,
     beforeWrite?: () => boolean,
   ): Promise<void> {
+    entry.pendingWrites++;
     entry.writes = entry.writes
       .then(async () => {
         if (beforeWrite && !beforeWrite()) return;
@@ -490,6 +517,9 @@ export class RevocationRetries {
       .catch((error: unknown) => {
         this.failClosed();
         throw error;
+      })
+      .finally(() => {
+        entry.pendingWrites--;
       });
     return entry.writes;
   }

@@ -8,6 +8,24 @@
 
 ## 2026-09-13 구현 재개
 
+### 자동 미디어 이력 축약 — 209 후속
+
+- `fix/S15P21C204-209-retention-runtime`, 시작 `34323c76`, 선행 reader 병합 `402bcb3d` 동기화.
+  모든 회수/사용량 확인24시간·토큰 만료·256묶음/분과 실제 제품 유지보수 경로를 연결했다.
+  journal→두 retry 소유자→공유 파일→usage 순서를 따르며 누계·미확인/최근 기록을 보존한다.
+- 실제 파일·두 소유자·제품 조립4파일101회귀 통과. 중간 종료/쓰기 실패 뒤 재기동, 원격 소유권/시계 변경,
+  새 경기·활성 예약 연장과 삭제된 요청 재생성 거절을 확인했다. [세부 동작](durable-retention.md)을 따른다.
+  전체/원격/실제 배포와24시간 안의 과거 방 조회 최적화, 실제 부하 인수는 후속이다.
+- 최종 `pnpm verify` 통과: 247파일·2,527개 테스트·E2E14개(54.9초), 포맷·계약·lint·타입·빌드·자산.
+  현재 retry 소유자의 미완료 쓰기 보존과 완료 뒤 메모리 정리/디스크 증거 유지도 회귀에 포함했다.
+- 선행 MR !132는 `c0ef4fbb`의 Jenkins MR #110 SUCCESS/GitLab #191449 passed,
+  246파일·2,513개·E2E14개 및 이미지 빌드 후 develop `402bcb3d`에 병합했다.
+  reader 배포·last-good 확인 전에 자동 aggregate writer를 운영에 활성화하지 않는다.
+- reader 배포 #103은15:16 KST DP-06 PASS·READY/OPEN·미해결0·last-good·팀 SSO를 확인했다.
+  game/web `402bcb3d`, 실제 `ROOM_IDLE_TTL_MS=600000`도 확인했다.
+- MR !131/배포 #102는 `c25bc88e`에서14:48 KST SUCCESS, 실제 Cloud DP-06 PASS,
+  game/web 동일 revision·READY/OPEN·미해결0·last-good·팀 SSO 유지 확인. Jira204–207 완료 확인.
+
 ### 208·209 reader 통합 검증
 
 - develop `c25bc88e`까지 동기화한 소스 `166d834`에서 `pnpm verify`를 통과했다.

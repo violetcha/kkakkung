@@ -1,5 +1,16 @@
 # E 공개 인계 기록
 
+## 2026-09-13 제품 자동 축약 — S15P21C204-209
+
+- localStage: INTEGRATED. Coordinator 유지보수→journal→현재/과거 retry 소유자→공유 retry→usage를
+  연결했다. 모든 회수/정산 뒤24시간·JWT 만료·최대256묶음/분, 누계와 미확인 보호를 유지한다.
+- 실제 파일·257묶음·중간 종료·rename 실패·재시작·현재 코디네이터6경기와 새 발급 등4파일101회귀 통과.
+  공개 wire나 문서용 타입은 제품 의존성으로 추가하지 않았다.
+- 전체 pnpm verify247파일·2,527개·E2E14개 통과. 선행 reader 배포 #103의 last-good 확인.
+- blockedOn: writer 원격 검사·실제 배포.24시간 내 과거 방의 조회 최적화,
+  실제 다수 방/Cloud·6대·외부 복원과 운영 명령의 장기 requestId 인덱스는 별도다.
+  [동작과 장애 순서](../../durable-retention.md)를 따른다.
+
 ## 2026-09-13 내구 이력 축약 reader — S15P21C204-209
 
 - localStage: INTEGRATED. 사용량의 선택 aggregate를 읽고 누계를 보존한다.

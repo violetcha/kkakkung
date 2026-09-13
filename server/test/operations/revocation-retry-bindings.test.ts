@@ -213,6 +213,7 @@ describe('E-11 composition with real local storage; no Cloud network calls', () 
     s.clock.ms += 1000;
     const retry = s.bindings.retries.retryNow('retire-0');
     await writing.promise;
+    expect(s.bindings.canPruneConfirmed(new Set(['shared-room-reservation']))).toBe(false);
     expect(s.remove).toHaveBeenCalledTimes(1);
     disk.resolve();
     expect(await retry).toMatchObject({ status: 'REVOKED', attempt: 1 });
@@ -247,6 +248,15 @@ describe('E-11 composition with real local storage; no Cloud network calls', () 
       ),
     ).toEqual({ status: 'applied' });
     expect(s.usage.snapshot().reservations[0]?.status).toBe('RELEASED');
+    s.clock.ms += 86_400_000;
+    const roots = new Set(['shared-room-reservation']);
+    expect(s.bindings.canPruneConfirmed(roots)).toBe(true);
+    await s.bindings.pruneConfirmed(roots, () => s.journal.writable);
+    expect(s.bindings.retries.snapshot()).toEqual([]);
+    // Only the orchestrator may remove the shared on-disk proof after both owners have pruned.
+    expect(await s.checkpoint.read()).toMatchObject({
+      checkpoint: { state: [{ status: 'REVOKED' }] },
+    });
   });
 
   it('keeps the six-person room reservation until every generation is durably revoked', async () => {

@@ -169,6 +169,29 @@ export class RevocationRetryBindings {
   pruneRequestHistory(): void {
     this.retirement.prune();
   }
+
+  canPruneConfirmed(roots: ReadonlySet<string>): boolean {
+    return (
+      !this.closed &&
+      !this.failed &&
+      this.retries.canPruneConfirmed(roots) &&
+      [...this.intents.values()].every(
+        (intent) => !roots.has(intent.reservationId) || intent.status === 'REVOKED',
+      )
+    );
+  }
+
+  pruneConfirmed(roots: ReadonlySet<string>, beforeCommit: () => boolean): Promise<void> {
+    const captured = new Set(roots);
+    return this.serialize(async () => {
+      if (!beforeCommit() || !this.canPruneConfirmed(captured))
+        throw new Error('RETENTION_RETRY_BUSY');
+      this.retries.pruneConfirmed(captured);
+      for (const [id, intent] of this.intents) {
+        if (captured.has(intent.reservationId)) this.intents.delete(id);
+      }
+    });
+  }
   /** Retry checkpoints are shared with recovery; they require separate durable compaction.
    * Never orphan an intent or an unreconciled reservation by dropping its Generation. */
   canForgetGeneration(generation: Generation): boolean {
