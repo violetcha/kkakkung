@@ -116,6 +116,7 @@ function fixture(kind: 'face' | 'audio' = 'audio', normalLimit = 100) {
     receiver: receiver!,
     kind,
     gateway,
+    prepareForward: async () => ({ completeKnown: async () => {} }),
     capability: () => localSplitCapability(epoch),
     monotonicNow: () => now,
     epochNowSeconds: () => (epoch + now) / 1000,
@@ -162,6 +163,35 @@ function fixture(kind: 'face' | 'audio' = 'audio', normalLimit = 100) {
 }
 
 describe('server forwarding with real gateway/budget and controlled Cloud transport', () => {
+  it('waits for durable preparation, then settles a canceled-before-dispatch operation without forwarding', async () => {
+    const f = fixture();
+    const durable = deferred<void>();
+    const completeKnown = vi.fn(async () => {});
+    f.options.prepareForward = async () => {
+      await durable.promise;
+      return { completeKnown };
+    };
+    f.edge.setDesired(f.source());
+    await settle();
+    expect(f.forward).not.toHaveBeenCalled();
+    f.edge.retire();
+    durable.resolve();
+    await f.edge.quiesce();
+    expect(f.forward).not.toHaveBeenCalled();
+    expect(completeKnown).toHaveBeenCalledOnce();
+  });
+
+  it('never sends a forward when write-ahead persistence fails', async () => {
+    const f = fixture();
+    f.options.prepareForward = async () => {
+      throw new Error('JOURNAL_NOT_WRITABLE');
+    };
+    f.edge.setDesired(f.source());
+    await settle();
+    expect(f.forward).not.toHaveBeenCalled();
+    expect(f.onFailure).toHaveBeenCalledOnce();
+  });
+
   it('removes the clone when the origin changes during forwarding before publishing its binding', async () => {
     const f = fixture();
     const originalForward = f.forward.getMockImplementation()!;

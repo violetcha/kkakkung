@@ -598,6 +598,9 @@ export class RecoveryCleanupBindings {
             (p) => p.identity === member.identity,
           ),
       });
+    // A crash loses the original HTTP completion. Remove ACK/current absence cannot prove that
+    // an earlier forward will not take effect later. Keep the journal and reservations unresolved.
+    if (target.record?.forwardIntents?.length) throw new Error('FORWARD_EFFECT_UNCONFIRMED');
   }
 
   private async participants(

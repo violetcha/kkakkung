@@ -3,6 +3,7 @@ import { TrackSource, TrackType } from 'livekit-server-sdk';
 import { AudioProjection } from './AudioProjection.js';
 import { AudibilityPolicy, type AudibilityFrame } from './AudibilityPolicy.js';
 import type { CapabilityReport } from './CloudCapabilityProbe.js';
+import type { ForwardCompletion } from '../operations/ForwardIntent.js';
 import { ForwardedMediaEdge, type ForwardSource } from './ForwardedMediaEdge.js';
 import { GatewayError } from './LiveKitGateway.js';
 import { LiveKitWebhook } from './LiveKitWebhook.js';
@@ -49,6 +50,11 @@ export class SplitMediaPolicyBindings {
     private readonly options: MediaPolicyBindingsOptions & {
       capability: () => CapabilityReport | null;
       epochNowSeconds: () => number;
+      prepareForward: (
+        publisher: Generation,
+        receiver: Generation,
+        kind: 'face' | 'audio',
+      ) => Promise<ForwardCompletion>;
     },
   ) {
     this.tracks = new TrackRegistry({
@@ -335,6 +341,7 @@ export class SplitMediaPolicyBindings {
                     receiver,
                     kind,
                     gateway: this.options.gateway,
+                    prepareForward: () => this.options.prepareForward(publisher, receiver, kind),
                     capability: this.options.capability,
                     epochNowSeconds: this.options.epochNowSeconds,
                     monotonicNow: this.options.monotonicNow,

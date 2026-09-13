@@ -1,5 +1,10 @@
 import { freezeSnapshot } from './ImmutableSnapshot.js';
 import {
+  validateForwardIntents,
+  type ForwardIntent,
+  type ForwardCompletion,
+} from './ForwardIntent.js';
+import {
   sameMediaOwnership,
   validateSplitMediaOwnership,
   type SplitMediaOwnership,
@@ -31,6 +36,7 @@ export type JournalRecord = Readonly<{
   issuedAtEpochMs: number;
   expiresAtEpochMs: number;
   splitOwnership?: SplitMediaOwnership;
+  forwardIntents?: readonly ForwardIntent[];
   reservationId?: string;
   retirementId?: string;
   requestId?: string;
@@ -66,7 +72,8 @@ type JournalAnchor = Readonly<{
   checksum: string;
 }>;
 
-function recordKey(record: JournalRecord): string {
+type JournalOwner = Pick<JournalRecord, 'namespace' | 'roomName' | 'identity' | 'generation'>;
+function recordKey(record: JournalOwner): string {
   return JSON.stringify([record.namespace, record.roomName, record.identity, record.generation]);
 }
 
@@ -163,6 +170,7 @@ export function validateJournalRecord(value: unknown): JournalRecord {
       'attempt',
       'firstRetireAtEpochMs',
       'splitOwnership',
+      'forwardIntents',
     ],
   );
   if (!['PREPARED', 'REVOKING', 'REVOKED', 'UNRESOLVED'].includes(object.state as string))
@@ -200,10 +208,15 @@ export function validateJournalRecord(value: unknown): JournalRecord {
     (object.expiresAtEpochMs as number) < (object.issuedAtEpochMs as number)
   )
     throw new Error('INVALID_JOURNAL_LIFETIME');
-  const record = { ...object } as JournalRecord;
-  return object.splitOwnership === undefined
-    ? record
-    : { ...record, splitOwnership: validateSplitMediaOwnership(object.splitOwnership, record) };
+  let record = { ...object } as JournalRecord;
+  if (object.splitOwnership !== undefined)
+    record = {
+      ...record,
+      splitOwnership: validateSplitMediaOwnership(object.splitOwnership, record),
+    };
+  if (object.forwardIntents !== undefined)
+    record = { ...record, forwardIntents: validateForwardIntents(object.forwardIntents, record) };
+  return record;
 }
 
 export class OperationJournal {
@@ -479,9 +492,59 @@ export class OperationJournal {
     } catch (error) {
       return Promise.reject(error);
     }
+    return this.appendUpdate(() => {
+      const previous = this.latest.get(recordKey(record))?.record;
+      // Ordinary lifecycle/retry writes must never erase in-flight effects captured meanwhile.
+      if (
+        record.forwardIntents !== undefined &&
+        previous &&
+        checksum(record.forwardIntents) !== checksum(previous.forwardIntents ?? [])
+      )
+        throw new Error('FORWARD_INTENT_MUTATION_REQUIRED');
+      return previous?.forwardIntents === undefined
+        ? record
+        : { ...record, forwardIntents: previous.forwardIntents };
+    });
+  }
+
+  /** Persist before dispatch. Restored intents deliberately have no completion handle. */
+  async prepareForward(
+    owner: JournalOwner,
+    target: Omit<ForwardIntent, 'operationId'>,
+  ): Promise<ForwardCompletion> {
+    const key = recordKey({ ...owner });
+    const intent: ForwardIntent = { ...target, operationId: randomUUID() };
+    await this.appendUpdate(() => {
+      const previous = this.latest.get(key)?.record;
+      if (!previous || previous.state !== 'PREPARED' || !previous.reservationId)
+        throw new Error('FORWARD_OWNER_NOT_PREPARED');
+      return { ...previous, forwardIntents: [...(previous.forwardIntents ?? []), intent] };
+    });
+    let completion: Promise<void> | undefined;
+    return Object.freeze({
+      completeKnown: () => {
+        completion ??= this.appendUpdate(() => {
+          const previous = this.latest.get(key)?.record;
+          if (!previous?.forwardIntents?.some((value) => value.operationId === intent.operationId))
+            throw new Error('FORWARD_INTENT_MISSING');
+          return {
+            ...previous,
+            forwardIntents: previous.forwardIntents.filter(
+              (value) => value.operationId !== intent.operationId,
+            ),
+          };
+        }).then(() => {});
+        return completion;
+      },
+    });
+  }
+
+  private appendUpdate(update: () => JournalRecord): Promise<{ seq: number; durable: true }> {
+    if (this.closed || this.closing) return Promise.reject(new Error('JOURNAL_NOT_WRITABLE'));
     const run = this.queue.then(async () => {
       await this.restored;
       if (!this.enabled || this.closed) throw new Error('JOURNAL_NOT_WRITABLE');
+      const record = validateJournalRecord(update());
       const previous = this.latest.get(recordKey(record));
       if (previous && !sameMediaOwnership(previous.record, record))
         throw new Error('JOURNAL_OWNERSHIP_CHANGED');

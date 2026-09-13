@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { TrackSource, TrackType } from 'livekit-server-sdk';
 import { ApiBudgetError } from '../operations/ApiBudget.js';
+import type { ForwardCompletion } from '../operations/ForwardIntent.js';
 import type { CapabilityReport } from './CloudCapabilityProbe.js';
 import { GatewayError, type LiveKitGateway } from './LiveKitGateway.js';
 import type { Generation } from './MediaGenerationRegistry.js';
@@ -25,6 +26,7 @@ export type ForwardedMediaEdgeOptions = Readonly<{
   isAllowed: () => boolean;
   onChanged: () => void;
   onFailure: (reason: string) => void;
+  prepareForward: () => Promise<ForwardCompletion>;
   timer?: PolicyTimer;
 }>;
 const fingerprint = (value: ForwardSource | null) =>
@@ -182,6 +184,7 @@ export class ForwardedMediaEdge {
           this.uncertainty.responded();
           continue;
         }
+        const completion = await this.options.prepareForward();
         this.mightExist = true;
         try {
           await this.options.gateway.forwardParticipant(
@@ -197,13 +200,20 @@ export class ForwardedMediaEdge {
         } catch (error) {
           if (error instanceof ApiBudgetError && ['ABORTED', 'SUPERSEDED'].includes(error.code)) {
             // These rejections occur before dispatch. No forward effect needs compensating.
+            await completion.completeKnown();
             this.mightExist = false;
             this.uncertainty.responded();
             continue;
           }
-          if (error instanceof GatewayError && error.outcomeUnknown) this.unknownForward = true;
+          if (
+            error instanceof ApiBudgetError ||
+            (error instanceof GatewayError && !error.outcomeUnknown)
+          )
+            await completion.completeKnown();
+          else this.unknownForward = true;
           throw error;
         }
+        await completion.completeKnown();
         if (!beforeDispatch()) {
           this.uncertainty.responded();
           continue;

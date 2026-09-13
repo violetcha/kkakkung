@@ -5,6 +5,7 @@ import { ParticipantInfo, TrackInfo } from 'livekit-server-sdk';
 import { splitCoordinatorFixture } from './split-coordinator-fixture.js';
 import { deferred, flush } from './generation-fixtures.js';
 import type { MediaBindings, AudioPolicy } from '../../src/media/types.js';
+import type { JournalEntry } from '../../src/operations/OperationJournal.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -35,11 +36,25 @@ describe('actual split media factory with durable files and controlled Cloud tra
     f.publish(a.grant);
     f.publish(b.grant);
     const original = f.forward.getMockImplementation()!;
+    let durableBeforeDispatch = false;
     f.forward.mockImplementationOnce(async (...args) => {
+      const lines = (await fs.readFile(path.join(f.directory, 'media-journal.jsonl'), 'utf8'))
+        .trim()
+        .split('\n');
+      const entries = lines.map((line) => JSON.parse(line) as JournalEntry);
+      durableBeforeDispatch = entries.some(({ record }) =>
+        record.forwardIntents?.some(
+          (intent) =>
+            intent.sourceRoomName === args[0] &&
+            intent.identity === args[1] &&
+            intent.destinationRoomName === args[2],
+        ),
+      );
       await original(...args);
       throw { code: 'deadline_exceeded' };
     });
     await f.coordinator.reconcile();
+    expect(durableBeforeDispatch).toBe(true);
     await vi.waitFor(
       () => expect(f.coordinator.getReadiness().unresolvedCount).toBeGreaterThan(0),
       { timeout: 3000, interval: 5 },
