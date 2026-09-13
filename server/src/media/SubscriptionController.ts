@@ -339,7 +339,10 @@ export class SubscriptionController {
           !target.desired.has(sid) ||
           target.acknowledgedBindings.get(sid) !== target.desiredBindings.get(sid),
       ) ||
+      // A queued allow has no remote effect. beforeDispatch rejects it if the policy changed.
+      // Once dispatched it may already be effective, even before the response arrives.
       (target.inFlight?.subscribe &&
+        target.inFlight.sentAt !== null &&
         target.inFlight.tracks.some(
           (sid) =>
             !target.desired.has(sid) ||

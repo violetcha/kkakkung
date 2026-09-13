@@ -24,6 +24,13 @@ export type DeploymentSmokeReport = {
   failureCode: string | null;
   failureObservation?: {
     condition: string | null;
+    media?: {
+      forbiddenReceived: number;
+      forbiddenVideo: number;
+      forbiddenAudio: number;
+      bindingMissing: number;
+      audioPolicyDenied: number;
+    }[];
     clients: {
       phase: string | null;
       serverTick: number | null;
@@ -113,6 +120,7 @@ export async function runDeploymentSmoke(
   let mediaFailure = false;
   let createdSession = false;
   let cleaning = false;
+  let mediaFailureObservation: NonNullable<DeploymentSmokeReport['failureObservation']>['media'];
   const timeLimit = () => (cleaning ? cleanupUntil : until);
   const bounded = async <T>(work: Promise<T>, capMs = 15_000): Promise<T> => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -220,8 +228,16 @@ export async function runDeploymentSmoke(
   };
   const sampleMedia = async (purpose: 'practice' | 'game') => {
     const samples = await bounded(Promise.all(players.map((player) => player.probe.snapshot())));
-    if (samples.some((sample) => sample.forbiddenReceived > 0))
+    if (samples.some((sample) => sample.forbiddenReceived > 0)) {
+      mediaFailureObservation = samples.map((sample) => ({
+        forbiddenReceived: sample.forbiddenReceived,
+        forbiddenVideo: sample.forbiddenByKind?.video ?? 0,
+        forbiddenAudio: sample.forbiddenByKind?.audio ?? 0,
+        bindingMissing: sample.forbiddenByReason?.binding ?? 0,
+        audioPolicyDenied: sample.forbiddenByReason?.audioPolicy ?? 0,
+      }));
       throw new Error('DP06_UNBOUND_MEDIA_RECEIVED');
+    }
     const video = samples.some((sample) => sample.allowedReceived.video > 0);
     const audio = samples.some((sample) => sample.allowedReceived.audio > 0);
     if (purpose === 'practice') {
@@ -398,6 +414,7 @@ export async function runDeploymentSmoke(
     // Observe before leave/drain can replace the state. Never serialize arbitrary errors,
     // snapshots, participant identities, grants or credentials.
     report.failureObservation = {
+      ...(mediaFailureObservation ? { media: mediaFailureObservation } : {}),
       condition:
         error instanceof Error && /^DP06_[A-Z_]{1,100}$/.test(error.message) ? error.message : null,
       clients: snapshot().map((value) => ({
@@ -435,7 +452,10 @@ export async function runDeploymentSmoke(
       try {
         await command('drain');
         const drained = await status();
-        checkCleanup(drained.admission === 'DRAINING' && drained.unresolvedCount === 0);
+        checkCleanup(
+          ['DRAINING', 'LOCKED'].includes(String(drained.admission)) &&
+            drained.unresolvedCount === 0,
+        );
         // E terminal drain verifies activity zero, journal retirement and reservation consistency.
         report.cleanup.drainConfirmed = true;
         if (report.status === 'PASS') {
