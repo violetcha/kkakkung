@@ -1032,7 +1032,7 @@ describe('E-16 actual coordinator factory with real local disk and synthetic Clo
     );
   });
 
-  it('binds authenticated operations HTTP to the factory audit without overwriting command or failed-auth history', async () => {
+  it('preserves command results while sampling repeated HTTP auth failures and counting every observation', async () => {
     const f = await fixture();
     await ready(f);
     const requestHttp = await operationsHttp(f);
@@ -1064,14 +1064,28 @@ describe('E-16 actual coordinator factory with real local disk and synthetic Clo
     expect(audit.state.entries[0]).toMatchObject({
       snapshot: { requestId: 'http-resume', action: 'resume', status: 'succeeded' },
     });
-    expect(audit.state.events).toHaveLength(2);
+    expect(audit.state.events).toHaveLength(1);
     expect(audit.state.events).toEqual([
       expect.objectContaining({ kind: 'auth-failed', resultCode: 'UNAUTHORIZED', requestId: null }),
-      expect.objectContaining({ kind: 'auth-failed', resultCode: 'UNAUTHORIZED', requestId: null }),
+    ]);
+    const metrics = vi.mocked(f.deps.emitMetric).mock.calls.map(([sample]) => sample);
+    expect(metrics.filter((sample) => sample.name === 'operations.audit.events')).toEqual([
+      expect.objectContaining({ value: 1, unit: 'count' }),
+      expect.objectContaining({ value: 1, unit: 'count' }),
+    ]);
+    expect(metrics.filter((sample) => sample.name === 'operations.audit.coalesced')).toEqual([
+      expect.objectContaining({ value: 1, unit: 'count' }),
     ]);
     expect(text).not.toContain('attacker-value');
     expect(text).not.toContain('attacker-request');
     expect(f.coordinator.canIssue()).toBe(true);
+    f.clock.offset += 60_001;
+    const later = await requestHttp('/ops/status');
+    expect(later.status).toBe(403);
+    await later.json();
+    const next = JSON.parse(await fs.readFile(path.join(f.dir, 'operations-audit.json'), 'utf8'));
+    expect(next.state.events).toHaveLength(2);
+    expect(next.state.entries).toEqual(audit.state.entries);
   });
 
   it('locks the same product runtime when an operations HTTP auth rejection cannot reach its audit', async () => {
