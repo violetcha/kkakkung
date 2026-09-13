@@ -90,6 +90,8 @@ export type RuntimeEvidenceDiagnostic = Readonly<{
   refreshPending: boolean;
   maxRefreshDurationMs: number;
   clockRollbackMs: number;
+  clockCorrectionCount: number;
+  maxClockCorrectionMs: number;
 }>;
 // A deployment configuration, not a periodically renewed statement of Cloud usage.
 // The provider enforces its quota; no remaining allowance or billing timestamp is invented.
@@ -131,6 +133,10 @@ const MAX_BYTES = 32 * 1024;
 // Five inspection opportunities tolerate local IO scheduling; actual evidence expiry is separate.
 const REFRESH_INTERVAL_MS = 1000;
 const VERIFIED_LEASE_MS = 5000;
+// Date.now can briefly regress during host clock correction (2ms observed in integration).
+// Compare against the accepted high-water mark, not the previous raw sample, so repeated
+// corrections cannot accumulate. This does not change attestation or verification deadlines.
+const MAX_CLOCK_CORRECTION_MS = 5;
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const LOCKED: RuntimeEvidenceServices = Object.freeze({
   getDiagnostic: () => ({
@@ -141,6 +147,8 @@ const LOCKED: RuntimeEvidenceServices = Object.freeze({
     refreshPending: false,
     maxRefreshDurationMs: 0,
     clockRollbackMs: 0,
+    clockCorrectionCount: 0,
+    maxClockCorrectionMs: 0,
   }),
   namespaceOwnershipConfirmed: () => false,
   firstInstallationConfirmed: async () => false,
@@ -229,6 +237,8 @@ export async function loadRuntimeEvidence(
   let leaseRecoveryCount = 0;
   let maxRefreshDurationMs = 0;
   let clockRollbackMs = 0;
+  let clockCorrectionCount = 0;
+  let maxClockCorrectionMs = 0;
   const invalidate = (failure: NonNullable<RuntimeEvidenceDiagnostic['reason']>) => {
     if (locked) return false;
     firstFailureReason ??= failure;
@@ -246,12 +256,18 @@ export async function loadRuntimeEvidence(
   const current = (verifyLease = true): boolean => {
     if (locked) return false;
     try {
-      const now = options.nowEpochMs();
-      if (!Number.isSafeInteger(now)) return invalidate('CLOCK_INVALID');
-      if (now < lastNow) {
-        clockRollbackMs = lastNow - now;
-        return invalidate('CLOCK_ROLLBACK');
+      const rawNow = options.nowEpochMs();
+      if (!Number.isSafeInteger(rawNow)) return invalidate('CLOCK_INVALID');
+      if (rawNow < lastNow) {
+        const correction = lastNow - rawNow;
+        if (correction > MAX_CLOCK_CORRECTION_MS) {
+          clockRollbackMs = correction;
+          return invalidate('CLOCK_ROLLBACK');
+        }
+        clockCorrectionCount++;
+        maxClockCorrectionMs = Math.max(maxClockCorrectionMs, correction);
       }
+      const now = Math.max(lastNow, rawNow);
       if (now < evidence.checkedAtEpochMs) return invalidate('EVIDENCE_FUTURE');
       if (evidence.version === 1 && now >= evidence.expiresAtEpochMs)
         return invalidate('EVIDENCE_EXPIRED');
@@ -389,6 +405,8 @@ export async function loadRuntimeEvidence(
       refreshPending: !!pendingRefresh,
       maxRefreshDurationMs,
       clockRollbackMs,
+      clockCorrectionCount,
+      maxClockCorrectionMs,
     }),
     refresh,
     close,

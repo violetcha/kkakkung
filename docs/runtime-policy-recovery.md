@@ -1,5 +1,8 @@
 # 운영 설정 검사 지연과 재검증
 
+후속 [미세 시각 보정](runtime-clock-correction.md)은 수락한 최대 시각보다5ms 이내인
+역행 표본만 제한적으로 허용한다. 기준 시각을 낮추거나 만료 기한을 늘리지 않으며 큰 역행은 계속 잠근다.
+
 2026-09-13 · [S15P21C204-213](https://ssafy.atlassian.net/browse/S15P21C204-213).
 시작 develop `280809d84764e2635c018a0d397fb049b800ebbf`.
 
