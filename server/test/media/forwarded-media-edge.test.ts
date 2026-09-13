@@ -163,6 +163,92 @@ function fixture(kind: 'face' | 'audio' = 'audio', normalLimit = 100) {
 }
 
 describe('server forwarding with real gateway/budget and controlled Cloud transport', () => {
+  it('does not classify local durable preparation delay as an unanswered Cloud request', async () => {
+    const f = fixture();
+    const durable = deferred<void>();
+    cleanups.push(async () => {
+      durable.resolve();
+      await settle();
+    });
+    f.options.prepareForward = async () => {
+      await durable.promise;
+      return { completeKnown: async () => {} };
+    };
+    f.edge.setDesired(f.source());
+    await settle();
+    f.advance(1500);
+    expect(f.forward).not.toHaveBeenCalled();
+    expect(f.onFailure).not.toHaveBeenCalled();
+    durable.resolve();
+    await f.edge.reconcile();
+    expect(f.forward).toHaveBeenCalledOnce();
+    expect(f.edge.binding).not.toBeNull();
+    expect(f.onFailure).not.toHaveBeenCalled();
+  });
+
+  it('keeps acknowledged forwarding pending on durable completion without a false response timeout', async () => {
+    const f = fixture();
+    const durable = deferred<void>();
+    cleanups.push(async () => {
+      durable.resolve();
+      await settle();
+    });
+    const completeKnown = vi.fn(async () => {
+      await durable.promise;
+    });
+    f.options.prepareForward = async () => ({ completeKnown });
+    f.edge.setDesired(f.source());
+    await settle();
+    expect(completeKnown).toHaveBeenCalledOnce();
+    expect(f.forward).toHaveBeenCalledOnce();
+    f.advance(1500);
+    expect(f.onFailure).not.toHaveBeenCalled();
+    expect(f.edge.binding).toBeNull();
+    durable.resolve();
+    await f.edge.reconcile();
+    expect(f.edge.binding).not.toBeNull();
+    expect(f.onFailure).not.toHaveBeenCalled();
+  });
+
+  it('retains the one-second security deadline while local completion is still pending', async () => {
+    const f = fixture();
+    const durable = deferred<void>();
+    cleanups.push(async () => {
+      durable.resolve();
+      await settle();
+    });
+    f.options.prepareForward = async () => ({
+      completeKnown: async () => {
+        await durable.promise;
+      },
+    });
+    f.edge.setDesired(f.source());
+    await settle();
+    expect(f.forward).toHaveBeenCalledOnce();
+    f.edge.setDesired(null);
+    f.advance(1001);
+    expect(f.onFailure).toHaveBeenCalledExactlyOnceWith('BLOCK_TIMEOUT');
+    durable.resolve();
+    await f.edge.reconcile();
+    expect(f.edge.binding).toBeNull();
+    expect(f.remote.size).toBe(0);
+  });
+
+  it('removes a known forward without publishing bindings when durable completion fails', async () => {
+    const f = fixture();
+    f.options.prepareForward = async () => ({
+      completeKnown: async () => {
+        throw new Error('JOURNAL_NOT_WRITABLE');
+      },
+    });
+    f.edge.setDesired(f.source());
+    await f.edge.reconcile();
+    expect(f.forward).toHaveBeenCalledOnce();
+    expect(f.onFailure).toHaveBeenCalledExactlyOnceWith('FORWARD_EFFECT_UNCONFIRMED');
+    expect(f.edge.binding).toBeNull();
+    expect(f.remote.size).toBe(0);
+  });
+
   it('waits for durable preparation, then settles a canceled-before-dispatch operation without forwarding', async () => {
     const f = fixture();
     const durable = deferred<void>();
