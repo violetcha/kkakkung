@@ -98,6 +98,57 @@ function harness(purpose: InstancePurpose = 'game') {
 }
 
 describe('createRemoteFaces', () => {
+  it('uses the distinct face publisher SID and does not accept the audio publisher as the face owner', () => {
+    const base = harness();
+    base.store.apply(
+      bindings([
+        participant('p2', 2, {
+          facePublisher: { mediaIdentity: 'face-identity-p2', participantSid: 'PA_face_2' },
+        }),
+      ]),
+      SELF,
+    );
+    base.faces.addTrack(remoteTrack(2));
+    expect(base.faces.getAttached()).toHaveLength(0);
+    const valid = { ...remoteTrack(2), participantSid: 'PA_face_2' };
+    base.faces.addTrack(valid);
+    expect(base.faces.getAttached()).toEqual([{ playerId: 'p2', trackSid: 'TR_face_2' }]);
+    base.faces.clear();
+  });
+
+  it('detaches the old face when its verified publisher SID changes even if the track SID and generation are unchanged', () => {
+    const base = harness();
+    base.store.apply(bindings([participant('p2', 2)]), SELF);
+    base.faces.addTrack(remoteTrack(2));
+    expect(base.faces.getAttached()).toHaveLength(1);
+    base.store.apply(
+      bindings(
+        [
+          participant('p2', 2, {
+            facePublisher: { mediaIdentity: 'different-face', participantSid: 'PA_different' },
+          }),
+        ],
+        { bindingRevision: 2 },
+      ),
+      SELF,
+    );
+    base.faces.reconcile();
+    expect(base.faces.getAttached()).toHaveLength(0);
+    expect(base.events.at(-1)?.element).toBeNull();
+    base.faces.clear();
+  });
+
+  it('rejects a malformed distinct publisher before replacing the current binding list', () => {
+    const base = harness();
+    base.store.apply(bindings([participant('p2', 2)]), SELF);
+    const malformed = bindings(
+      [participant('p2', 2, { facePublisher: { mediaIdentity: '', participantSid: 'PA_face' } })],
+      { bindingRevision: 2 },
+    );
+    expect(base.store.apply(malformed, SELF)).toEqual({ status: 'ignored', reason: 'MALFORMED' });
+    expect(base.store.getRevision()).toBe(1);
+  });
+
   it('attaches only when the verified binding and the real track agree', () => {
     const base = harness();
     base.store.apply(bindings([participant(SELF, 1), participant('p2', 2)]), SELF);

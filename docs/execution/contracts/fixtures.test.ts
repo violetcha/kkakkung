@@ -7,6 +7,18 @@ import {
   ROOM_REMOVED_CLOSE_CODE,
 } from './types.ts';
 import { roomAccessFixture, hostCommandFixture, roomInvitationFixture } from './fixtures.ts';
+import { splitMediaGrantFixture, splitMediaBindingsFixture } from './fixtures.ts';
+
+test('split transport separates credentials and publisher bindings within one receiver generation', () => {
+  const grant = splitMediaGrantFixture;
+  assert.equal(grant.subscriptionMode, 'server-forwarding');
+  assert.equal(grant.facePublication.url, grant.url);
+  assert.notEqual(String(grant.facePublication.token), String(grant.token));
+  assert.notEqual(String(grant.facePublication.roomName), String(grant.roomName));
+  assert.notEqual(String(grant.facePublication.mediaIdentity), String(grant.mediaIdentity));
+  const binding = splitMediaBindingsFixture.participants[0];
+  assert.notEqual(String(binding.facePublisher.participantSid), String(binding.participantSid));
+});
 
 test('friend invitation handoff exposes no session credential or operator authority', () => {
   assert.equal(ROOM_INVITATION_ROUTE, '/api/sessions/current/invitation');

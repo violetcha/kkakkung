@@ -44,6 +44,8 @@ export type MediaBinding = Readonly<{
   publisherGeneration: number;
   mediaIdentity: string;
   participantSid: string;
+  /** Present when the face has a distinct, server-verified publisher in this receiver room. */
+  facePublisher?: Readonly<{ mediaIdentity: string; participantSid: string }>;
   faceTrackSid?: string;
   audioTrackSid?: string;
 }>;
@@ -76,7 +78,14 @@ export type AudioPolicy = MediaScope &
   }>;
 export type MediaGrant = MediaScope &
   Readonly<{
-    subscriptionMode?: 'publisher-permissions';
+    subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    /** Only server-forwarding: CAMERA-only source, distinct from the MIC/receive room. */
+    facePublication?: Readonly<{
+      url: string;
+      token: string;
+      roomName: string;
+      mediaIdentity: string;
+    }>;
     url: string;
     token: string;
     roomName: string;

@@ -241,6 +241,7 @@ mediaInstanceId는 팀별 연습/본 경기의 논리 미디어 인스턴스다.
 - 개인 소리 제어는 D가 소유한 기존 AudioContext를 사용한다. C는 로컬 `AudioPreferences`의 음량(0–1)·전체 수신 음소거·현재 친구별 수신 음소거를 적용하며 서버 정책이나 출력 잠금을 열지 않는다. 방 안의 재경기·세대 교체에는 설정을 유지하고 방 이탈 시 초기화한다. 확인음은 활성 장치 점검/팀 연습에서만 짧게 재생하며 경기 시작·비활성·종료에서 멈춘다. 마이크 입력 크기는 선택한 트랙의 순간 값(0–1, 미사용은 null)만 제공하고 스피커 연결·추가 취득·녹음·저장·업로드를 하지 않는다. 이 로컬 제어는 금지 수신의 Cloud 차단 증거가 아니다.
 - D는 트랙·바인딩·음향 정책을 각각 저장하고 **어느 입력이 바뀌어도 reconcile**한다. 알 수 없는 트랙은 화면/오디오에 붙이지 않는다. 보류는 최대 12개/2초, 넘으면 detach/구독 중지 및 bindings-refresh를 요청한다. 바인딩이 뒤늦게 오면 SDK에 이미 존재하는 publication도 다시 대조한다. nickname/metadata로 매핑을 추측하지 않는다.
 - 바인딩 refresh는 B의 현재 검증 목록 재전송이며 임의 Cloud 조회 증폭을 허용하지 않는다. 수신자당 1초에 1회로 제한한다. 목록이 불명확하면 E의 공유 예산 대조 큐에 합쳐 신규 허용을 막는다.
+- W02 분리 전송 준비(215): `MediaGrant.subscriptionMode=server-forwarding`에서 기본 grant는 개인 MIC 게시/수신 방이며 `facePublication`은 같은 URL·같은 만료 시점의 별도 CAMERA 게시 방/신원/토큰이다. 이 필드는 해당 모드에서만 필수이며 단일 모드에 섞으면 거절한다. 두 연결 모두 준비돼야 사용하며 하나의 receiverGeneration으로 교체·실패·정리한다. 개인 방은 서버가 전달한 트랙을 자동 구독하고 얼굴 게시 방은 구독하지 않는다. `MediaBinding.facePublisher`가 있으면 얼굴은 그 별도 participantSid로, 음성은 기존 participantSid로 대조한다. 이 계약·웹 소비자 추가는 공개 권한/회수/사용량의 서버 생산자 완료나 PUBLIC_READY를 뜻하지 않으며 기존 팀 모드를 유지한다.
 - AudioPolicy가 바인딩보다 미래이면 최대 1개 최신 정책을 2초 보류한다. 과거 바인딩 정책은 폐기한다. 트랙 없이 온 정책은 최신 상태로 보관하고 트랙 도착 시 재대조한다. scope가 바뀌면 pending과 실제 그래프를 함께 비운다.
 - 가청은 미허용 pair의 거리≤5에서 진입, 이미 허용된 pair의 거리>6에서 이탈한다. 시험은 **5→6→7→6→5**로 하며 이전 허용 상태를 함께 기록한다.
 - 서버 Webhook은 track_published/track_unpublished/participant_joined/participant_left/participant_connection_aborted 등 실제 서버 이름을 쓴다. D의 RoomEvent와 B의 클라이언트 신고를 혼합하지 않는다. 서명 검증·역순/중복 처리, 누락 대비 대조는 공유 API 예산 안에서 실행한다.
@@ -891,6 +892,8 @@ export type MediaBinding = Readonly<{
   publisherGeneration: number;
   mediaIdentity: string;
   participantSid: string;
+  /** Present when the face has a distinct, server-verified publisher in this receiver room. */
+  facePublisher?: Readonly<{ mediaIdentity: string; participantSid: string }>;
   faceTrackSid?: string;
   audioTrackSid?: string;
 }>;
@@ -923,7 +926,14 @@ export type AudioPolicy = MediaScope &
   }>;
 export type MediaGrant = MediaScope &
   Readonly<{
-    subscriptionMode?: 'publisher-permissions';
+    subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    /** Only server-forwarding: CAMERA-only source, distinct from the MIC/receive room. */
+    facePublication?: Readonly<{
+      url: string;
+      token: string;
+      roomName: string;
+      mediaIdentity: string;
+    }>;
     url: string;
     token: string;
     roomName: string;

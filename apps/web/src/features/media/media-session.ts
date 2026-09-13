@@ -50,8 +50,26 @@ function scopeOf(grant: MediaGrant): MediaScope {
 }
 
 function isCompleteGrant(grant: MediaGrant): boolean {
+  const face = grant.facePublication;
+  if ((grant.subscriptionMode === 'server-forwarding') !== Boolean(face)) return false;
+  if (
+    face &&
+    (face.url !== grant.url ||
+      face.token === grant.token ||
+      typeof face.token !== 'string' ||
+      !face.token ||
+      typeof face.roomName !== 'string' ||
+      !face.roomName ||
+      face.roomName === grant.roomName ||
+      typeof face.mediaIdentity !== 'string' ||
+      !face.mediaIdentity ||
+      face.mediaIdentity === grant.mediaIdentity)
+  )
+    return false;
   return (
-    (grant.subscriptionMode === undefined || grant.subscriptionMode === 'publisher-permissions') &&
+    (grant.subscriptionMode === undefined ||
+      grant.subscriptionMode === 'publisher-permissions' ||
+      grant.subscriptionMode === 'server-forwarding') &&
     typeof grant.url === 'string' &&
     grant.url.length > 0 &&
     typeof grant.token === 'string' &&
@@ -134,7 +152,7 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
 
   const start = async (grant: MediaGrant, epoch: number): Promise<void> => {
     const current = scopeOf(grant);
-    const target = deps.createRoom();
+    const target = deps.createRoom(grant);
     room = target;
     scope = current;
     publishScoped(current, 'connecting', null);
@@ -142,7 +160,7 @@ export function createMediaSession(deps: MediaSessionDeps): MediaSession {
     try {
       // 승인 URL/token을 그대로 쓴다. 토큰은 메모리에만 둔다.
       await target.connect(grant.url, grant.token, {
-        autoSubscribe: false,
+        autoSubscribe: grant.subscriptionMode === 'server-forwarding',
         ...(grant.subscriptionMode ? { subscriptionMode: grant.subscriptionMode } : {}),
       });
     } catch {

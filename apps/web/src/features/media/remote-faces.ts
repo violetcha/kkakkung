@@ -160,7 +160,9 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
       }
       if (
         binding.faceTrackSid !== entry.trackSid ||
-        binding.publisherGeneration !== entry.publisherGeneration
+        binding.publisherGeneration !== entry.publisherGeneration ||
+        entry.track.participantSid !==
+          (binding.facePublisher?.participantSid ?? binding.participantSid)
       ) {
         // 원격 한 명의 교체는 그 사람 자원만 바꾼다.
         release(entry, 'replaced');
@@ -175,7 +177,10 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
       const track = tracks.get(binding.faceTrackSid);
       if (!track || track.kind !== 'video') continue;
       // participantSid도 독립 대조한다.
-      if (track.participantSid !== binding.participantSid) continue;
+      if (
+        track.participantSid !== (binding.facePublisher?.participantSid ?? binding.participantSid)
+      )
+        continue;
       pending.resolve(binding.faceTrackSid);
       attach(binding, track, scope);
     }
@@ -202,7 +207,11 @@ export function createRemoteFaces(deps: RemoteFacesDeps): RemoteFaces {
         track.kind === 'video'
           ? deps.bindings.findByFaceTrack(track.trackSid)
           : deps.bindings.findByAudioTrack(track.trackSid);
-      if (scope && binding && binding.participantSid === track.participantSid) {
+      const expectedSid =
+        track.kind === 'video'
+          ? (binding?.facePublisher?.participantSid ?? binding?.participantSid)
+          : binding?.participantSid;
+      if (scope && binding && expectedSid === track.participantSid) {
         reconcile();
         return;
       }

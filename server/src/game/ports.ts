@@ -269,6 +269,14 @@ export type MediaFailureCode =
   | 'TIMEOUT';
 export type MediaGrant = MediaScope &
   Readonly<{
+    subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    /** Only server-forwarding: CAMERA-only source, distinct from the MIC/receive room. */
+    facePublication?: Readonly<{
+      url: string;
+      token: string;
+      roomName: string;
+      mediaIdentity: string;
+    }>;
     url: string;
     token: string;
     roomName: string;

@@ -144,6 +144,14 @@ export type MediaScope = Readonly<{
 
 export type MediaGrant = MediaScope &
   Readonly<{
+    subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+    /** Only server-forwarding: CAMERA-only source, distinct from the MIC/receive room. */
+    facePublication?: Readonly<{
+      url: string;
+      token: string;
+      roomName: string;
+      mediaIdentity: string;
+    }>;
     url: string;
     token: string;
     roomName: string;
@@ -167,6 +175,8 @@ export type MediaBinding = Readonly<{
   publisherGeneration: number;
   mediaIdentity: string;
   participantSid: string;
+  /** Present when the face has a distinct, server-verified publisher in this receiver room. */
+  facePublisher?: Readonly<{ mediaIdentity: string; participantSid: string }>;
   faceTrackSid?: string;
   audioTrackSid?: string;
 }>;
@@ -693,11 +703,11 @@ export const createInteractionRuntime = (
     return publisher;
   };
   const media: MediaSession = createMediaSession({
-    createRoom: () => {
-      if (options.createMediaRoom) return options.createMediaRoom();
+    createRoom: (grant) => {
+      if (options.createMediaRoom) return options.createMediaRoom(grant);
       // connectMedia가 ensureLiveKit을 먼저 기다린다. 여기 도달하면 적재가 끝나 있다.
       if (!liveKit) throw new InteractionNotImplementedError('createMediaRoom', 'SDK 적재 실패');
-      return liveKit.createRoom();
+      return liveKit.createRoom(grant);
     },
     onStatus: (status) => {
       if (!disposed) deps.onMediaStatus(status);

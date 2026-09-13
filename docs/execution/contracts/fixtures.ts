@@ -1,4 +1,5 @@
 import type {
+  MediaGrant,
   CommandEnvelope,
   CommandReceipt,
   CommandOutcome,
@@ -213,6 +214,32 @@ export const firstBindings = {
       participantSid: 'PA_2',
       faceTrackSid: 'TR_face_2',
       audioTrackSid: 'TR_audio_2',
+    },
+  ],
+} as const satisfies MediaBindings;
+export const splitMediaGrantFixture = {
+  matchId: 'fixture-match-1',
+  mediaInstanceId: 'fixture-game-1',
+  receiverGeneration: 2,
+  subscriptionMode: 'server-forwarding',
+  url: 'wss://synthetic.invalid',
+  token: 'synthetic-receiver-token',
+  roomName: 'synthetic-private-receiver',
+  mediaIdentity: 'synthetic-microphone-identity',
+  expiresAt: 300,
+  facePublication: {
+    url: 'wss://synthetic.invalid',
+    token: 'synthetic-face-token',
+    roomName: 'synthetic-face-source',
+    mediaIdentity: 'synthetic-face-identity',
+  },
+} as const satisfies MediaGrant;
+export const splitMediaBindingsFixture = {
+  ...firstBindings,
+  participants: [
+    {
+      ...firstBindings.participants[1],
+      facePublisher: { mediaIdentity: 'synthetic-face-p2', participantSid: 'PA_face_p2' },
     },
   ],
 } as const satisfies MediaBindings;

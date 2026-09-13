@@ -20,6 +20,7 @@ export const mediaBindingSchema = z.strictObject({
   publisherGeneration: generation,
   mediaIdentity: idSchema,
   participantSid: idSchema,
+  facePublisher: z.strictObject({ mediaIdentity: idSchema, participantSid: idSchema }).optional(),
   faceTrackSid: idSchema.optional(),
   audioTrackSid: idSchema.optional(),
 });
@@ -73,15 +74,36 @@ export const mediaGrantRequestSchema = z.strictObject({
 });
 export type MediaGrantRequest = z.infer<typeof mediaGrantRequestSchema>;
 
-export const mediaGrantSchema = mediaScopeSchema.extend({
-  subscriptionMode: z.literal('publisher-permissions').optional(),
-  url: z.string().min(1),
-  token: z.string().min(1),
-  roomName: z.string().min(1),
-  mediaIdentity: idSchema,
-  /** Epoch seconds. */
-  expiresAt: z.number().int().positive().safe(),
-});
+export const mediaGrantSchema = mediaScopeSchema
+  .extend({
+    subscriptionMode: z.enum(['publisher-permissions', 'server-forwarding']).optional(),
+    facePublication: z
+      .strictObject({
+        url: z.string().min(1),
+        token: z.string().min(1),
+        roomName: z.string().min(1),
+        mediaIdentity: idSchema,
+      })
+      .optional(),
+    url: z.string().min(1),
+    token: z.string().min(1),
+    roomName: z.string().min(1),
+    mediaIdentity: idSchema,
+    /** Epoch seconds. */
+    expiresAt: z.number().int().positive().safe(),
+  })
+  .superRefine((grant, context) => {
+    const face = grant.facePublication;
+    if (
+      (grant.subscriptionMode === 'server-forwarding') !== Boolean(face) ||
+      (face &&
+        (face.url !== grant.url ||
+          face.token === grant.token ||
+          face.roomName === grant.roomName ||
+          face.mediaIdentity === grant.mediaIdentity))
+    )
+      context.addIssue({ code: 'custom', message: 'INVALID_SPLIT_MEDIA_GRANT' });
+  });
 export type MediaGrant = z.infer<typeof mediaGrantSchema>;
 
 export const mediaStatusReportSchema = mediaScopeSchema.extend({
