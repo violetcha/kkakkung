@@ -25,15 +25,17 @@ export function resultPresenter(round: PublicRoundState, self: PrivateView['self
               : '결과 대기',
     message: round.abortReason
       ? ABORT_LABELS[round.abortReason]
-      : ended
-        ? reason === 'two-escaped'
-          ? '도망자 2명이 탈출하여 도망자 팀이 승리했습니다.'
-          : reason === 'two-captured'
-            ? '도망자 2명을 포획하여 술래 팀이 승리했습니다.'
-            : reason === 'timeout'
-              ? '제한 시간이 끝나 술래 팀이 승리했습니다.'
-              : '최종 결과를 확인하고 있습니다.'
-        : '참가가 종료되었습니다. 경기가 끝날 때까지 팀의 공개 결과를 확인할 수 있습니다.',
+      : round.phase === 'ABORTED'
+        ? '경기를 계속할 수 없어 무효 처리되었습니다. 연결 정리가 끝나면 방장이 다시 시작할 수 있습니다.'
+        : ended
+          ? reason === 'two-escaped'
+            ? '도망자 2명이 탈출하여 도망자 팀이 승리했습니다.'
+            : reason === 'two-captured'
+              ? '도망자 2명을 포획하여 술래 팀이 승리했습니다.'
+              : reason === 'timeout'
+                ? '제한 시간이 끝나 술래 팀이 승리했습니다.'
+                : '최종 결과를 확인하고 있습니다.'
+          : '참가가 종료되었습니다. 경기가 끝날 때까지 팀의 공개 결과를 확인할 수 있습니다.',
     counts: {
       ...round.counts,
       active: Math.max(0, 3 - round.counts.escaped - round.counts.captured),

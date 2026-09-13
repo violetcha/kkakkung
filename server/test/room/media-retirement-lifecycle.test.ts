@@ -4,11 +4,13 @@ import { expect, it } from 'vitest';
 import { createKkakkungRoom } from '../../src/rooms/KkakkungRoom.js';
 import { ProductSessionStore } from '../../src/session/ProductSessionStore.js';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
+import { RoomExpiry } from '../../src/session/RoomExpiry.js';
 import { FakeCore, fakePracticePort, layoutFor, testTuning } from './test-harness.js';
 
 function fixture(
   prepareGeneration?: (request: any) => Promise<any>,
   retire?: (request: any) => Promise<any>,
+  layouts: any = null,
 ) {
   let now = 0;
   const sessions = new ProductSessionStore({ now: () => now });
@@ -22,11 +24,11 @@ function fixture(
     slots,
     directory: { unregister() {} } as any,
     coordinator: { rearm() {}, unregister() {} } as any,
-    roomExpiry: { decide: () => 'keep', remainingMs: () => null } as any,
+    roomExpiry: new RoomExpiry(600_000),
     core: new FakeCore(),
     tuning: testTuning,
     practice: { port: fakePracticePort, raw: { practiceVersion: 'fixture' } },
-    layouts: null,
+    layouts,
     media: {
       observeFrame() {},
       releaseMatch(matchId: string) {
@@ -88,6 +90,175 @@ function fixture(
     close: () => room.clock.clear(),
   };
 }
+
+async function pendingFinalization() {
+  const f = fixture(
+    async (request) => ({
+      ...request,
+      status: 'ready',
+      receiverGeneration: 1,
+      grant: {},
+      code: null,
+    }),
+    async (request) => ({ ...request, status: 'unknown', code: 'TIMEOUT' }),
+  );
+  for (const player of f.players) {
+    await f.room.requestMediaGrant(player.session.playerId, 'practice', null);
+    await f.flush();
+    f.room.onCommand(player.client, {
+      matchId: f.room.matchId,
+      requestId: randomUUID(),
+      sequence: 2,
+      type: 'PRACTICE_READY',
+      payload: { ready: true },
+    });
+  }
+  f.room.tick();
+  await f.flush();
+  expect(f.room.phase).toBe('MAP_FINALIZING');
+  expect(f.room.pendingRetirements.size).toBe(6);
+  return f;
+}
+
+it('bounds map finalization despite live heartbeats and retains unknown retirement until confirmed', async () => {
+  const f = await pendingFinalization();
+  try {
+    const previous = f.room.matchId;
+    f.advance(29_999);
+    expect(f.room.phase).toBe('MAP_FINALIZING');
+    f.advance(1);
+    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.state.abortReason).toBe('MEDIA_UNAVAILABLE');
+    expect(f.room.blockedReason).toBe('MAP_FINALIZING_TIMEOUT');
+    expect(f.room.state.rematchState).toBe('settling');
+    expect(f.room.pendingRetirements.size).toBe(6);
+    expect(f.room.mediaScopeFor(f.players[0]!.session.playerId, 'game')).toBeNull();
+    const leaving = f.players[5]!;
+    f.room.onLeave(leaving.client);
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBe('RETIRING');
+    f.room.onCommand(f.players[0]!.client, {
+      matchId: previous,
+      requestId: randomUUID(),
+      sequence: 3,
+      type: 'REMATCH',
+      payload: { mode: 'lobby' },
+    });
+    f.room.tick();
+    expect(f.room.state.rematchState).toBe('requested');
+    f.advance(270_000);
+    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.matchId).toBe(previous);
+    expect(f.slots.occupied('ABCDEF')).toBe(6);
+    expect(f.slots.reserve('ABCDEF', 'replacement', 300_050)).toBe('ROOM_CLOSED');
+    for (const scope of f.retirementRequests)
+      f.room.enqueueMediaControl({
+        type: 'MEDIA_RETIRED',
+        result: { ...scope, status: 'confirmed', code: null },
+      });
+    f.room.tick();
+    expect(f.room.matchId).not.toBe(previous);
+    expect(f.room.phase).toBe('LOBBY');
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBeNull();
+    expect(f.room.pendingRetirements.size).toBe(0);
+    for (const scope of f.retirementRequests)
+      f.room.enqueueMediaControl({
+        type: 'MEDIA_RETIRED',
+        result: { ...scope, status: 'unknown', code: 'TIMEOUT' },
+      });
+    f.room.tick();
+    expect(f.room.pendingRetirements.size).toBe(0);
+    expect(f.room.phase).toBe('LOBBY');
+  } finally {
+    f.close();
+  }
+});
+
+it.each([29_999, 30_000])(
+  'applies the map deadline deterministically when retirement settles at %i ms',
+  async (elapsed) => {
+    const f = await pendingFinalization();
+    try {
+      f.room.finalizing = Promise.resolve();
+      f.room.pendingLayout = {
+        status: 'selected',
+        layout: layoutFor([...f.room.roles].map(([playerId, role]: any) => ({ playerId, role }))),
+      };
+      for (const scope of f.retirementRequests)
+        f.room.enqueueMediaControl({
+          type: 'MEDIA_RETIRED',
+          result: { ...scope, status: 'confirmed', code: null },
+        });
+      f.advance(elapsed);
+      if (elapsed < 30_000) {
+        expect(f.room.phase).toBe('GAME_LOADING');
+        expect(f.room.gameInstance()).not.toBeNull();
+      } else {
+        expect(f.room.phase).toBe('ABORTED');
+        expect(f.room.gameInstance()).toBeNull();
+        expect(f.room.state.rematchState).toBe('available');
+      }
+      expect(f.room.pendingRetirements.size).toBe(0);
+    } finally {
+      f.close();
+    }
+  },
+);
+
+it('fails current pending retirement errors after practice detaches, ignoring foreign and stale scopes', async () => {
+  const f = await pendingFinalization();
+  try {
+    const scope = f.retirementRequests[0];
+    const failure = {
+      ...scope,
+      type: 'MEDIA_FAILED',
+      eventId: randomUUID(),
+      code: 'POLICY_UNKNOWN',
+    };
+    f.room.enqueueMediaControl({ ...failure, matchId: 'old-match' });
+    f.room.enqueueMediaControl({ ...failure, receiverGeneration: 100 });
+    f.room.tick();
+    expect(f.room.phase).toBe('MAP_FINALIZING');
+    f.room.enqueueMediaControl(failure);
+    f.room.tick();
+    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.state.abortReason).toBe('MEDIA_POLICY_UNCERTAIN');
+    expect(f.room.pendingRetirements.size).toBe(6);
+  } finally {
+    f.close();
+  }
+});
+
+it('invalidates a slow layout result at the deadline without creating a game after abort', async () => {
+  let complete!: (value: any) => void;
+  const f = fixture(undefined, undefined, {
+    loader: {
+      prepare: () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    },
+  });
+  try {
+    f.room.endPractice('to-map-finalizing');
+    f.room.tick();
+    expect(complete).toBeTypeOf('function');
+    f.advance(30_000);
+    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.blockedReason).toBe('MAP_FINALIZING_TIMEOUT');
+    complete({
+      status: 'selected',
+      layout: {
+        layout: layoutFor([...f.room.roles].map(([playerId, role]: any) => ({ playerId, role }))),
+      },
+    });
+    await f.flush();
+    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.gameInstance()).toBeNull();
+    expect(f.room.pendingLayout).toBeNull();
+  } finally {
+    f.close();
+  }
+});
 
 it('keeps media ownership throughout ordinary ticks and releases it only on disposal', () => {
   const f = fixture();
