@@ -8,9 +8,51 @@
 
 ## 2026-09-13 구현 재개
 
+### 미세 시각 보정 — 216 MR 생성, 21:54 KST
+
+- [S15P21C204-216](https://ssafy.atlassian.net/browse/S15P21C204-216),
+  `fix/S15P21C204-216-runtime-clock-jitter`, 소스 `5653bec5` 커밋·푸시 및
+  [MR !143](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/143) 생성.
+- 마지막 수락 시각을 기준으로 최대 5ms의 보정을 흡수한다. 단일/누적 6ms 역행,
+  실제 만료·stale·파일 변경·단조시간 lease 차단은 유지한다. 이전 구현에서 새 회귀
+  3개가 실패함을 확인하고, 수정 후 해당 파일 41개와 전체 259파일 2,697개·22 E2E,
+  포맷·계약 33개·도구 11개·lint·타입·빌드·실제 Worker/자산 검사를 통과했다.
+  문서 2개의 파일 링크 3개도 확인했다. 원격 CI·병합·배포는 후속 확인이다.
+- 입장 503 사례의 상세 원인은 별개로 미확정이다.
+  [허용 폭과 검증 범위](runtime-clock-correction.md)를 따른다.
+
+### 215 서버 제어 조립 병합 — 21:47 KST
+
+- [MR !142](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/142),
+  최종 소스 `c83102be`의 Jenkins MR122/GitLab191794 SUCCESS,
+  259파일 2,690개·22 E2E(2.0분)·이미지 PASS.
+  21:47:41 develop `3c000b53167e5c78f6b8b8d044c657e50b5a20ff` 병합 및
+  소스 브랜치 삭제 확인. 배포113 SUCCESS, 기존 팀 모드 실제 Cloud DP-06 PASS(69.25초).
+  21:58:29 READY/OPEN·미해결 0·last-good·게임/웹 동일 SHA·팀 SSO 유지 확인.
+
+### 방 생성 전 회수 Cloud 진단 — 215 진행 중
+
+- `test/S15P21C204-215-unjoined-cloud-revocation`, !142 병합 `3c000b53` 및
+  !143 소스 `5653bec5` 동기화.
+  [MC-PUBLIC-03](unjoined-media-revocation.md)은 실제 세대/소유 생산자의3방4대상과
+  진단용 최소 JWT를 사용해 방 생성 전 회수 ACK·부재·SDK 거절, 새 신원 정상 접속,
+  생성·삭제·재생성 후 cutoff 유지와 실제 목록 조회 응답을 확인하도록 구현했다.
+- 아직 실제 Cloud 실행 전이다. 전체 검사와 새 관측을 확인한 뒤 기록하며,
+  제품 발급/조립부에 시험용 capability를 주입하거나 공개 상태를 승격하지 않는다.
+- 집중 2파일 44개와 QA 타입·변경 lint를 통과했다. 첫 전체 검사는 제품 통합에서
+  CLOCK_ROLLBACK 5ms로 실패했으며 결과를 보존했다. 216 수정 반영 후
+  전체 260파일 2,708개·22 E2E(57.9초), 포맷·계약·lint·타입·빌드·Worker/자산 PASS.
+  후속 코드 검토에서 Cloud 전용 페이지 경로와 재생성 목록 확인을 보강했다.
+  최종 QA 타입·포맷·lint 및 문서 3개의 파일 링크 90개 PASS.
+  외부 요청을 막은 로컬 브라우저 검사에서 이전 경로 404, 수정 경로 200과 SDK 초기화를
+  확인했다. 외부 요청·Cloud 실행·미디어 캡처는 0이며 실제 Cloud 결과는 별도로 확인한다.
+
 ### 분리 미디어의 서버 제어 조립 — 215 진행 중
 
 - `feat/S15P21C204-215-split-media-policy`, 선행 !141 병합 `0e50ad3b` 동기화.
+- 소스 `799f8087603085f9fb67b0de20747d5acc961559` 커밋·푸시,
+  [MR !142](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/142)와
+  Jenkins MR121의 원격 CI를 확인 중이다.
 - MediaCoordinator의 split 선택, 가청 정책 forward/remove, 원본/수신 SID 대조,
   두 연결의 복구, 전체 자원 상한과 공유 방 삭제를 연결했다. 원본 회수 후 늦은 전달의
   정리를 확인해야 REVOKED를 기록하며 transport-unknown은 예약/입장을 막는다.
@@ -23,7 +65,8 @@
   [구현 경로와 미검증 경계](split-media-policy.md)를 따른다.
 - 소스799f8087의 Jenkins MR121은6인 시험의 누락된 얼굴 가입 통지 때문에 실패했다.
   게시 전 최초 부재 조회를 고정해 구 fixture의12/72 실패를 재현하고 두 서명 통지를
-  모두 전송하도록 수정했다. 관련2파일21개·QA 타입·변경 lint PASS, 원격 전체 재검증 중이다.
+  모두 전송하도록 수정했다. 관련2파일21개·QA 타입·변경 lint PASS.
+  최종 원격 전체 검증과 병합은 위 21:47 기록에서 확인했다.
 
 ### 215 발급·예약 기반 병합·배포 — 20:50 KST
 
