@@ -56,7 +56,33 @@ MC-PUBLIC-02는 두 브라우저에서 실제 제품 어댑터로 네 SDK 연결
 한정된 진단 시나리오가 수행한다. 제품 서버 생산자까지 연결한 시험으로 확대 해석하지 않는다.
 첫 단계의 `pnpm verify`는254파일·2,614개·22 E2E(58.5초), 포맷·계약33/도구11·
 lint·루트 타입·빌드·실제 Worker/자산 검사를 통과했다. 앞선 lint의 시험용 미사용 변수2개는
-제거했다. 현재 소스의 실제 Cloud·CI·MR·배포 결과는 확인 후 기록한다.
+제거했다.
+
+2026-09-13 19:20:30–19:20:56 KST, 깨끗한 소스
+`8e11d0b1db5891d915eb6081f2a3e957650579b4`로 실제 MC-PUBLIC-02를 통과했다.
+`product-split-adapter`의 두 페이지/네 SDK 연결, 합성 Canvas/오실레이터를 사용했다.
+시험23,967ms/exit0, 정상15·정리16호출, 위 열 조건 모두 true다.
+얼굴/음성/재허용 음성의 원본·전달본 SID가 같은 것으로 관측됐고 최종 참가자·방 부재를 확인했다.
+허용 약267ms·재허용263ms·차단과2초 안정 구간 확인2,359ms다. G1의1초 차단 인수는 아니다.
+`splitTransportVerified=true`, `productPublicReady=false`, `promotionAllowed=false`다.
+
+호스트 격리 checkout `split-runtime-215a-20260913-8e11d0b1` 아래
+`.local/qa/split-media-1789294830288`에 증거를 보존했다.
+namespace는 `qa-public-20260913-e4d77cb1`이며 운영 게임 자원을 사용하지 않았다.
+19:14 KST에 Build 포함5,000분 중313분·50GB 중약1GB 사용, 동시100참가자·
+API10,000/분을 확인했다.3방/8참가자·50분/400MB·정상40/정리30호출 상한을 유지했다.
+
+| 증거                      | SHA-256                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| pnpm-lock.yaml            | `469b418cc3a6d656d9f5ea61292d3e7801b5b7bcfc89af3bec29580342944fdf` |
+| preflight.json            | `37e8214390e87649ffb6c73713049542482e2cc7436a0fca0d9c2526d56f18bc` |
+| devices.json              | `1b2be368e2e7c8b05fd5689200ab05d792e125c87d33f6034f80d46c9e66c95e` |
+| run-summary.json          | `667d672d85a8140bf58939446d907373d5fa76f3e19b6aa5e8268cfa98c5f953` |
+| split-media-evidence.json | `48a48717a63c90dfa3f5762f78eac60cfbc95c77b9af8af9a5e7c26b019972d9` |
+
+이 결과는 제품 웹의 전송 소비자를 사용하지만 발급·전달·정리 생산자는 진단 실행기다.
+제품 서버 수명·실장치·전체 G1·부하의 통과로 계산하지 않는다. 후속 문서 커밋은 위 소스와
+앱 코드가 같으며 CI·MR·배포 결과는 각각 확인 후 [구현 기록](mvp-implementation-progress.md)에 기록한다.
 
 ## 다음 구현 경계
 
