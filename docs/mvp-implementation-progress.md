@@ -8,7 +8,7 @@
 
 ## 2026-09-13 구현 재개
 
-### 재개 후 구현 — 196·199
+### 재개 후 구현 — 196·198·199·200
 
 - 197 문서 MR [!126](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/126)은
   `9b641663`으로 병합, Jira 완료. 소스 `978d397c`의 Jenkins MR #102/GitLab #191322 통과:
@@ -34,6 +34,14 @@
   `fix/S15P21C204-198-map-finalizing-timeout`에서 30초 맵 준비 상한·회수 장벽 보존을 구현 중이다.
   실제 room/세션/좌석/만료 코드와 fake core/Cloud 경계 회귀27개 및 lint·타입 통과,
   로컬 커밋 `b020711`. 제품 Cloud 인수는 아니다.
+- [200](https://ssafy.atlassian.net/browse/S15P21C204-200) K07은
+  `fix/S15P21C204-200-configured-budget-alert`, 커밋 `42d6933`에서 구현했다.
+  ApiBudget과 같은 total 설정의 90%에 경보를 연결했다(180→162, 기본900→810).
+  임계 직전/도달/복구·잘못된 상한·실제 서버 샘플러 연결51개 및 lint·타입 통과.
+  실제 외부 경보 전달·수신 인수는 별도로 남는다.
+- 196·199와 198·200을 `feat/S15P21C204-196-host-controls`에 충돌 없이 통합했다.
+  네 스토리를 한 MR로 묶어 최종 `pnpm verify`·동일 소스 원격 CI 뒤 병합한다.
+  실제 Cloud/6대/10방/복원·공개 전환 인수를 완료로 계산하지 않는다.
 
 ### 재개 기준을 기록한 당시 내용
 
