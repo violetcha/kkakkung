@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createReadinessRuntime, type ReadinessRuntime } from '../health/ReadinessRuntime.js';
 import { ApiBudget } from '../operations/ApiBudget.js';
+import { DurableRetention } from '../operations/DurableRetention.js';
 import { CheckpointStore } from '../operations/CheckpointStore.js';
 import { OperationJournal } from '../operations/OperationJournal.js';
 import { OperationsAudit } from '../operations/OperationsAudit.js';
@@ -82,6 +83,7 @@ class Coordinator implements MediaCoordinatorRuntime {
   private readonly audit: OperationsAudit;
   private readonly runtime: ReadinessRuntime;
   private readonly currentCleanup: RevocationRetryBindings;
+  private readonly durableRetention: DurableRetention;
   private readonly recovery: ReturnType<typeof createRecoveryBootstrap>;
   private readonly policy: MediaPolicyBindings;
   private readonly transition: GenerationTransition;
@@ -297,6 +299,30 @@ class Coordinator implements MediaCoordinatorRuntime {
               ['PREPARED', 'REVOKING', 'REVOKED'].includes(g.state),
           )
           .map(([g]) => g),
+    });
+    this.durableRetention = new DurableRetention({
+      journal: this.journal,
+      usageBudget,
+      retryCheckpoint,
+      owners: [this.currentCleanup, recoveryCleanup],
+      now: nowEpochMs,
+      monotonicNow: deps.monotonicNow,
+      canStart: () => {
+        const activity = deps.getGameActivity();
+        return (
+          this.isInitialized() &&
+          this.getReadiness().state === 'READY' &&
+          activity.activeMatches === 0 &&
+          activity.activePractices === 0 &&
+          activity.pendingAdmissions === 0 &&
+          this.retirements.size === 0 &&
+          this.roomCleanups.size === 0
+        );
+      },
+      ownershipConfirmed: () => services.namespaceOwnershipConfirmed?.() === true,
+      onFailure: () => {
+        if (!this.closed) this.runtime.lock('JOURNAL_WRITE_FAILED');
+      },
     });
     this.policy = new MediaPolicyBindings({
       registry: this.registry,
@@ -649,6 +675,8 @@ class Coordinator implements MediaCoordinatorRuntime {
       }
       // Polling health cannot automatically restore OPEN after an actual lost prerequisite.
       this.getReadiness();
+      // Do not hold media policy renewal behind disk compaction. close() drains this writer first.
+      void this.durableRetention.run().catch(() => {});
     })()
       .catch(() => {
         this.runtime.lock('READINESS_UNCONFIRMED');
@@ -670,8 +698,10 @@ class Coordinator implements MediaCoordinatorRuntime {
       .all()
       .filter((g) => g.state !== 'REVOKED')
       .map((g) => this.rawRetire(this.retirement(g, 'shutdown')));
-    const runtime = this.runtime.close();
+    const retention = this.durableRetention.close();
     this.closing = (async () => {
+      const retentionResult = await Promise.allSettled([retention]);
+      const runtime = this.runtime.close();
       const pending = await Promise.allSettled([
         runtime,
         ...retirements,
@@ -682,7 +712,11 @@ class Coordinator implements MediaCoordinatorRuntime {
       const recovery = await Promise.allSettled([this.recovery.close()]); // Drain journal even on failure.
       this.apiBudget.close();
       this.registry.close();
-      if ([...pending, ...cleanup, ...recovery].some((result) => result.status === 'rejected'))
+      if (
+        [...retentionResult, ...pending, ...cleanup, ...recovery].some(
+          (result) => result.status === 'rejected',
+        )
+      )
         throw new Error('MEDIA_CLOSE_FAILED');
     })();
     return this.closing;

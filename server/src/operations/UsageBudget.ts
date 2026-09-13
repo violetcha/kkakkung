@@ -3,6 +3,12 @@ import type { OfficialBudgetCheckpoint } from '../media/types.js';
 import { checksum, safeIdentifier } from './CheckpointStore.js';
 import { usageReservationEpoch } from './UsageReservationId.js';
 import {
+  belongsToReservation,
+  releasedGroupIsOld,
+  reservationGroup,
+  RETENTION_MS,
+} from './DurableRetentionPlan.js';
+import {
   UsageCheckpoint,
   validateOfficialBudget,
   validateUsageRequest,
@@ -120,10 +126,23 @@ export class UsageBudget {
           ? { status: 'duplicate', reservation: structuredClone(existing) }
           : { status: 'rejected', code: 'UNRESOLVED_RETIREMENT' };
       if (this.state.compacted) {
+        const parent = this.state.reservations.find(
+          (r) =>
+            r.request.reservationId !== request.reservationId &&
+            belongsToReservation(request.reservationId, r.request.reservationId),
+        );
+        if (parent && parent.request.matchId !== request.matchId)
+          return { status: 'rejected', code: 'ID_CONFLICT' };
+        if (parent && parent.status !== 'ACTIVE')
+          return { status: 'rejected', code: 'UNRESOLVED_RETIREMENT' };
         const issuedAt = usageReservationEpoch(request.reservationId);
         if (this.isRetiredReservation(request.reservationId))
           return { status: 'rejected', code: 'UNRESOLVED_RETIREMENT' };
-        if (issuedAt === null || issuedAt > this.options.now())
+        const liveParent = parent?.status === 'ACTIVE';
+        if (
+          (!liveParent && issuedAt === null) ||
+          (issuedAt !== null && issuedAt > this.options.now())
+        )
           return { status: 'rejected', code: 'INVALID_REQUEST' };
       }
       const current = this.snapshot();
@@ -177,12 +196,64 @@ export class UsageBudget {
     if (
       !this.state.compacted ||
       this.state.reservations.some(
-        (reservation) => reservation.request.reservationId === reservationId,
+        (reservation) =>
+          reservation.request.reservationId === reservationId ||
+          (reservation.status === 'ACTIVE' &&
+            belongsToReservation(reservationId, reservation.request.reservationId)),
       )
     )
       return false;
     const issuedAt = usageReservationEpoch(reservationId);
     return issuedAt === null || issuedAt <= this.state.compacted.retiredThroughEpochMs;
+  }
+
+  /** Called only after journal and both retry owners have durably removed these roots. */
+  compactReleased(
+    plan: ReadonlyMap<string, string>,
+    now: number,
+    beforeCommit: () => boolean,
+  ): Promise<number> {
+    const captured = new Map(plan);
+    return this.serialize(async () => {
+      const snapshot = this.readSnapshot();
+      if (
+        snapshot.integrity !== 'ok' ||
+        !snapshot.writable ||
+        !beforeCommit() ||
+        !Number.isSafeInteger(now) ||
+        now < RETENTION_MS ||
+        this.options.now() < now ||
+        (this.state.compacted && now < this.state.compacted.compactedAtEpochMs)
+      )
+        throw new Error('RETENTION_USAGE_UNCONFIRMED');
+      if (captured.size === 0) return 0;
+      const removed: UsageReservation[] = [];
+      for (const [root, fingerprint] of captured) {
+        const group = reservationGroup(this.state.reservations, root);
+        if (!releasedGroupIsOld(group, root, now) || checksum(group) !== fingerprint)
+          throw new Error('RETENTION_USAGE_CHANGED');
+        removed.push(...group);
+      }
+      const ids = new Set(removed.map((r) => r.request.reservationId));
+      if (ids.size !== removed.length) throw new Error('RETENTION_GROUP_OVERLAP');
+      const prior = this.state.compacted;
+      const next: UsageState = {
+        ...this.state,
+        reservations: this.state.reservations.filter((r) => !ids.has(r.request.reservationId)),
+        compacted: {
+          version: 1,
+          retiredThroughEpochMs: Math.max(prior?.retiredThroughEpochMs ?? 0, now - RETENTION_MS),
+          compactedAtEpochMs: now,
+          reservationCount: (prior?.reservationCount ?? 0) + removed.length,
+          minutes: removed.reduce((sum, r) => sum + r.minutes, prior?.minutes ?? 0),
+          bytes: removed.reduce((sum, r) => sum + r.bytes, prior?.bytes ?? 0),
+        },
+      };
+      if (!beforeCommit() || !(await this.persist(next)))
+        throw new Error('RETENTION_USAGE_WRITE_FAILED');
+      if (!beforeCommit()) throw new Error('RETENTION_OWNERSHIP_LOST');
+      return removed.length;
+    });
   }
 
   markRetiring(reservationId: string): Promise<boolean> {

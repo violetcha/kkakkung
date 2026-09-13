@@ -249,6 +249,53 @@ export class RecoveryCleanupBindings {
     return this.lastReport ? structuredClone(this.lastReport) : null;
   }
 
+  canPruneConfirmed(roots: ReadonlySet<string>): boolean {
+    return (
+      this.canDispatch() &&
+      this.activeSweep === null &&
+      this.historyComplete &&
+      this.lastReport?.historyComplete === true &&
+      this.lastReport.unresolved === 0 &&
+      this.lastReport.ownedRoomsRemaining === 0 &&
+      this.observed.size === 0 &&
+      this.retries.canPruneConfirmed(roots) &&
+      [...this.intents.values()].every(
+        (intent) => !roots.has(intent.reservationId) || intent.status === 'REVOKED',
+      ) &&
+      [...this.records.values()].every(
+        ({ record }) =>
+          !record.reservationId || !roots.has(record.reservationId) || record.state === 'REVOKED',
+      )
+    );
+  }
+
+  pruneConfirmed(roots: ReadonlySet<string>, beforeCommit: () => boolean): Promise<void> {
+    const captured = new Set(roots);
+    return this.serialize(async () => {
+      if (!beforeCommit() || !this.canPruneConfirmed(captured))
+        throw new Error('RETENTION_RECOVERY_BUSY');
+      this.retries.pruneConfirmed(captured);
+      for (const [id, intent] of this.intents) {
+        if (!captured.has(intent.reservationId)) continue;
+        this.intents.delete(id);
+        this.intentRecords.delete(id);
+      }
+      for (const [id, { record }] of this.records) {
+        if (record.reservationId && captured.has(record.reservationId)) this.records.delete(id);
+      }
+      if (this.input)
+        this.input = {
+          ...this.input,
+          records: this.input.records.filter(
+            ({ record }) => !record.reservationId || !captured.has(record.reservationId),
+          ),
+          retryIntents: this.input.retryIntents.filter(
+            (intent) => !captured.has(intent.reservationId),
+          ),
+        };
+    });
+  }
+
   /** Only retry an unresolved observation of this process's verified retired history. */
   canRetryObservation(): boolean {
     return (

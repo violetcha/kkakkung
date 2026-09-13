@@ -74,6 +74,32 @@ function manualTimers() {
 }
 
 describe('bounded revocation retry and durable retention', () => {
+  it('keeps a durably revoked entry while confirmation is still running, then prunes without a timer', async () => {
+    const confirmation = deferred<void>();
+    const release = deferred<void>();
+    const f = setup(async () => ({ status: 'confirmed' }), {
+      onConfirmed: async () => {
+        confirmation.resolve();
+        await release.promise;
+      },
+    });
+    await f.retries.begin(input);
+    vi.setSystemTime(101_000);
+    const result = f.retries.retryNow(input.retirementId);
+    await confirmation.promise;
+    const roots = new Set([input.reservationId]);
+    expect(f.retries.snapshot()[0]?.status).toBe('REVOKED');
+    expect(f.retries.canPruneConfirmed(roots)).toBe(false);
+    expect(() => f.retries.pruneConfirmed(roots)).toThrow('RETENTION_RETRY_BUSY');
+    release.resolve();
+    await result;
+    expect(f.retries.canPruneConfirmed(roots)).toBe(true);
+    f.retries.pruneConfirmed(roots);
+    await vi.advanceTimersByTimeAsync(86_400_000);
+    expect(f.retries.snapshot()).toEqual([]);
+    expect(f.attempts).toHaveLength(1);
+    await f.retries.close();
+  });
   it('persists the initial unknown provider wait before any timer and preserves it across boot', async () => {
     const first = setup();
     await first.retries.begin({ ...input, providerWaitUnknown: true });

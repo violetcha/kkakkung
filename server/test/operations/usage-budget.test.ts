@@ -9,6 +9,7 @@ import {
   validateUsageState,
 } from '../../src/operations/UsageCheckpoint.js';
 import { createUsageReservationId } from '../../src/operations/UsageReservationId.js';
+import { planDurableRetention, RETENTION_MS } from '../../src/operations/DurableRetentionPlan.js';
 import type { UsageRequest } from '../../src/operations/UsageCheckpoint.js';
 
 const directories: string[] = [];
@@ -72,6 +73,44 @@ afterEach(async () => {
 });
 
 describe('durable usage reservations', () => {
+  it('preserves extensions of an old live lease while refusing a retired or foreign parent', async () => {
+    const f = await setup(false, true);
+    await f.budget.reserve(request);
+    const retired = { ...request, reservationId: createUsageReservationId(1000) };
+    await f.budget.reserve(retired);
+    await f.budget.markRetiring(retired.reservationId);
+    await f.budget.markRemoteConfirmed(retired.reservationId);
+    const now = 1000 + RETENTION_MS;
+    f.setNow(now);
+    const plan = planDurableRetention({
+      reservations: f.budget.snapshot().reservations,
+      records: [],
+      intents: [],
+      now,
+    });
+    expect(await f.budget.compactReleased(plan, now, () => true)).toBe(1);
+    expect(
+      (await f.budget.reserve({ ...request, reservationId: `${request.reservationId}:1` })).status,
+    ).toBe('reserved');
+    expect(
+      await f.budget.reserve({
+        ...request,
+        matchId: 'another-match',
+        reservationId: `${request.reservationId}:2`,
+      }),
+    ).toMatchObject({ code: 'ID_CONFLICT' });
+    await f.budget.markRetiring(request.reservationId);
+    await f.budget.markRemoteConfirmed(request.reservationId);
+    expect(
+      await f.budget.reserve({ ...request, reservationId: `${request.reservationId}:2` }),
+    ).toMatchObject({ code: 'UNRESOLVED_RETIREMENT' });
+    expect(await f.budget.reserve(retired)).toMatchObject({ code: 'UNRESOLVED_RETIREMENT' });
+    expect(f.budget.snapshot()).toMatchObject({
+      compacted: { reservationCount: 1 },
+      activeMinutes: 36,
+      localEstimatedMinutes: 108,
+    });
+  });
   it.each([false, true])(
     'reads an aggregate, rejects retired requests, and preserves live idempotence and totals (quota=%s)',
     async (providerQuota) => {

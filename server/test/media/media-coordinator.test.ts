@@ -279,6 +279,29 @@ it('continuous operation forgets completed matches only after revocation, accoun
     f.coordinator.observeFrame(game(1, { matchId, frameRevision: 999 }));
     expect(f.coordinator.inspectRetention().frames).toBe(0);
   }
+  const usageFile = path.join(f.dir, 'usage-checkpoint.json');
+  const before = JSON.parse(await fs.readFile(usageFile, 'utf8'));
+  expect(before.state.reservations).toHaveLength(6);
+  f.clock.offset += 86_400_001;
+  await f.coordinator.reconcile();
+  await vi.waitFor(
+    async () => {
+      const saved = JSON.parse(await fs.readFile(usageFile, 'utf8'));
+      expect(saved.state.reservations).toHaveLength(0);
+      expect(saved.state.compacted.reservationCount).toBe(6);
+    },
+    { timeout: 6000, interval: 20 },
+  );
+  expect(f.coordinator.getReadiness().state).toBe('READY');
+  alive(f, game(1, { matchId: 'after-durable-retention' }));
+  expect(
+    (
+      await prepare(
+        f,
+        request('p1', { matchId: 'after-durable-retention', requestId: 'post-retention' }),
+      )
+    ).status,
+  ).toBe('ready');
 }, 60_000);
 
 it('attested usage awaiting reconciliation keeps its revoked generation after expiry', async () => {
