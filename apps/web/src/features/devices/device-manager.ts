@@ -55,6 +55,7 @@ export type DeviceManagerDeps = Readonly<{
 
 export interface DeviceManager {
   start(input: { microphone: boolean }): Promise<DeviceStatus>;
+  unlockAudio(): Promise<DeviceStatus>;
   getStatus(): DeviceStatus;
   getCameraStream(): MediaStream | null;
   getMicrophoneTrack(): MediaStreamTrack | null;
@@ -337,6 +338,10 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       return status;
     },
 
+    async unlockAudio() {
+      if (!disposed) await unlockAudio();
+      return status;
+    },
     getStatus: () => status,
     getCameraStream: () => camera?.stream ?? null,
     getMicrophoneTrack: () => microphone,

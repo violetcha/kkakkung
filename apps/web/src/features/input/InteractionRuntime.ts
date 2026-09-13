@@ -52,6 +52,19 @@ import {
 } from '../media/audio-graph';
 import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
 import { createEffectBuffer } from '../media/effect-buffer';
+import { createAudioDiagnostics } from '../media/audio-diagnostics';
+import {
+  DEFAULT_AUDIO_PREFERENCES,
+  normalizeAudioPreferences,
+  type AudioPreferences,
+  type LocalAudioStatus,
+  type TestToneResult,
+} from '../media/audio-preferences';
+export type {
+  AudioPreferences,
+  LocalAudioStatus,
+  TestToneResult,
+} from '../media/audio-preferences';
 import {
   createMediaLifecycle,
   type MediaLifecycle,
@@ -231,6 +244,9 @@ export interface InteractionRuntime {
   removeRemoteTrack(trackSid: string): void;
   /** D-16. COUNTDOWN 등에서 출력을 잠근다. */
   setAudioOutputLock(lock: OutputLock): void;
+  setAudioPreferences(preferences: AudioPreferences): void;
+  getLocalAudioStatus(): LocalAudioStatus;
+  playTestTone(): Promise<TestToneResult>;
   endParticipation(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -393,6 +409,7 @@ export type KeyboardTarget = Readonly<{
 function browserAudio(): (AudioGraphEnvironment & AudioUnlockPort) | null {
   if (typeof AudioContext === 'undefined') return null;
   const context = new AudioContext();
+  const diagnostics = createAudioDiagnostics(context);
   const effectBuffers = new Map<
     Parameters<AudioGraphEnvironment['createEffectSource']>[0],
     AudioBuffer
@@ -411,8 +428,10 @@ function browserAudio(): (AudioGraphEnvironment & AudioUnlockPort) | null {
     get state() {
       return context.state;
     },
+    diagnostics,
     resume: () => context.resume(),
     close: async () => {
+      diagnostics.dispose();
       master.disconnect();
       effectBuffers.clear();
       await context.close();
@@ -548,6 +567,26 @@ export const createInteractionRuntime = (
   let audioGraph: AudioGraph | null = null;
   let sharedAudio: (AudioGraphEnvironment & AudioUnlockPort) | null = null;
   let audioOutputLock: OutputLock = 'locked';
+  let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
+  const localAudio = () => (options.audio ?? sharedAudio)?.diagnostics;
+  const canMonitorAudio = () => {
+    const current = context.get();
+    return (
+      !disposed &&
+      lifecycle.canOperate() &&
+      current?.pageActive === true &&
+      current.status === 'ACTIVE' &&
+      !['RESULT', 'ABORTED'].includes(current.phase)
+    );
+  };
+  const canTestAudio = () => {
+    const current = context.get();
+    return (
+      canMonitorAudio() &&
+      current !== null &&
+      ['DEVICE_CHECK', 'TEAM_PRACTICE'].includes(current.phase)
+    );
+  };
 
   const ensureAudio = (): AudioGraph | null => {
     if (audioGraph) return audioGraph;
@@ -561,6 +600,7 @@ export const createInteractionRuntime = (
         options.getAudioTrack?.(trackSid) ?? liveKit?.getAudioTrack(trackSid) ?? null,
     });
     audioGraph.setOutputLock(audioOutputLock);
+    audioGraph.setPreferences(audioPreferences);
     return audioGraph;
   };
 
@@ -1071,6 +1111,7 @@ export const createInteractionRuntime = (
         patch({ vision: 'idle', calibration: 'idle' });
       },
       onMicrophoneTrack: (track) => {
+        localAudio()?.microphoneLevel(canMonitorAudio() ? track : null);
         if (track) return;
         fallback.reportMicrophoneOnly();
         void publisher?.stopMicrophone().catch(() => {
@@ -1182,6 +1223,8 @@ export const createInteractionRuntime = (
       if (disposed) return;
       const previous = context.get();
       const change = context.set(next);
+      if (!canTestAudio()) localAudio()?.stopTestTone();
+      if (!canMonitorAudio()) localAudio()?.microphoneLevel(null);
       if (
         change.shouldClearHolds ||
         previous?.phase !== next.phase ||
@@ -1230,6 +1273,30 @@ export const createInteractionRuntime = (
       if (disposed) return;
       audioOutputLock = lock;
       audioGraph?.setOutputLock(lock);
+    },
+    setAudioPreferences(next) {
+      if (disposed) return;
+      audioPreferences = normalizeAudioPreferences(next);
+      audioGraph?.setPreferences(audioPreferences);
+      localAudio()?.setTestToneVolume(audioPreferences.muted ? 0 : audioPreferences.volume);
+    },
+    getLocalAudioStatus() {
+      return {
+        preferences: audioPreferences,
+        microphoneLevel:
+          localAudio()?.microphoneLevel(
+            canMonitorAudio() ? (devices?.getMicrophoneTrack() ?? null) : null,
+          ) ?? null,
+        testTonePlaying: !disposed && (localAudio()?.testTonePlaying ?? false),
+      };
+    },
+    async playTestTone() {
+      if (!canTestAudio()) return 'unavailable';
+      if (audioPreferences.muted || audioPreferences.volume === 0) return 'muted';
+      await ensureDevices().unlockAudio();
+      if (!canTestAudio() || lastStatus.audioPlayback !== 'ready') return 'unavailable';
+      if (audioPreferences.muted || audioPreferences.volume === 0) return 'muted';
+      return localAudio()?.playTestTone(audioPreferences.volume) ? 'played' : 'unavailable';
     },
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */
@@ -1296,6 +1363,7 @@ export const createInteractionRuntime = (
     /** 논리 참가 종료. 입력·Worker·원본 장치까지 닫는다. 게임 Room 수명은 C가 정한다. */
     async endParticipation() {
       await lifecycle.endParticipation();
+      audioPreferences = DEFAULT_AUDIO_PREFERENCES;
       runtimeGeneration += 1;
     },
 
@@ -1311,6 +1379,7 @@ export const createInteractionRuntime = (
     async dispose() {
       if (disposed) return;
       disposed = true;
+      audioPreferences = DEFAULT_AUDIO_PREFERENCES;
       await lifecycle.dispose();
       deps.onMediaStatus(IDLE_MEDIA_STATUS);
       await media.dispose();

@@ -164,13 +164,64 @@ describe('createAudioGraph', () => {
 
   it('locks the master output on countdown and reopens it later', () => {
     const base = harness();
-    expect(base.masterGain.gainValue).toBe(1);
+    expect(base.masterGain.gainValue).toBe(0.7);
 
     base.graph.setOutputLock('locked');
     expect(base.masterGain.gainValue).toBe(0);
 
     base.graph.setOutputLock('open');
+    expect(base.masterGain.gainValue).toBe(0.7);
+  });
+
+  it('keeps current policy and output locks authoritative when user settings change', () => {
+    const base = harness();
+    base.graph.reconcileVoices([voice()]);
+    base.graph.setPreferences({ volume: 0.4, muted: false, mutedPlayerIds: ['p2'] });
+    expect(base.masterGain.gainValue).toBe(0.4);
+    expect(base.graph.getVoices()[0]!.gain.gainValue).toBe(0);
+    base.graph.reconcileVoices([voice({ gain: 0.15 })]);
+    base.graph.setOutputLock('locked');
+    base.graph.setPreferences({ volume: 0.8, muted: false, mutedPlayerIds: [] });
+    expect(base.masterGain.gainValue).toBe(0);
+    expect(base.graph.getVoices()[0]!.gain.gainValue).toBe(0.15);
+    base.graph.setPreferences({ volume: 0.8, muted: true, mutedPlayerIds: [] });
+    base.graph.setOutputLock('open');
+    expect(base.masterGain.gainValue).toBe(0);
+    base.graph.reconcileVoices([]);
+    base.graph.setPreferences({ volume: 0.4, muted: false, mutedPlayerIds: [] });
+    expect(base.graph.getVoices()).toEqual([]);
+    expect(base.sources).toHaveLength(1);
+  });
+
+  it('applies player mute on track arrival and generation changes without leaking it to another player', () => {
+    const base = harness({ TR_audio_2: null });
+    base.graph.setPreferences({ volume: 0.5, muted: false, mutedPlayerIds: ['p2'] });
+    base.graph.reconcileVoices([voice()]);
+    expect(base.sources).toHaveLength(0);
+    base.arriveTrack('TR_audio_2');
+    base.graph.reconcileVoices([voice()]);
+    expect(base.graph.getVoices()[0]!.gain.gainValue).toBe(0);
+    base.graph.reconcileVoices([voice({ publisherGeneration: 2 })]);
+    expect(base.graph.getVoices()[0]!.gain.gainValue).toBe(0);
+    base.graph.reconcileVoices([voice({ publisherGeneration: 2, playerId: 'p3' })]);
+    expect(base.sources).toHaveLength(3);
+    expect(base.sources[1]!.stopped).toBe(true);
+    expect(base.graph.getVoices()[0]!.gain.gainValue).toBe(0.8);
+  });
+
+  it('clamps user volume and cannot reopen a disposed graph', () => {
+    const base = harness();
+    base.graph.setPreferences({ volume: Infinity, muted: false, mutedPlayerIds: [] });
+    expect(base.masterGain.gainValue).toBe(0);
+    base.graph.setPreferences({ volume: 2, muted: false, mutedPlayerIds: [] });
     expect(base.masterGain.gainValue).toBe(1);
+    base.graph.dispose();
+    base.graph.setOutputLock('locked');
+    base.graph.setOutputLock('open');
+    base.graph.setPreferences({ volume: 1, muted: false, mutedPlayerIds: [] });
+    base.graph.reconcileVoices([voice()]);
+    expect(base.masterGain.gainValue).toBe(0);
+    expect(base.sources).toHaveLength(0);
   });
 
   it('plays an approved effect once per server eventId', () => {

@@ -8,6 +8,7 @@ import {
   type InteractionState,
   type SensorSnapshot,
   type CommandInput,
+  type AudioPreferences,
 } from '../../input/InteractionRuntime';
 import { isSampleFresh } from '../../vision/sensor-types';
 import { INITIAL_DEVICES } from '../flow/device-readiness';
@@ -193,6 +194,11 @@ export function createSoloSession(
     async microphone(enabled: boolean) {
       if (!disposed && pageActive) await bridge!.updateMicrophone(enabled);
     },
+    getLocalAudioStatus: () => bridge!.runtime.getLocalAudioStatus(),
+    setAudioPreferences(value: AudioPreferences) {
+      if (!disposed) bridge!.runtime.setAudioPreferences({ ...value, mutedPlayerIds: [] });
+    },
+    playTestTone: () => bridge!.runtime.playTestTone(),
     setPreviewHost(element: HTMLElement | null) {
       if (!disposed) bridge!.setPreviewHost(element);
     },

@@ -778,3 +778,53 @@ kbd {
     scroll-behavior: auto !important;
   }
 }
+.audio-controls {
+  padding: 0.9rem;
+  border: 1px solid #43615b;
+  border-radius: 0.65rem;
+  background: #101b1b;
+}
+
+.audio-controls summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.audio-controls details > label,
+.audio-controls .microphone-level {
+  display: block;
+  margin-top: 0.8rem;
+}
+
+.audio-controls input[type='range'],
+.audio-controls meter {
+  width: 100%;
+  accent-color: #91d9c5;
+}
+
+.audio-controls .audio-toggle {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.audio-controls input[type='checkbox'] {
+  width: auto;
+  flex: none;
+  padding: 0;
+}
+
+.audio-controls small {
+  display: block;
+  color: #bacac6;
+}
+
+.audio-controls button,
+.audio-controls fieldset {
+  margin-top: 0.8rem;
+}
+
+.audio-controls fieldset {
+  display: grid;
+  gap: 0.5rem;
+}

@@ -228,6 +228,99 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
 }
 
 describe('createInteractionRuntime', () => {
+  it.each(['phase', 'muted', 'disposed'] as const)(
+    'rechecks %s after a delayed audio unlock without acquiring a camera or Cloud connection',
+    async (boundary) => {
+      let release!: () => void;
+      let playing = false;
+      const diagnostics = {
+        playTestTone: vi.fn(() => {
+          playing = true;
+          return true;
+        }),
+        setTestToneVolume: vi.fn(),
+        stopTestTone: vi.fn(() => {
+          playing = false;
+        }),
+        microphoneLevel: vi.fn(() => null),
+        get testTonePlaying() {
+          return playing;
+        },
+        dispose: vi.fn(),
+      };
+      const unlock = {
+        state: 'running',
+        resume: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            }),
+        ),
+        close: vi.fn(async () => {}),
+      };
+      const createAudioUnlock = vi.fn(() => unlock);
+      const getUserMedia = vi.fn(async () => stream(videoTrack()));
+      const audioNode = () => ({ connect() {}, disconnect() {} });
+      const base = harness({
+        environment: {
+          getUserMedia,
+          createAudioUnlock,
+          createPreviewElement: () => {
+            throw new Error('UNEXPECTED_CAMERA_PREVIEW');
+          },
+        },
+        audio: {
+          diagnostics,
+          masterGain: { ...audioNode(), gainValue: 0 },
+          destination: audioNode(),
+          createSourceFromTrack: audioNode,
+          createEffectSource: audioNode,
+          createGain: () => ({ ...audioNode(), gainValue: 0 }),
+          createFilter: () => ({ ...audioNode(), frequency: 0 }),
+          createPanner: () => ({ ...audioNode(), azimuthRad: 0 }),
+        },
+      });
+      const current = {
+        matchId: 'solo-audio',
+        selfPlayerId: 'self',
+        phase: 'DEVICE_CHECK',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'keyboard',
+        pageActive: true,
+      } as const;
+      try {
+        base.runtime.setContext(current);
+        const pending = base.runtime.playTestTone();
+        if (boundary === 'phase') base.runtime.setContext({ ...current, phase: 'COUNTDOWN' });
+        if (boundary === 'muted')
+          base.runtime.setAudioPreferences({ volume: 0.7, muted: true, mutedPlayerIds: [] });
+        if (boundary === 'disposed') await base.runtime.dispose();
+        release();
+        expect(await pending).toBe(boundary === 'muted' ? 'muted' : 'unavailable');
+        expect(diagnostics.playTestTone).not.toHaveBeenCalled();
+        expect(getUserMedia).not.toHaveBeenCalled();
+        expect(base.deps.requestMediaGrant).not.toHaveBeenCalled();
+        if (boundary !== 'disposed') {
+          base.runtime.setContext(current);
+          base.runtime.setAudioPreferences({ volume: 0.4, muted: false, mutedPlayerIds: [] });
+          unlock.resume.mockResolvedValue(undefined);
+          expect(await base.runtime.playTestTone()).toBe('played');
+          expect(createAudioUnlock).toHaveBeenCalledOnce();
+          expect(diagnostics.playTestTone).toHaveBeenCalledWith(0.4);
+          base.runtime.setContext({ ...current, pageActive: false });
+          expect(diagnostics.testTonePlaying).toBe(false);
+          expect(base.runtime.getLocalAudioStatus().microphoneLevel).toBe(null);
+          expect(diagnostics.microphoneLevel).toHaveBeenLastCalledWith(null);
+          expect(await base.runtime.playTestTone()).toBe('unavailable');
+        }
+      } finally {
+        await base.runtime.dispose();
+      }
+      expect(unlock.close).toHaveBeenCalledOnce();
+    },
+  );
+
   it('turns both ways from fresh calibrated face samples and suppresses motion in keyboard mode', async () => {
     const base = harness();
     try {

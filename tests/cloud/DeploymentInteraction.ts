@@ -12,6 +12,10 @@ import type {
   MediaScope,
 } from '../../apps/web/src/features/input/InteractionRuntime';
 import { INITIAL_DEVICES } from '../../apps/web/src/features/game/flow/device-readiness';
+import {
+  DEFAULT_AUDIO_PREFERENCES,
+  normalizeAudioPreferences,
+} from '../../apps/web/src/features/media/audio-preferences';
 
 export interface DeploymentProbeSnapshot {
   connected: boolean;
@@ -56,6 +60,7 @@ export function createDeploymentInteractionFactory(
     let context: InteractionContext | null = null;
     let state: 'live' | 'terminal' | 'closed' = 'live';
     let disposed = false;
+    let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
     let published = false;
     let bindings: MediaBindings | null = null;
     let publications: ReturnType<InteractionRuntime['getPublications']> = [];
@@ -217,6 +222,16 @@ export function createDeploymentInteractionFactory(
       // The Cloud harness supplies synthetic input and checks media policy at the probe.
       setQualityPreset: () => {},
       setAudioOutputLock: () => {},
+      // This harness does not claim device diagnostics or local audio graph acceptance.
+      setAudioPreferences: (value) => {
+        audioPreferences = normalizeAudioPreferences(value);
+      },
+      getLocalAudioStatus: () => ({
+        preferences: audioPreferences,
+        microphoneLevel: null,
+        testTonePlaying: false,
+      }),
+      playTestTone: async () => 'unavailable',
       addRemoteTrack: () => {},
       removeRemoteTrack: () => {},
     };
