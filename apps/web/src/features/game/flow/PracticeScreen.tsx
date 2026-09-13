@@ -25,7 +25,7 @@ export function PracticeScreen({
   const model = practicePresenter(round, view, devices);
   const [kind, setKind] = useState<PoseKind>('left');
   const [progress, setProgress] = useState(0);
-  const scope = model?.scope;
+  const scope = model?.role === 'runner' ? model.scope : undefined;
   useEffect(() => {
     if (!scope) return;
     const hold = createPoseHold();
@@ -55,35 +55,39 @@ export function PracticeScreen({
           ? '3분 안에 도망자 2명이 출구의 포즈 도전에 성공하면 승리합니다.'
           : '도망자 2명을 포획하거나, 3분 동안 도망자 2명의 탈출을 막으면 승리합니다.'}
       </p>
-      <p>
-        몸을 기울여 이동하고 고개를 돌려 방향을 바꾸세요. 가시 아군과 지도를 교환할 수 있습니다.
-      </p>
-      {model.role === 'tagger' && (
+      <p>몸을 기울여 이동하고 고개를 돌려 방향을 바꾸세요.</p>
+      {model.role === 'runner' ? (
+        <p>가까이 보이는 도망자 아군과 지도를 교환하고 출구에서 사용할 포즈를 연습해 보세요.</p>
+      ) : (
         <p>1·2로 장비를 고르고 F를 한 번 눌러 설치하세요. 설치 중 F를 다시 누르면 취소합니다.</p>
       )}
       <p>키보드는 W/S로 전진·후진, A/D를 한 번씩 눌러 90° 회전합니다.</p>
       <p>전원 준비 또는 최대 60초 후 서버가 다음 단계를 정합니다.</p>
-      <label htmlFor="practice-pose">상체 포즈 연습</label>
-      <select
-        id="practice-pose"
-        value={kind}
-        onChange={(event) => {
-          setKind(event.target.value as PoseKind);
-          setProgress(0);
-        }}
-      >
-        {(['left', 'right', 'y'] as const).map((value) => (
-          <option key={value} value={value}>
-            {POSE_LABELS[value]}
-          </option>
-        ))}
-      </select>
-      <progress aria-label="연습 자세 유지" max={1} value={progress} />
-      <p>
-        {progress >= 1
-          ? '1.2초 자세 유지 확인'
-          : '얼굴과 상체를 카메라에 두고 선택한 자세를 유지하세요.'}
-      </p>
+      {model.role === 'runner' && (
+        <>
+          <label htmlFor="practice-pose">출구에서 사용할 상체 포즈 연습</label>
+          <select
+            id="practice-pose"
+            value={kind}
+            onChange={(event) => {
+              setKind(event.target.value as PoseKind);
+              setProgress(0);
+            }}
+          >
+            {(['left', 'right', 'y'] as const).map((value) => (
+              <option key={value} value={value}>
+                {POSE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          <progress aria-label="연습 자세 유지" max={1} value={progress} />
+          <p>
+            {progress >= 1
+              ? '1.2초 자세 유지 확인'
+              : '얼굴과 상체를 카메라에 두고 선택한 자세를 유지하세요.'}
+          </p>
+        </>
+      )}
       <button disabled={!model.canReady || pending || submitted} onClick={onReady}>
         {submitted
           ? '준비 신고 확인 · 서버 전환 대기'
