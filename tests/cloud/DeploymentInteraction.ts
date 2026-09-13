@@ -22,6 +22,8 @@ export interface DeploymentProbeSnapshot {
   localTracks: readonly { sid: string; kind: 'video' | 'audio' }[];
   allowedReceived: Readonly<{ video: number; audio: number }>;
   forbiddenReceived: number;
+  forbiddenByKind?: Readonly<{ video: number; audio: number }>;
+  forbiddenByReason?: Readonly<{ binding: number; audioPolicy: number }>;
 }
 
 export interface DeploymentMediaProbe {

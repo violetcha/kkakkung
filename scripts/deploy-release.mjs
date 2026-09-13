@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { DEFAULT_DEADLINES, runRelease } from './lib/release-sequence.mjs';
 import { prepareDeploymentSmoke } from './lib/deployment-smoke-preflight.mjs';
+import { archiveDeploymentSmoke } from './lib/archive-deployment-smoke.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
@@ -207,6 +208,7 @@ const adapters = {
     return { code: result.status ?? 1 };
   },
   runSmoke(mode) {
+    const startedAt = Date.now();
     const smokeDir = mode === 'cloud' ? cloudSmoke.evidenceDir : resolve(evidenceDir, 'smoke');
     const cmd =
       mode === 'cloud'
@@ -232,7 +234,17 @@ const adapters = {
           SMOKE_BASE_URL: process.env.SMOKE_INTERNAL_BASE_URL,
         },
       });
-      child.on('exit', (code) => resolveCode({ code: code ?? 1 }));
+      child.on('exit', (code) => {
+        if (mode !== 'cloud') return resolveCode({ code: code ?? 1 });
+        const result = archiveDeploymentSmoke({
+          sourceDir: smokeDir,
+          evidenceDir,
+          startedAt,
+          code: code ?? 1,
+        });
+        if (result.archive) log(`smoke attempt archived: ${result.archive}`);
+        resolveCode({ code: result.code });
+      });
       child.on('error', () => resolveCode({ code: 1 }));
     });
   },

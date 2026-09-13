@@ -1,10 +1,18 @@
 // Browser-only synthetic transport probe. Grants stay in memory; no console, trace or capture.
 // Received byte deltas are RTP diagnostics, not proof of rendered/played media or G1 acceptance.
-import { LocalAudioTrack, LocalVideoTrack, Room, Track, setLogLevel } from 'livekit-client';
+import {
+  LocalAudioTrack,
+  LocalVideoTrack,
+  Room,
+  RoomEvent,
+  Track,
+  setLogLevel,
+} from 'livekit-client';
 import { createBindingStore } from '../../apps/web/src/features/media/media-bindings';
 import { createPolicyStore } from '../../apps/web/src/features/media/audio-policy';
 import { DEPLOYMENT_AUDIO_BITRATE, DEPLOYMENT_VIDEO_BITRATE } from './DeploymentSmokePlan.js';
 import type { DeploymentMediaProbe, DeploymentProbeSnapshot } from './DeploymentInteraction.js';
+import { DeploymentReception } from './DeploymentReception.js';
 
 setLogLevel('silent');
 let playerId = '';
@@ -15,9 +23,7 @@ let tail: Promise<unknown> = Promise.resolve();
 let closing: Promise<void> | null = null;
 const bindings = createBindingStore();
 const policy = createPolicyStore(bindings);
-const received = new Map<string, number>();
-const unmappedSince = new Map<string, number>();
-let forbiddenReceived = 0;
+const reception = new DeploymentReception();
 
 const enqueue = <T>(work: () => Promise<T>): Promise<T> => {
   const result = tail.then(work);
@@ -55,9 +61,7 @@ async function closeResources() {
     });
   bindings.reset();
   policy.reset();
-  received.clear();
-  unmappedSince.clear();
-  forbiddenReceived = 0;
+  reception.reset();
   if (failed) throw new Error('DP06_CLOSE_FAILED');
 }
 
@@ -131,6 +135,9 @@ const probe: DeploymentMediaProbe = {
         if (requested !== epoch) throw new Error('DP06_CONNECT_SUPERSEDED');
         bindings.beginScope(grant);
         const next = new Room({ adaptiveStream: false, dynacast: false });
+        next.on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
+          if (room === next) reception.forget(publication.trackSid);
+        });
         room = next;
         await next.connect(grant.url, grant.token, { autoSubscribe: false });
         if (requested !== epoch || room !== next || next.state !== 'connected')
@@ -198,48 +205,52 @@ const probe: DeploymentMediaProbe = {
           localTracks.push({ sid: publication.trackSid, kind: publication.kind });
       }
       const voices = policy.resolveVoices().filter((voice) => voice.gain > 0);
+      const active = new Set<string>();
       for (const participant of current.remoteParticipants.values()) {
         for (const publication of participant.trackPublications.values()) {
-          if (!publication.track) continue;
+          const track = publication.track;
+          if (!track || (publication.kind !== 'video' && publication.kind !== 'audio')) continue;
           const sid = publication.trackSid;
           const binding =
             publication.kind === Track.Kind.Video
               ? bindings.findByFaceTrack(sid)
               : bindings.findByAudioTrack(sid);
-          const allowed =
+          const bindingAllowed =
             binding?.mediaIdentity === participant.identity &&
-            binding.participantSid === participant.sid &&
+            binding.participantSid === participant.sid;
+          const allowed =
+            bindingAllowed &&
             (publication.kind === Track.Kind.Video ||
               voices.some((voice) => voice.trackSid === sid));
-          const report = await publication.track.getRTCStatsReport();
+          const report = await track.getRTCStatsReport();
           if (requested !== epoch || room !== current) return emptySnapshot();
+          if (publication.track !== track) continue;
+          active.add(sid);
           let bytes = 0;
           report?.forEach((entry) => {
             if (entry.type === 'inbound-rtp' && typeof entry.bytesReceived === 'number')
               bytes += entry.bytesReceived;
           });
-          const previous = received.get(sid) ?? bytes;
-          received.set(sid, bytes);
-          if (allowed) {
-            unmappedSince.delete(sid);
-            if (bytes > previous) {
-              if (publication.kind === Track.Kind.Video) allowedReceived.video++;
-              else if (publication.kind === Track.Kind.Audio) allowedReceived.audio++;
-            }
-          } else {
-            const since = unmappedSince.get(sid) ?? performance.now();
-            unmappedSince.set(sid, since);
-            // Tracks may precede authoritative bindings by the shared 2s pending window.
-            // No remote media is rendered or played; this remains raw RTP diagnostics.
-            if (performance.now() - since > 2000 && bytes > previous) forbiddenReceived++;
-          }
+          if (
+            reception.observe({
+              sid,
+              track: track.mediaStreamTrack,
+              kind: publication.kind,
+              bytes,
+              now: performance.now(),
+              bindingAllowed,
+              allowed,
+            })
+          )
+            allowedReceived[publication.kind]++;
         }
       }
+      reception.retain(active);
       return {
         connected: current.state === 'connected',
         localTracks,
         allowedReceived,
-        forbiddenReceived,
+        ...reception.snapshot(),
       };
     });
   },

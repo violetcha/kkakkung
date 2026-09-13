@@ -17,6 +17,42 @@ const flush = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 describe('policy uncertainty', () => {
+  it('does not invent a remote block deadline for a stale allow still waiting to dispatch', async () => {
+    let now = 0;
+    let dispatch!: () => void;
+    const failure = vi.fn();
+    const controller = new SubscriptionController({
+      now: () => now,
+      timer: () => () => {},
+      validateKey: () => true,
+      validateTrack: () => true,
+      getTrackFingerprint: (_, sid) => sid,
+      onUnknown: failure,
+      send: async (request) => {
+        await new Promise<void>((resolve) => {
+          dispatch = () => {
+            expect(request.beforeDispatch()).toBe(false);
+            resolve();
+          };
+        });
+      },
+    });
+    controller.setDesired({ key, policyVersion: 1, trackSids: ['A'], generatedAtMs: now });
+    await flush();
+    now = 100;
+    controller.setDesired({ key, policyVersion: 2, trackSids: [], generatedAtMs: now });
+    now = 1101;
+    controller.checkDeadlines();
+    expect(failure).not.toHaveBeenCalled();
+    dispatch();
+    await flush();
+    expect(controller.inspect(key)).toMatchObject({
+      terminal: false,
+      acknowledgedTracks: [],
+      inFlight: null,
+    });
+    controller.dispose();
+  });
   it('rearms an early timer callback instead of losing the security deadline', () => {
     let now = 0.5;
     let callback: () => void = () => {};
