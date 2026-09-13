@@ -70,6 +70,7 @@ export class ReadinessRuntime {
       nowEpochMs: options.nowEpochMs,
       monotonicNow: options.monotonicNow,
       timeoutMs: options.config.operationTimeoutMs,
+      timeoutForCommand: (command) => this.bindings.recoveryCheckpointTimeout(command),
       setAdmission: (state) => {
         if (state === 'LOCKED') this.gate.lock('READINESS_UNCONFIRMED');
         this.bindings.setAdmission(state);

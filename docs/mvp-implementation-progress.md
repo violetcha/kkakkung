@@ -8,6 +8,28 @@
 
 ## 2026-09-13 구현 재개
 
+### 회수 완료 후 조회 복구 — 205
+
+- [205](https://ssafy.atlassian.net/browse/S15P21C204-205),
+  `fix/S15P21C204-205-recovery-observation`, 시작 develop `644af64b`.
+- K10: 전체 identity가 REVOKED인 조회 실패를 기존 운영 checkpoint로 재검증한다.
+  통신 오류와 손상 이력을 구분하고 입장 차단·동일 writer/소유권/기록·빈 경기 상태를 유지한다.
+  실제 전송 전후와 사용량 기록 경계에서 조건을 재검사하며 중복 sweep·늦은 성공을 거절한다.
+- 복구 checkpoint만 접수부터180초, 일반 운영/개별 Cloud HTTP/권한 철회 기한은 유지한다.
+  성공 뒤에도 별도 resume가 필요하다. 새 명령·내구 형식 변경·자동 재개는 없다.
+  [동작과 운영 절차](recovery-observation.md)를 따른다.
+- 실제 로컬 durable 구성 회귀40개와 서버 타입 검사 통과. continuous는 공식 입력 파일 없이,
+  attested는 새 공식 revision 대조 후 복구하는 경로를 각각 검사했다.
+  최초 재현 실패와 소유권/시각 fixture 보완 이력은 로컬 검사 기록에 남겼다.
+  204 소스 `54377b2b`와 통합한 `pnpm verify`도 통과했다:
+  245개 파일·2,491개 테스트·E2E14개, 포맷·실행 계약·lint·타입·빌드·자산 검사.
+  원격 CI·MR·배포는 별도 확인한다.
+- 204는 [MR !130](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/130)으로
+  제출해 소스 `54377b2b`의 Jenkins MR #106 SUCCESS/GitLab #191397 passed를 확인했다.
+  245파일·2,473개·E2E14개 및 이미지 빌드 통과 후 develop `12bb0bf4`에 병합했다.
+  실제 배포는 후속 확인한다. 201·202는 배포 #100 성공 후 Jira 완료도 확인했다.
+  K02 장기 보관과 실제 Cloud 장애/6대/60세션 인수는 남는다.
+
 ### 운영·미디어 HTTP 상한 — 204
 
 - [204](https://ssafy.atlassian.net/browse/S15P21C204-204),

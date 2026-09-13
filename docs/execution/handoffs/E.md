@@ -1,5 +1,17 @@
 # E 공개 인계 기록
 
+## 2026-09-13 조회 실패 복구 — S15P21C204-205
+
+- K10의 기존 checkpoint 소비자/생산자를 OperationsController → OperationsBindings →
+  RecoveryCleanupBindings → gateway/저널/usage에 연결했다. 공개 명령과 저장 형식은 유지한다.
+- 정상 기록의 원격 관측 실패만 closed admission에서 재검증하며 동일 writer·소유권·세대·빈 경기·
+  미확인 회수 0 조건을 전송 전후에 확인한다. 일반 기한과 분리한 복구 checkpoint180초,
+  중복 sweep/지연 성공 거절, 성공 후 별도 resume를 공통 원본과 사본에 동기화했다.
+- localStage: INTEGRATED. 204 통합 pnpm verify245파일·2,491개·E2E14개 통과.
+  실제 로컬 파일 구성에서 attested/continuous, 늦은 응답·취소·손상·소유권/세대 변경을 검사했다.
+- blockedOn: 원격 CI·MR·실제 배포 확인, K02 장기 보관, 실제 Cloud 장애/장치/부하 인수.
+  [조회 재검증](../../recovery-observation.md)과 [구현 기록](../../mvp-implementation-progress.md)을 따른다.
+
 ## S15P21C204-174 제출 기준
 
 - Jira: [S15P21C204-174](https://ssafy.atlassian.net/browse/S15P21C204-174), 담당 이주헌, 상위 에픽 S15P21C204-44.

@@ -14,6 +14,9 @@ import {
   type JournalRecord,
 } from '../../src/operations/OperationJournal.js';
 import { createRecoveryBootstrap } from '../../src/operations/RecoveryBootstrap.js';
+import { OperationsAudit } from '../../src/operations/OperationsAudit.js';
+import { OperationsBindings } from '../../src/operations/OperationsBindings.js';
+import { OperationsController } from '../../src/operations/OperationsController.js';
 import {
   RecoveryCleanupBindings,
   validateCleanupCheckpoint,
@@ -27,6 +30,7 @@ import { UsageCheckpoint } from '../../src/operations/UsageCheckpoint.js';
 import {
   deferred,
   localCapability,
+  localConfiguration,
   practiceFrame,
   prepareRequest,
 } from '../media/generation-fixtures.js';
@@ -36,7 +40,7 @@ const directories: string[] = [];
 const closers: (() => Promise<void>)[] = [];
 const releases: (() => void)[] = [];
 
-function resources(dir: string, clock: { ms: number }) {
+function resources(dir: string, clock: { ms: number }, providerQuota = false) {
   const journal = new OperationJournal({ opsDataDir: dir });
   const usageStore = new UsageCheckpoint({ opsDataDir: dir, isWritable: () => journal.writable });
   const usage = new UsageBudget({
@@ -45,6 +49,7 @@ function resources(dir: string, clock: { ms: number }) {
     officialBudgetMaxAgeMs: 3_600_000,
     now: () => EPOCH + clock.ms,
     canIssue: () => ({ allowed: true }),
+    providerQuota,
   });
   const retry = new CheckpointStore<readonly RetryIntent[]>({
     opsDataDir: dir,
@@ -136,10 +141,11 @@ function fixture(
     normalLimit?: number;
     startMs?: number;
     firstInstallationConfirmed?: () => Promise<boolean>;
+    providerQuota?: boolean;
   } = {},
 ) {
   const clock = { ms: options.startMs ?? 0 };
-  const stores = resources(seeded.dir, clock);
+  const stores = resources(seeded.dir, clock, options.providerQuota);
   const timers = new Set<{ callback: () => void; at: number }>();
   const timing = {
     setTimer: (callback: () => void, delay: number) => {
@@ -248,6 +254,7 @@ function fixture(
     nowEpochMs: () => EPOCH + clock.ms,
     monotonicNow: () => clock.ms,
     officialBudgetMaxAgeMs: 3_600_000,
+    providerQuota: options.providerQuota,
     beginCleanup: (input) => bindings.run(input),
     closeCleanup: () => bindings.close(),
     allowIncompleteHistoryCleanup: true,
@@ -269,6 +276,7 @@ function fixture(
   return {
     ...stores,
     ...seeded,
+    providerQuota: options.providerQuota === true,
     bootstrap,
     bindings,
     api,
@@ -312,6 +320,242 @@ function holdRename(filePath: string) {
   });
   return { entered: entered.promise, release: () => gate.resolve() };
 }
+
+async function operationsFor(s: ReturnType<typeof fixture>) {
+  const activity = { activeMatches: 0, activePractices: 0, pendingAdmissions: 0 };
+  s.clock.ms++;
+  if (!s.providerQuota)
+    await fs.writeFile(
+      path.join(s.dir, 'official-usage-input.json'),
+      JSON.stringify({
+        ...s.usage.snapshot().official!.checkpoint,
+        checkedAtEpochMs: EPOCH + s.clock.ms,
+      }),
+    );
+  const operationsBindings = new OperationsBindings({
+    config: {
+      ...localConfiguration(EPOCH),
+      ...(s.providerQuota
+        ? {
+            operatingMode: 'continuous' as const,
+            publicWindow: { mode: 'continuous' as const },
+          }
+        : {}),
+      opsDataDir: s.dir,
+    },
+    journal: s.journal,
+    usageBudget: s.usage,
+    getReadiness: () => s.bootstrap.getReadiness(),
+    getGameActivity: () => activity,
+    retries: [s.bindings.retries],
+    recoveryCleanup: s.bindings,
+    nowEpochMs: () => EPOCH + s.clock.ms,
+    getOfficialRevision: () => ({ periodId: '2026-09', version: 2 }),
+    refreshBudget: () => s.bootstrap.refreshBudget(),
+  });
+  const audit = new OperationsAudit({
+    opsDataDir: s.dir,
+    nowEpochMs: () => EPOCH + s.clock.ms,
+    isWritable: () => s.journal.writable,
+    allowMissingHistory: () => true,
+  });
+  const actionErrors: string[] = [];
+  const controller = new OperationsController({
+    nowEpochMs: () => EPOCH + s.clock.ms,
+    monotonicNow: () => s.clock.ms,
+    timeoutMs: 1000,
+    timeoutForCommand: (command) => operationsBindings.recoveryCheckpointTimeout(command),
+    setAdmission: (state) => operationsBindings.setAdmission(state),
+    getStatus: () => operationsBindings.getStatus(),
+    canResume: () => operationsBindings.canResume(),
+    canComplete: (command) => operationsBindings.canComplete(command),
+    run: async (command, signal, guard) => {
+      try {
+        await operationsBindings.run(command, signal, guard);
+      } catch (error) {
+        actionErrors.push(error instanceof Error ? error.message : 'UNKNOWN');
+        throw error;
+      }
+    },
+    auditStore: audit,
+  });
+  await controller.initializeAudit();
+  closers.push(async () => {
+    await controller.close();
+    await operationsBindings.close();
+  });
+  const terminal = async (requestId: string) => {
+    await vi.waitFor(() =>
+      expect(['succeeded', 'failed']).toContain(controller.getSnapshot(requestId)?.status),
+    );
+    const snapshot = controller.getSnapshot(requestId)!;
+    await vi.waitFor(() => expect(audit.get(requestId)?.snapshot).toEqual(snapshot));
+    return snapshot;
+  };
+  return { activity, operationsBindings, controller, terminal, actionErrors };
+}
+
+it('keeps verified history after a transport-only room query failure until a full recheck succeeds', async () => {
+  const s = fixture(await seed('REVOKED'));
+  s.listRooms.mockRejectedValueOnce(new Error('temporary transport failure'));
+  const first = await s.run();
+  expect(first).toMatchObject({ historyComplete: true });
+  expect(first?.unresolved).toBeGreaterThan(0);
+  expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+  expect(s.bindings.retries.snapshot()).toHaveLength(0);
+  const report = await s.bindings.reconcile();
+  expect(report).toMatchObject({ historyComplete: true, unresolved: 0, ownedRoomsRemaining: 0 });
+  expect(s.bootstrap.getReadiness().state).toBe('READY');
+  expect(s.remove).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  'rechecks observations durably and requires separate resume (providerQuota=%s)',
+  async (providerQuota) => {
+    const s = fixture(await seed('REVOKED'), { providerQuota });
+    s.listRooms.mockRejectedValueOnce(new Error('temporary transport failure'));
+    await s.run();
+    const o = await operationsFor(s);
+    if (providerQuota)
+      await expect(fs.access(path.join(s.dir, 'official-usage-input.json'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    expect(o.operationsBindings.getStatus()).toMatchObject({
+      readiness: 'LOCKED',
+      admission: 'DRAINING',
+    });
+    expect(s.bindings.canRetryObservation()).toBe(true);
+    expect(
+      o.operationsBindings.recoveryCheckpointTimeout({ requestId: 'r', action: 'resume' }),
+    ).toBeUndefined();
+    const submitted = o.controller.submit({ requestId: 'recheck', action: 'checkpoint' });
+    expect(o.controller.submit({ requestId: 'recheck', action: 'checkpoint' })).toEqual(submitted);
+    const result = await o.terminal('recheck');
+    expect(o.actionErrors).toEqual([]);
+    expect(result).toMatchObject({ status: 'succeeded' });
+    expect(s.listRooms).toHaveBeenCalledTimes(4);
+    expect(o.operationsBindings.getStatus()).toMatchObject({
+      readiness: 'READY',
+      admission: 'DRAINING',
+      unresolvedCount: 0,
+    });
+    expect(s.usage.snapshot().reservations[0]?.status).toBe('RELEASED');
+    o.controller.submit({ requestId: 'resume-after-recheck', action: 'resume' });
+    expect(await o.terminal('resume-after-recheck')).toMatchObject({ status: 'succeeded' });
+    expect(o.operationsBindings.getStatus().admission).toBe('OPEN');
+  },
+);
+
+it.each(['active-game', 'new-epoch', 'ownership-lost', 'malformed-history'] as const)(
+  'refuses observation recheck for %s without another Cloud call',
+  async (reason) => {
+    const s = fixture(await seed('REVOKED'));
+    if (reason === 'malformed-history')
+      s.listRooms.mockResolvedValueOnce([{ name: null }] as unknown as Awaited<
+        ReturnType<GatewayClient['listRooms']>
+      >);
+    else s.listRooms.mockRejectedValueOnce(new Error('temporary transport failure'));
+    await s.run();
+    const o = await operationsFor(s);
+    if (reason === 'active-game') o.activity.activeMatches = 1;
+    if (reason === 'ownership-lost') s.setOwnership(false);
+    if (reason === 'new-epoch')
+      await s.journal.append({
+        ...s.record,
+        serverEpoch: s.bootstrap.serverEpoch,
+        roomName: `e-fixture--${s.bootstrap.serverEpoch}--${randomUUID()}`,
+        identity: randomUUID(),
+      });
+    const before = s.listRooms.mock.calls.length;
+    o.controller.submit({ requestId: 'unsafe-recheck', action: 'checkpoint' });
+    expect(await o.terminal('unsafe-recheck')).toMatchObject({ status: 'failed' });
+    expect(s.listRooms).toHaveBeenCalledTimes(before);
+    expect(o.operationsBindings.getStatus().admission).not.toBe('OPEN');
+  },
+);
+
+it('keeps a canceled observation sweep exclusive and rejects its late success', async () => {
+  const s = fixture(await seed('REVOKED'));
+  s.listRooms.mockRejectedValueOnce(new Error('temporary transport failure'));
+  await s.run();
+  const o = await operationsFor(s);
+  const entered = deferred<void>();
+  const gate = deferred<void>();
+  releases.push(() => gate.resolve());
+  s.listRooms.mockImplementationOnce(async () => {
+    entered.resolve();
+    await gate.promise;
+    return [];
+  });
+  o.controller.submit({ requestId: 'timeout-recheck', action: 'checkpoint' });
+  await entered.promise;
+  expect(s.bindings.canRetryObservation()).toBe(false);
+  await expect(s.bindings.retryObservation({ beforeDispatch: () => true })).rejects.toThrow(
+    'NOT_RETRYABLE',
+  );
+  s.clock.ms += 10_001;
+  expect(o.controller.getSnapshot('timeout-recheck')?.status).toBe('pending');
+  s.clock.ms += 170_000;
+  expect(await o.terminal('timeout-recheck')).toMatchObject({
+    status: 'failed',
+    code: 'OPERATION_TIMEOUT',
+  });
+  const before = s.deleteRoom.mock.calls.length;
+  gate.resolve();
+  await vi.waitFor(() => expect(s.bindings.canRetryObservation()).toBe(true));
+  expect(s.deleteRoom).toHaveBeenCalledTimes(before);
+  expect(s.listRooms).toHaveBeenCalledTimes(3);
+  expect(o.operationsBindings.getStatus()).toMatchObject({
+    readiness: 'LOCKED',
+    admission: 'DRAINING',
+  });
+  expect(s.usage.snapshot().reservations[0]?.status).toBe('ACTIVE');
+});
+
+it('keeps malformed room observations untrusted on later successful queries', async () => {
+  const s = fixture(await seed('REVOKED'));
+  s.listRooms.mockResolvedValueOnce([{ name: null }] as unknown as Awaited<
+    ReturnType<GatewayClient['listRooms']>
+  >);
+  expect(await s.run()).toMatchObject({ historyComplete: false });
+  expect(await s.bindings.reconcile()).toMatchObject({ historyComplete: false });
+  expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+});
+
+it.each(['new-generation', 'active-game', 'ownership-lost'] as const)(
+  'rejects a delayed successful observation after %s without releasing usage',
+  async (reason) => {
+    const s = fixture(await seed('REVOKED'));
+    s.listRooms.mockRejectedValueOnce(new Error('temporary transport failure'));
+    await s.run();
+    const o = await operationsFor(s);
+    const entered = deferred<void>();
+    const gate = deferred<void>();
+    releases.push(() => gate.resolve());
+    s.listRooms.mockImplementationOnce(async () => {
+      entered.resolve();
+      await gate.promise;
+      return [];
+    });
+    o.controller.submit({ requestId: 'stale-observation', action: 'checkpoint' });
+    await entered.promise;
+    if (reason === 'new-generation')
+      await s.journal.append({
+        ...s.record,
+        serverEpoch: s.bootstrap.serverEpoch,
+        roomName: `e-fixture--${s.bootstrap.serverEpoch}--${randomUUID()}`,
+        identity: randomUUID(),
+      });
+    if (reason === 'active-game') o.activity.activeMatches = 1;
+    if (reason === 'ownership-lost') s.setOwnership(false);
+    const before = s.deleteRoom.mock.calls.length;
+    gate.resolve();
+    expect(await o.terminal('stale-observation')).toMatchObject({ status: 'failed' });
+    expect(s.deleteRoom).toHaveBeenCalledTimes(before);
+    expect(s.usage.snapshot().reservations[0]?.status).toBe('ACTIVE');
+    expect(o.operationsBindings.getStatus().admission).not.toBe('OPEN');
+  },
+);
 
 afterEach(async () => {
   for (const release of releases.splice(0)) release();

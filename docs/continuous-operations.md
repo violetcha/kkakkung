@@ -7,7 +7,7 @@
 09:48 KST에 Jenkins 제품 배포 #96 SUCCESS, release READY, 운영 READY/OPEN,
 게임·웹의 동일 `dab788ac` revision과 DP-06 실제 Cloud PASS를 확인했다.
 이는 정상 배포 경로의 현재 결과다. 장기 보관·다방 부하·외부 복원·공개 권한 인수는 남아 있다.
-이번 요청에서는 문서만 갱신하며 제품 구현 중단을 유지한다.
+위 내용은 당시 검토 기준이며 이후 구현·병합·배포는 [구현 기록](mvp-implementation-progress.md)을 따른다.
 [재검토 기록](mvp-plan-review-2026-09-13.md)에 코드 근거와 다음 작업 순서를 둔다.
 
 ## 운영 모드
@@ -91,6 +91,10 @@ DP-06 report=PASS와 실행 중 이미지 SHA가 일치해야 한다.
 새 도메인으로 옮길 때는 TLS/SSO redirect·허용 Origin·webhook 주소를 해당 도메인에 맞춰 별도로 설정한다.
 
 ## 실패와 롤백
+
+전체 identity가 REVOKED인데 원격 조회만 일시적으로 실패한 경우에는
+[조회 재검증 절차](recovery-observation.md)의 인증된 `checkpoint`를 사용한다.
+기록·소유권·입장 차단 조건을 다시 검증하며 성공 뒤에도 별도 resume가 필요하다.
 
 재시작 복구는 기록에 남은 방도 최초 참가자 조회·회수·삭제·최종 조회를 수행한다.
 전체 방 목록이 비어 있거나 과거 상태가 REVOKED라는 이유로 방별 확인을 생략하지 않는다.

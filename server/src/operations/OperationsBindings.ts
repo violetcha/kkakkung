@@ -132,6 +132,14 @@ export class OperationsBindings {
     return this.options.journal.writable && this.options.usageBudget.snapshot().writable;
   }
 
+  recoveryCheckpointTimeout(command: OperationsCommand): number | undefined {
+    return command.action === 'checkpoint' &&
+      this.safeRecoveryObservation() &&
+      this.options.recoveryCleanup?.canRetryObservation()
+      ? 180_000
+      : undefined;
+  }
+
   run(
     command: OperationsCommand,
     signal: AbortSignal,
@@ -185,6 +193,8 @@ export class OperationsBindings {
       }
       this.checkpointPending++;
       try {
+        await this.recheckRecovery(combined, allowed);
+        guard();
         await this.checkpoint(guard, allowed);
       } finally {
         this.checkpointPending--;
@@ -204,6 +214,41 @@ export class OperationsBindings {
       this.closing = Promise.allSettled([...this.active]).then(() => undefined);
     }
     return this.closing;
+  }
+
+  private async recheckRecovery(signal: AbortSignal, allowed: () => boolean): Promise<void> {
+    const recovery = this.options.recoveryCleanup;
+    const previous = recovery?.snapshot();
+    if (!recovery || !previous || (previous.unresolved === 0 && previous.ownedRoomsRemaining === 0))
+      return;
+    const safe = () => allowed() && this.safeRecoveryObservation();
+    if (!safe() || !recovery.canRetryObservation()) throw new Error('RECOVERY_UNCONFIRMED');
+    const report = await abortable(
+      recovery.retryObservation({ signal, beforeDispatch: safe }),
+      signal,
+    );
+    if (!safe() || !report.historyComplete || report.unresolved || report.ownedRoomsRemaining)
+      throw new Error('RECOVERY_UNCONFIRMED');
+    // Readiness may now recover; admission remains closed until a separate resume command.
+  }
+
+  private safeRecoveryObservation(): boolean {
+    try {
+      const activity = this.options.getGameActivity();
+      return (
+        !this.closed &&
+        !this.locked &&
+        this.admission === 'DRAINING' &&
+        [activity.activeMatches, activity.activePractices, activity.pendingAdmissions].every(
+          (value) => Number.isSafeInteger(value) && value === 0,
+        ) &&
+        this.options.retries.every((engine) =>
+          engine.snapshot().every((intent) => intent.status === 'REVOKED'),
+        )
+      );
+    } catch {
+      return false;
+    }
   }
 
   private async checkpoint(guard: () => void, allowed: () => boolean): Promise<void> {
