@@ -12,6 +12,13 @@ import {
   type OperationsAuditCode,
 } from './OperationsAudit.js';
 
+export const MAX_PENDING_OPERATIONS = 64;
+export class OperationsCapacityError extends Error {
+  constructor() {
+    super('OPERATIONS_BUSY');
+  }
+}
+
 export const isOperationsRequestId = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() === value && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
 
@@ -56,6 +63,7 @@ export type OperationsControllerOptions = Readonly<{
   timeoutMs: number;
   /** Internal override for bounded recovery only; never read a deadline from HTTP input. */
   timeoutForCommand?: (command: OperationsCommand) => number | undefined;
+  observePressure?: (pending: number, rejected: boolean) => void;
   setAdmission: (state: OperationsStatus['admission']) => void;
   getStatus: () => OperationsStatus;
   canResume: () => boolean;
@@ -101,6 +109,7 @@ export class OperationsController implements OperationsPort {
   private readonly entries = new Map<string, Entry>();
   private readonly jobs = new Set<Job>();
   private readonly deferredAudit = new Set<Promise<unknown>>();
+  private readonly activeEffects = new Set<Promise<unknown>>();
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
   private faulted = false;
@@ -144,6 +153,12 @@ export class OperationsController implements OperationsPort {
     }
     if (this.closed) throw new Error('OPERATIONS_CLOSED');
     if (this.faulted) throw new Error('AUDIT_WRITE_FAILED');
+    // Retain capacity for one drain even when ordinary work has saturated the queue.
+    const capacity = MAX_PENDING_OPERATIONS + (command.action === 'drain' ? 1 : 0);
+    if (this.pressure() >= capacity) {
+      this.observePressure(true);
+      throw new OperationsCapacityError();
+    }
     const override = this.deps.timeoutForCommand?.(command);
     if (
       override !== undefined &&
@@ -189,6 +204,7 @@ export class OperationsController implements OperationsPort {
     };
     this.entries.set(command.requestId, entry);
     this.jobs.add(job);
+    this.observePressure();
     this.scheduleTimeout(job);
     this.queue = this.queue.then(() => this.execute(job)).catch(() => this.auditFailed(job));
     return { status: 'accepted', snapshot: snapshot(pending) };
@@ -425,6 +441,14 @@ export class OperationsController implements OperationsPort {
               (job.command.action !== 'resume' || job.admissionRevision === this.admissionRevision),
           );
         });
+        this.activeEffects.add(work);
+        this.observePressure();
+        void work
+          .finally(() => {
+            this.activeEffects.delete(work);
+            this.observePressure();
+          })
+          .catch(() => undefined);
         if ((await this.race(job, work)) === 'aborted') {
           status = 'failed';
           code = job.stopReason ?? 'OPERATION_TIMEOUT';
@@ -446,6 +470,7 @@ export class OperationsController implements OperationsPort {
     } finally {
       this.clearTimeout(job);
       this.jobs.delete(job);
+      this.observePressure();
     }
   }
 
@@ -553,14 +578,32 @@ export class OperationsController implements OperationsPort {
   }
 
   private defer(job: Job | undefined, work: Promise<unknown>): void {
+    if (this.deferredAudit.has(work)) return;
     this.deferredAudit.add(work);
+    this.observePressure();
     void work.then(
-      () => this.deferredAudit.delete(work),
       () => {
         this.deferredAudit.delete(work);
+        this.observePressure();
+      },
+      () => {
+        this.deferredAudit.delete(work);
+        this.observePressure();
         this.auditFailed(job);
       },
     );
+  }
+
+  private pressure(): number {
+    return this.jobs.size + this.deferredAudit.size + this.activeEffects.size;
+  }
+
+  private observePressure(rejected = false): void {
+    try {
+      this.deps.observePressure?.(this.pressure(), rejected);
+    } catch {
+      /* Observer only. */
+    }
   }
 
   private auditFailed(job?: Job): void {

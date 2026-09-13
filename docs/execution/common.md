@@ -242,11 +242,12 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - POST /api/media/grants: Bearer 세션 + MediaGrantRequest → MediaGrant. 이전 회수/예산/phase 불충족은 409, 인증 오류 401/403, 공급자 불명 503으로 안전 code만 반환한다.
 - POST /api/media/report: Bearer 세션 + MediaStatusReport → 204. 수신자 신원과 scope를 검사한다. 신고만으로 원격 회수·권한 성공을 확정하지 않는다.
 - POST /api/livekit/webhook: raw body + 공급자 Authorization을 E가 검증하며 JSON 재직렬화·인증 생략을 하지 않는다.
-- POST /api/operations/commands: OPS_TOKEN + OperationsCommand → 202 OperationSnapshot(pending). 같은 requestId/같은 본문은 같은 operationId, 다른 본문 재사용은 409다. retry-retirement에만 retirementId를 요구한다.
+- POST /api/operations/commands: OPS_TOKEN + OperationsCommand → 202 OperationSnapshot(pending). 같은 requestId/같은 본문은 같은 operationId, 다른 본문 재사용은 409다. retry-retirement에만 retirementId를 요구한다. 명령 대기·미완료 backend·감사 쓰기의 접수 상한은 64이며 drain용 여유 한 개를 둔다. 초과는 429 OPERATIONS_BUSY와 Retry-After: 1로 거절하며 접수되지 않은 같은 requestId를 다시 시도할 수 있다. 중복 결과 조회는 이 상한 때문에 새 명령으로 바꾸지 않는다.
 - GET /api/operations/commands/:requestId: OPS_TOKEN → 200 OperationSnapshot 또는 404. 완료 상태는 succeeded/failed이며 HTTP 202를 작업 성공으로 해석하지 않는다.
 - GET /api/operations/status: OPS_TOKEN → OperationsStatus. remaining 값이 null이면 미확인이고 0으로 바꾸지 않는다.
 - /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
+- 반복 오류 감사는 고정 kind/resultCode마다 60초 첫 표본을 공유하고 최근24시간/최대4,096개를 보관한다. 미완료 쓰기를 추가로 쌓지 않으며 실패를 성공으로 숨기지 않는다. 명령 entries의 requestId fingerprint·최종 결과와 파일 형식은 보존한다. 과부하 거절 자체는 영구 잠금 사유가 아니며 실제 감사 쓰기 실패는 기존처럼 잠근다. 수치 관측과 정확한 계수 범위는 [감사·명령 상한](../operations-audit-limits.md)을 따른다.
 - attested의 checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. continuous에서는 같은 명령이 로컬 기록 flush와 쓰기 가능 여부를 확인하며 공식 사용량 파일 갱신을 요구하지 않는다. 어느 모드도 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
 
 ## 격리 상태의 배포 검증 — B/E/F

@@ -52,6 +52,11 @@ export const REGISTERED_METRICS = Object.freeze({
   'media.reservation.participantMs': 'ms',
   'media.reservation.bytes': 'bytes',
   'operations.journal.writable': 'count',
+  'operations.audit.events': 'count',
+  'operations.audit.coalesced': 'count',
+  'operations.audit.retained': 'count',
+  'operations.queue.pending': 'count',
+  'operations.queue.rejected': 'count',
   'observability.dropped': 'count',
 } as const satisfies Record<string, MetricUnit>);
 
