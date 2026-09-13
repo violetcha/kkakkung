@@ -24,7 +24,7 @@ export class LiveKitWebhook {
     private readonly options: {
       apiKey: string;
       apiSecret: string;
-      registry: TrackRegistry;
+      registry: Pick<TrackRegistry, 'markEvent' | 'reconcileDue'>;
       now: () => number;
       verifier?: WebhookVerifier;
       maxEventIds?: number;

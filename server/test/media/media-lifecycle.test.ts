@@ -9,14 +9,15 @@ import { MediaGenerationRegistry } from '../../src/media/MediaGenerationRegistry
 import type { RetireGenerationRequest } from '../../src/media/types.js';
 import { practiceFrame, prepareRequest } from './generation-fixtures.js';
 
-function setup(extra: Partial<MediaLifecycleOptions> = {}) {
+function setup(extra: Partial<MediaLifecycleOptions> = {}, split = false) {
   let now = 100;
   const timers = new Set<{ callback: () => void; at: number }>();
-  const registry = new MediaGenerationRegistry('e-fixture');
+  const registry = new MediaGenerationRegistry('e-fixture', false, split ? 'split' : 'single');
   registry.observe(practiceFrame);
   const generation = registry.allocate(prepareRequest, 1_800_000_000_000);
   let inspection: LifecycleInspection | null = {
     participantSid: 'PA_FIRST',
+    ...(split ? { faceParticipantSid: 'PA_FACE' } : {}),
     dirty: false,
     terminal: false,
     lastVerifiedAt: 90,
@@ -26,9 +27,9 @@ function setup(extra: Partial<MediaLifecycleOptions> = {}) {
         mediaInstanceId: 'practice',
         mediaRoomName: generation.roomName,
         playerId: 'p',
-        mediaIdentity: generation.identity,
+        mediaIdentity: generation.splitOwnership?.faceIdentity ?? generation.identity,
         publisherGeneration: 1,
-        participantSid: 'PA_FIRST',
+        participantSid: split ? 'PA_FACE' : 'PA_FIRST',
         source: 'camera',
         trackSid: 'TR_CAMERA',
         verifiedAt: 90,
@@ -102,6 +103,25 @@ function setup(extra: Partial<MediaLifecycleOptions> = {}) {
 }
 
 describe('authenticated lifecycle side port; scoped reports are not Cloud proof', () => {
+  it.each(['face-changed', 'receiver-changed', 'half-connected', 'both-fresh'])(
+    'requires both split identities and a fresh combined inspection: %s',
+    (mode) => {
+      const s = setup({}, true);
+      s.connect();
+      s.lifecycle.report(s.report);
+      s.time(200);
+      s.refreshCamera(200);
+      if (mode === 'face-changed') s.updateInspection({ faceParticipantSid: 'PA_FACE_NEW' });
+      if (mode === 'receiver-changed') s.updateInspection({ participantSid: 'PA_RECEIVER_NEW' });
+      if (mode === 'half-connected') s.updateInspection({ faceParticipantSid: null });
+      s.lifecycle.reconcile();
+      expect(s.lifecycle.recoveryStartedAt(s.generation)).toBe(mode === 'both-fresh' ? null : 100);
+      s.time(10101, true);
+      expect(s.options.onFailure).toHaveBeenCalledTimes(mode === 'both-fresh' ? 0 : 1);
+      s.lifecycle.close();
+    },
+  );
+
   it('stops the ordinary window after a fatal policy end already handled by the coordinator', () => {
     let allowed = true;
     const s = setup({ isRecoveryAllowed: () => allowed });

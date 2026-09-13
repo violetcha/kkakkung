@@ -13,7 +13,7 @@ export type GrantIssuerDeps = {
   config: MediaConfiguration;
   registry: MediaGenerationRegistry;
   nowEpochMs: () => number;
-  canIssue: (existingGeneration?: Generation) => boolean;
+  canIssue: (existingGeneration?: Generation, requested?: PrepareGenerationRequest) => boolean;
   capability: () => CapabilityReport | null;
   reserve: (generation: Generation) => Promise<boolean>;
   persist: (generation: Generation) => Promise<void>;
@@ -162,7 +162,7 @@ export class GrantIssuer {
       code,
     });
     const d = this.deps;
-    if (!d.canIssue() || !this.capabilitySupported()) return result('NOT_READY');
+    if (!d.canIssue(undefined, input) || !this.capabilitySupported()) return result('NOT_READY');
     if (!d.registry.eligible(input)) return result('WRONG_SCOPE');
     const old = d.registry.get(input.matchId, input.playerId);
     if ((old?.generation ?? null) !== input.expectedPreviousGeneration)

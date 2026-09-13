@@ -106,7 +106,23 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
             ...(roomCode ? { roomCode } : {}),
           }),
         });
-        expect(response.status).toBe(201);
+        if (response.status !== 201) {
+          const inspection = await server.inspect(roomCode);
+          const status = await fetch(`${endpoint}/api/operations/status`, { headers: operator });
+          const operation = (await status.json()) as { admission?: unknown };
+          throw new Error(
+            JSON.stringify({
+              admissionStatus: response.status,
+              readiness: inspection.readiness,
+              runtimeEvidence: inspection.runtimeEvidence,
+              blockedReason: inspection.blockedReason,
+              participantCount: inspection.participantCount,
+              admission: ['OPEN', 'DRAINING', 'LOCKED'].includes(String(operation.admission))
+                ? operation.admission
+                : 'UNCONFIRMED',
+            }),
+          );
+        }
         const session = sessionResponseSchema.parse(await response.json());
         roomCode = session.roomCode;
         const room = await sdk.joinOrCreate<PublicMatchState>(PRODUCT_ROOM_NAME, {

@@ -48,6 +48,7 @@ export type RevocationRetryBindingsOptions = Readonly<{
   monotonicNow: () => number;
   epochNowMs: () => number;
   stopPermissions: (generation: Generation) => void;
+  awaitPendingPermissions?: (generation: Generation) => Promise<void>;
   onOccupancyEnded: (generation: Generation) => Promise<void>;
   lockIssuance: (reason: 'RETIREMENT_UNRESOLVED' | 'JOURNAL_WRITE_FAILED') => void;
   onUnresolved: (intent: RetryIntent) => void;
@@ -98,6 +99,7 @@ export class RevocationRetryBindings {
       nowEpochSeconds: () => options.epochNowMs() / 1000,
       persist: (generation) => this.persistGeneration(generation),
       stopPermissions: options.stopPermissions,
+      awaitPendingPermissions: options.awaitPendingPermissions,
       remove: async (generation, cutoff) => {
         for (const member of ownedMediaTargets(generation))
           await options.gateway.removeParticipant(

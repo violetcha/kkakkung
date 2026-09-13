@@ -8,6 +8,30 @@
 
 ## 2026-09-13 구현 재개
 
+### 분리 미디어의 서버 제어 조립 — 215 진행 중
+
+- `feat/S15P21C204-215-split-media-policy`, 선행 !141 병합 `0e50ad3b` 동기화.
+- MediaCoordinator의 split 선택, 가청 정책 forward/remove, 원본/수신 SID 대조,
+  두 연결의 복구, 전체 자원 상한과 공유 방 삭제를 연결했다. 원본 회수 후 늦은 전달의
+  정리를 확인해야 REVOKED를 기록하며 transport-unknown은 예약/입장을 막는다.
+- 관련4파일70개 PASS, 제어된 Cloud transport와 실제 factory/파일/JWT/서명된 webhook에서
+  6인72자원·7방·12예약 정리와 차단/재허용·부분 연결·지연/미확인 처리를 확인했다.
+  최종 pnpm verify259파일2,690개·22 E2E57.8초·포맷/계약33·도구11/lint/타입/
+  빌드/실제 Worker·자산 PASS. 실제 새 경로 Cloud·원격 결과는 후속이며 공개 설정 차단을 유지한다.
+  이전 두 전체 검사 실패(로컬 시각2ms 역행 잠금, continuous 재경기 뒤 입장503)는 보존한다.
+  입장 실패 진단을 보강한 뒤 집중2개와 최종 전체 검사 PASS이며 간헐 원인 전체 해결은 아니다.
+  [구현 경로와 미검증 경계](split-media-policy.md)를 따른다.
+
+### 215 발급·예약 기반 병합·배포 — 20:50 KST
+
+- [MR !141](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/141),
+  소스 `c3e74bf116bed483d2b091cee4307da345b32e90`의 Jenkins MR120/GitLab191720 SUCCESS,
+  257파일2,663개·22 E2E(2.0분)·이미지 PASS. 20:40:18 develop
+  `0e50ad3bbaab4f73b12e6270d6ab599781a7e8eb` 병합·소스 브랜치 삭제 확인.
+- 배포112/GitLab191728 SUCCESS, 기존 팀 모드 실제 Cloud DP-06 PASS73.23초,
+  20:50:21 READY/OPEN·미해결0·last-good·게임/웹0e50ad3b 일치·SSO302/익명운영403 확인.
+  새 공개 발급/전달의 실제 Cloud 인수는 남아 Jira215는 진행 중이다.
+
 ### 분리 세대 발급·예약 기반 — 215 진행 중
 
 - `feat/S15P21C204-215-split-media-authority`, 선행 !140 병합 `9a4d9ecb` 동기화.
