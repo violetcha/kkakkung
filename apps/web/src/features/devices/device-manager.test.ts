@@ -111,6 +111,66 @@ function manager(base: Harness) {
 }
 
 describe('createDeviceManager', () => {
+  it.each(['unopened', 'denied', 'ended', 'ready'] as const)(
+    'changes only microphone when the camera is %s',
+    async (cameraState) => {
+      const video = track('video');
+      const audio = track('audio');
+      const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+        if (constraints.audio === true) return stream(audio);
+        if (cameraState === 'denied')
+          throw Object.assign(new Error('no'), { name: 'NotAllowedError' });
+        return stream(video);
+      });
+      const base = harness(getUserMedia);
+      const devices = manager(base);
+      try {
+        if (cameraState !== 'unopened') await devices.start({ microphone: false });
+        if (cameraState === 'ended') video.end();
+        const before = devices.getStatus();
+        const source = devices.getCameraStream();
+        getUserMedia.mockClear();
+        await devices.setMicrophone(true);
+        await devices.setMicrophone(false);
+        expect(getUserMedia).toHaveBeenCalledExactlyOnceWith(MICROPHONE_CONSTRAINTS);
+        expect(devices.getStatus()).toMatchObject({
+          camera: before.camera,
+          calibration: before.calibration,
+          microphone: 'off',
+        });
+        expect(devices.getCameraStream()).toBe(source);
+        expect(audio.stop).toHaveBeenCalledOnce();
+        if (cameraState === 'ready') expect(video.stop).not.toHaveBeenCalled();
+      } finally {
+        await devices.dispose();
+      }
+    },
+  );
+
+  it('stops a microphone arriving after disable and never acquires a camera', async () => {
+    const audio = track('audio');
+    let finish!: (stream: MediaStream) => void;
+    const getUserMedia = vi.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const base = harness(getUserMedia);
+    const devices = manager(base);
+    try {
+      const pending = devices.setMicrophone(true);
+      await devices.setMicrophone(false);
+      finish(stream(audio));
+      await pending;
+      expect(audio.stop).toHaveBeenCalledOnce();
+      expect(devices.getStatus().microphone).toBe('off');
+      expect(getUserMedia).toHaveBeenCalledExactlyOnceWith(MICROPHONE_CONSTRAINTS);
+      expect(base.createdElements).toHaveLength(0);
+    } finally {
+      await devices.dispose();
+    }
+  });
   it('acquires the camera once for two concurrent start calls', async () => {
     const video = track('video');
     const getUserMedia = vi.fn(async () => stream(video));

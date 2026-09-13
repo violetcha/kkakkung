@@ -22,3 +22,12 @@ export const roomRosterSchema = z.strictObject({
 export type RoomRosterMessage = z.infer<typeof roomRosterSchema>;
 /** Application close code for an expired waiting/result room. */
 export const ROOM_EXPIRED_CLOSE_CODE = 4001;
+/** Host removal during waiting phases; the old logical session is invalidated. */
+export const ROOM_REMOVED_CLOSE_CODE = 4002;
+/** Separate additive channel so older clients can still consume the unchanged roster. */
+export const roomAccessSchema = z.strictObject({
+  matchId: matchIdSchema,
+  revision: z.number().int().nonnegative().safe(),
+  locked: z.boolean(),
+});
+export type RoomAccessMessage = z.infer<typeof roomAccessSchema>;

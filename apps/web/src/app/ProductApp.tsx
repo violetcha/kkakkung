@@ -351,7 +351,11 @@ export function ProductApp({
           )}
         </section>
       ) : snapshot.lost ? (
-        <ConnectionLostScreen onLeave={() => void leave()} expired={snapshot.roomExpired} />
+        <ConnectionLostScreen
+          onLeave={() => void leave()}
+          expired={snapshot.roomExpired}
+          removed={snapshot.removedByHost}
+        />
       ) : (
         <>
           {preparationFeedback(round?.preparationIssue) && (
@@ -371,7 +375,18 @@ export function ProductApp({
           />
           {!worldVisible && localControls}
           {snapshot.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
-            <LobbyScreen roster={snapshot.roster} selfId={selfId} roomCode={code} />
+            <LobbyScreen
+              roster={snapshot.roster}
+              selfId={selfId}
+              roomCode={code}
+              access={snapshot.roomAccess}
+              lockRequest={snapshot.requests.ROOM_LOCK}
+              kickRequest={snapshot.requests.ROOM_KICK}
+              onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
+              onKick={(targetPlayerId) =>
+                runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
+              }
+            />
           )}
           {round?.phase === 'DEVICE_CHECK' && (
             <DeviceCheckScreen

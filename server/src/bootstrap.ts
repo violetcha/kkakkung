@@ -122,7 +122,11 @@ export function createApplication<State = unknown>(
   const monotonicNow = product?.monotonicNow ?? (() => performance.now());
   const metrics = createMetricRegistry({ now: monotonicNow });
   const eventLogger = createStructuredEventLogger(logger);
-  const alerts = createAlertPolicy({ now: monotonicNow, onEvent: eventLogger.emit });
+  const alerts = createAlertPolicy({
+    now: monotonicNow,
+    onEvent: eventLogger.emit,
+    mediaApiTotalLimit: product?.mediaConfig?.maxTotalApiCallsPer60s,
+  });
   const histogram = monitorEventLoopDelay({ resolution: 20 });
   const emitMetric: EmitMetric = (sample) => {
     metrics.emitMetric(sample);

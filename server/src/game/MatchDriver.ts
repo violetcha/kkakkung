@@ -4,7 +4,7 @@
  * the core port, validates one outcome per processed command, commits the next state and
  * fans out outcomes, audience events, spatial sound frames and media intents.
  */
-import type { CommandOutcome } from '@kkakkung/protocol/game-messages';
+import { isPhaseCommand, type CommandOutcome } from '@kkakkung/protocol/game-messages';
 import type { CommandQueue, LedgerEntry } from './CommandQueue.js';
 import type { MatchContext } from './MatchContext.js';
 import { toCoreCommand } from './CommandAdapter.js';
@@ -187,12 +187,7 @@ export class MatchDriver<State> {
     const perInstance = new Map<string, { entries: LedgerEntry[]; commands: CoreCommand[] }>();
     for (const entry of batch) {
       const command = entry.command;
-      if (
-        command.type === 'READY' ||
-        command.type === 'PRACTICE_READY' ||
-        command.type === 'LOAD_READY' ||
-        command.type === 'REMATCH'
-      ) {
+      if (isPhaseCommand(command)) {
         const result = this.deps.handlePhaseCommand(entry, tick);
         const done = queue.complete(
           command.requestId,

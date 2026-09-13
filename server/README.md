@@ -64,6 +64,11 @@ src/
 
 ## 현재 단계
 
+`MAP_FINALIZING`은 진입 후 30초를 상한으로 미디어 회수와 맵 준비를 기다린다. 기한 초과는
+`ABORTED`로 전환하고 맵 로더의 늦은 결과를 무효화한다. 분리된 연습 인스턴스라도 현재 match의
+미확인 회수 scope에 대한 `MEDIA_FAILED`는 중단 사유다. 중단은 회수 성공을 의미하지 않으며
+미확인 retirement·RETIRING 좌석·세대 발급·재경기 장벽은 확인이 끝날 때까지 유지한다.
+
 - [x] 0.2.0 공개 계약·개인 뷰 allowlist·명령 접수/종결 원장·단일 Tick 경로
 - [x] 초대·세션·좌석·heartbeat·clock·재동기화·6인 준비·연습·맵 로더·로딩 장벽·카운트다운·재경기 (FakeCore 통합 시험)
 - [x] SDK 매칭 이전 HTTP Origin/2KB 경계와 WS Origin

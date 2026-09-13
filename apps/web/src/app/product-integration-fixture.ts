@@ -66,6 +66,11 @@ export function createSyntheticInteractionFactory(hooks: {
         deps.onDeviceStatus(devices);
         return devices;
       },
+      setMicrophone: async (enabled) => {
+        const next = { ...devices, microphone: enabled ? ('ready' as const) : ('off' as const) };
+        deps.onDeviceStatus(next);
+        return next;
+      },
       calibrate: async () => {
         deps.onDeviceStatus(devices);
         return devices;

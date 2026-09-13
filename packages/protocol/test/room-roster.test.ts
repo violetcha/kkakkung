@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { roomRosterSchema } from '../src/game-messages/room.js';
+import {
+  roomRosterSchema,
+  roomAccessSchema,
+  ROOM_REMOVED_CLOSE_CODE,
+} from '../src/game-messages/room.js';
 import {
   sessionRequestSchema,
   sessionResponseSchema,
@@ -8,6 +12,17 @@ import {
 } from '../src/game-messages/session.js';
 
 describe('room roster and session contracts', () => {
+  it('exposes only the room access revision and lock without player authority fields', () => {
+    const value = { matchId: 'm', revision: 1, locked: true };
+    expect(roomAccessSchema.parse(value)).toEqual(value);
+    expect(ROOM_REMOVED_CLOSE_CODE).toBe(4002);
+    for (const invalid of [
+      { ...value, revision: -1 },
+      { ...value, revision: 0.5 },
+      { ...value, hostId: 'p' },
+    ])
+      expect(roomAccessSchema.safeParse(invalid).success).toBe(false);
+  });
   it('carries readiness and connection only, never roles or coordinates', () => {
     const roster = {
       matchId: 'm',

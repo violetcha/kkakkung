@@ -20,6 +20,17 @@ it('distinguishes each abort cause from a loss', () => {
   expect(results.every((r) => r.title === '경기 무효')).toBe(true);
 });
 
+it('ends preparation failures without suggesting the aborted match is still awaiting a result', () => {
+  const result = resultPresenter(
+    roundFixture({ phase: 'ABORTED', abortReason: null, result: null }),
+    null,
+  );
+  expect(result.title).toBe('경기 무효');
+  expect(result.message).toContain('방장이 다시 시작');
+  expect(result.message).not.toContain('확인하고 있습니다');
+  expect(result.remaining).toBeNull();
+});
+
 it.each([
   ['two-escaped', 'runners', '탈출'],
   ['two-captured', 'taggers', '포획'],

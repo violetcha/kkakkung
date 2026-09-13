@@ -194,7 +194,7 @@ A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(ra
 채널은 아래 ClientMessages/ServerMessages의 정확한 키를 사용한다. 구조는 `contracts/types.ts`의 판별 가능한 타입을 기준으로 strict 런타임 스키마로 구현한다. 모르는 필드·범위 밖 좌표·안전 정수가 아닌 sequence·잘못된 UUID는 거절한다. 신원은 인증된 연결에서만 주입한다.
 
 1. B는 인증·봉투·단계별 기본 조건·큐 한도를 검사하고 `command-result`를 보낸다. accepted는 큐 접수다. rejected이면 큐에 넣지 않으며 별도 실행 결과는 없다.
-2. **accepted인 모든 명령은 반드시 한 개의 논리적 command-outcome으로 종결한다.** A의 순수 명령은 StepResult.outcomes, B의 READY/LOAD_READY/REMATCH는 B 단계 처리 결과에서 만든다. 실패로 상태가 전혀 변하지 않아도 requestId/sequence에 연결해 보낸다.
+2. **accepted인 모든 명령은 반드시 한 개의 논리적 command-outcome으로 종결한다.** A의 순수 명령은 StepResult.outcomes, B의 READY/ROOM_LOCK/ROOM_KICK/PRACTICE_READY/LOAD_READY/REMATCH는 B 단계 처리 결과에서 만든다. 실패로 상태가 전혀 변하지 않아도 requestId/sequence에 연결해 보낸다.
 3. applied는 의도 반영·행동 예약·교환/도전 생성 등이 처리됐다는 뜻이다. 이동 도착·설치 완료·탈출 성공은 이후 권위 상태/사건으로 확인한다. 적용 후 다른 판정으로 취소되어도 같은 명령의 terminal 결과를 다시 바꾸지 않는다.
 4. 동일 requestId/동일 내용은 최초 접수/종결 결과를 재전송하고 core를 다시 호출하지 않는다. 다른 내용 재사용은 STALE_REQUEST로 거절한다. pending 요청은 캐시에서 퇴출하지 않는다. 연결별 pending 최대 64, completed 최대 512개/2분으로 제한하고 큐를 넣기 전에 한도를 검사한다. 매치 종료 때 미처리 수용 요청은 ROUND_ENDED의 canceled로 정리한다.
 5. C는 접수 결과가 rejected이면 즉시 pending을 끝내고 안전 code와 재요청 UI를 표시한다. 이 경우 outcome·조회 타이머를 기다리지 않는다. accepted만으로 spinner를 끝내거나 성공을 표시하지 않는다. outcome을 받으면 요청 pending은 끝내고 필요한 private-view/event를 별도로 기다린다. EXIT_START가 rejected/canceled이면 재요청 UI를 복구하며 challenge를 만들어내지 않는다.
@@ -205,6 +205,10 @@ A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(ra
 
 ## 개인 상태·출구·교환·준비
 
+대기방의 ROOM_LOCK과 ROOM_KICK은 LOBBY/DEVICE_CHECK에서 현재 연결된 방장만 요청하며 실행 tick에서도 권한과 단계를 재검사한다. 내보내기는 자신·이미 나간 참가자·다른 방 참가자를 거절하고 입장을 먼저 잠근 뒤 해당 세션을 무효화한다. 예약 좌석은 잠글 때 무효화하되 미확인 미디어 회수 좌석을 해제하지 않는다. 강제 퇴장 close code는 4002이며 클라이언트는 장치·미디어를 정리하고 입장 화면으로 돌아갈 수 있어야 한다. 영구 차단은 아니며 방장이 다시 잠금을 풀면 새 세션으로 참가할 수 있다.
+
+입장 상태는 기존 room-roster를 바꾸지 않는 추가 room-access 채널의 {matchId, revision, locked}로 전달한다. revision은 방 내 입장 상태가 변경될 때 증가하고 동일 방의 단계 전환·재경기에서도 잠금을 유지한다. 두 메시지는 공개 상태 patch 뒤에 전송해 새 matchId보다 목록이 먼저 도착하지 않도록 한다. 클라이언트는 현재 matchId와 각 채널의 버전을 확인하고 구 경기 메시지는 버린다. 잠금 상태를 받기 전 관리 버튼을 활성화하거나 목록을 게임 위치·역할 정보로 사용하지 않는다.
+
 개인 뷰는 초기/허용 내용 변경/scope 전환/공개 phase 변경/명시적 resync 때 전체 교체한다. 일반적인 stateVersion 증가만으로 같은 지형을 계속 전송하지 않는다. phase 전환은 새 하한을 확인할 전체 뷰를 한 번 보내고 resync는 현재 버전으로 재직렬화한다. 사건 stateVersion은 참조 개인 뷰 버전이고 발생 시각은 tick이다. 미래 사건은 최대 64개/1초 대기 후 resync, 구 match·구 gameScope·중복·만료 사건은 폐기한다.
 
 - visibleEntities는 종류별 필수 필드가 다르다. **가시 sensor는 wall이 필수**이며 자기 기억인 ownedEquipment와 분리한다. sensor.cell은 접근 셀, wall은 실제 부착 면이다. 다른 장비 위치를 전원에게 전송하지 않는다.
@@ -212,6 +216,7 @@ A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(ra
 - C는 현재 가시 아군만 교환 후보로 삼는다. 기존 후보가 계속 보이면 유지하고, 없으면 셀 제곱 거리·동률 playerId 순으로 고른다. 후보 선택은 서버의 거리·활동·지식 차이 검사를 대신하지 않는다.
 - **READY true는 DEVICE_CHECK에서 로컬 장치 점검을 완료했다는 클라이언트 신고**다. 카메라·vision·calibration이 ready일 때만 보내고 장치 장애·취소는 false로 갱신한다. 마이크는 선택이다. 서버는 신고·인원·단계를 검증하며 원격 웹캠 정상 여부를 독립 증명한다고 쓰지 않는다.
 - vision ready는 모델 로드만 뜻하지 않는다. 현재 유효 얼굴·첫 안전 가공 프레임·살아있는 가공 트랙까지 확보해야 한다. 실패 원인은 DeviceStatus.errorCode로 보고한다.
+- 마이크 단독 변경은 InteractionRuntime.setMicrophone을 사용해 카메라 권한을 새로 요청하지 않는다. 보정 실패의 구체 사유는 이후 FACE_INVALID가 덮지 않으며 새 보정·카메라/Worker 오류는 정상 갱신한다. 새 경기 런타임은 사용자가 선택한 품질을 다시 적용한다.
 - 미니맵은 기억한 허용 출구를 표시할 수 있지만, **3D 포털·소유자 식별은 현재 관찰 중인 출구 벽면에만** 그린다. 폐쇄 시 같은 벽면의 일반 벽을 복원한다. 술래에게 출구를 보내지 않는다.
 - 포즈 탈출 완료는 C가 단독 전송한다. 새롭고 유효한 동일 pose 관측으로 1.2초 유지하고 minSuccessTick도 충족해야 한다. 키 폴백은 challengeId 해시로 고정한 4방향 순환 순서를 사용한다. 최소 시간 조기 거절은 동일 도전·기한·유효 조건을 재확인한 경우에만 새 requestId로 제한 재시도한다.
 
@@ -451,6 +456,8 @@ export type CommandPayloads = {
   MOVE_INTENT: { direction: 'forward' | 'back' | null };
   TURN: { direction: 'left' | 'right' };
   READY: { ready: boolean };
+  ROOM_LOCK: { locked: boolean };
+  ROOM_KICK: { targetPlayerId: string };
   PRACTICE_READY: { ready: boolean };
   LOAD_READY: { loadId: string; mediaInstanceId: string; receiverGeneration: number };
   EXCHANGE_REQUEST: { targetPlayerId: string };
@@ -618,6 +625,8 @@ export type PublicRoundState = Readonly<{
   rematchState?: RematchState;
 }>;
 export const ROOM_EXPIRED_CLOSE_CODE = 4001;
+export const ROOM_REMOVED_CLOSE_CODE = 4002;
+export type RoomAccess = Readonly<{ matchId: string; revision: number; locked: boolean }>;
 export type RoomRoster = Readonly<{
   matchId: string;
   stateVersion: number;
@@ -670,7 +679,7 @@ export type ClockReply = ClockProbe &
 export type ViewResync = Readonly<{ matchId: string; lastStateVersion: number }>;
 export type CoreCommandType = Exclude<
   CommandType,
-  'READY' | 'PRACTICE_READY' | 'LOAD_READY' | 'REMATCH'
+  'READY' | 'ROOM_LOCK' | 'ROOM_KICK' | 'PRACTICE_READY' | 'LOAD_READY' | 'REMATCH'
 >;
 export type CoreCommand = CommandEnvelope<CoreCommandType> & Readonly<{ actorId: string }>;
 export type ControlIntent =
@@ -1144,6 +1153,8 @@ export type LocalAudioStatus = Readonly<{
 export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  /** Changes only microphone permission/source/publication; never acquires a camera. */
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;
@@ -1208,6 +1219,7 @@ export type ServerMessages = {
   'command-outcome': CommandOutcome;
   'request-status-result': RequestStatusResult;
   'room-roster': RoomRoster;
+  'room-access': RoomAccess;
   'private-view': PrivateView;
   'private-event': PrivateEvent;
   'game-heartbeat': GameHeartbeat;

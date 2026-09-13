@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { INVITATION_ROUTES, ROOM_EXPIRED_CLOSE_CODE } from './types.ts';
+import { INVITATION_ROUTES, ROOM_EXPIRED_CLOSE_CODE, ROOM_REMOVED_CLOSE_CODE } from './types.ts';
+import { roomAccessFixture, hostCommandFixture } from './fixtures.ts';
+
+test('host controls identify a target without trusting a payload actor and keep access separate', () => {
+  assert.equal(ROOM_REMOVED_CLOSE_CODE, 4002);
+  assert.equal(hostCommandFixture.type, 'ROOM_KICK');
+  assert.deepEqual(Object.keys(hostCommandFixture.payload), ['targetPlayerId']);
+  assert.deepEqual(Object.keys(roomAccessFixture).sort(), ['locked', 'matchId', 'revision']);
+});
 import {
   operatorInvitationFixture,
   rejectedInvitationFixture,

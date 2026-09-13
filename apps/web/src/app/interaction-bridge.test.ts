@@ -18,6 +18,7 @@ const context: InteractionContext = {
 it('allows device recovery during practice/play and preserves phase locks and the selected mode', async () => {
   const runtime = {
     startDevices: vi.fn(async () => INITIAL_DEVICES),
+    setMicrophone: vi.fn(async () => INITIAL_DEVICES),
     calibrate: vi.fn(async () => INITIAL_DEVICES),
     setContext: vi.fn(),
     dispose: vi.fn(async () => {}),
@@ -43,6 +44,10 @@ it('allows device recovery during practice/play and preserves phase locks and th
   }
   expect(runtime.startDevices).toHaveBeenCalledTimes(3);
   expect(runtime.calibrate).toHaveBeenCalledTimes(3);
+  await bridge.updateMicrophone(true);
+  expect(runtime.setMicrophone).toHaveBeenCalledExactlyOnceWith(true);
+  expect(runtime.startDevices).toHaveBeenCalledTimes(3);
+  expect(runtime.calibrate).toHaveBeenCalledTimes(3);
   expect(runtime.setContext).toHaveBeenLastCalledWith(
     expect.objectContaining({ mode: 'keyboard' }),
   );
@@ -58,6 +63,7 @@ it('allows device recovery during practice/play and preserves phase locks and th
     await bridge.updateMicrophone(true);
   }
   expect(runtime.startDevices).toHaveBeenCalledTimes(3);
+  expect(runtime.setMicrophone).toHaveBeenCalledOnce();
   await bridge.dispose();
 });
 it('registers callbacks once, keeps sensor updates out of UI and ignores late disposed callbacks', async () => {
