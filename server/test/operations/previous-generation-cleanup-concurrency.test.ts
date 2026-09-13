@@ -50,6 +50,75 @@ const flush = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe('bounded startup room recovery', () => {
+  it('reuses only verified retired absence and revalidates that proof after both inventories', async () => {
+    const s = options();
+    const proof = vi.fn(() => true);
+    expect(
+      await new PreviousGenerationCleanup({ ...s, canReuseRetiredRoom: proof }).run(input(240)),
+    ).toMatchObject({ historyComplete: true, unresolved: 0, ownedRoomsRemaining: 0 });
+    expect(s.listRooms).toHaveBeenCalledTimes(2);
+    expect(s.listParticipants).not.toHaveBeenCalled();
+    expect(s.deleteRoom).not.toHaveBeenCalled();
+    expect(proof).toHaveBeenCalledTimes(480);
+  });
+
+  it.each([
+    'reappeared',
+    'invalid-inventory',
+    'failed-inventory',
+    'changed-proof',
+    'cancelled',
+  ] as const)(
+    'does not complete an expired room when the final observation is %s',
+    async (failure) => {
+      const s = options();
+      const abort = new AbortController();
+      let proven = true;
+      s.listRooms.mockImplementation(async () => {
+        if (s.listRooms.mock.calls.length === 1) return [];
+        if (failure === 'reappeared') return [{ name: room(0) }];
+        if (failure === 'invalid-inventory') return [{}] as { name: string }[];
+        if (failure === 'failed-inventory') throw new Error('transport failed');
+        if (failure === 'changed-proof') proven = false;
+        if (failure === 'cancelled') abort.abort();
+        return [];
+      });
+      const report = await new PreviousGenerationCleanup({
+        ...s,
+        canReuseRetiredRoom: () => proven,
+      }).run(input(1, abort.signal));
+      expect(report.unresolved).toBeGreaterThan(0);
+      if (failure !== 'failed-inventory') expect(report.historyComplete).toBe(false);
+      if (failure === 'reappeared')
+        expect(s.listParticipants).toHaveBeenCalledWith(room(0), expect.any(Object));
+    },
+  );
+
+  it('does not reuse an unrevoked record or an initially observed room even if the callback returns true', async () => {
+    const s = options();
+    s.listRooms.mockResolvedValueOnce([{ name: room(0) }]);
+    const original = input(2);
+    const records = original.records.map((entry, index) => {
+      const payload = {
+        version: 1 as const,
+        seq: entry.seq,
+        record: {
+          ...entry.record,
+          state: index === 1 ? ('PREPARED' as const) : ('REVOKED' as const),
+        },
+      };
+      return { ...payload, checksum: checksum(payload) };
+    });
+    expect(
+      await new PreviousGenerationCleanup({ ...s, canReuseRetiredRoom: () => true }).run({
+        ...original,
+        records,
+      }),
+    ).toMatchObject({ unresolved: 0, historyComplete: true });
+    expect(s.listParticipants).toHaveBeenCalledTimes(4);
+    expect(s.deleteRoom).toHaveBeenCalledTimes(2);
+    expect(s.revoke).toHaveBeenCalledOnce();
+  });
   it('checks all 78 historical rooms within 62 rather than 236 simulated seconds', async () => {
     vi.useFakeTimers({ now: 0 });
     const s = options();

@@ -70,10 +70,15 @@ function resources(dir: string, clock: { ms: number }, providerQuota = false) {
   return { journal, usage, usageStore, retry, cleanupCheckpoint };
 }
 
-async function seed(state: 'PREPARED' | 'REVOKED' = 'PREPARED', historicalRooms = 1) {
+async function seed(
+  state: 'PREPARED' | 'REVOKED' = 'PREPARED',
+  historicalRooms = 1,
+  released = false,
+) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e13-bindings-'));
   directories.push(dir);
-  const stores = resources(dir, { ms: 0 });
+  const seedClock = { ms: 0 };
+  const stores = resources(dir, seedClock);
   await stores.journal.restore();
   await stores.usage.restore({ allowInitializeMissing: true });
   expect(
@@ -126,6 +131,27 @@ async function seed(state: 'PREPARED' | 'REVOKED' = 'PREPARED', historicalRooms 
       roomName: `e-fixture--${record.serverEpoch}--${randomUUID()}`,
       identity: randomUUID(),
     });
+  }
+  if (released) {
+    expect(await stores.usage.markRetiring(generation.reservationId)).toBe(true);
+    expect(await stores.usage.markRemoteConfirmed(generation.reservationId)).toBe(true);
+    seedClock.ms++;
+    expect(
+      await stores.usage.reconcileOfficial(
+        { ...stores.usage.snapshot().official!.checkpoint, checkedAtEpochMs: EPOCH + seedClock.ms },
+        {
+          periodId: '2026-09',
+          version: 2,
+        },
+      ),
+    ).toEqual({ status: 'applied' });
+    expect(
+      await stores.usage.releaseConfirmed(generation.reservationId, {
+        remoteConfirmed: true,
+        periodId: '2026-09',
+        version: 2,
+      }),
+    ).toBe(true);
   }
   await Promise.all([stores.usage.close(), stores.retry.close(), stores.cleanupCheckpoint.close()]);
   await stores.journal.close();
@@ -978,6 +1004,57 @@ describe('E-13 real local composition with mock Cloud transport; no Cloud eviden
       checkpoint: { state: { report: { unresolved: 0, historyComplete: true } } },
     });
   });
+
+  it('revalidates 240 durably revoked/settled/expired absent rooms with two global queries', async () => {
+    const s = fixture(await seed('REVOKED', 240, true), {
+      normalLimit: 120,
+      totalLimit: 180,
+      startMs: 610_000,
+    });
+    expect(await s.run()).toMatchObject({
+      historyComplete: true,
+      unresolved: 0,
+      ownedRoomsRemaining: 0,
+    });
+    expect(s.listRooms).toHaveBeenCalledTimes(2);
+    expect(s.listParticipants).not.toHaveBeenCalled();
+    expect(s.deleteRoom).not.toHaveBeenCalled();
+    expect(s.remove).not.toHaveBeenCalled();
+    expect(s.api.getSnapshot().total60s).toBe(2);
+    expect(s.usage.snapshot().reservations[0]?.status).toBe('RELEASED');
+    expect(s.journal.snapshot().records).toHaveLength(240);
+  });
+
+  it('keeps per-room checks until the refreshed-token horizon even when the original JWT has expired', async () => {
+    const s = fixture(await seed('REVOKED', 1, true), { startMs: 300_001 });
+    expect(await s.run()).toMatchObject({ historyComplete: true, unresolved: 0 });
+    expect(s.listParticipants).toHaveBeenCalledTimes(2);
+    expect(s.deleteRoom).toHaveBeenCalledOnce();
+  });
+
+  it.each(['new-generation', 'ownership-lost', 'clock-reversed'] as const)(
+    'rejects expired-history reuse when %s changes during the final Cloud query',
+    async (change) => {
+      const s = fixture(await seed('REVOKED', 1, true), { startMs: 610_000 });
+      s.listRooms.mockResolvedValueOnce([]).mockImplementationOnce(async () => {
+        if (change === 'new-generation')
+          await s.journal.append({
+            ...s.record,
+            generation: s.record.generation + 1,
+            state: 'PREPARED',
+          });
+        if (change === 'ownership-lost') s.setOwnership(false);
+        if (change === 'clock-reversed') s.clock.ms = 300_001;
+        return [];
+      });
+      const report = await s.run();
+      expect(report?.unresolved).toBeGreaterThan(0);
+      expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+      expect(s.listRooms).toHaveBeenCalledTimes(2);
+      expect(s.deleteRoom).not.toHaveBeenCalled();
+      expect(s.journal.snapshot().records.length).toBeGreaterThan(0);
+    },
+  );
 
   it('rechecks ownership after waiting for a rolling window without dispatching queued queries', async () => {
     const s = fixture(await seed('REVOKED'), { normalLimit: 1, totalLimit: 1 });

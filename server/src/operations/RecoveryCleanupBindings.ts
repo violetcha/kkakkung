@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { expiredRetirementIsProven } from './ExpiredRetirementProof.js';
 import type { CapabilityReport } from '../media/CloudCapabilityProbe.js';
 import {
   GatewayError,
@@ -174,6 +175,7 @@ export class RecoveryCleanupBindings {
       deleteRoom: (room, context) => this.deleteRoom(room, context),
       checkpoint: (report, context) => this.persistReport(report, context),
       onUnresolved: () => this.notify('RECOVERY_UNCONFIRMED'),
+      canReuseRetiredRoom: (roomName) => this.canReuseRetiredRoom(roomName),
     });
     this.retries = new RevocationRetries({
       monotonicNow: options.monotonicNow,
@@ -337,6 +339,24 @@ export class RecoveryCleanupBindings {
     } catch {
       return false;
     }
+  }
+
+  private canReuseRetiredRoom(roomName: string): boolean {
+    if (!this.canDispatch() || !this.historyComplete || this.observed.size > 0) return false;
+    const usage = this.options.usageBudget.readSnapshot();
+    const journal = this.options.journal.readSnapshot();
+    const profile = this.options.capability()?.revocationProfile;
+    if (usage.integrity !== 'ok' || !usage.writable || !journal.writable || !profile) return false;
+    return expiredRetirementIsProven({
+      roomName,
+      records: [...this.records.values()],
+      liveRecords: journal.records,
+      reservations: usage.reservations,
+      intents: [...this.intents.values(), ...this.retries.snapshot()],
+      now: this.options.epochNowMs(),
+      clockBufferMs:
+        Math.ceil(profile.bufferSeconds * 1000 + profile.maxObservedClockOffsetMs) + 1000,
+    });
   }
 
   private async initialize(input: RecoveryCleanupInput): Promise<void> {

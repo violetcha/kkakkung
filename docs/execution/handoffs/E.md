@@ -1,5 +1,17 @@
 # E 공개 인계 기록
 
+## 2026-09-13 과거 방 조회 개선 — S15P21C204-209
+
+- localStage: INTEGRATED. writer 병합 `92fe505c`에 복구 조회 개선을 연결했다.
+  저널·사용량·retry 회수 확인과 원래/갱신 토큰 기한, 검증된 시계 여유를 모두 만족하는 방만
+  처음/마지막 전체 목록 조회로 재검증한다. 최근 방과 미확인 기록의 개별 검사·회수 의무는 유지한다.
+- 실제 복구 구성의 240방 API 2회와 최종 조회 중 세대/소유권/시각 변경, 재출현/통신 실패/취소,
+  파일 축약 회귀 등 4파일 71개 통과. 실제 Cloud 전송·부하·장치 증거로 확대하지 않는다.
+- 최종 pnpm verify: 248파일·2,542개·E2E 14개, 포맷·계약·lint·타입·빌드·자산 통과.
+- blockedOn: 원격·MR·실제 배포. 공개 wire 변경은 없다.
+  선행 writer는 MR !133/CI #111·GitLab #191468 통과 후 병합됐고 배포 확인 중이다.
+  [내구 이력](../../durable-retention.md)과 [구현 기록](../../mvp-implementation-progress.md)을 따른다.
+
 ## 2026-09-13 제품 자동 축약 — S15P21C204-209
 
 - localStage: INTEGRATED. Coordinator 유지보수→journal→현재/과거 retry 소유자→공유 retry→usage를
