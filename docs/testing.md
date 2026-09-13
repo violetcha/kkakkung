@@ -54,6 +54,10 @@ pnpm verify
 
 G1~G6는 별도 제품 검증 관문이다. 특히 가짜 Gateway는 실제 Cloud의 불허 구독 차단이나 토큰 회수를 증명하지 않는다. 로컬 G1/G3/G4 회귀는 `tests/contracts`, 게임 전용 부하 도구는 `scripts/run-game-load.mjs`, Cloud 시험은 승인된 preflight를 요구하는 `scripts/run-cloud-check.mjs`를 사용한다. 시험 증거에는 소스 버전, lockfile, protocolVersion, 설정 버전, 장치·네트워크 조건을 기록하고 원본 토큰·얼굴·음성을 저장하지 않는다.
 
+종합 인수는 [MVP 증거 형식](mvp-evidence-format.md)을 따른다. 파일 존재나 manifest의 PASS만으로
+인수하지 않고 실제 바이트/해시·빌드·환경·원시 결과를 검증한다. 6대 수동 기록에도 판별 소스와
+허용 영상/음성 관찰이 필요하다. 일반 공개 인수와 팀 전용 continuous 배포 준비는 별도로 보고한다.
+
 `EXEC-CONTRACT-3` fixture는 맵 출처·fallback, 논리 scope 전환·늦은 개인 데이터, 초기화/READY/입장 재개, 격리 배포 순서를 검사한다. 합성 자료는 실제 맵·Jenkins 실행 증거가 아니다. Origin 차단과 HTTP/OPTIONS/WS 진입 경계는 실제 B 서버의 회귀 시험으로 확인하며 거절된 요청이 방·좌석·세션을 소비하지 않아야 한다.
 
 합성 미디어·공개 projection 시험 자료는 `tests/fixtures`에 있다. `tests/load`의 게임 진단은 실제 A 엔진·맵과 B Room을 loopback에서 실행하며 미디어를 연결하지 않는다. 기본 개발 프로필은 1방·6슬롯이며 Cloud 부하 시험은 사용량·관리 API 예산과 G1을 먼저 확인한다.

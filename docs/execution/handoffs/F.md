@@ -1,5 +1,15 @@
 # F 공개 인계 기록
 
+## 2026-09-13 HTTP 자원 관측 — S15P21C204-204
+
+B 제품 조립과 F registry/수집기에 `http.requests.active/count`,
+`http.requests.work/count`, `http.requests.rejected/count`를 함께 등록했다.
+현재 HTTP 연결·연결 종료 뒤에도 남은 비동기 처리·프로세스 누적 거절의 집계다.
+운영 토큰·세션·IP·본문 label은 전달하지 않는다. 지표는 현재 프로세스의 요청 제한을 관측하며
+Cloud API 사용량 지표나 60세션 인수 결과를 대체하지 않는다.
+생산자 HTTP 회귀와 수집기 allowlist 계약을 같이 검사한다.
+상한·예외는 [HTTP 자원 상한](../../http-resource-limits.md)을 따른다.
+
 전달 기준: [S15P21C204-171](https://ssafy.atlassian.net/browse/S15P21C204-171) · 브랜치 `feat/S15P21C204-171-product-integration` · 병합 대상 `develop`. 로컬 통합 검증 후 사용자 요청으로 스토리 생성·커밋·푸시 및 MR 본문 작성을 진행한다. 아래의 임시 브랜치·미커밋·Jira 미생성 표기는 검증 당시 기록이다. 실제 Cloud·배포 인수와 MR 병합은 별도다.
 
 수정자: **F만** · [담당 계획](../f-infra-qa.md) · [공통 규칙](../common.md)

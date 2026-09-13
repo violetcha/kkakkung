@@ -25,10 +25,12 @@ export function ResultScreen({
   return (
     <section className="result-screen">
       <h2>{result.title}</h2>
+      {result.personalResult && <p aria-label="나의 결과">{result.personalResult}</p>}
+      {result.teamResult && <p aria-label="우리 팀 결과">{result.teamResult}</p>}
       <p>{result.message}</p>
       <p>
-        탈출 {result.counts.escaped} · 포획 {result.counts.captured} · 활동 중인 도망자{' '}
-        {result.counts.active}
+        탈출 {result.counts.escaped} · 포획 {result.counts.captured} ·{' '}
+        {ended ? '종료 시 남은 도망자' : '활동 중인 도망자'} {result.counts.active}
       </p>
       {result.remaining !== null && <p>남은 시간 {result.remaining}초</p>}
       {ended && (
