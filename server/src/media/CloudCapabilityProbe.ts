@@ -1,6 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LIVEKIT_SDK_VERSION } from './LiveKitGateway.js';
+import {
+  parseSplitAuthorityProof,
+  parseSplitGrantProfile,
+  SPLIT_AUTHORITY_CHECKS,
+  type SplitAuthorityProof,
+  type SplitGrantProfile,
+} from './SplitCapability.js';
 
 export type MinimumGrantProfile = Readonly<{
   roomJoin: true;
@@ -21,7 +28,9 @@ export type RevocationProfile = Readonly<{
 }>;
 
 export type CapabilityReport = Readonly<{
-  subscriptionMode?: 'publisher-permissions';
+  subscriptionMode?: 'publisher-permissions' | 'server-forwarding';
+  splitGrantProfile?: SplitGrantProfile | null;
+  splitAuthorityProof?: SplitAuthorityProof | null;
   status: 'SUPPORTED' | 'BLOCKED';
   sdkVersion: string;
   cloudProjectAlias: string;
@@ -144,7 +153,9 @@ function revocation(input: unknown): RevocationProfile {
 
 /** Validates structure only. E's MC-01 harness measures Cloud behavior; F approves the evidence. */
 export function parseCapabilityReport(input: unknown): CapabilityReport {
-  const publisherMode = !!input && typeof input === 'object' && 'subscriptionMode' in input;
+  const hasMode = !!input && typeof input === 'object' && 'subscriptionMode' in input;
+  const forwardingMode = hasMode && input.subscriptionMode === 'server-forwarding';
+  const publisherMode = hasMode && !forwardingMode;
   const data = record(
     input,
     [
@@ -159,12 +170,15 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
       'forbiddenRejected',
       'revocationVerified',
       'evidenceRefs',
-      ...(publisherMode ? ['subscriptionMode'] : []),
+      ...(hasMode ? ['subscriptionMode'] : []),
+      ...(forwardingMode ? ['splitGrantProfile', 'splitAuthorityProof'] : []),
     ],
     'report',
   );
   if (publisherMode && data.subscriptionMode !== 'publisher-permissions')
     throw new InvalidCapabilityReport('subscriptionMode');
+  if (forwardingMode && data.grantProfile !== null)
+    throw new InvalidCapabilityReport('splitGrantProfile');
   if (data.status !== 'SUPPORTED' && data.status !== 'BLOCKED') {
     throw new InvalidCapabilityReport('status');
   }
@@ -195,9 +209,21 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
   const grantProfile = data.grantProfile === null ? null : grant(data.grantProfile, publisherMode);
   const revocationProfile =
     data.revocationProfile === null ? null : revocation(data.revocationProfile);
+  const splitGrantProfile =
+    forwardingMode && data.splitGrantProfile !== null
+      ? parseSplitGrantProfile(data.splitGrantProfile)
+      : null;
+  const splitAuthorityProof =
+    forwardingMode && data.splitAuthorityProof !== null
+      ? parseSplitAuthorityProof(data.splitAuthorityProof)
+      : null;
   if (
     data.status === 'SUPPORTED' &&
-    (!grantProfile ||
+    ((forwardingMode
+      ? !splitGrantProfile ||
+        !splitAuthorityProof ||
+        SPLIT_AUTHORITY_CHECKS.some((key) => splitAuthorityProof[key] !== true)
+      : !grantProfile) ||
       !revocationProfile ||
       !data.allowReceived ||
       !data.forbiddenRejected ||
@@ -209,6 +235,9 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
   return Object.freeze({
     status: data.status,
     ...(publisherMode ? { subscriptionMode: 'publisher-permissions' as const } : {}),
+    ...(forwardingMode
+      ? { subscriptionMode: 'server-forwarding' as const, splitGrantProfile, splitAuthorityProof }
+      : {}),
     sdkVersion: identifier(data.sdkVersion, 'sdkVersion'),
     cloudProjectAlias: identifier(data.cloudProjectAlias, 'cloudProjectAlias'),
     namespace: identifier(data.namespace, 'namespace'),
@@ -228,7 +257,7 @@ export type CapabilityLoadResult =
 
 /** No environment access, network calls, or permissive fallback is performed by this loader. */
 export async function loadCapabilityReport(options: {
-  subscriptionMode?: 'server-controlled' | 'publisher-permissions';
+  subscriptionMode?: 'server-controlled' | 'publisher-permissions' | 'server-forwarding';
   opsDataDir: string;
   projectAlias: string;
   namespace: string;

@@ -206,7 +206,7 @@ export type MediaCoordinatorDeps = Readonly<{
   }>;
 }>;
 export type MediaConfiguration = Readonly<{
-  subscriptionMode?: 'server-controlled' | 'publisher-permissions';
+  subscriptionMode?: 'server-controlled' | 'publisher-permissions' | 'server-forwarding';
   httpUrl: string;
   wsUrl: string;
   apiKey: string;

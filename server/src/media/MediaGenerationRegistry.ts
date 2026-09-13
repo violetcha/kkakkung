@@ -25,6 +25,7 @@ export class MediaGenerationRegistry {
   private readonly generations: Generation[] = [];
   private readonly unissued = new WeakSet<Generation>();
   private readonly rooms = new Map<string, string>();
+  private readonly splitRosters = new Map<string, readonly string[]>();
   private readonly frames = new Map<string, TrustedMediaFrame>();
   private readonly playerInstances = new Map<string, string>();
   private readonly obsoleteScopes = new Set<string>();
@@ -34,6 +35,7 @@ export class MediaGenerationRegistry {
   constructor(
     readonly namespace: string,
     private readonly requireOpenMatch = false,
+    private readonly transport: 'single' | 'split' = 'single',
   ) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(namespace) || namespace.includes('--')) {
       throw new Error('INVALID_NAMESPACE');
@@ -59,6 +61,7 @@ export class MediaGenerationRegistry {
     const belongs = (key: string) => JSON.parse(key)[0] === matchId;
     for (const key of this.frames.keys()) if (belongs(key)) this.frames.delete(key);
     for (const key of this.rooms.keys()) if (belongs(key)) this.rooms.delete(key);
+    for (const key of this.splitRosters.keys()) if (belongs(key)) this.splitRosters.delete(key);
     for (const key of this.current.keys()) if (belongs(key)) this.current.delete(key);
     for (const key of this.playerInstances.keys())
       if (belongs(key)) this.playerInstances.delete(key);
@@ -101,6 +104,16 @@ export class MediaGenerationRegistry {
       return false;
     if (this.requireOpenMatch && !this.isMatchOpen(frame.matchId)) return false;
     const key = instanceKey(frame.matchId, frame.mediaInstanceId);
+    if (this.transport === 'split') {
+      const ids = frame.participants.map((participant) => participant.playerId);
+      const roster = this.splitRosters.get(key);
+      if (
+        ids.length > 6 ||
+        new Set(ids).size !== ids.length ||
+        ids.some((id) => !id || (roster && !roster.includes(id)))
+      )
+        return false;
+    }
     const old = this.frames.get(key);
     if (!old && this.frames.size >= 4096) return false;
     if (old && frame.frameRevision <= old.frameRevision) return false;
@@ -176,10 +189,31 @@ export class MediaGenerationRegistry {
       throw new Error('STALE_GENERATION');
     }
     const key = instanceKey(input.matchId, input.mediaInstanceId);
-    let roomName = this.rooms.get(key);
-    if (!roomName) {
-      roomName = `${this.namespace}--${this.serverEpoch}--${randomUUID()}`;
-      this.rooms.set(key, roomName);
+    const sharedRoom = this.room(key);
+    let roomName = sharedRoom;
+    let splitOwnership: SplitMediaOwnership | undefined;
+    if (this.transport === 'split') {
+      let roster = this.splitRosters.get(key);
+      if (!roster) {
+        roster = Object.freeze(
+          this.frames
+            .get(key)!
+            .participants.map((participant) => participant.playerId)
+            .sort(),
+        );
+        this.splitRosters.set(key, roster);
+      }
+      if (!roster.includes(input.playerId)) throw new Error('WRONG_SCOPE');
+      const receiverRoom = (playerId: string) =>
+        this.room(JSON.stringify([input.matchId, input.mediaInstanceId, playerId]));
+      roomName = receiverRoom(input.playerId);
+      splitOwnership = Object.freeze({
+        faceRoomName: sharedRoom,
+        faceIdentity: `${this.namespace}--${this.serverEpoch}--${randomUUID()}`,
+        receiverRoomNames: Object.freeze(
+          roster.filter((playerId) => playerId !== input.playerId).map(receiverRoom),
+        ),
+      });
     }
     const value: Generation = {
       request: { ...input },
@@ -190,12 +224,22 @@ export class MediaGenerationRegistry {
       reservationId: randomUUID(),
       issuedAtEpochMs: nowEpochMs,
       expiresAtEpochMs: nowEpochMs + 300_000,
+      ...(splitOwnership ? { splitOwnership } : {}),
       terminal: false,
       state: 'PREPARED',
     };
     this.current.set(playerKey(input.matchId, input.playerId), value);
     this.generations.push(value);
     return value;
+  }
+
+  private room(key: string): string {
+    let roomName = this.rooms.get(key);
+    if (!roomName) {
+      roomName = `${this.namespace}--${this.serverEpoch}--${randomUUID()}`;
+      this.rooms.set(key, roomName);
+    }
+    return roomName;
   }
 
   isCurrent(value: Generation): boolean {
@@ -214,5 +258,6 @@ export class MediaGenerationRegistry {
     this.playerInstances.clear();
     this.obsoleteScopes.clear();
     this.openMatches.clear();
+    this.splitRosters.clear();
   }
 }

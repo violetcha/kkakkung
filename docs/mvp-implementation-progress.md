@@ -8,6 +8,28 @@
 
 ## 2026-09-13 구현 재개
 
+### 분리 세대 발급·예약 기반 — 215 진행 중
+
+- `feat/S15P21C204-215-split-media-authority`, 선행 !140 병합 `9a4d9ecb` 동기화.
+- 고정 명단/방과 두 신원·동일 만료 최소 권한 JWT를 전체 예약/내구 저장 뒤 발급한다.
+  두 번째 서명/예약 실패와 늦은 완료는 반쪽 grant를 반환하지 않는다. split capability는
+  실제 제품 경계의 별도 확인을 요구하며 시험 입력을 운영 증거로 승격하지 않는다.
+- 기존6자리 내구 형식으로 두 원본/가능한 전달본을 모두 선예약한다. 여러 블록을 확보해도
+  사용 가능한5분/갱신1분이 중복 연장되지 않는다. 실제 파일 복원·예산 거절 포함 시험 통과.
+  관련6파일75개·QA 타입·lint PASS, 최종 `pnpm verify`257파일2,663개·22 E2E(55.6초)·
+  포맷/계약33/도구11/타입/빌드/실제 Worker·자산 PASS. 문서4개86개 파일 링크 PASS.
+  원격 결과는 후속 확인이다. 제품 조립/가청 전달/물리 상한/Cloud는 남아 있다.
+  [발급 기반과 남은 통합](split-media-authority.md)을 따른다.
+
+### 215 회수 reader 병합·배포 — 20:12 KST
+
+- [MR !140](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/140),
+  소스 `3459230e`의 Jenkins MR119/GitLab191691 SUCCESS,255파일2,638개·22 E2E(2.0분)·이미지 PASS.
+  20:02:24 develop `9a4d9ecb911a046cefd165f51ee6a79405cd826d` 병합·소스 브랜치 삭제 확인.
+- 배포111/GitLab191705 SUCCESS, 기존 팀 모드의 실제 Cloud DP-06 PASS70.09초,
+  20:12:33 READY/OPEN·미해결0·last-good·게임/웹9a4d9ecb 일치·SSO302/익명운영403 확인.
+  새 split 회수의 실제 Cloud 인수는 남아 있다. Jira215는 진행 중이다.
+
 ### 분리 세대의 내구 회수 — 215 서버 단계 진행 중
 
 - `feat/S15P21C204-215-split-media-recovery`, 시작 `fbde188a`, 선행 !139의 `674631b3` 동기화.
@@ -25,7 +47,8 @@
   최종 소스 `fbde188acc09bccfb2432174c0a5e175686f3dca`의 Jenkins MR #118/GitLab #191675 PASS,
   254파일·2,614개·22 E2E(2.0분)·이미지 검사 통과.
   develop `674631b3494de56a63ba9dac53f22325cf487a3a` 병합·소스 브랜치 삭제를 확인했다.
-  별도 배포와 서버 단계가 남아 Jira215는 진행 중이다.
+  별도 배포110은19:50:32 SUCCESS·실제 Cloud DP-06 PASS71.28초·READY/OPEN·미해결0·
+  last-good·게임/웹674631b3 일치·팀 SSO를 확인했다. 서버 단계가 남아 Jira215는 진행 중이다.
 
 ### 공개 미디어 분리 연결 — 215 진행 중
 

@@ -1,31 +1,46 @@
 import type { Generation } from '../media/MediaGenerationRegistry.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { createUsageReservationId } from './UsageReservationId.js';
+import { ownedMediaTargets } from './SplitMediaOwnership.js';
+
+type Lease = {
+  id: string;
+  roomName: string;
+  matchId: string;
+  until: number;
+  sequence: number;
+  reservations: string[];
+  pending: Promise<boolean> | null;
+  retiring: boolean;
+  profile: string;
+  units: number;
+  bytesPerMinute: number;
+};
 
 /** Conservative estimates, never Cloud billing. Six participants, five receivers per publisher,
  * 100 kbps face + 64 kbps audio, 100% transport/retry margin; first five minutes then minute slices.
  * A slice must be durable before its connection time is used. Unconfirmed slices stay reserved.
  */
 export class MediaUsageLease {
-  private readonly leases = new Map<
-    string,
-    {
-      id: string;
-      roomName: string;
-      matchId: string;
-      until: number;
-      sequence: number;
-      reservations: string[];
-      pending: Promise<boolean> | null;
-      retiring: boolean;
-    }
-  >();
+  private readonly leases = new Map<string, Lease>();
   constructor(
     private readonly budget: UsageBudget,
     private readonly now: () => number,
   ) {}
 
   reserve(generation: Generation): Promise<boolean> {
+    const split = generation.splitOwnership;
+    // Keep the durable UsageRequest's existing six-slot block format. Split generations
+    // reserve enough blocks for both originals and every possible clone, at the SAME time.
+    const units = split ? Math.ceil(ownedMediaTargets(generation).length / 6) : 1;
+    if (units < 1 || units > 2) return Promise.reject(new Error('INVALID_LEASE_CAPACITY'));
+    const profile = JSON.stringify([
+      generation.request.matchId,
+      generation.request.mediaInstanceId,
+      split ? [split.faceRoomName, split.receiverRoomNames] : null,
+    ]);
+    const bytesPerMinute =
+      (164_000 / 8) * (split ? Math.max(1, split.receiverRoomNames.length) : 30) * 60;
     let lease = this.leases.get(generation.roomName);
     if (!lease) {
       lease = {
@@ -37,51 +52,63 @@ export class MediaUsageLease {
         reservations: [],
         pending: null,
         retiring: false,
+        profile,
+        units,
+        bytesPerMinute,
       };
       this.leases.set(generation.roomName, lease);
     }
+    if (lease.profile !== profile) return Promise.reject(new Error('LEASE_OWNERSHIP_CHANGED'));
     generation.reservationId = lease.id;
     if (lease.retiring) return Promise.resolve(false);
     if (lease.until - this.now() > 60_000) return Promise.resolve(true);
     if (lease.pending) return lease.pending;
     const current = lease;
+    current.pending = this.reserveSlice(current).finally(() => {
+      current.pending = null;
+    });
+    return current.pending;
+  }
+
+  private async reserveSlice(current: Lease): Promise<boolean> {
     const minutes = current.sequence === 0 ? 5 : 1;
-    const id = current.sequence === 0 ? current.id : `${current.id}:${current.sequence}`;
-    current.pending = this.budget
-      .reserve({
+    let reserved = 0;
+    for (let unit = 0; unit < current.units; unit++) {
+      const id = current.sequence === 0 ? current.id : `${current.id}:${current.sequence}`;
+      const result = await this.budget.reserve({
         reservationId: id,
         matchId: current.matchId,
         purpose: 'public',
         slots: 6,
         expectedMinutes: minutes,
-        expectedBytes: Math.ceil((164_000 / 8) * 30 * minutes * 60),
+        expectedBytes: Math.ceil((current.bytesPerMinute * minutes) / current.units),
         margin: 1,
-      })
-      .then((result) => {
-        if (result.status === 'rejected') {
-          const persisted = this.budget
-            .snapshot()
-            .reservations.some((reservation) => reservation.request.reservationId === id);
-          if (persisted || result.code === 'STORAGE_FAILURE') {
-            // Admission may close after the reservation reached disk. Preserve
-            // its identity for the issuer's unresolved/retirement path instead
-            // of treating the attempt as an ordinary rejection with no effects.
-            current.reservations.push(id);
-            current.sequence++;
-            current.retiring = true;
-            throw new Error('RESERVATION_UNCONFIRMED');
-          }
-          return false;
-        }
-        current.until = Math.max(current.until, this.now()) + minutes * 60_000;
-        current.sequence++;
-        current.reservations.push(id);
-        return true;
-      })
-      .finally(() => {
-        current.pending = null;
       });
-    return current.pending;
+      if (result.status === 'rejected') {
+        const persisted = this.budget
+          .snapshot()
+          .reservations.some((reservation) => reservation.request.reservationId === id);
+        if (persisted || result.code === 'STORAGE_FAILURE') {
+          // Admission may close after the reservation reached disk. Preserve
+          // its identity for the issuer's unresolved/retirement path instead
+          // of treating the attempt as an ordinary rejection with no effects.
+          current.reservations.push(id);
+          current.sequence++;
+          current.retiring = true;
+          throw new Error('RESERVATION_UNCONFIRMED');
+        }
+        if (reserved > 0) {
+          current.retiring = true;
+          throw new Error('PARTIAL_RESERVATION_UNCONFIRMED');
+        }
+        return false;
+      }
+      current.sequence++;
+      current.reservations.push(id);
+      reserved++;
+    }
+    current.until = Math.max(current.until, this.now()) + minutes * 60_000;
+    return true;
   }
 
   remaining(generation: Generation): number {

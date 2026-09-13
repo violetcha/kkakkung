@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MediaUsageLease } from '../../src/operations/MediaUsageLease.js';
 import type { UsageBudget } from '../../src/operations/UsageBudget.js';
+import type { UsageRequest } from '../../src/operations/UsageCheckpoint.js';
 import type { Generation } from '../../src/media/MediaGenerationRegistry.js';
 import { deferred, flush, prepareRequest } from '../media/generation-fixtures.js';
 
@@ -21,7 +22,7 @@ function generation(): Generation {
 function setup() {
   let now = 0;
   const budget = {
-    reserve: vi.fn(async () => ({ status: 'reserved' })),
+    reserve: vi.fn(async (_request: UsageRequest) => ({ status: 'reserved' })),
     markRetiring: vi.fn(async () => true),
     markRemoteConfirmed: vi.fn(async () => true),
     snapshot: vi.fn(() => ({
@@ -128,5 +129,143 @@ describe('media usage lease lifetime', () => {
     expect(await s.lease.reserve(first)).toBe(false);
     await s.lease.markRetiring(first.roomName);
     expect(s.budget.markRetiring).not.toHaveBeenCalled();
+  });
+});
+
+function splitGeneration(player = 0, players = 6): Generation {
+  return {
+    ...generation(),
+    roomName: `receiver-${player}`,
+    identity: `voice-${player}`,
+    splitOwnership: {
+      faceRoomName: 'face-room',
+      faceIdentity: `face-${player}`,
+      receiverRoomNames: Array.from({ length: players }, (_, index) => `receiver-${index}`).filter(
+        (room) => room !== `receiver-${player}`,
+      ),
+    },
+  };
+}
+
+describe('split media capacity reservations', () => {
+  it('reserves twelve possible participants for five minutes, without doubling the usable duration', async () => {
+    const s = setup();
+    const first = splitGeneration();
+    await expect(s.lease.reserve(first)).resolves.toBe(true);
+    const reservations = s.budget.reserve.mock.calls.map(([request]) => request);
+    expect(reservations).toHaveLength(2);
+    expect(reservations.map((request) => [request.slots, request.expectedMinutes])).toEqual([
+      [6, 5],
+      [6, 5],
+    ]);
+    expect(reservations.map((request) => request.reservationId)).toEqual([
+      first.reservationId,
+      `${first.reservationId}:1`,
+    ]);
+    // 164 kbps, five destinations, five minutes; UsageBudget applies the 100% margin.
+    expect(reservations.reduce((bytes, request) => bytes + request.expectedBytes, 0)).toBe(
+      (164_000 / 8) * 5 * 300,
+    );
+    expect(s.lease.remaining(first)).toBe(300_000);
+    s.now(240_000);
+    await s.lease.reserve(first);
+    expect(
+      s.budget.reserve.mock.calls.slice(2).map(([request]) => request.expectedMinutes),
+    ).toEqual([1, 1]);
+    expect(s.lease.remaining(first)).toBe(120_000);
+    await s.lease.markRetiring(first.roomName);
+    expect(s.budget.markRemoteConfirmed.mock.calls).toEqual(
+      ['', ':1', ':2', ':3'].map((suffix) => [`${first.reservationId}${suffix}`]),
+    );
+  });
+
+  it('does not share one player’s allowance across the six separate receiver rooms', async () => {
+    const s = setup();
+    const players = Array.from({ length: 6 }, (_, index) => splitGeneration(index));
+    expect(await Promise.all(players.map((player) => s.lease.reserve(player)))).toEqual(
+      Array(6).fill(true),
+    );
+    expect(new Set(players.map((player) => player.reservationId)).size).toBe(6);
+    expect(s.budget.reserve.mock.calls.reduce((slots, [request]) => slots + request.slots, 0)).toBe(
+      72,
+    );
+    await s.lease.markRetiring(players[0]!.roomName);
+    expect(s.budget.markRemoteConfirmed).toHaveBeenCalledTimes(2);
+    expect(s.lease.remaining(players[1]!)).toBe(300_000);
+  });
+
+  it('waits for the second durable block before a concurrent caller can use the lease', async () => {
+    const s = setup();
+    const pending = deferred<{ status: string }>();
+    s.budget.reserve
+      .mockResolvedValueOnce({ status: 'reserved' })
+      .mockImplementationOnce(() => pending.promise);
+    const first = splitGeneration();
+    const reserving = s.lease.reserve(first);
+    await flush();
+    const concurrent = s.lease.reserve(first);
+    expect(concurrent).toBe(reserving);
+    expect(s.lease.remaining(first)).toBe(0);
+    pending.resolve({ status: 'reserved' });
+    await expect(reserving).resolves.toBe(true);
+    expect(s.lease.remaining(first)).toBe(300_000);
+  });
+
+  it('retains a successful first block when the second block is rejected without side effects', async () => {
+    const s = setup();
+    s.budget.reserve
+      .mockResolvedValueOnce({ status: 'reserved' })
+      .mockResolvedValueOnce({ status: 'rejected' });
+    const first = splitGeneration();
+    await expect(s.lease.reserve(first)).rejects.toThrow('PARTIAL_RESERVATION_UNCONFIRMED');
+    await expect(s.lease.reserve(first)).resolves.toBe(false);
+    expect(s.lease.remaining(first)).toBe(0);
+    await s.lease.markRetiring(first.roomName);
+    expect(s.budget.markRemoteConfirmed.mock.calls).toEqual([[first.reservationId]]);
+  });
+
+  it('retains both block identities when the second block reached disk before rejection', async () => {
+    const s = setup();
+    const first = splitGeneration();
+    s.budget.reserve
+      .mockResolvedValueOnce({ status: 'reserved' })
+      .mockResolvedValueOnce({ status: 'rejected' });
+    s.budget.snapshot.mockImplementation(() => ({
+      reservations: [{ request: { reservationId: `${first.reservationId}:1` } }],
+    }));
+    await expect(s.lease.reserve(first)).rejects.toThrow('RESERVATION_UNCONFIRMED');
+    expect(s.lease.remaining(first)).toBe(0);
+    await s.lease.markRetiring(first.roomName);
+    expect(s.budget.markRemoteConfirmed.mock.calls).toEqual([
+      [first.reservationId],
+      [`${first.reservationId}:1`],
+    ]);
+  });
+
+  it('rejects adding destinations or moving a private room into another instance under an existing lease', async () => {
+    const s = setup();
+    const first = splitGeneration(0, 2);
+    await s.lease.reserve(first);
+    await expect(s.lease.reserve(splitGeneration())).rejects.toThrow('LEASE_OWNERSHIP_CHANGED');
+    await expect(
+      s.lease.reserve({
+        ...first,
+        request: { ...first.request, mediaInstanceId: 'another-instance' },
+      }),
+    ).rejects.toThrow('LEASE_OWNERSHIP_CHANGED');
+    expect(s.budget.reserve).toHaveBeenCalledOnce();
+    expect(s.lease.remaining(first)).toBe(300_000);
+  });
+
+  it('keeps the earlier usable time after a side-effect-free renewal rejection', async () => {
+    const s = setup();
+    const first = splitGeneration();
+    await s.lease.reserve(first);
+    s.now(240_000);
+    s.budget.reserve.mockResolvedValueOnce({ status: 'rejected' });
+    await expect(s.lease.reserve(first)).resolves.toBe(false);
+    expect(s.lease.remaining(first)).toBe(60_000);
+    await expect(s.lease.reserve(first)).resolves.toBe(true);
+    expect(s.lease.remaining(first)).toBe(120_000);
   });
 });
