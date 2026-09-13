@@ -68,6 +68,29 @@ const evidenceSchema = z
   .strict();
 
 export type RuntimeEvidence = z.infer<typeof evidenceSchema>;
+export const RUNTIME_EVIDENCE_FAILURES = [
+  'INITIAL_VALIDATION_FAILED',
+  'CLOCK_INVALID',
+  'CLOCK_ROLLBACK',
+  'EVIDENCE_FUTURE',
+  'EVIDENCE_EXPIRED',
+  'EVIDENCE_STALE',
+  'EPOCH_LEASE_EXPIRED',
+  'MONOTONIC_LEASE_EXPIRED',
+  'FILE_INVALID',
+  'FILE_CHANGED',
+  'FILE_READ_FAILED',
+  'CLOSED',
+] as const;
+export type RuntimeEvidenceDiagnostic = Readonly<{
+  reason: (typeof RUNTIME_EVIDENCE_FAILURES)[number] | null;
+  firstFailureReason: (typeof RUNTIME_EVIDENCE_FAILURES)[number] | null;
+  refreshCount: number;
+  leaseRecoveryCount: number;
+  refreshPending: boolean;
+  maxRefreshDurationMs: number;
+  clockRollbackMs: number;
+}>;
 // A deployment configuration, not a periodically renewed statement of Cloud usage.
 // The provider enforces its quota; no remaining allowance or billing timestamp is invented.
 const servicePolicySchema = evidenceSchema
@@ -88,6 +111,7 @@ export type RuntimeEvidenceServices = Required<
     | 'getOfficialRevision'
   >
 > & {
+  getDiagnostic(): RuntimeEvidenceDiagnostic;
   refresh(): Promise<void>;
   close(): Promise<void>;
 };
@@ -109,6 +133,15 @@ const REFRESH_INTERVAL_MS = 1000;
 const VERIFIED_LEASE_MS = 5000;
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const LOCKED: RuntimeEvidenceServices = Object.freeze({
+  getDiagnostic: () => ({
+    reason: 'INITIAL_VALIDATION_FAILED' as const,
+    firstFailureReason: 'INITIAL_VALIDATION_FAILED' as const,
+    refreshCount: 0,
+    leaseRecoveryCount: 0,
+    refreshPending: false,
+    maxRefreshDurationMs: 0,
+    clockRollbackMs: 0,
+  }),
   namespaceOwnershipConfirmed: () => false,
   firstInstallationConfirmed: async () => false,
   firstAuditConfirmed: () => false,
@@ -132,7 +165,8 @@ function regularFile(path: string): boolean {
  * Changed/missing files lock this instance; configuration changes require a new validation.
  * Continuous scope has no daily expiry. File contents
  * are never logged. Normal getters only check a bounded in-memory lease. An asynchronous
- * refresh verifies the unchanged file; first-use callbacks alone perform durable marker IO.
+ * refresh verifies the unchanged file and may recover an expired verification lease.
+ * Invalid evidence remains latched; first-use callbacks alone perform durable marker IO.
  */
 export async function loadRuntimeEvidence(
   options: RuntimeEvidenceOptions,
@@ -189,30 +223,47 @@ export async function loadRuntimeEvidence(
     return LOCKED;
   }
   let locked = false;
+  let reason: RuntimeEvidenceDiagnostic['reason'] = null;
+  let firstFailureReason: RuntimeEvidenceDiagnostic['reason'] = null;
+  let refreshCount = 0;
+  let leaseRecoveryCount = 0;
+  let maxRefreshDurationMs = 0;
+  let clockRollbackMs = 0;
+  const invalidate = (failure: NonNullable<RuntimeEvidenceDiagnostic['reason']>) => {
+    if (locked) return false;
+    firstFailureReason ??= failure;
+    reason = failure;
+    locked = true;
+    return false;
+  };
+  const expireLease = (failure: 'EPOCH_LEASE_EXPIRED' | 'MONOTONIC_LEASE_EXPIRED') => {
+    firstFailureReason ??= failure;
+    reason = failure;
+    return false;
+  };
   let verifiedUntilEpochMs = Number.POSITIVE_INFINITY;
   let verifiedUntilMonotonicMs = Number.POSITIVE_INFINITY;
-  const current = (): boolean => {
+  const current = (verifyLease = true): boolean => {
     if (locked) return false;
     try {
       const now = options.nowEpochMs();
-      if (
-        !Number.isSafeInteger(now) ||
-        now < lastNow ||
-        now < evidence.checkedAtEpochMs ||
-        (evidence.version === 1 &&
-          (now >= evidence.expiresAtEpochMs ||
-            now - evidence.checkedAtEpochMs > options.maxAgeMs)) ||
-        now >= verifiedUntilEpochMs ||
-        performance.now() >= verifiedUntilMonotonicMs
-      ) {
-        locked = true;
-        return false;
+      if (!Number.isSafeInteger(now)) return invalidate('CLOCK_INVALID');
+      if (now < lastNow) {
+        clockRollbackMs = lastNow - now;
+        return invalidate('CLOCK_ROLLBACK');
       }
+      if (now < evidence.checkedAtEpochMs) return invalidate('EVIDENCE_FUTURE');
+      if (evidence.version === 1 && now >= evidence.expiresAtEpochMs)
+        return invalidate('EVIDENCE_EXPIRED');
+      if (evidence.version === 1 && now - evidence.checkedAtEpochMs > options.maxAgeMs)
+        return invalidate('EVIDENCE_STALE');
+      if (verifyLease && now >= verifiedUntilEpochMs) return expireLease('EPOCH_LEASE_EXPIRED');
+      if (verifyLease && performance.now() >= verifiedUntilMonotonicMs)
+        return expireLease('MONOTONIC_LEASE_EXPIRED');
       lastNow = now;
       return true;
     } catch {
-      locked = true;
-      return false;
+      return invalidate('CLOCK_INVALID');
     }
   };
   if (!current()) return LOCKED;
@@ -222,26 +273,44 @@ export async function loadRuntimeEvidence(
   let pendingRefresh: Promise<void> | undefined;
   const refresh = (): Promise<void> => {
     if (pendingRefresh) return pendingRefresh;
-    if (!current()) return Promise.resolve();
+    // A stale snapshot denies every permission, but an unchanged configuration may be
+    // reverified. Invalid/changed files, clock failures, attestation expiry and close latch.
+    if (!current(false)) return Promise.resolve();
+    const startedAt = performance.now();
+    const startedAtEpochMs = lastNow;
     pendingRefresh = (async () => {
       try {
         const stat = await lstat(path);
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > MAX_BYTES) {
-          locked = true;
+          invalidate('FILE_INVALID');
           return;
         }
         const bytes = await readFile(path);
         if (bytes.byteLength > MAX_BYTES || digest(bytes) !== originalDigest) {
-          locked = true;
+          invalidate('FILE_CHANGED');
           return;
         }
-        // A late completion must never reopen an expired lease or a closed provider.
-        if (!current()) return;
+        if (!current(false)) return;
+        // Do not turn an old in-flight read into fresh proof. Start a new inspection on the
+        // next timer only after this read settles; never accumulate overlapping file IO.
+        if (lastNow - startedAtEpochMs >= VERIFIED_LEASE_MS) {
+          expireLease('EPOCH_LEASE_EXPIRED');
+          return;
+        }
+        if (performance.now() - startedAt >= VERIFIED_LEASE_MS) {
+          expireLease('MONOTONIC_LEASE_EXPIRED');
+          return;
+        }
+        if (reason === 'EPOCH_LEASE_EXPIRED' || reason === 'MONOTONIC_LEASE_EXPIRED')
+          leaseRecoveryCount++;
         verifiedUntilEpochMs = lastNow + VERIFIED_LEASE_MS;
         verifiedUntilMonotonicMs = performance.now() + VERIFIED_LEASE_MS;
+        reason = null;
+        refreshCount++;
       } catch {
-        locked = true;
+        invalidate('FILE_READ_FAILED');
       } finally {
+        maxRefreshDurationMs = Math.max(maxRefreshDurationMs, performance.now() - startedAt);
         pendingRefresh = undefined;
       }
     })();
@@ -250,7 +319,7 @@ export async function loadRuntimeEvidence(
   const timer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
   timer.unref();
   const close = async (): Promise<void> => {
-    locked = true;
+    if (!locked) invalidate('CLOSED');
     clearInterval(timer);
     await pendingRefresh;
   };
@@ -263,7 +332,7 @@ export async function loadRuntimeEvidence(
       // Initial history authorization is rare and must verify the file again immediately
       // before consuming proof. Readiness and permission hot paths never perform this IO.
       if (!regularFile(path) || digest(readFileSync(path)) !== originalDigest || !current()) {
-        locked = true;
+        invalidate('FILE_CHANGED');
         return false;
       }
       // A fixed purpose filename prevents replay using another attestation id or process.
@@ -312,9 +381,18 @@ export async function loadRuntimeEvidence(
   };
 
   return Object.freeze({
+    getDiagnostic: () => ({
+      reason,
+      firstFailureReason,
+      refreshCount,
+      leaseRecoveryCount,
+      refreshPending: !!pendingRefresh,
+      maxRefreshDurationMs,
+      clockRollbackMs,
+    }),
     refresh,
     close,
-    namespaceOwnershipConfirmed: current,
+    namespaceOwnershipConfirmed: () => current(),
     firstInstallationConfirmed: async () => consume('firstInstallation'),
     firstAuditConfirmed: () => consume('firstAudit'),
     getOfficialRevision: (checkpoint: OfficialBudgetCheckpoint) => {

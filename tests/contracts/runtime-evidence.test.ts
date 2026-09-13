@@ -1,7 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { performance } from 'node:perf_hooks';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   loadRuntimeEvidence as createRuntimeEvidence,
   officialCheckpointDigest,
@@ -50,6 +51,7 @@ async function loadRuntimeEvidence(options: RuntimeEvidenceOptions) {
 }
 afterEach(async () => {
   await Promise.all(providers.splice(0).map((provider) => provider.close()));
+  vi.restoreAllMocks();
   for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 function fixture(value: unknown = valid()) {
@@ -205,6 +207,124 @@ describe('F runtime evidence provider', () => {
     expect(services.namespaceOwnershipConfirmed()).toBe(false);
   });
 
+  it('denies stale proof and recovers only after a fresh inspection of the identical file', async () => {
+    const f = fixture({ ...valid(), expiresAtEpochMs: NOW + 20_000 });
+    const services = await loadRuntimeEvidence({ ...f.options, maxAgeMs: 30_000 });
+    f.setNow(NOW + 5000);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(await services.firstInstallationConfirmed()).toBe(false);
+    expect(services.firstAuditConfirmed()).toBe(false);
+    expect(services.getOfficialRevision(official)).toBeNull();
+    expect(readdirSync(f.directory)).toEqual(['runtime-evidence.json']);
+    const refreshing = services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: 'EPOCH_LEASE_EXPIRED',
+      firstFailureReason: 'EPOCH_LEASE_EXPIRED',
+      refreshPending: true,
+      leaseRecoveryCount: 0,
+    });
+    expect(services.refresh()).toBe(refreshing);
+    await refreshing;
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    expect(services.getOfficialRevision(official)).toEqual({
+      periodId: 'fixture-period',
+      version: 7,
+    });
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: null,
+      firstFailureReason: 'EPOCH_LEASE_EXPIRED',
+      refreshPending: false,
+      leaseRecoveryCount: 1,
+      refreshCount: 1,
+    });
+    expect(await services.firstInstallationConfirmed()).toBe(true);
+    expect(await services.firstInstallationConfirmed()).toBe(false);
+  });
+
+  it('restores permission after a verified lease delay without restarting the provider', async () => {
+    const f = fixture({ ...valid(), expiresAtEpochMs: NOW + 20_000 });
+    const services = await loadRuntimeEvidence({ ...f.options, maxAgeMs: 30_000 });
+    f.setNow(NOW + 5000);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+  });
+
+  it('refuses an over-age read, then verifies again without overlapping pending reads', async () => {
+    const f = fixture({ ...valid(), expiresAtEpochMs: NOW + 20_000 });
+    const services = await loadRuntimeEvidence({ ...f.options, maxAgeMs: 30_000 });
+    const oldRead = services.refresh();
+    f.setNow(NOW + 5000);
+    expect(services.refresh()).toBe(oldRead);
+    await oldRead;
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: 'EPOCH_LEASE_EXPIRED',
+      refreshCount: 0,
+      refreshPending: false,
+    });
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    expect(services.getDiagnostic()).toMatchObject({ refreshCount: 1, leaseRecoveryCount: 1 });
+  });
+
+  it('keeps the independent monotonic boundary even when the epoch clock does not advance', async () => {
+    const monotonic = vi.spyOn(performance, 'now').mockReturnValue(100);
+    const f = fixture({ ...valid(), expiresAtEpochMs: NOW + 20_000 });
+    const services = await loadRuntimeEvidence({ ...f.options, maxAgeMs: 30_000 });
+    const oldRead = services.refresh();
+    monotonic.mockReturnValue(5100);
+    await oldRead;
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: 'MONOTONIC_LEASE_EXPIRED',
+      refreshCount: 0,
+      maxRefreshDurationMs: 5000,
+    });
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    monotonic.mockReturnValue(10100);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+  });
+
+  it.each(['changed', 'missing', 'expired', 'rollback', 'closed'] as const)(
+    'does not use lease recovery to reopen %s evidence',
+    async (failure) => {
+      const record = { ...valid(), expiresAtEpochMs: NOW + 20_000 };
+      const f = fixture(record);
+      const services = await loadRuntimeEvidence({ ...f.options, maxAgeMs: 30_000 });
+      f.setNow(NOW + 5000);
+      expect(services.namespaceOwnershipConfirmed()).toBe(false);
+      if (failure === 'changed')
+        writeFileSync(f.path, JSON.stringify({ ...record, checkedBy: 'changed' }));
+      if (failure === 'missing') rmSync(f.path);
+      if (failure === 'expired') f.setNow(NOW + 20_000);
+      if (failure === 'rollback') f.setNow(NOW - 1);
+      if (failure === 'closed') await services.close();
+      await services.refresh();
+      const reason = services.getDiagnostic().reason;
+      expect(reason).toBe(
+        {
+          changed: 'FILE_CHANGED',
+          missing: 'FILE_READ_FAILED',
+          expired: 'EVIDENCE_EXPIRED',
+          rollback: 'CLOCK_ROLLBACK',
+          closed: 'CLOSED',
+        }[failure],
+      );
+      writeFileSync(f.path, JSON.stringify(record));
+      f.setNow(NOW + 6000);
+      await services.refresh();
+      expect(services.namespaceOwnershipConfirmed()).toBe(false);
+      expect(services.getDiagnostic()).toMatchObject({
+        reason,
+        firstFailureReason: 'EPOCH_LEASE_EXPIRED',
+        leaseRecoveryCount: 0,
+      });
+    },
+  );
+
   it('closes immediately, awaits pending refresh and never reopens after repeated close', async () => {
     const f = fixture();
     const services = await loadRuntimeEvidence(f.options);
@@ -324,6 +444,21 @@ describe('continuous service configuration', () => {
     writeFileSync(f.path, JSON.stringify({ ...f.policy, projectAlias: 'other-project' }));
     const restarted = await loadRuntimeEvidence({ ...f.options, projectAlias: 'other-project' });
     expect(restarted.namespaceOwnershipConfirmed()).toBe(false);
+  });
+  it('recovers a delayed automatic inspection of the same continuous policy without a new approval', async () => {
+    const f = continuous();
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW + 5000);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    expect(services.getOfficialRevision(official)).toBeNull();
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: null,
+      firstFailureReason: 'EPOCH_LEASE_EXPIRED',
+      leaseRecoveryCount: 1,
+    });
+    expect(readdirSync(f.directory)).toEqual(['service-operations.json']);
   });
   it('still locks on a changed, missing or wrong-origin configuration', async () => {
     const f = continuous();
