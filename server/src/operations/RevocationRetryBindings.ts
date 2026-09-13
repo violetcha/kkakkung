@@ -3,6 +3,7 @@ import type { CapabilityReport } from '../media/CloudCapabilityProbe.js';
 import { GatewayError, type LiveKitGateway } from '../media/LiveKitGateway.js';
 import type { Generation } from '../media/MediaGenerationRegistry.js';
 import { RetirementBarrier } from '../media/RetirementBarrier.js';
+import { areRevokedMediaTargetsAbsent } from '../media/RevokedMediaAbsence.js';
 import type { OfficialBudgetCheckpoint, RetireGenerationRequest } from '../media/types.js';
 import {
   checksum,
@@ -23,7 +24,7 @@ import {
   type RevocationRetryOptions,
 } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
-import { ownedMediaRooms, ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
+import { ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
 
 export function validateRetryCheckpoint(value: unknown): readonly RetryIntent[] {
   if (!Array.isArray(value)) throw new Error('INVALID_RETRY_CHECKPOINT');
@@ -109,25 +110,10 @@ export class RevocationRetryBindings {
             this.context(generation),
           );
       },
-      absent: async (generation) => {
-        const targets = ownedMediaTargets(generation);
-        for (const roomName of ownedMediaRooms(generation)) {
-          const participants = await options.gateway.listParticipants(
-            roomName,
-            this.context(generation),
-          );
-          if (
-            participants.some((participant) =>
-              targets.some(
-                (target) =>
-                  target.roomName === roomName && target.identity === participant.identity,
-              ),
-            )
-          )
-            return false;
-        }
-        return true;
-      },
+      absent: (generation) =>
+        areRevokedMediaTargetsAbsent(ownedMediaTargets(generation), options.gateway, () =>
+          this.context(generation),
+        ),
       onFailure: (generation, error) => this.failures.set(generation, error),
       onUnresolved: () => options.lockIssuance('RETIREMENT_UNRESOLVED'),
       onConfirmed: (generation) => this.confirmOccupancy(generation),

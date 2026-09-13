@@ -197,6 +197,88 @@ afterEach(async () => {
 });
 
 describe('E-11 composition with real local storage; no Cloud network calls', () => {
+  it.each([false, true])(
+    'confirms a missing room only after every removal ACK, split=%s',
+    async (split) => {
+      const s = await setup();
+      const generation = s.generations[0]!;
+      if (split) {
+        const room = () => `e-fixture--${generation.serverEpoch}--${randomUUID()}`;
+        generation.splitOwnership = {
+          faceRoomName: room(),
+          faceIdentity: randomUUID(),
+          receiverRoomNames: [room()],
+        };
+      }
+      const targets = ownedMediaTargets(generation);
+      s.list.mockImplementation(async () => {
+        expect(s.remove.mock.calls.map(([roomName, identity]) => ({ roomName, identity }))).toEqual(
+          targets,
+        );
+        expect(s.remove.mock.calls.every((call) => call[2]?.revokeTokenTs === 1_800_000_002n)).toBe(
+          true,
+        );
+        throw { status: 404, code: 'not_found' };
+      });
+      expect(await s.bindings.retire(s.request())).toMatchObject({ status: 'confirmed' });
+      expect(s.list.mock.calls.map(([roomName]) => roomName)).toEqual(ownedMediaRooms(generation));
+      expect((await s.records()).at(-1)?.record.state).toBe('REVOKED');
+      expect(s.ended).toHaveBeenCalledOnce();
+      expect(s.usage.snapshot().reservations[0]?.status).toBe('AWAITING_OFFICIAL');
+      expect(s.usage.snapshot().activeMinutes).toBe(60);
+    },
+  );
+
+  it.each([
+    { status: 404, code: 'not_found' },
+    { status: 503, code: 'unavailable' },
+  ])('does not use room absence instead of a removal ACK: %j', async (error) => {
+    const s = await setup();
+    s.remove.mockRejectedValue(error);
+    s.list.mockRejectedValue({ status: 404, code: 'not_found' });
+    expect(await s.bindings.retire(s.request())).toMatchObject({ status: 'unknown' });
+    expect(s.list).not.toHaveBeenCalled();
+    expect(s.ended).not.toHaveBeenCalled();
+    expect(s.generations[0]!.state).toBe('UNRESOLVED');
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+  });
+
+  it.each([
+    { status: 403, code: 'permission_denied' },
+    { status: 503, code: 'unavailable' },
+    { status: 404 },
+    { code: 'not_found' },
+  ])('does not treat an unconfirmed inventory as a missing room: %j', async (error) => {
+    const s = await setup();
+    s.list.mockRejectedValue(error);
+    expect(await s.bindings.retire(s.request())).toMatchObject({ status: 'unknown' });
+    expect(s.ended).not.toHaveBeenCalled();
+    expect(s.generations[0]!.state).toBe('UNRESOLVED');
+    expect(s.lock).toHaveBeenCalled();
+  });
+
+  it('does not skip a remaining clone after a missing original room', async () => {
+    const s = await setup();
+    const generation = s.generations[0]!;
+    const room = () => `e-fixture--${generation.serverEpoch}--${randomUUID()}`;
+    generation.splitOwnership = {
+      faceRoomName: room(),
+      faceIdentity: randomUUID(),
+      receiverRoomNames: [room()],
+    };
+    const last = ownedMediaTargets(generation).at(-1)!;
+    s.list.mockImplementation(async (roomName) => {
+      if (roomName !== last.roomName) throw { status: 404, code: 'not_found' };
+      return [{ identity: last.identity }] as Awaited<
+        ReturnType<GatewayClient['listParticipants']>
+      >;
+    });
+    expect(await s.bindings.retire(s.request())).toMatchObject({ status: 'unknown' });
+    expect(s.list.mock.calls.map(([roomName]) => roomName)).toEqual(ownedMediaRooms(generation));
+    expect(s.ended).not.toHaveBeenCalled();
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+  });
+
   it.each(['success', 'clone-failure', 'clone-remains'] as const)(
     'retires a complete split generation before confirming its occupancy: %s',
     async (outcome) => {

@@ -11,6 +11,7 @@ import { caseTimeoutMs, requireCloudPreflight } from '../../../tests/cloud/Cloud
 import { ApiBudget } from '../../src/operations/ApiBudget.js';
 import { ownedMediaRooms, ownedMediaTargets } from '../../src/operations/SplitMediaOwnership.js';
 import { MediaGenerationRegistry } from '../../src/media/MediaGenerationRegistry.js';
+import { areRevokedMediaTargetsAbsent } from '../../src/media/RevokedMediaAbsence.js';
 import {
   GatewayError,
   LiveKitGateway,
@@ -245,6 +246,12 @@ it(
           missingRoomInventories.push({ roomIndex, outcome: 'not_found' });
         }
       }
+      // Use the same product absence consumer after every explicit removal has acknowledged.
+      evidence.productAbsenceConfirmed = await areRevokedMediaTargetsAbsent(
+        targets,
+        gateway,
+        context,
+      );
       const rejected = async (phase: string) => {
         let all = true;
         for (let i = 0; i < tokens.length; i++) {
@@ -368,9 +375,11 @@ it(
             samples,
             observations,
             missingRoomInventories,
-            currentProductListAbsenceCompatible:
+            rawInventoriesAreEmpty:
               missingRoomInventories.length === rooms.length &&
               missingRoomInventories.every((value) => value.outcome === 'empty'),
+            currentProductListAbsenceCompatible: evidence.productAbsenceConfirmed,
+            productAbsenceUsed: true,
             realDevices: false,
             mediaPublished: false,
             diagnosticSigner: true,

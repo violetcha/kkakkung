@@ -4,6 +4,7 @@ export const UNJOINED_REVOCATION_CHECKS = [
   'roomsInitiallyAbsent',
   'missingRemoveAcknowledged',
   'missingParticipantsAbsent',
+  'productAbsenceConfirmed',
   'neverJoinedTokensRejected',
   'freshControlsConnected',
   'creationPreservedCutoffs',

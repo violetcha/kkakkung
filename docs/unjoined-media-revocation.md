@@ -2,8 +2,8 @@
 
 관련 Jira는 [S15P21C204-215](https://ssafy.atlassian.net/browse/S15P21C204-215)다.
 MC-PUBLIC-03은 [서버 제어 조립](split-media-policy.md)의 후속 Cloud 인수 중,
-미입장 원본과 아직 생성되지 않은 전달 대상을 먼저 확인한다. 현재는 시험 구현 단계이며
-아래 조건을 실제로 실행하기 전에는 성공으로 기록하지 않는다.
+미입장 원본과 아직 생성되지 않은 전달 대상을 먼저 확인한다. 첫 실제 실행의 부분 통과와
+미확인 결과는 아래에 보존한다. 전체 조건이 충족되기 전에는 성공으로 기록하지 않는다.
 
 제품 MediaGenerationRegistry와 ownedMediaTargets/ownedMediaRooms가 생성한 하나의 분리
 세대·두 명 명단·세 개 방·네 개 대상에 최소 CAMERA/MIC 토큰을 진단용으로 서명한다.
@@ -15,8 +15,10 @@ capability를 넣지 않는다. 이 시험은 해당 두 제품 조립부의 실
 
 1. 대상 방이 하나도 없는 상태에서 네 신원에 명시적인 cutoff로 remove를 호출한다.
    원격 성공 응답과 참가자 부재를 모두 요구하며 remove의404를 성공으로 바꾸지 않는다.
-   제품이 사용하는 listParticipants도 조회해 빈 목록/404를 따로 기록한다. 기존 제품이
-   그대로 소비할 수 있는지는 currentProductListAbsenceCompatible로 별도 보고한다.
+   제품이 사용하는 listParticipants도 조회해 빈 목록/404를 따로 기록한다.
+   실제 제품의 areRevokedMediaTargetsAbsent로 ACK 뒤 부재를 확인한다.
+   currentProductListAbsenceCompatible는 이 제품 함수의 결과이며 rawInventoriesAreEmpty와
+   구분한다. 제거 자체의404·통신 오류·미확인 응답은 회수 성공으로 인정하지 않는다.
 2. 발급 후 한 번도 입장하지 않은 기존 토큰 네 개가 실제 SDK에서401/403으로 거절돼야 한다.
    연결 시간 초과나 일반 오류는 거절 증거가 아니다.
 3. 별도의 새 CAMERA/MIC 신원은 같은 프로젝트·방·권한으로 연결돼야 한다.
@@ -29,6 +31,29 @@ capability를 넣지 않는다. 이 시험은 해당 두 제품 조립부의 실
 [LiveKit 참가자 관리 문서](https://docs.livekit.io/intro/basics/rooms-participants-tracks/participants/)는
 명시적인 revoke_token_ts와 미존재 참가자 응답 억제를 설명한다. 방 자체의 생성 전·삭제 후
 재생성 경계는 문서에서 추정하지 않고 위 시험으로 확인한다.
+
+## 실제 관측과 제품 수정
+
+2026-09-13 22:08 KST 첫 실행 소스는 `911de4ee9ce2945b97c9167bb3ab55bf522b7368`다.
+26,942ms, 정상24/정리16 API 호출로 미입장 네 토큰 거절, 새 신원 정상 접속,
+최초 방 생성 후 기존 토큰 거절, 최종 정리는 확인했다. 삭제 후 재생성의 즉시 목록 조회가
+세 방과 일치하지 않아 `UNJOINED_PROBE_RECREATION_UNCONFIRMED`, exit1로 종료했다.
+이 결과는 토큰 재사용 성공을 의미하지 않으며 해당 재생성 경계는 미확인이다.
+
+생성 전 세 방의 listParticipants는 모두 명시적인404/not_found였다. 기존 실행 중 회수
+경로는 이 응답을 예외로 처리하여 ACK 뒤에도 UNRESOLVED로 남길 수 있었다. 제품 함수를
+분리해 ACK 뒤의 명시적404만 부재로 처리하고 나머지 소유 방도 계속 확인하도록 수정했다.
+구 구현에서 회귀3개 실패를 확인했다. 수정 후 관련5파일131개, QA 타입·lint PASS다.
+회수 ACK 누락, 다른 오류, 남아 있는 전달본, 내구 저장/예약 보존을 함께 검사했다.
+실제 제품 발급기/조립부 전체를 통과했다는 뜻은 아니다.
+
+첫 원본은 같은 서버의 다음 경로에 보존하며 비밀과 사용자 미디어를 문서로 옮기지 않는다.
+
+```text
+/var/lib/jenkins/.local/kkakkung-diagnostics/unjoined-215e-20260913-911de4ee/.local/qa/unjoined-revocation-1789304854461
+unjoined-revocation-evidence.json SHA-256:
+52d44d9328d8f2bc9fabcca78388ee138d9822521e4d8ea8deb6ee88c2bbebb2
+```
 
 ## 실행·보존
 
