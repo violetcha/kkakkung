@@ -1,6 +1,7 @@
 import { freezeSnapshot } from './ImmutableSnapshot.js';
 import type { OfficialBudgetCheckpoint } from '../media/types.js';
 import { checksum, safeIdentifier } from './CheckpointStore.js';
+import { usageReservationEpoch } from './UsageReservationId.js';
 import {
   UsageCheckpoint,
   validateOfficialBudget,
@@ -118,6 +119,13 @@ export class UsageBudget {
         return existing.status === 'ACTIVE'
           ? { status: 'duplicate', reservation: structuredClone(existing) }
           : { status: 'rejected', code: 'UNRESOLVED_RETIREMENT' };
+      if (this.state.compacted) {
+        const issuedAt = usageReservationEpoch(request.reservationId);
+        if (this.isRetiredReservation(request.reservationId))
+          return { status: 'rejected', code: 'UNRESOLVED_RETIREMENT' };
+        if (issuedAt === null || issuedAt > this.options.now())
+          return { status: 'rejected', code: 'INVALID_REQUEST' };
+      }
       const current = this.snapshot();
       const minutes = Math.ceil(request.slots * request.expectedMinutes * (1 + request.margin));
       const bytes = Math.ceil(request.expectedBytes * (1 + request.margin));
@@ -162,6 +170,19 @@ export class UsageBudget {
       if (afterWriteCode) return { status: 'rejected', code: afterWriteCode };
       return { status: 'reserved', reservation: structuredClone(reservation) };
     });
+  }
+
+  /** Retained live requests remain valid; an absent legacy/old ID must never be recreated. */
+  isRetiredReservation(reservationId: string): boolean {
+    if (
+      !this.state.compacted ||
+      this.state.reservations.some(
+        (reservation) => reservation.request.reservationId === reservationId,
+      )
+    )
+      return false;
+    const issuedAt = usageReservationEpoch(reservationId);
+    return issuedAt === null || issuedAt <= this.state.compacted.retiredThroughEpochMs;
   }
 
   markRetiring(reservationId: string): Promise<boolean> {
@@ -358,6 +379,7 @@ export class UsageBudget {
         ? { budgetPolicy: 'provider-quota' as const, initializedMissing: this.initializedMissing }
         : {}),
       reservations: this.state.reservations,
+      ...(this.state.compacted ? { compacted: this.state.compacted } : {}),
       activeMinutes,
       activeBytes,
       availableMinutes: Math.max(
@@ -368,8 +390,14 @@ export class UsageBudget {
         0,
         (this.state.official?.checkpoint.remainingBytes ?? 0) - activeBytes,
       ),
-      localEstimatedMinutes: this.state.reservations.reduce((sum, r) => sum + r.minutes, 0),
-      localEstimatedBytes: this.state.reservations.reduce((sum, r) => sum + r.bytes, 0),
+      localEstimatedMinutes: this.state.reservations.reduce(
+        (sum, r) => sum + r.minutes,
+        this.state.compacted?.minutes ?? 0,
+      ),
+      localEstimatedBytes: this.state.reservations.reduce(
+        (sum, r) => sum + r.bytes,
+        this.state.compacted?.bytes ?? 0,
+      ),
     });
   }
 
@@ -384,6 +412,8 @@ export class UsageBudget {
 
   private blockedCode(): UsageRejection | null {
     if (this.closed || this.failed || !this.options.store.writable) return 'STORAGE_FAILURE';
+    if (this.state.compacted && this.options.now() < this.state.compacted.compactedAtEpochMs)
+      return 'BUDGET_STALE';
     if (
       !this.restored ||
       this.integrity !== 'ok' ||

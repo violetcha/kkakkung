@@ -51,6 +51,14 @@ describe('media usage lease lifetime', () => {
     expect(await s.lease.reserve(reopened)).toBe(true);
     expect(reopened.reservationId).not.toBe(first.reservationId);
     expect(s.budget.reserve).toHaveBeenCalledTimes(2);
+    expect(s.budget.reserve).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ reservationId: expect.stringMatching(/^u1-0-[0-9a-f-]+$/) }),
+    );
+    expect(s.budget.reserve).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ reservationId: reopened.reservationId }),
+    );
   });
   it('blocks reuse while remote confirmation persistence is pending and retains the lock on failure', async () => {
     const s = setup();
@@ -73,6 +81,10 @@ describe('media usage lease lifetime', () => {
     s.now(240_000);
     await s.lease.reserve(first);
     expect(s.budget.reserve).toHaveBeenCalledTimes(2);
+    expect(s.budget.reserve).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ reservationId: `${first.reservationId}:1` }),
+    );
     await s.lease.markRetiring(first.roomName);
     expect(s.budget.markRemoteConfirmed.mock.calls).toEqual([
       [first.reservationId],

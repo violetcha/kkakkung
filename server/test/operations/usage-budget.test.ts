@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { UsageBudget } from '../../src/operations/UsageBudget.js';
-import { UsageCheckpoint, validateOfficialBudget } from '../../src/operations/UsageCheckpoint.js';
+import {
+  UsageCheckpoint,
+  validateOfficialBudget,
+  validateUsageState,
+} from '../../src/operations/UsageCheckpoint.js';
+import { createUsageReservationId } from '../../src/operations/UsageReservationId.js';
 import type { UsageRequest } from '../../src/operations/UsageCheckpoint.js';
 
 const directories: string[] = [];
@@ -67,6 +72,135 @@ afterEach(async () => {
 });
 
 describe('durable usage reservations', () => {
+  it.each([false, true])(
+    'reads an aggregate, rejects retired requests, and preserves live idempotence and totals (quota=%s)',
+    async (providerQuota) => {
+      const f = await setup(true, providerQuota);
+      await f.budget.reserve(request);
+      const old = await f.store.read();
+      if (old.integrity !== 'ok') throw new Error('INVALID_FIXTURE');
+      expect(Object.keys(old.checkpoint.state).sort()).toEqual(['official', 'reservations']);
+      await f.budget.close();
+      const compacted = {
+        version: 1 as const,
+        retiredThroughEpochMs: 1000,
+        compactedAtEpochMs: 1000 + 86_400_000,
+        reservationCount: 2,
+        minutes: 72,
+        bytes: 2400,
+      };
+      const now = compacted.compactedAtEpochMs + 1000;
+      f.setNow(now);
+      const store = new UsageCheckpoint({ opsDataDir: f.dir, providerQuota });
+      await store.write({
+        lastSeq: old.checkpoint.lastSeq + 1,
+        state: {
+          ...old.checkpoint.state,
+          official: providerQuota
+            ? null
+            : {
+                ...old.checkpoint.state.official!,
+                checkpoint: { ...official, checkedAtEpochMs: now },
+              },
+          compacted,
+        },
+      });
+      const budget = new UsageBudget({ ...f.options, store });
+      await budget.restore();
+      expect(budget.snapshot()).toMatchObject({
+        integrity: 'ok',
+        compacted,
+        activeMinutes: 36,
+        activeBytes: 1200,
+        localEstimatedMinutes: 108,
+        localEstimatedBytes: 3600,
+      });
+      expect((await budget.reserve(request)).status).toBe('duplicate');
+      const before = await fs.readFile(store.filePath, 'utf8');
+      for (const reservationId of ['old-legacy-id', createUsageReservationId(1000)])
+        expect(await budget.reserve({ ...request, reservationId })).toMatchObject({
+          status: 'rejected',
+          code: 'UNRESOLVED_RETIREMENT',
+        });
+      expect(
+        await budget.reserve({ ...request, reservationId: createUsageReservationId(now + 1) }),
+      ).toMatchObject({ status: 'rejected', code: 'INVALID_REQUEST' });
+      f.setNow(compacted.compactedAtEpochMs - 1);
+      expect(await budget.reserve(request)).toMatchObject({ code: 'BUDGET_STALE' });
+      f.setNow(now);
+      expect(await fs.readFile(store.filePath, 'utf8')).toBe(before);
+      expect(
+        (await budget.reserve({ ...request, reservationId: createUsageReservationId(now) })).status,
+      ).toBe('reserved');
+      expect(budget.snapshot()).toMatchObject({
+        compacted,
+        activeMinutes: 72,
+        localEstimatedMinutes: 144,
+        localEstimatedBytes: 4800,
+      });
+      if (!providerQuota) expect(budget.snapshot().availableMinutes).toBe(928);
+      await budget.markRetiring(request.reservationId);
+      await budget.markRemoteConfirmed(request.reservationId);
+      if (!providerQuota) {
+        f.setNow(now + 1);
+        await budget.reconcileOfficial(
+          { ...official, checkedAtEpochMs: now + 1 },
+          { periodId: '2026-09', version: 2 },
+        );
+        expect(
+          await budget.releaseConfirmed(request.reservationId, {
+            remoteConfirmed: true,
+            periodId: '2026-09',
+            version: 2,
+          }),
+        ).toBe(true);
+      }
+      await budget.close();
+      const again = new UsageBudget({
+        ...f.options,
+        store: new UsageCheckpoint({ opsDataDir: f.dir, providerQuota }),
+      });
+      expect(await again.restore()).toMatchObject({
+        compacted,
+        activeMinutes: 36,
+        localEstimatedMinutes: 144,
+        localEstimatedBytes: 4800,
+      });
+      expect((await again.reserve(request)).status).toBe('rejected');
+      await again.close();
+    },
+  );
+
+  it.each([
+    { version: 2 },
+    { reservationCount: 0 },
+    { reservationCount: 73 },
+    { minutes: -1 },
+    { bytes: Number.POSITIVE_INFINITY },
+    { retiredThroughEpochMs: 1001 },
+    { compactedAtEpochMs: null },
+    { unexpected: 'value' },
+  ])('rejects malformed compaction evidence without inventing totals: %j', (change) => {
+    expect(() =>
+      validateUsageState(
+        {
+          official: null,
+          reservations: [],
+          compacted: {
+            version: 1,
+            retiredThroughEpochMs: 1000,
+            compactedAtEpochMs: 1000 + 86_400_000,
+            reservationCount: 2,
+            minutes: 72,
+            bytes: 2400,
+            ...change,
+          },
+        },
+        true,
+      ),
+    ).toThrow('unexpected' in change ? 'INVALID_SCHEMA' : 'INVALID_USAGE_COMPACTION');
+  });
+
   it('counts all six participants plus safety margin once and persists before success', async () => {
     const { budget, options } = await setup();
     const [first, second] = await Promise.all([

@@ -1,5 +1,13 @@
 # E 공개 인계 기록
 
+## 2026-09-13 내구 이력 축약 reader — S15P21C204-209
+
+- localStage: LOCAL_VERIFIED. 사용량의 선택 aggregate를 읽고 누계를 보존한다.
+  신규 서버 예약 ID의 시각 경계로 옛 요청 재사용을 거절하며 공유 retry가 이를 되살리면 실패한다.
+  실제 디스크/Coordinator5파일108회귀·타입 검사 통과. 새 aggregate writer는 아직 없다.
+- blockedOn: 통합 전체/원격 검사·reader 정상 배포·last-good 이후 제품 축약 경로 연결.
+  [저장 형식과 순서](../../durable-retention.md)를 따르며 중간 병합을 K02 완료로 계산하지 않는다.
+
 ## 2026-09-13 조회 실패 복구 — S15P21C204-205
 
 - K10의 기존 checkpoint 소비자/생산자를 OperationsController → OperationsBindings →

@@ -26,13 +26,14 @@ function intent(id: string, changes: Partial<RetryIntent> = {}): RetryIntent {
   };
 }
 
-async function fixture() {
+async function fixture(isRetiredReservation?: (reservationId: string) => boolean) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-shared-retry-'));
   directories.push(directory);
   const lease = { writable: true };
   const store = new SharedRetryCheckpoint({
     opsDataDir: directory,
     isWritable: () => lease.writable,
+    isRetiredReservation,
   });
   stores.push(store);
   return { directory, lease, store };
@@ -60,6 +61,33 @@ afterEach(async () => {
 });
 
 describe('shared current and recovery retry checkpoint', () => {
+  it('rejects an old engine snapshot instead of resurrecting a compacted retirement', async () => {
+    let retired = false;
+    const { store } = await fixture(() => retired);
+    await store.write({ lastSeq: 20, state: [] });
+    const before = await fs.readFile(store.filePath, 'utf8');
+    retired = true;
+    await expect(
+      store.write({
+        lastSeq: 20,
+        state: [intent('old', { status: 'REVOKED', nextAttemptEpochMs: null })],
+      }),
+    ).rejects.toThrow('RETRY_RESERVATION_COMPACTED');
+    expect(store.writable).toBe(false);
+    expect(await fs.readFile(store.filePath, 'utf8')).toBe(before);
+  });
+
+  it('keeps unexpected compacted retry evidence on disk and fails recovery closed', async () => {
+    let retired = false;
+    const { store } = await fixture(() => retired);
+    await store.write({ lastSeq: 1, state: [intent('old')] });
+    const before = await fs.readFile(store.filePath, 'utf8');
+    retired = true;
+    expect(await store.read()).toEqual({ integrity: 'corrupt', checkpoint: null });
+    expect(store.writable).toBe(false);
+    expect(await fs.readFile(store.filePath, 'utf8')).toBe(before);
+  });
+
   it('reports missing history without creating a checkpoint', async () => {
     const { store, directory } = await fixture();
     expect(await store.read()).toEqual({ integrity: 'missing', checkpoint: null });
