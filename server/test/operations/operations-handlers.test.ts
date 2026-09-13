@@ -145,7 +145,7 @@ describe('E-14 operations HTTP handler exports through a local Express fixture',
     });
     expect(initial.status).toBe(202);
     const accepted = await initial.json();
-    await vi.waitFor(() => expect(f.run).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(f.run).toHaveBeenCalledOnce(), { timeout: 6000 });
     const responses = await Promise.all(
       Array.from({ length: 100 }, (_, i) =>
         f.request('/api/operations/commands', { requestId: `burst-${i}`, action: 'checkpoint' }),
@@ -171,8 +171,11 @@ describe('E-14 operations HTTP handler exports through a local Express fixture',
     expect(drain.status).toBe(202);
     expect(f.controller.getStatus().admission).toBe('DRAINING');
     release();
-    await vi.waitFor(() =>
-      expect(f.controller.getSnapshot('reserved-drain')?.status).toBe('succeeded'),
+    await vi.waitFor(
+      () => expect(f.controller.getSnapshot('reserved-drain')?.status).toBe('succeeded'),
+      // The command's real five-second deadline stays active. Observe that terminal result,
+      // not Vitest's unrelated one-second default while dozens of fsyncs are queued.
+      { timeout: 6000 },
     );
     expect(f.onAuditFailure).not.toHaveBeenCalled();
   });

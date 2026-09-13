@@ -7,7 +7,8 @@
   `operations.queue.pending/rejected`를 같은 count 단위로 등록했다. 식별자 label은 없다.
 - 파일 version과 명령 entries는 유지하며 오류 표본은24시간/4,096개, 동일 kind/code는60초 첫 표본이다.
   [상한과 운영 경계](../../operations-audit-limits.md)를 따른다. 미디어 기록 축약은 K02다.
-- localStage: IMPLEMENTED. 관련 운영115회귀·서버 타입 검사 통과, 통합 전체 검증은 후속이다.
+- localStage: INTEGRATED. 관련 운영115회귀와 감사 실패 공유/제품 HTTP 조립 회귀를 검사했다.
+  205/206/207 최종 verify는246파일·2,500개·E2E14개 및 전체 도구 검사 통과다.
   blockedOn: 원격 CI·병합·배포·실제 부하 인수. 이전 결과로 인수하지 않는다.
 
 ## 2026-09-13 배포 연습 음성 대조 — S15P21C204-207
