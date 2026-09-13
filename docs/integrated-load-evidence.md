@@ -2,9 +2,13 @@
 
 Jira [S15P21C204-191](https://ssafy.atlassian.net/browse/S15P21C204-191), MVP W06/W19. 판정 구현은 [TenRoomSchedule](../tests/load/TenRoomSchedule.ts), 파일 소비자는 [집계 CLI](../scripts/summarize-integrated-load.mjs)다. 제품 전송 계약을 바꾸지 않는다.
 
+2026-09-13 재검토 기준은 develop `dab788ac9e6c205bcdbb800dc8b095b626a7f737`이다. 900초 유효 관측·동일 10방·60세션·이동 60초 API 판정 보강은 반영되어 있다. 실제 부하 시나리오의 행동·관측 연결과 실행은 미완료이며, 이번 문서 갱신으로 구현을 재개하지 않는다. 전체 우선순위는 [재검토 기록](mvp-plan-review-2026-09-13.md)을 따른다.
+
 ## 실제 측정의 경계
 
 판정기 시험은 합성 데이터의 계산·거절 동작을 검증한다. JSON 형식 통과는 실제 Cloud 실행의 증명이 아니다. 실제 실행은 승인된 preflight, 동일 소스 SHA/lockfile, 실제 Cloud 표식·게임 이벤트·원격 API 관측, 정리 결과를 함께 보관해야 한다. 10방 러너와 G1·실장치 인수는 별도 작업이다.
+
+[단계 Cloud 사례](../tests/cloud/staged-load.cloud.test.ts)와 [10방 Cloud 사례](../tests/cloud/ten-room-integrated.cloud.test.ts)는 현재 preflight 뒤 BLOCKED 예외로 끝난다. 공통 ProbeHarness 파일은 존재하지만 해당 시나리오에 필요한 1·3·5·10방의 실제 행동·수신·API 계측이 연결된 것은 아니다. 2026-09-13 09:48 KST 확인한 배포 #96의 DP-06 Cloud PASS는 합성 6클라이언트의 제품 배포 시험이며 G2/G6의 10방 증거로 계산하지 않는다.
 
 ## 파일과 필드
 
@@ -41,3 +45,15 @@ node scripts/summarize-integrated-load.mjs --input .local/qa/QA-12 --output .loc
 ```
 
 모든 관문 통과는 exit 0, 부족한 관측·관문 실패는 exit 1, 누락·손상된 입력은 BLOCKED exit 3이다. 출력에는 증거 형식 2와 소스 SHA/측정 시간이 포함된다. 실제 10방 Cloud 시험과 운영 공개 전환을 이 명령이 실행하지 않는다.
+
+## 수집기와 종합 인수의 선행 조건
+
+다음 항목은 아직 구현해야 하는 W06/W19/W20의 연결 조건이다. 현재 v2 필드를 추가된 계약처럼 변경하지 않는다.
+
+- 1·3·5방을 순서대로 실행하고 앞 단계 실패·미확인 정리·예산 부족이면 다음 단계로 확대하지 않는다. 현재 운영 팀원 제한과 검증된 방 상한을 시험 목적으로 임의 해제하지 않는다.
+- 실제 게임 명령·정책·서버 API 요청·새 표식의 수신/차단을 같은 구간에 연결한다. `requirements.json` 문자열이나 한 방의 수치를 복제해 10방 행동으로 집계하지 않는다.
+- 시야·음성 관계가 허용되는 구간의 양성 대조와 금지 관계의 음성/영상 차단을 모두 기록한다. G1 전체의 지연·SID 교체·세대·회수 관문은 별도로 충족한다.
+- G5 수집·판정도 먼저 보강한다. 현재 [6대 판정기](../scripts/collect-six-device-results.mjs)는 원격 얼굴 0·근거리 음성 false·중복 판 시각을 기록해도 coverage와 다른 필드가 채워지면 PASS할 수 있다. 이번 합성 재현을 실기기 실패나 성공 증거로 바꾸지 않는다.
+- [종합 판정기](../scripts/verify-mvp-evidence.mjs)는 증거 내용·실제 실행 SHA/lockfile·정리 결과까지 확인하도록 보강한다. 파일 존재·빈 디렉터리·과거 feature 브랜치 선언만으로 최종 인수하지 않는다. continuous 운영과 attested 시험, 팀 제한 유지와 공개 준비를 구분한다.
+
+실제 6대 5판, 10방 부하, 외부 복원, 공개 대상 전환 리허설은 서로 다른 관문이다. 최종 상태 이름과 공개 대상 설정은 [실행계획](mvp-completion-plan.md)의 설계 과제이며 현재 서버 전송 필드가 아니다.
