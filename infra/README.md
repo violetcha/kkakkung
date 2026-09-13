@@ -30,6 +30,12 @@
 
 제품 프로필은 `LIVEKIT_*` 설정과 운영 증거를 읽는다. 실제 값은 Jenkins Secret file과 제품 Compose overlay로 주입하며 예시·이미지·소스에는 넣지 않는다. `NODE_ENV`와 `SERVER_PROFILE`은 별개다. 현재 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`를 사용한다.
 
+로비 무활동 기한은 D-2026-09-13-01에 따라 **10분**이다. 제품 릴리스 preflight와
+continuous/attested 제품 Compose overlay가 `ROOM_IDLE_TTL_MS=600000`을 적용한다.
+이 값은 비밀이 아닌 제품 정책이며 과거 Secret file의30분 값보다 우선한다.
+정책을 바꾸려면 제품 결정과 이 세 경계를 함께 검토한다. 개발/진단의 가속 설정과
+장치 준비·결과·중단의5분, 연습60초·로딩30초·실제 경기 기한은 각 기존 정책을 따른다.
+
 ## 토폴로지 (EC2 한 대)
 
 ```

@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import type { Generation } from '../media/MediaGenerationRegistry.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { createUsageReservationId } from './UsageReservationId.js';
 
 /** Conservative estimates, never Cloud billing. Six participants, five receivers per publisher,
  * 100 kbps face + 64 kbps audio, 100% transport/retry margin; first five minutes then minute slices.
@@ -29,7 +29,7 @@ export class MediaUsageLease {
     let lease = this.leases.get(generation.roomName);
     if (!lease) {
       lease = {
-        id: randomUUID(),
+        id: createUsageReservationId(this.now()),
         roomName: generation.roomName,
         matchId: generation.request.matchId,
         until: this.now(),

@@ -45,6 +45,9 @@ try {
     /^(LIVEKIT_|OPS_|MEDIA_|INVITE_|SESSION_|ROOM_IDLE_|SERVICE_NAMESPACE$|SMOKE_INTERNAL_TOKEN$|SMOKE_INTERNAL_BASE_URL$)/;
   const env = { ...process.env };
   for (const [key, value] of Object.entries(privateEnv)) if (allowed.test(key)) env[key] = value;
+  // D-2026-09-13-01 product policy. Match both product Compose overlays even when a
+  // legacy private environment still contains the previous thirty-minute value.
+  env.ROOM_IDLE_TTL_MS = '600000';
   // New product releases use persistent service configuration. Legacy trial operation remains
   // explicit for old installations; no environment file's date is renewed by this runner.
   env.OPS_OPERATING_MODE = opt.operatingMode ?? privateEnv.OPS_OPERATING_MODE ?? 'continuous';

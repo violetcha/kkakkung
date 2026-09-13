@@ -144,6 +144,39 @@ afterEach(async () => {
 });
 
 describe('E-12 durable record reconciliation', () => {
+  it('requires the durable journal boundary and valid time for an aggregate with no hot records', () => {
+    const compacted = {
+      version: 1 as const,
+      retiredThroughEpochMs: 1000,
+      compactedAtEpochMs: DAY + 1000,
+      reservationCount: 2,
+      minutes: 60,
+      bytes: 2000,
+    };
+    const candidate = input({
+      journal: journal([], 20),
+      usage: { ...usage([]), compacted },
+      retryCheckpoint: { integrity: 'ok', checkpoint: { lastSeq: 20, state: [] } },
+      epochNowMs: DAY + 2000,
+    });
+    expect(reconcileRecoveryRecords(candidate).reasonCodes).toEqual([]);
+    expect(
+      reconcileRecoveryRecords({
+        ...candidate,
+        journal: { ...journal([], 0), integrity: 'missing' },
+      }).reasonCodes,
+    ).toContain('JOURNAL_HISTORY_MISSING');
+    expect(reconcileRecoveryRecords({ ...candidate, epochNowMs: DAY }).reasonCodes).toContain(
+      'USAGE_INTEGRITY',
+    );
+    expect(
+      reconcileRecoveryRecords({
+        ...candidate,
+        usage: { ...candidate.usage, compacted: { ...compacted, minutes: -1 } },
+      }).reasonCodes,
+    ).toContain('USAGE_INTEGRITY');
+  });
+
   it('restores quota reservations without official billing but still requires matching journal history', () => {
     const quota = { ...usage(), official: null, budgetPolicy: 'provider-quota' as const };
     expect(reconcileRecoveryRecords(input({ usage: quota })).reasonCodes).toEqual([]);
