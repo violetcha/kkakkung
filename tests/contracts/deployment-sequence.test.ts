@@ -820,6 +820,103 @@ describe('continuous publication and rollback', () => {
   };
   const continuousManifest = () =>
     manifest({ operatingMode: 'continuous', officialBudgetMaxAgeMs: undefined });
+  it('requires the explicit startup guard and still runs recovery, resume, smoke and publication', async () => {
+    const h = harness(
+      world({
+        statusAfterResume: status,
+        readySequence: [readyResponse('RECOVERING'), readyResponse('READY')],
+      }),
+    );
+    let preparations = 0;
+    const out = await runRelease(
+      h.input({
+        manifest: continuousManifest(),
+        recoverFailedStartup: true,
+      }),
+      {
+        ...h.adapters,
+        recoverFailedStartup: async () => {
+          preparations++;
+          return { code: 0 };
+        },
+      },
+    );
+    expect(out).toMatchObject({ result: 'READY', lastGoodWritten: true });
+    expect(preparations).toBe(1);
+    expect(h.calls.posts.map((command) => command.action)).toEqual(['resume']);
+    expect(h.calls.smoke).toEqual(['cloud']);
+    expect(out.steps.some((step) => step.name === 'RELEASE recovering')).toBe(true);
+    expect(h.calls.state['last-good-tag']).toBe(TAG + '\n');
+  });
+  it('swaps nothing if the startup guard is absent or rejects the existing state', async () => {
+    for (const recoverFailedStartup of [undefined, async () => ({ code: 1 })]) {
+      const h = harness(world({ statusAfterResume: status }));
+      expect(
+        await runRelease(
+          h.input({
+            manifest: continuousManifest(),
+            recoverFailedStartup: true,
+          }),
+          { ...h.adapters, recoverFailedStartup },
+        ),
+      ).toMatchObject({
+        result: 'BLOCKED',
+        lastGoodWritten: false,
+      });
+      expect(h.calls.compose).toEqual([]);
+      expect(h.calls.posts).toEqual([]);
+      expect(h.calls.smoke).toEqual([]);
+    }
+  });
+  it('does not reuse the first-start exception for a failed recovery rollback', async () => {
+    const h = harness(
+      world({
+        statusAfterResume: status,
+        readyByTag: { [TAG]: [readyResponse('RECOVERING')] },
+        drainSnapshots: [{ status: 'failed', code: 'OPERATION_TIMEOUT' }],
+      }),
+    );
+    let preparations = 0;
+    expect(
+      await runRelease(
+        h.input({
+          manifest: continuousManifest(),
+          recoverFailedStartup: true,
+        }),
+        {
+          ...h.adapters,
+          recoverFailedStartup: async () => {
+            preparations++;
+            return { code: 0 };
+          },
+        },
+      ),
+    ).toMatchObject({
+      result: 'ROLLBACK_BLOCKED',
+      reason: 'ROLLBACK_DRAIN_FAILED',
+      lastGoodWritten: false,
+    });
+    expect(preparations).toBe(1);
+    expect(h.calls.compose).toEqual([TAG]);
+    expect(h.calls.posts.map((command) => command.action)).toEqual(['drain']);
+    expect(h.calls.smoke).toEqual([]);
+    expect(h.calls.state).toEqual({});
+  });
+  it('keeps ordinary releases on the drain path even when a recovery adapter exists', async () => {
+    const h = harness(world({ statusAfterResume: status }));
+    let preparations = 0;
+    expect(
+      await runRelease(h.input({ manifest: continuousManifest() }), {
+        ...h.adapters,
+        recoverFailedStartup: async () => {
+          preparations++;
+          return { code: 0 };
+        },
+      }),
+    ).toMatchObject({ result: 'READY' });
+    expect(preparations).toBe(0);
+    expect(h.calls.posts.map((command) => command.action)).toEqual(['drain', 'resume']);
+  });
   it('publishes only the matching explicit provider policy with unknown billing balances', async () => {
     const h = harness(world({ statusAfterResume: status }));
     expect(await runRelease(h.input({ manifest: continuousManifest() }), h.adapters)).toMatchObject(

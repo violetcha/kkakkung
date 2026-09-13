@@ -14,7 +14,7 @@
 // Exit 1: FAILED / ROLLED_BACK / PUBLISH_BLOCKED / ROLLBACK_BLOCKED. Exit 3: BLOCKED. Exit 2: usage.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -42,6 +42,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--state-dir') opt.stateDir = args[++i];
   else if (a === '--preflight') opt.preflight = args[++i];
   else if (a === '--compose') opt.compose = args[++i];
+  else if (a === '--recover-failed-startup') opt.recoverFailedStartup = args[++i];
   else if (a === '--drain-timeout-seconds') opt.deadlines.drainMs = Number(args[++i]) * 1000;
   else if (a === '--ready-timeout-seconds') opt.deadlines.readyMs = Number(args[++i]) * 1000;
   else if (a === '--recover-timeout-seconds') opt.deadlines.recoverMs = Number(args[++i]) * 1000;
@@ -60,6 +61,10 @@ if (
     'usage: node scripts/deploy-release.mjs --manifest <file> --evidence <dir> --base-url https://<host> [--local-url http://127.0.0.1:8080] [--state-dir /opt/kkakkung] [--preflight <file>] [--compose "<base> <override>"]',
   );
   process.exit(2);
+}
+if (opt.recoverFailedStartup && !/^[a-f0-9]{8}$/.test(opt.recoverFailedStartup)) {
+  console.error('BLOCKED: INVALID_FAILED_STARTUP_TAG');
+  process.exit(3);
 }
 if (!existsSync(opt.manifest)) {
   console.error(`BLOCKED: manifest not found ${opt.manifest}`);
@@ -231,6 +236,33 @@ const adapters = {
       child.on('error', () => resolveCode({ code: 1 }));
     });
   },
+  async recoverFailedStartup() {
+    try {
+      const { prepareFailedStartupRecovery } = await import('./lib/failed-startup-recovery.ts');
+      const { createStartupRecoveryHost } = await import('./lib/failed-startup-recovery-host.ts');
+      const tag = opt.recoverFailedStartup;
+      if (!tag || tag === manifest.tag) return { code: 1 };
+      const read = (name) => {
+        const file = resolve(opt.stateDir, 'releases', name);
+        if (statSync(file).size > 2 * 1024 * 1024) throw new Error('RECOVERY_RECORD_TOO_LARGE');
+        return JSON.parse(readFileSync(file, 'utf8'));
+      };
+      return await prepareFailedStartupRecovery(
+        {
+          candidate: manifest,
+          failedManifest: read(tag + '.json'),
+          failedReport: read(tag + '/release.json'),
+        },
+        createStartupRecoveryHost({
+          stateDir: opt.stateDir,
+          localUrl: opt.localUrl,
+          http: adapters.http,
+        }),
+      );
+    } catch {
+      return { code: 1 };
+    }
+  },
   writeState(name, text) {
     mkdirSync(opt.stateDir, { recursive: true });
     writeFileSync(resolve(opt.stateDir, name), text);
@@ -246,6 +278,7 @@ const outcome = await runRelease(
     smokePreflightPresent: Boolean(opt.preflight && existsSync(opt.preflight)),
     nowEpochMs: () => Date.now(),
     deadlines: opt.deadlines,
+    recoverFailedStartup: Boolean(opt.recoverFailedStartup),
   },
   adapters,
 );

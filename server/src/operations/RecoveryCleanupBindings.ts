@@ -129,6 +129,11 @@ const failedReport = (): CleanupReport => ({
   historyComplete: false,
 });
 
+// Historical-room enumeration may cross the shared 60-second API window.
+// This bounds queue waiting only; transport timeouts and revocation deadlines remain separate.
+const SWEEP_QUEUE_WAIT_MS = 65_000;
+const REVOCATION_QUEUE_WAIT_MS = 1_000;
+
 /** E-13 composition. No Generation/player metadata is fabricated from persisted journal entries. */
 export class RecoveryCleanupBindings {
   private readonly cleanup: PreviousGenerationCleanup;
@@ -161,7 +166,9 @@ export class RecoveryCleanupBindings {
     this.cleanup = new PreviousGenerationCleanup({
       namespace: options.namespace,
       listRooms: (context) =>
-        this.cancellable(() => options.gateway.listRooms(undefined, this.context(context))),
+        this.cancellable(() =>
+          options.gateway.listRooms(undefined, this.context(context, SWEEP_QUEUE_WAIT_MS)),
+        ),
       listParticipants: (room, context) => this.participants(room, context),
       revoke: (target, context) => this.revoke(target, context),
       deleteRoom: (room, context) => this.deleteRoom(room, context),
@@ -459,16 +466,20 @@ export class RecoveryCleanupBindings {
         );
       },
       absent: async () =>
-        !(await this.participants(target.roomName, context)).some(
+        !(await this.participants(target.roomName, context, REVOCATION_QUEUE_WAIT_MS)).some(
           (p) => p.identity === target.identity,
         ),
     });
   }
 
-  private async participants(room: string, context: CleanupCallContext) {
+  private async participants(
+    room: string,
+    context: CleanupCallContext,
+    queueWaitMs = SWEEP_QUEUE_WAIT_MS,
+  ) {
     try {
       return await this.cancellable(() =>
-        this.options.gateway.listParticipants(room, this.context(context)),
+        this.options.gateway.listParticipants(room, this.context(context, queueWaitMs)),
       );
     } catch (error) {
       // Only a typed query "not_found" means no current participant; Remove must still ACK.
@@ -480,7 +491,9 @@ export class RecoveryCleanupBindings {
 
   private async deleteRoom(room: string, context: CleanupCallContext): Promise<void> {
     try {
-      await this.cancellable(() => this.options.gateway.deleteRoom(room, this.context(context)));
+      await this.cancellable(() =>
+        this.options.gateway.deleteRoom(room, this.context(context, SWEEP_QUEUE_WAIT_MS)),
+      );
     } catch (error) {
       // A typed already-absent room is idempotent deletion, still followed by final queries.
       // This exception never applies to removeParticipant, whose ACK remains mandatory.
@@ -619,11 +632,14 @@ export class RecoveryCleanupBindings {
     return queued;
   }
 
-  private context(context: CleanupCallContext): GatewayCallContext {
+  private context(
+    context: CleanupCallContext,
+    queueWaitMs = REVOCATION_QUEUE_WAIT_MS,
+  ): GatewayCallContext {
     this.assertOpen(context);
     return {
       requestId: randomUUID(),
-      deadlineMs: this.options.monotonicNow() + 1000,
+      deadlineMs: this.options.monotonicNow() + queueWaitMs,
       priority: 'cleanup',
       signal: this.signal,
       beforeDispatch: () => this.canDispatch(context),
