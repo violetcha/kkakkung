@@ -10,6 +10,16 @@
 - localStage: IMPLEMENTED. 관련 운영115회귀·서버 타입 검사 통과, 통합 전체 검증은 후속이다.
   blockedOn: 원격 CI·병합·배포·실제 부하 인수. 이전 결과로 인수하지 않는다.
 
+## 2026-09-13 배포 연습 음성 대조 — S15P21C204-207
+
+- localStage: LOCAL_VERIFIED. 실제 practice-v1 코어/공간 음성 정책 회귀3개와
+  로컬6클라이언트 배포 smoke3개(50.69초), QA 타입·lint를 통과했다.
+- 전체 게시 준비 후 참가자별 서버 승인 전진3회로 연습 양성 음성 대조를 수행한다.
+  실제 수신 없이 이동만으로 성공하지 않는다. Cloud 수신/경기/회수 실패 판정은 유지한다.
+- blockedOn: 205/206 통합 전체 검사·정확한 소스 CI·MR·실제 배포.
+  #101은 이미지 교체 전 LOCAL_CONTRACT_ONLY 연습 음성 실패였으며 운영은 #100을 유지했다.
+  실제6대/MC-PUBLIC·60세션 인수는 별도다.
+
 ## 2026-09-13 HTTP 자원 관측 — S15P21C204-204
 
 B 제품 조립과 F registry/수집기에 `http.requests.active/count`,

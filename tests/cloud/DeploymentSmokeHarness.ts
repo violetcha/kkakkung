@@ -16,6 +16,7 @@ import {
   type DeploymentMediaProbe,
 } from './DeploymentInteraction.js';
 import { validateDeploymentSmokePlan } from './DeploymentSmokePlan.js';
+import { DeploymentPracticeApproach } from './DeploymentPracticeApproach.js';
 import type { CloudPreflight } from './CloudPreflight.js';
 
 export type DeploymentSmokeReport = {
@@ -114,6 +115,7 @@ export async function runDeploymentSmoke(
   const joinedRooms: Room<unknown, PublicMatchState>[] = [];
   const createdProbes: DeploymentMediaProbe[] = [];
   const gameInputs = new Set<string>();
+  const practiceApproach = new DeploymentPracticeApproach(6);
   const cloudRooms = { practice: new Set<string>(), game: new Set<string>() };
   let timer: ReturnType<typeof setInterval> | undefined;
   let stage = 'DP06_INITIALIZATION_FAILED';
@@ -343,6 +345,7 @@ export async function runDeploymentSmoke(
         },
       });
       room.onMessage('command-outcome', (outcome: { result: string; requestId: string }) => {
+        practiceApproach.acknowledge(outcome.requestId, outcome.result);
         if (outcome.result === 'applied') report.commandsApplied++;
         if (gameInputs.delete(outcome.requestId) && outcome.result === 'applied')
           report.gameInputsApplied++;
@@ -364,9 +367,10 @@ export async function runDeploymentSmoke(
     await wait(async () => {
       if (snapshot().some((s) => s.round?.phase !== 'TEAM_PRACTICE' || s.error))
         throw new Error('DP06_PRACTICE_ENDED_EARLY');
-      players.forEach((_, index) => move(index, moves));
-      moves++;
       const published = await sampleMedia('practice');
+      report.commandsSent += practiceApproach.advance(published, (index) =>
+        players[index]!.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } }),
+      );
       return published && report.received.practiceVideo && report.received.practiceAudio;
     });
     players.forEach((player) =>
