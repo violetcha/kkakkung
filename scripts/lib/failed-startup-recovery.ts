@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { checksum, strictObject } from '../../server/src/operations/CheckpointStore.js';
 import { validateJournalRecord } from '../../server/src/operations/OperationJournal.js';
+import {
+  isEmptyReservationAbort,
+  validReservationTransition,
+} from '../../server/src/operations/ReservationIntent.js';
 import { ownsMediaRoom } from '../../server/src/operations/PreviousGenerationCleanup.js';
 import { validateCleanupCheckpoint } from '../../server/src/operations/RecoveryCleanupBindings.js';
 import { validateRetryCheckpoint } from '../../server/src/operations/RevocationRetryBindings.js';
@@ -41,6 +45,7 @@ export type StartupRecoveryProof = Readonly<{
   stateHash: string;
   lastSeq: number;
   identities: number;
+  abortedIssuances: number;
   unresolvedQueries: number;
 }>;
 
@@ -163,11 +168,21 @@ export function confirmFailedStartup(
       )
         blocked();
       const key = JSON.stringify([record.roomName, record.identity, record.generation]);
-      if (latest.get(key)?.state === 'REVOKED' && record.state !== 'REVOKED') blocked();
+      const previous = latest.get(key);
+      if (
+        previous &&
+        (!validReservationTransition(previous, record) ||
+          (['REVOKED', 'ABORTED'].includes(previous.state) && record.state !== previous.state))
+      )
+        blocked();
       latest.set(key, record);
       lastSeq++;
     }
-    if (!lastSeq || [...latest.values()].some((record) => record.state !== 'REVOKED')) blocked();
+    if (
+      !lastSeq ||
+      [...latest.values()].some((record) => !['REVOKED', 'ABORTED'].includes(record.state))
+    )
+      blocked();
     const cleanup = checkpoint(observed.cleanup, validateCleanupCheckpoint);
     // Match RecoveryRecords: missing retry storage is valid only when no journal record is pending.
     // Keep absence explicit in the proof/archive; never create an empty replacement file.
@@ -192,14 +207,15 @@ export function confirmFailedStartup(
       usage.state.reservations.some(
         (reservation) => !['AWAITING_OFFICIAL', 'RELEASED'].includes(reservation.status),
       ) ||
-      [...latest.values()].some(
-        (record) =>
-          !record.reservationId ||
-          !usage.state.reservations.some(
-            (reservation) =>
-              reservation.request.reservationId === record.reservationId &&
-              reservation.request.matchId === record.matchId,
-          ),
+      [...latest.values()].some((record) =>
+        record.state === 'ABORTED'
+          ? !isEmptyReservationAbort(record, usage.state.reservations)
+          : !record.reservationId ||
+            !usage.state.reservations.some(
+              (reservation) =>
+                reservation.request.reservationId === record.reservationId &&
+                reservation.request.matchId === record.matchId,
+            ),
       )
     )
       blocked();
@@ -214,7 +230,8 @@ export function confirmFailedStartup(
         usage: observed.usage,
       }),
       lastSeq,
-      identities: latest.size,
+      identities: [...latest.values()].filter((record) => record.state === 'REVOKED').length,
+      abortedIssuances: [...latest.values()].filter((record) => record.state === 'ABORTED').length,
       unresolvedQueries: result.unresolved,
     };
   } catch {

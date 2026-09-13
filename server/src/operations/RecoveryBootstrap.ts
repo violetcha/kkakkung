@@ -6,6 +6,7 @@ import { reconcileRecoveryRecords, type RecoveryRecords } from './RecoveryRecord
 import { RecoveryState, type CleanupInput, type CleanupReport } from './RecoveryState.js';
 import type { RetryIntent } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { reservationGroupFor } from './ReservationIntent.js';
 
 export type RecoveryCleanupInput = CleanupInput &
   Readonly<{
@@ -95,7 +96,7 @@ export class RecoveryBootstrap {
   private async initializeOnce(): Promise<MediaInitializationResult> {
     try {
       if (this.closed) return this.fatal('INITIALIZATION_FAILED');
-      const journal = await this.options.journal.restore();
+      let journal = await this.options.journal.restore();
       if (journal.reason === 'WRITER_CONFLICT') return this.fatal('WRITER_CONFLICT');
       if (journal.reason === 'IO_FAILURE' || this.closed)
         return this.fatal('INITIALIZATION_FAILED');
@@ -115,6 +116,43 @@ export class RecoveryBootstrap {
         allowInitializeMissing: firstInstallConfirmed,
       });
       if (this.closed) return this.fatal('INITIALIZATION_FAILED');
+      if (
+        journal.integrity === 'ok' &&
+        journal.writable &&
+        usage.integrity === 'ok' &&
+        usage.writable &&
+        retry.integrity !== 'corrupt' &&
+        this.options.retryCheckpoint.writable
+      ) {
+        for (const { record } of this.options.journal.readSnapshot().records) {
+          if (
+            record.namespace === this.options.namespace &&
+            record.serverEpoch !== this.serverEpoch &&
+            record.state === 'PREPARED' &&
+            record.reservationIntent?.phase === 'RESERVING' &&
+            reservationGroupFor(record, usage.reservations).length === 0 &&
+            !(
+              retry.integrity === 'ok' &&
+              (retry.checkpoint.lastSeq > journal.lastSeq ||
+                retry.checkpoint.state.some(
+                  (intent) => intent.reservationId === record.reservationId,
+                ))
+            )
+          ) {
+            await this.options.journal.abortUnreserved(record, usage, this.options.nowEpochMs());
+          }
+        }
+        const current = this.options.journal.snapshot();
+        journal = {
+          ...journal,
+          lastSeq: current.lastSeq,
+          writable: current.writable,
+          records: [
+            ...journal.records,
+            ...current.records.filter((entry) => entry.seq > journal.lastSeq),
+          ],
+        };
+      }
       this.state.restore(
         journal,
         { ...usage, budgetConfirmed: this.budgetConfirmed() },

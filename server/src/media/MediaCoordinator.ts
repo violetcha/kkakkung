@@ -349,6 +349,22 @@ class Coordinator implements MediaCoordinatorRuntime {
             ...policyOptions,
             capability: () => this.capability,
             epochNowSeconds: deps.epochNowSeconds,
+            prepareForward: (publisher, receiver, kind) =>
+              this.journal.prepareForward(
+                {
+                  namespace: config.namespace,
+                  roomName: publisher.roomName,
+                  identity: publisher.identity,
+                  generation: publisher.generation,
+                },
+                {
+                  sourceRoomName:
+                    kind === 'face' ? publisher.splitOwnership!.faceRoomName : publisher.roomName,
+                  identity:
+                    kind === 'face' ? publisher.splitOwnership!.faceIdentity : publisher.identity,
+                  destinationRoomName: receiver.roomName,
+                },
+              ),
           })
         : new MediaPolicyBindings(policyOptions);
     this.lifecycle = new MediaLifecycle({

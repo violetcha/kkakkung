@@ -3,6 +3,7 @@ import { planDurableRetention, reservationGroup } from './DurableRetentionPlan.j
 import type { OperationJournal } from './OperationJournal.js';
 import type { SharedRetryCheckpoint } from './SharedRetryCheckpoint.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { reservationGroupFor } from './ReservationIntent.js';
 
 type RetryOwner = {
   canPruneConfirmed(roots: ReadonlySet<string>): boolean;
@@ -23,7 +24,7 @@ const skipped: RetentionResult = {
   reservations: 0,
 };
 
-/** One bounded background pass. Every durable crash prefix remains readable by the prior reader. */
+/** One bounded background pass. Every durable crash prefix remains readable by the strict reader. */
 export class DurableRetention {
   private pending: Promise<RetentionResult> | null = null;
   private lastAttempt: number | null = null;
@@ -123,8 +124,12 @@ export class DurableRetention {
       guard() &&
       [...plan].every(
         ([root, fingerprint]) =>
-          checksum(reservationGroup(this.options.usageBudget.readSnapshot().reservations, root)) ===
-          fingerprint,
+          checksum(
+            reservationGroupFor(
+              { reservationId: root },
+              this.options.usageBudget.readSnapshot().reservations,
+            ),
+          ) === fingerprint,
       );
     if (!groupsUnchanged()) throw new Error('RETENTION_USAGE_CHANGED');
     let verifiedGroups = false;
@@ -155,7 +160,7 @@ export class DurableRetention {
         .snapshot()
         .intents.some((intent) => roots.has(intent.reservationId));
     const removedReservations = await this.options.usageBudget.compactReleased(
-      plan,
+      new Map([...plan].filter(([root]) => reservationGroup(usage.reservations, root).length > 0)),
       now,
       retryRemoved,
     );

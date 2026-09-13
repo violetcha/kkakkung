@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { TrackSource, TrackType } from 'livekit-server-sdk';
 import { ApiBudgetError } from '../operations/ApiBudget.js';
+import type { ForwardCompletion } from '../operations/ForwardIntent.js';
 import type { CapabilityReport } from './CloudCapabilityProbe.js';
 import { GatewayError, type LiveKitGateway } from './LiveKitGateway.js';
 import type { Generation } from './MediaGenerationRegistry.js';
@@ -25,6 +26,7 @@ export type ForwardedMediaEdgeOptions = Readonly<{
   isAllowed: () => boolean;
   onChanged: () => void;
   onFailure: (reason: string) => void;
+  prepareForward: () => Promise<ForwardCompletion>;
   timer?: PolicyTimer;
 }>;
 const fingerprint = (value: ForwardSource | null) =>
@@ -178,12 +180,14 @@ export class ForwardedMediaEdge {
         const beforeDispatch = () => this.revision === revision && this.current(desired);
         this.uncertainty.sent(this.options.monotonicNow());
         await this.verifyOrigin(desired, beforeDispatch);
-        if (!beforeDispatch()) {
-          this.uncertainty.responded();
-          continue;
-        }
+        this.uncertainty.responded();
+        if (!beforeDispatch()) continue;
+        // Local journal queue/fsync is not an unanswered remote request. responded() only
+        // clears that request timer; an existing security/block deadline remains armed.
+        const completion = await this.options.prepareForward();
         this.mightExist = true;
         try {
+          this.uncertainty.sent(this.options.monotonicNow());
           await this.options.gateway.forwardParticipant(
             this.sourceRoom,
             this.identity,
@@ -194,21 +198,27 @@ export class ForwardedMediaEdge {
               beforeDispatch,
             },
           );
+          this.uncertainty.responded();
         } catch (error) {
+          this.uncertainty.responded();
           if (error instanceof ApiBudgetError && ['ABORTED', 'SUPERSEDED'].includes(error.code)) {
             // These rejections occur before dispatch. No forward effect needs compensating.
+            await completion.completeKnown();
             this.mightExist = false;
-            this.uncertainty.responded();
             continue;
           }
-          if (error instanceof GatewayError && error.outcomeUnknown) this.unknownForward = true;
+          if (
+            error instanceof ApiBudgetError ||
+            (error instanceof GatewayError && !error.outcomeUnknown)
+          )
+            await completion.completeKnown();
+          else this.unknownForward = true;
           throw error;
         }
-        if (!beforeDispatch()) {
-          this.uncertainty.responded();
-          continue;
-        }
+        await completion.completeKnown();
+        if (!beforeDispatch()) continue;
         const observed = this.dirtyRevision;
+        this.uncertainty.sent(this.options.monotonicNow());
         const binding = await this.query(beforeDispatch);
         await this.verifyOrigin(desired, beforeDispatch);
         this.uncertainty.responded();

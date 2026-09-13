@@ -1,5 +1,6 @@
 import type { OperationJournal } from './OperationJournal.js';
 import type { UsageBudget } from './UsageBudget.js';
+import { isEmptyReservationAbort } from './ReservationIntent.js';
 
 export type RetentionRecord = Readonly<{
   status: 'PREPARED' | 'REVOKING' | 'REVOKED' | 'UNRESOLVED';
@@ -35,6 +36,11 @@ export function compactConfirmedRetirements(
     return Promise.reject(new Error('RETENTION_BUDGET_UNVERIFIED'));
   const reservations = snapshot.reservations;
   return journal.compact((record) => {
+    if (record.state === 'ABORTED')
+      return (
+        isEmptyReservationAbort(record, budget.readSnapshot().reservations) &&
+        record.atEpochMs! <= nowEpochMs - 86_400_000
+      );
     if (!record.reservationId || record.atEpochMs === undefined) return false;
     const matching = reservations.filter(
       (reservation) =>

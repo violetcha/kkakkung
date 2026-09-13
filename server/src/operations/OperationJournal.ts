@@ -1,5 +1,18 @@
 import { freezeSnapshot } from './ImmutableSnapshot.js';
 import {
+  validateReservationIntent,
+  reservationGroupFor,
+  reservationIntentMatches,
+  validReservationTransition,
+  type ReservationIntent,
+} from './ReservationIntent.js';
+import type { UsageBudget } from './UsageBudget.js';
+import {
+  validateForwardIntents,
+  type ForwardIntent,
+  type ForwardCompletion,
+} from './ForwardIntent.js';
+import {
   sameMediaOwnership,
   validateSplitMediaOwnership,
   type SplitMediaOwnership,
@@ -18,7 +31,7 @@ import {
   syncDirectory,
 } from './CheckpointStore.js';
 
-export type JournalState = 'PREPARED' | 'REVOKING' | 'REVOKED' | 'UNRESOLVED';
+export type JournalState = 'PREPARED' | 'REVOKING' | 'REVOKED' | 'UNRESOLVED' | 'ABORTED';
 export type JournalRecord = Readonly<{
   state: JournalState;
   namespace: string;
@@ -31,6 +44,8 @@ export type JournalRecord = Readonly<{
   issuedAtEpochMs: number;
   expiresAtEpochMs: number;
   splitOwnership?: SplitMediaOwnership;
+  forwardIntents?: readonly ForwardIntent[];
+  reservationIntent?: ReservationIntent;
   reservationId?: string;
   retirementId?: string;
   requestId?: string;
@@ -44,6 +59,10 @@ export type JournalEntry = Readonly<{
   record: JournalRecord;
   checksum: string;
 }>;
+/** Empty pre-signing abort is terminal, but is never counted as a remote revocation. */
+export function terminalJournalRecord(record: Pick<JournalRecord, 'state'>): boolean {
+  return record.state === 'REVOKED' || record.state === 'ABORTED';
+}
 export type JournalRestore = Readonly<{
   records: readonly JournalEntry[];
   lastSeq: number;
@@ -66,7 +85,8 @@ type JournalAnchor = Readonly<{
   checksum: string;
 }>;
 
-function recordKey(record: JournalRecord): string {
+type JournalOwner = Pick<JournalRecord, 'namespace' | 'roomName' | 'identity' | 'generation'>;
+function recordKey(record: JournalOwner): string {
   return JSON.stringify([record.namespace, record.roomName, record.identity, record.generation]);
 }
 
@@ -163,9 +183,13 @@ export function validateJournalRecord(value: unknown): JournalRecord {
       'attempt',
       'firstRetireAtEpochMs',
       'splitOwnership',
+      'forwardIntents',
+      'reservationIntent',
     ],
   );
-  if (!['PREPARED', 'REVOKING', 'REVOKED', 'UNRESOLVED'].includes(object.state as string))
+  if (
+    !['PREPARED', 'REVOKING', 'REVOKED', 'UNRESOLVED', 'ABORTED'].includes(object.state as string)
+  )
     throw new Error('INVALID_JOURNAL_STATE');
   for (const key of [
     'namespace',
@@ -200,10 +224,28 @@ export function validateJournalRecord(value: unknown): JournalRecord {
     (object.expiresAtEpochMs as number) < (object.issuedAtEpochMs as number)
   )
     throw new Error('INVALID_JOURNAL_LIFETIME');
-  const record = { ...object } as JournalRecord;
-  return object.splitOwnership === undefined
-    ? record
-    : { ...record, splitOwnership: validateSplitMediaOwnership(object.splitOwnership, record) };
+  let record = { ...object } as JournalRecord;
+  if (object.splitOwnership !== undefined)
+    record = {
+      ...record,
+      splitOwnership: validateSplitMediaOwnership(object.splitOwnership, record),
+    };
+  if (object.forwardIntents !== undefined)
+    record = { ...record, forwardIntents: validateForwardIntents(object.forwardIntents, record) };
+  if (object.reservationIntent !== undefined)
+    record = {
+      ...record,
+      reservationIntent: validateReservationIntent(object.reservationIntent, record),
+    };
+  if (
+    record.state === 'ABORTED' &&
+    (!record.reservationIntent ||
+      record.atEpochMs === undefined ||
+      record.atEpochMs < record.issuedAtEpochMs ||
+      record.retirementId !== undefined)
+  )
+    throw new Error('INVALID_EMPTY_ABORT');
+  return record;
 }
 
 export class OperationJournal {
@@ -369,6 +411,8 @@ export class OperationJournal {
             const previous = this.latest.get(recordKey(entry.record));
             if (previous && !sameMediaOwnership(previous.record, entry.record))
               throw new Error('JOURNAL_OWNERSHIP_CHANGED');
+            if (previous && !validReservationTransition(previous.record, entry.record))
+              throw new Error('RESERVATION_INTENT_CHANGED');
             this.immutableRecords = null;
             this.latest.set(recordKey(entry.record), structuredClone(entry));
             if (entry.seq > afterSeq) records.push(entry);
@@ -411,7 +455,7 @@ export class OperationJournal {
         writable: true,
         // Replay filtering must not hide an older unresolved generation. The full
         // latest-state index also keeps identical identities in separate scopes apart.
-        unresolved: [...this.latest.values()].some((entry) => entry.record.state !== 'REVOKED'),
+        unresolved: [...this.latest.values()].some((entry) => !terminalJournalRecord(entry.record)),
       };
     } catch {
       this.enabled = false;
@@ -479,12 +523,147 @@ export class OperationJournal {
     } catch (error) {
       return Promise.reject(error);
     }
+    return this.appendUpdate(() => {
+      const previous = this.latest.get(recordKey(record))?.record;
+      if (!previous && record.reservationIntent !== undefined)
+        throw new Error('RESERVATION_INTENT_MUTATION_REQUIRED');
+      if (previous?.reservationIntent !== undefined) {
+        if (
+          record.reservationIntent !== undefined &&
+          checksum(record.reservationIntent) !== checksum(previous.reservationIntent)
+        )
+          throw new Error('RESERVATION_INTENT_MUTATION_REQUIRED');
+        record = { ...record, reservationIntent: previous.reservationIntent };
+      }
+      if (record.state === 'ABORTED' && previous?.state !== 'ABORTED')
+        throw new Error('EMPTY_ABORT_PROOF_REQUIRED');
+      // Ordinary lifecycle/retry writes must never erase in-flight effects captured meanwhile.
+      if (
+        record.forwardIntents !== undefined &&
+        previous &&
+        checksum(record.forwardIntents) !== checksum(previous.forwardIntents ?? [])
+      )
+        throw new Error('FORWARD_INTENT_MUTATION_REQUIRED');
+      return previous?.forwardIntents === undefined
+        ? record
+        : { ...record, forwardIntents: previous.forwardIntents };
+    });
+  }
+
+  /** Persist before dispatch. Restored intents deliberately have no completion handle. */
+  async prepareForward(
+    owner: JournalOwner,
+    target: Omit<ForwardIntent, 'operationId'>,
+  ): Promise<ForwardCompletion> {
+    const key = recordKey({ ...owner });
+    const intent: ForwardIntent = { ...target, operationId: randomUUID() };
+    await this.appendUpdate(() => {
+      const previous = this.latest.get(key)?.record;
+      if (
+        !previous ||
+        previous.state !== 'PREPARED' ||
+        !previous.reservationId ||
+        previous.reservationIntent?.phase === 'RESERVING'
+      )
+        throw new Error('FORWARD_OWNER_NOT_PREPARED');
+      return { ...previous, forwardIntents: [...(previous.forwardIntents ?? []), intent] };
+    });
+    let completion: Promise<void> | undefined;
+    return Object.freeze({
+      completeKnown: () => {
+        completion ??= this.appendUpdate(() => {
+          const previous = this.latest.get(key)?.record;
+          if (!previous?.forwardIntents?.some((value) => value.operationId === intent.operationId))
+            throw new Error('FORWARD_INTENT_MISSING');
+          return {
+            ...previous,
+            forwardIntents: previous.forwardIntents.filter(
+              (value) => value.operationId !== intent.operationId,
+            ),
+          };
+        }).then(() => {});
+        return completion;
+      },
+    });
+  }
+
+  /** No reservation or signer is allowed to run before this record reaches disk. */
+  prepareReservation(
+    record: JournalRecord,
+    intent: ReservationIntent,
+  ): Promise<{ seq: number; durable: true }> {
+    const captured = validateJournalRecord({ ...record, reservationIntent: intent });
+    return this.appendUpdate(() => {
+      if (
+        this.latest.has(recordKey(captured)) ||
+        captured.state !== 'PREPARED' ||
+        captured.reservationIntent?.phase !== 'RESERVING'
+      )
+        throw new Error('RESERVATION_ALREADY_PREPARED');
+      return captured;
+    });
+  }
+
+  commitReservation(
+    owner: JournalOwner,
+    usage: ReturnType<UsageBudget['snapshot']>,
+  ): Promise<{ seq: number; durable: true }> {
+    const key = recordKey(owner);
+    const snapshot = structuredClone(usage);
+    return this.appendUpdate(() => {
+      const record = this.latest.get(key)?.record;
+      if (
+        !record ||
+        record.state !== 'PREPARED' ||
+        record.reservationIntent?.phase !== 'RESERVING' ||
+        snapshot.integrity !== 'ok' ||
+        !snapshot.writable ||
+        !reservationIntentMatches(record, snapshot.reservations) ||
+        reservationGroupFor(record, snapshot.reservations).length !==
+          record.reservationIntent.requests.length ||
+        reservationGroupFor(record, snapshot.reservations).some((r) => r.status !== 'ACTIVE')
+      )
+        throw new Error('RESERVATION_COMMIT_UNCONFIRMED');
+      return { ...record, reservationIntent: { ...record.reservationIntent, phase: 'COMMITTED' } };
+    });
+  }
+
+  /** Only an intact empty budget plus pre-signing write-ahead state can prove no issued JWT. */
+  abortUnreserved(
+    owner: JournalOwner,
+    usage: ReturnType<UsageBudget['snapshot']>,
+    atEpochMs: number,
+  ): Promise<{ seq: number; durable: true }> {
+    const key = recordKey(owner);
+    const snapshot = structuredClone(usage);
+    return this.appendUpdate(() => {
+      const record = this.latest.get(key)?.record;
+      if (
+        !record ||
+        record.state !== 'PREPARED' ||
+        record.reservationIntent?.phase !== 'RESERVING' ||
+        snapshot.integrity !== 'ok' ||
+        !snapshot.writable ||
+        reservationGroupFor(record, snapshot.reservations).length !== 0
+      )
+        throw new Error('EMPTY_ABORT_UNCONFIRMED');
+      return { ...record, state: 'ABORTED', atEpochMs };
+    });
+  }
+
+  private appendUpdate(update: () => JournalRecord): Promise<{ seq: number; durable: true }> {
+    if (this.closed || this.closing) return Promise.reject(new Error('JOURNAL_NOT_WRITABLE'));
     const run = this.queue.then(async () => {
       await this.restored;
       if (!this.enabled || this.closed) throw new Error('JOURNAL_NOT_WRITABLE');
+      const record = validateJournalRecord(update());
       const previous = this.latest.get(recordKey(record));
       if (previous && !sameMediaOwnership(previous.record, record))
         throw new Error('JOURNAL_OWNERSHIP_CHANGED');
+      if (previous && !validReservationTransition(previous.record, record))
+        throw new Error('RESERVATION_INTENT_CHANGED');
+      if (previous?.record.state === 'ABORTED' && record.state !== 'ABORTED')
+        throw new Error('ABORTED_GENERATION_TERMINAL');
       const payload = { version: 1 as const, seq: this.seq + 1, record };
       try {
         const created = this.handle === null;
@@ -527,7 +706,7 @@ export class OperationJournal {
       const entries = [...this.latest.values()].sort((a, b) => a.seq - b.seq);
       const retained = entries.filter(
         (entry) =>
-          entry.record.state !== 'REVOKED' ||
+          !terminalJournalRecord(entry.record) ||
           !isEligible(freezeSnapshot(structuredClone(entry.record))),
       );
       const removed = entries.length - retained.length;

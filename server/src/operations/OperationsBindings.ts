@@ -12,6 +12,7 @@ import type { RecoveryCleanupBindings } from './RecoveryCleanupBindings.js';
 import type { RevocationRetries } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { readOfficialUsageInput, validateOfficialBudget } from './UsageCheckpoint.js';
+import { isEmptyReservationAbort } from './ReservationIntent.js';
 
 export type OperationsBindingsOptions = Readonly<{
   config: Pick<
@@ -334,7 +335,11 @@ export class OperationsBindings {
         readiness.historyComplete &&
         readiness.unresolvedCount === 0 &&
         journal.writable &&
-        journal.records.every((entry) => entry.record.state === 'REVOKED') &&
+        journal.records.every(
+          (entry) =>
+            entry.record.state === 'REVOKED' ||
+            isEmptyReservationAbort(entry.record, usage.reservations),
+        ) &&
         usage.writable &&
         usage.integrity === 'ok' &&
         usage.reservations.every(

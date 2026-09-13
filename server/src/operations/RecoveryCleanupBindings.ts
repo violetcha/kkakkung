@@ -30,6 +30,7 @@ import {
 } from './RevocationRetries.js';
 import type { UsageBudget } from './UsageBudget.js';
 import { ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
+import { isEmptyReservationAbort, validReservationTransition } from './ReservationIntent.js';
 
 export type CleanupCheckpointState = Readonly<{
   namespace: string;
@@ -267,7 +268,10 @@ export class RecoveryCleanupBindings {
       ) &&
       [...this.records.values()].every(
         ({ record }) =>
-          !record.reservationId || !roots.has(record.reservationId) || record.state === 'REVOKED',
+          !record.reservationId ||
+          !roots.has(record.reservationId) ||
+          record.state === 'REVOKED' ||
+          isEmptyReservationAbort(record, this.options.usageBudget.readSnapshot().reservations),
       )
     );
   }
@@ -330,7 +334,8 @@ export class RecoveryCleanupBindings {
         journal.records.length === this.records.size &&
         journal.records.every(
           (entry) =>
-            entry.record.state === 'REVOKED' &&
+            (entry.record.state === 'REVOKED' ||
+              isEmptyReservationAbort(entry.record, usage.reservations)) &&
             this.records.get(recordKey(entry.record))?.checksum === entry.checksum,
         ) &&
         this.retries.snapshot().every((intent) => intent.status === 'REVOKED') &&
@@ -401,7 +406,8 @@ export class RecoveryCleanupBindings {
           prior.issuedAtEpochMs !== record.issuedAtEpochMs ||
           prior.expiresAtEpochMs !== record.expiresAtEpochMs ||
           !sameMediaOwnership(prior, record) ||
-          (prior.state === 'REVOKED' && record.state !== 'REVOKED'))
+          !validReservationTransition(prior, record) ||
+          (['REVOKED', 'ABORTED'].includes(prior.state) && record.state !== prior.state))
       )
         throw new Error('RECOVERY_RECORD_CONFLICT');
       this.records.set(key, structuredClone(entry));
@@ -429,6 +435,7 @@ export class RecoveryCleanupBindings {
       if (
         this.intents.has(intent.retirementId) ||
         matches.length !== 1 ||
+        matches[0]!.record.state === 'ABORTED' ||
         (intent.status === 'REVOKED' && matches[0]!.record.state !== 'REVOKED')
       )
         throw new Error('RECOVERY_RETRY_MISMATCH');
@@ -448,7 +455,9 @@ export class RecoveryCleanupBindings {
       await this.initialization;
       this.assertOpen(pass);
       const report = await this.cleanup.run({
-        records: [...this.records.values()].sort((a, b) => a.seq - b.seq),
+        records: [...this.records.values()]
+          .filter(({ record }) => record.state !== 'ABORTED')
+          .sort((a, b) => a.seq - b.seq),
         observedTargets: [...this.observed.values()],
         historyComplete: this.historyComplete,
         singleWriter: true,
@@ -460,7 +469,11 @@ export class RecoveryCleanupBindings {
       if (this.historyComplete && report.unresolved === 0 && report.ownedRoomsRemaining === 0) {
         // This also recovers a crash after durable REVOKED but before usage confirmation.
         // Wait until the whole sweep rules out unknown identities sharing the same room.
-        const roots = new Set([...this.records.values()].map(({ record }) => record.reservationId));
+        const roots = new Set(
+          [...this.records.values()]
+            .filter(({ record }) => record.state !== 'ABORTED')
+            .map(({ record }) => record.reservationId),
+        );
         for (const root of roots) await this.confirmUsage(root, pass);
         await this.persistReport({ ...report, historyComplete: this.historyComplete }, pass);
       }
@@ -598,6 +611,9 @@ export class RecoveryCleanupBindings {
             (p) => p.identity === member.identity,
           ),
       });
+    // A crash loses the original HTTP completion. Remove ACK/current absence cannot prove that
+    // an earlier forward will not take effect later. Keep the journal and reservations unresolved.
+    if (target.record?.forwardIntents?.length) throw new Error('FORWARD_EFFECT_UNCONFIRMED');
   }
 
   private async participants(

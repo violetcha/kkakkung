@@ -76,6 +76,7 @@ async function seed(
   historicalRooms = 1,
   released = false,
   split = false,
+  forward: 'pending' | 'known' | null = null,
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e13-bindings-'));
   directories.push(dir);
@@ -139,6 +140,14 @@ async function seed(
       : {}),
   };
   await stores.journal.append(record);
+  if (forward) {
+    const completion = await stores.journal.prepareForward(record, {
+      sourceRoomName: record.roomName,
+      identity: record.identity,
+      destinationRoomName: record.splitOwnership!.receiverRoomNames[0]!,
+    });
+    if (forward === 'known') await completion.completeKnown();
+  }
   for (let index = 1; index < historicalRooms; index++) {
     await stores.journal.append({
       ...record,
@@ -363,6 +372,39 @@ function holdRename(filePath: string) {
 }
 
 describe('split ownership through actual journal recovery and shared gateway', () => {
+  it('keeps unknown forward effects, reservations and readiness blocked after restart despite absent rooms and expired JWTs', async () => {
+    const s = fixture(await seed('PREPARED', 1, false, true, 'pending'));
+    const first = await s.run();
+    expect(first?.unresolved).toBeGreaterThan(0);
+    expect(s.remove).toHaveBeenCalledTimes(12); // Originals are still revoked promptly.
+    expect(s.bootstrap.getReadiness().state).toBe('LOCKED');
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+    s.advance(600_000); // Token expiration cannot settle an earlier server API operation.
+    const destination = s.record.splitOwnership!.receiverRoomNames[0]!;
+    s.rooms.set(destination, new Set([s.record.identity])); // The old request's late effect.
+    s.listed.add(destination);
+    expect((await s.bindings.reconcile()).unresolved).toBeGreaterThan(0);
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).toBeNull();
+    const latest = s.journal.readSnapshot().records.at(-1)!.record;
+    expect(latest.state).toBe('UNRESOLVED');
+    expect(latest.forwardIntents).toHaveLength(1);
+    expect(await s.journal.compact(() => true)).toMatchObject({ removed: 0 });
+  });
+
+  it('recovers a known completed forward after restart only through full original/clone revocation', async () => {
+    const s = fixture(await seed('PREPARED', 1, false, true, 'known'));
+    const destination = s.record.splitOwnership!.receiverRoomNames[0]!;
+    s.rooms.set(destination, new Set([s.record.identity]));
+    s.listed.add(destination);
+    expect(await s.run()).toMatchObject({ historyComplete: true, unresolved: 0, revoked: 12 });
+    expect(s.remove).toHaveBeenCalledTimes(12);
+    expect(s.journal.readSnapshot().records.at(-1)!.record).toMatchObject({
+      state: 'REVOKED',
+      forwardIntents: [],
+    });
+    expect(s.usage.snapshot().reservations[0]?.remoteConfirmedAtEpochMs).not.toBeNull();
+  });
+
   it('waits for both origins and every possible clone before REVOKED or usage confirmation', async () => {
     const s = fixture(await seed('PREPARED', 1, false, true));
     const targets = ownedMediaTargets(s.record);

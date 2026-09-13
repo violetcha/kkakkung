@@ -106,7 +106,7 @@ function pendingIdentities(journal: JournalRestore): number {
       record.state,
     );
   }
-  return [...latest.values()].filter((state) => state !== 'REVOKED').length;
+  return [...latest.values()].filter((state) => state !== 'REVOKED' && state !== 'ABORTED').length;
 }
 
 function validatedCleanup(report: CleanupReport): CleanupReport {
