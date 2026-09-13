@@ -180,13 +180,14 @@ export class ForwardedMediaEdge {
         const beforeDispatch = () => this.revision === revision && this.current(desired);
         this.uncertainty.sent(this.options.monotonicNow());
         await this.verifyOrigin(desired, beforeDispatch);
-        if (!beforeDispatch()) {
-          this.uncertainty.responded();
-          continue;
-        }
+        this.uncertainty.responded();
+        if (!beforeDispatch()) continue;
+        // Local journal queue/fsync is not an unanswered remote request. responded() only
+        // clears that request timer; an existing security/block deadline remains armed.
         const completion = await this.options.prepareForward();
         this.mightExist = true;
         try {
+          this.uncertainty.sent(this.options.monotonicNow());
           await this.options.gateway.forwardParticipant(
             this.sourceRoom,
             this.identity,
@@ -197,12 +198,13 @@ export class ForwardedMediaEdge {
               beforeDispatch,
             },
           );
+          this.uncertainty.responded();
         } catch (error) {
+          this.uncertainty.responded();
           if (error instanceof ApiBudgetError && ['ABORTED', 'SUPERSEDED'].includes(error.code)) {
             // These rejections occur before dispatch. No forward effect needs compensating.
             await completion.completeKnown();
             this.mightExist = false;
-            this.uncertainty.responded();
             continue;
           }
           if (
@@ -214,11 +216,9 @@ export class ForwardedMediaEdge {
           throw error;
         }
         await completion.completeKnown();
-        if (!beforeDispatch()) {
-          this.uncertainty.responded();
-          continue;
-        }
+        if (!beforeDispatch()) continue;
         const observed = this.dirtyRevision;
+        this.uncertainty.sent(this.options.monotonicNow());
         const binding = await this.query(beforeDispatch);
         await this.verifyOrigin(desired, beforeDispatch);
         this.uncertainty.responded();
