@@ -4,6 +4,7 @@ import type { Generation } from '../media/MediaGenerationRegistry.js';
 import { checksum, safeIdentifier, strictObject } from '../operations/CheckpointStore.js';
 import {
   validateJournalRecord,
+  terminalJournalRecord,
   type JournalEntry,
   type JournalRecord,
 } from '../operations/OperationJournal.js';
@@ -13,6 +14,10 @@ import {
   sameMediaOwnership,
   validateSplitMediaOwnership,
 } from '../operations/SplitMediaOwnership.js';
+import {
+  isEmptyReservationAbort,
+  reservationIntentMatches,
+} from '../operations/ReservationIntent.js';
 
 export type ReservationReadinessInput = Readonly<{
   namespace: string;
@@ -202,15 +207,17 @@ function inspect(input: ReservationReadinessInput) {
     identities.add(record.identity);
     if (record.splitOwnership) identities.add(record.splitOwnership.faceIdentity);
     const generation = generations.get(key(record));
+    if (!reservationIntentMatches(record, input.reservations)) consistent = false;
     if (generation && !sameJournalGeneration(record, generation)) consistent = false;
-    if (record.state !== 'REVOKED') {
+    if (!terminalJournalRecord(record)) {
       const currentPrepared =
         record.state === 'PREPARED' &&
         record.serverEpoch === input.serverEpoch &&
         generation !== undefined &&
         sameJournalGeneration(record, generation) &&
         generation.state === 'PREPARED' &&
-        !generation.terminal;
+        !generation.terminal &&
+        (record.reservationIntent?.phase !== 'RESERVING' || pending.has(generation));
       const currentRetiring =
         generation !== undefined &&
         retiring.has(generation) &&
@@ -245,7 +252,18 @@ function inspect(input: ReservationReadinessInput) {
   if (reservationIds.size !== input.reservations.length) consistent = false;
   for (const [root, group] of roots) {
     // A pending preparation may be inspected before its very first reserve reaches disk.
-    if (!reservationIds.has(root) && group.records.length > 0) consistent = false;
+    if (
+      !reservationIds.has(root) &&
+      group.records.length > 0 &&
+      !group.records.every(
+        (record) =>
+          isEmptyReservationAbort(record, input.reservations) ||
+          (record.state === 'PREPARED' &&
+            record.reservationIntent?.phase === 'RESERVING' &&
+            [...pending].some((generation) => sameJournalGeneration(record, generation))),
+      )
+    )
+      consistent = false;
   }
   for (const reservation of input.reservations) {
     const id = reservation.request.reservationId;

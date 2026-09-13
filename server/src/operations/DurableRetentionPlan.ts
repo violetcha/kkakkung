@@ -4,6 +4,7 @@ import { canCompact } from './RetentionPolicy.js';
 import type { RetryIntent } from './RevocationRetries.js';
 import type { UsageReservation } from './UsageCheckpoint.js';
 import { usageReservationEpoch } from './UsageReservationId.js';
+import { isEmptyReservationAbort, reservationGroupFor } from './ReservationIntent.js';
 
 export const RETENTION_MS = 24 * 60 * 60 * 1_000;
 export const RETENTION_BATCH_ROOTS = 256;
@@ -87,6 +88,22 @@ export function planDurableRetention(input: {
     )
       continue;
     result.set(root, checksum(group));
+  }
+  for (const { record } of input.records) {
+    if (result.size >= RETENTION_BATCH_ROOTS) break;
+    const root = record.reservationId;
+    if (
+      !root ||
+      !isEmptyReservationAbort(record, input.reservations) ||
+      record.atEpochMs! > input.now - RETENTION_MS ||
+      input.intents.some((intent) => intent.reservationId === root) ||
+      input.records.some(
+        ({ record: other }) =>
+          other.reservationId === root && !isEmptyReservationAbort(other, input.reservations),
+      )
+    )
+      continue;
+    result.set(root, checksum(reservationGroupFor(record, input.reservations)));
   }
   return result;
 }

@@ -11,6 +11,7 @@ import {
   validMediaNamespace as validNamespace,
 } from '../media/MediaRoomOwnership.js';
 import { ownedMediaRooms, ownedMediaTargets, sameMediaOwnership } from './SplitMediaOwnership.js';
+import { validReservationTransition } from './ReservationIntent.js';
 
 export { ownsMediaRoom } from '../media/MediaRoomOwnership.js';
 
@@ -78,7 +79,8 @@ function replay(records: readonly JournalEntry[], namespace: string): readonly J
         previous.issuedAtEpochMs !== record.issuedAtEpochMs ||
         previous.expiresAtEpochMs !== record.expiresAtEpochMs ||
         !sameMediaOwnership(previous, record) ||
-        (previous.state === 'REVOKED' && record.state !== 'REVOKED'))
+        !validReservationTransition(previous, record) ||
+        (['REVOKED', 'ABORTED'].includes(previous.state) && record.state !== previous.state))
     )
       throw new Error('INVALID_CLEANUP_RECORDS');
     latest.set(key, structuredClone(record));

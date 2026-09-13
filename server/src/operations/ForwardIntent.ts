@@ -42,7 +42,7 @@ export function validateForwardIntents(
     new Set(
       result.map((intent) => JSON.stringify([intent.sourceRoomName, intent.destinationRoomName])),
     ).size !== result.length ||
-    (owner.state === 'REVOKED' && result.length > 0)
+    (['REVOKED', 'ABORTED'].includes(owner.state) && result.length > 0)
   )
     throw new Error('UNCONFIRMED_FORWARD_INTENTS');
   return result;
