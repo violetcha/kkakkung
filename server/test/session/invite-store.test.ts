@@ -68,6 +68,7 @@ describe('InviteStore', () => {
     expect(inviteToken.length).toBeGreaterThanOrEqual(40);
     expect(h.invites.verify({ inviteToken, createRoom: false, roomCode: 'ABC234' })).toEqual({
       inviteId,
+      expiresAt: issued.invitation.expiresAt,
     });
     expect(h.invites.verify({ inviteToken, createRoom: true })).toBeNull();
     expect(h.invites.verify({ inviteToken, createRoom: false, roomCode: 'ZZZ999' })).toBeNull();
@@ -101,7 +102,10 @@ describe('InviteStore', () => {
       inviteToken: creator.invitation.inviteToken,
       createRoom: true,
     });
-    expect(created).toEqual({ inviteId: creator.invitation.inviteId });
+    expect(created).toEqual({
+      inviteId: creator.invitation.inviteId,
+      expiresAt: creator.invitation.expiresAt,
+    });
     h.invites.bindCreatedRoom(creator.invitation.inviteId, 'NEW234');
     expect(
       h.invites.verify({

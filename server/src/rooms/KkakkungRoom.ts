@@ -231,6 +231,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       return this.context.matchId;
     }
 
+    canManageInvitations(playerId: string): boolean {
+      return (
+        !this.closing &&
+        !this.disposed &&
+        (this.phase === 'LOBBY' || this.phase === 'DEVICE_CHECK') &&
+        playerId === this.lobby.host &&
+        this.clientsByPlayer.has(playerId)
+      );
+    }
+
     mediaScopeFor(playerId: string, purpose: 'practice' | 'game') {
       if (!this.clientsByPlayer.has(playerId)) return null;
       const instance = this.context.instanceOf(playerId);

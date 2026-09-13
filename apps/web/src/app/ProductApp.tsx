@@ -8,6 +8,7 @@ import {
 } from '../features/room/product-session';
 import type { SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
+import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { LocalControls } from '../features/game/flow/LocalControls';
 import { AudioControls } from '../features/game/flow/AudioControls';
@@ -51,6 +52,7 @@ export function ProductApp({
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);
   const [selfId, setSelfId] = useState('');
   const [code, setCode] = useState('');
+  const [sessionCredential, setSessionCredential] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<number | null>(null);
   const runtime = useRef<ReturnType<typeof bindProductRoom> | null>(null);
   const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
@@ -96,6 +98,7 @@ export function ProductApp({
     runtime.current = null;
     setJoining(false);
     setSnapshot(null);
+    setSessionCredential(null);
     await old
       ?.leave()
       .catch(() => setError('연결 정리를 확인하지 못했습니다. 페이지를 새로고침해 주세요.'));
@@ -156,7 +159,7 @@ export function ProductApp({
     try {
       const base = {
         nickname: nickname.trim(),
-        ...(access === 'gitlab-sso' ? {} : { inviteToken: invitation }),
+        ...(invitation ? { inviteToken: invitation } : {}),
       };
       session = await requestSession(
         createRoom
@@ -186,6 +189,7 @@ export function ProductApp({
       runtime.current.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
       setSelfId(session.playerId);
       setCode(session.roomCode);
+      setSessionCredential(session.sessionToken);
     } catch (cause) {
       if (joined)
         await productRoomPort(joined)
@@ -195,10 +199,11 @@ export function ProductApp({
       if (run === generation.current) {
         runtime.current = null;
         setSnapshot(null);
+        setSessionCredential(null);
         const labels: Record<string, string> = {
           INVALID_REQUEST: '닉네임·초대 링크·방 코드를 확인해 주세요.',
           INVALID_INVITATION:
-            access === 'gitlab-sso'
+            access === 'gitlab-sso' && !invitation
               ? '로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'
               : '유효한 초대 링크가 필요합니다.',
           CAPACITY: '방이 가득 찼습니다.',
@@ -388,6 +393,17 @@ export function ProductApp({
               }
             />
           )}
+          {sessionCredential &&
+            snapshot.roster?.hostId === selfId &&
+            round &&
+            ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
+              <RoomInvitationControls
+                key={`${code}:${selfId}`}
+                sessionToken={sessionCredential}
+                roomCode={code}
+                teamOnly={access === 'gitlab-sso'}
+              />
+            )}
           {round?.phase === 'DEVICE_CHECK' && (
             <DeviceCheckScreen
               status={snapshot.devices}

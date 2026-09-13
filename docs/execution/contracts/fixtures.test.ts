@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { INVITATION_ROUTES, ROOM_EXPIRED_CLOSE_CODE, ROOM_REMOVED_CLOSE_CODE } from './types.ts';
-import { roomAccessFixture, hostCommandFixture } from './fixtures.ts';
+import {
+  INVITATION_ROUTES,
+  ROOM_INVITATION_ROUTE,
+  ROOM_EXPIRED_CLOSE_CODE,
+  ROOM_REMOVED_CLOSE_CODE,
+} from './types.ts';
+import { roomAccessFixture, hostCommandFixture, roomInvitationFixture } from './fixtures.ts';
+
+test('friend invitation handoff exposes no session credential or operator authority', () => {
+  assert.equal(ROOM_INVITATION_ROUTE, '/api/sessions/current/invitation');
+  assert.deepEqual(Object.keys(roomInvitationFixture).sort(), [
+    'expiresAt',
+    'inviteToken',
+    'roomCode',
+  ]);
+  assert.ok(Number.isSafeInteger(roomInvitationFixture.expiresAt));
+});
 
 test('host controls identify a target without trusting a payload actor and keep access separate', () => {
   assert.equal(ROOM_REMOVED_CLOSE_CODE, 4002);

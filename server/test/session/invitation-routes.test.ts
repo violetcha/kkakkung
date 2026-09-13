@@ -60,7 +60,7 @@ describe('operator invitation routes', () => {
     expect(body.inviteToken.length).toBeGreaterThan(30);
     expect(
       invites.verify({ inviteToken: body.inviteToken, createRoom: false, roomCode: 'ABC234' }),
-    ).toEqual({ inviteId: body.inviteId });
+    ).toEqual({ inviteId: body.inviteId, expiresAt: now + 30_000 });
     const revoke = await post(
       INVITATION_ROUTES.revoke.replace(':inviteId', body.inviteId),
       {},

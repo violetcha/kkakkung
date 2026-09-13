@@ -21,7 +21,7 @@ export type InvitationCheck = Readonly<{ inviteToken: string }> &
 export interface InvitationPort {
   issue(input: IssueInvitation): InvitationIssueResult;
   revoke(inviteId: string): void;
-  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string; expiresAt?: number }> | null;
   bindCreatedRoom(inviteId: string, roomCode: string): void;
 }
 

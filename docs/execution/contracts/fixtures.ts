@@ -31,6 +31,7 @@ import type {
   SessionAccessResponse,
   PublicRoundState,
   RoomAccess,
+  RoomInvitationResponse,
 } from './types.ts';
 
 // Shared planning examples. These fixtures do not run product modules or certify a real map,
@@ -82,6 +83,11 @@ export const teamSessionFixture = {
   createRoom: true,
 } as const satisfies SessionRequest;
 export const teamAccessFixture = { method: 'gitlab-sso' } as const satisfies SessionAccessResponse;
+export const roomInvitationFixture = {
+  inviteToken: 'synthetic-room-invitation-only',
+  roomCode: 'ABCDEF',
+  expiresAt: 1900000000000,
+} as const satisfies RoomInvitationResponse;
 export const operatorInvitationFixture = {
   scope: { allowCreate: false, roomCodes: ['ABC123'] },
   expiresAt: 1_900_000_000_000,

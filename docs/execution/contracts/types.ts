@@ -20,6 +20,19 @@ export type SessionResponse = Readonly<{
 // Owner-only cancellation before the first game connection; no identity in the body.
 export const SESSION_CANCEL_ROUTE = '/api/sessions/current' as const;
 export type SessionCancelErrorCode = 'INVALID_REQUEST' | 'INVALID_SESSION' | 'SESSION_IN_USE';
+// Current connected host, LOBBY/DEVICE_CHECK only. POST returns 201, DELETE returns 204.
+export const ROOM_INVITATION_ROUTE = '/api/sessions/current/invitation' as const;
+export type RoomInvitationResponse = Readonly<{
+  inviteToken: string;
+  roomCode: string;
+  expiresAt: number;
+}>;
+export type RoomInvitationErrorCode =
+  | 'INVALID_REQUEST'
+  | 'INVALID_SESSION'
+  | 'INVITATION_UNAVAILABLE'
+  | 'RATE_LIMITED'
+  | 'ADMISSION_CLOSED';
 // Server/operator-only. These endpoints do not accept a player's session Bearer token.
 export const INVITATION_ROUTES = {
   issue: '/api/operations/invitations',
@@ -41,7 +54,7 @@ export type InvitationCheck = Readonly<{ inviteToken: string }> &
 export interface InvitationPort {
   issue(input: IssueInvitation): InvitationIssueResult;
   revoke(inviteId: string): void;
-  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string; expiresAt?: number }> | null;
   bindCreatedRoom(inviteId: string, roomCode: string): void;
 }
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';

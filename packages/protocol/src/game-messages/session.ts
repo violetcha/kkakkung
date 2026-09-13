@@ -49,6 +49,24 @@ export const sessionResponseSchema = z.strictObject({
 });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
+/** The connected lobby host manages only their current room. Never shares session credentials. */
+export const ROOM_INVITATION_ROUTE = '/api/sessions/current/invitation';
+export const roomInvitationRequestSchema = z.strictObject({});
+export const roomInvitationResponseSchema = z.strictObject({
+  inviteToken: inviteTokenSchema,
+  roomCode: roomCodeSchema,
+  expiresAt: z.number().int().positive().safe(),
+});
+export type RoomInvitationResponse = z.infer<typeof roomInvitationResponseSchema>;
+export const ROOM_INVITATION_ERROR_CODES = [
+  'INVALID_REQUEST',
+  'INVALID_SESSION',
+  'INVITATION_UNAVAILABLE',
+  'RATE_LIMITED',
+  'ADMISSION_CLOSED',
+] as const;
+export type RoomInvitationErrorCode = (typeof ROOM_INVITATION_ERROR_CODES)[number];
+
 /** Safe HTTP error codes for the session route. No hidden room content is ever returned. */
 export const SESSION_ERROR_CODES = [
   'INVALID_REQUEST',

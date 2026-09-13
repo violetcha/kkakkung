@@ -278,7 +278,27 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
       const logicalScope = structuredClone(recovering.runtime.getSnapshot().view!.gameScope);
       const beforeRecovery = recovering.grants[1]!;
       expect(recovering.mediaControl.failOnce()).toBe(true);
-      await expect.poll(() => recovering.grants.length, { timeout: 8000 }).toBe(3);
+      try {
+        await expect.poll(() => recovering.grants.length, { timeout: 8000 }).toBe(3);
+      } catch (failure) {
+        const observed = recovering.runtime.getSnapshot();
+        throw new Error(
+          JSON.stringify({
+            stage: 'one-player-generation-recovery',
+            grantCount: recovering.grants.length,
+            grantResults: grantResults.slice(-8),
+            reports: reports.slice(-8),
+            phase: observed.round?.phase,
+            abortReason: observed.round?.abortReason,
+            error: observed.error,
+            lost: observed.lost,
+            mediaState: observed.media?.state,
+            mediaGeneration: observed.media?.receiverGeneration,
+            server: await server.inspect(roomCode),
+          }),
+          { cause: failure },
+        );
+      }
       const afterRecovery = recovering.grants[2]!;
       expect(afterRecovery.mediaInstanceId).toBe(beforeRecovery.mediaInstanceId);
       expect(afterRecovery.receiverGeneration).toBeGreaterThan(beforeRecovery.receiverGeneration);
