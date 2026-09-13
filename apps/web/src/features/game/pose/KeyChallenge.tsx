@@ -8,12 +8,14 @@ export function KeyChallenge({
   tick,
   onKey,
   onCancel,
+  local = false,
 }: {
   challenge: ChallengeView;
   index: number;
   tick: number;
   onKey(key: ChallengeKey, repeat?: boolean): void;
   onCancel(): void;
+  local?: boolean;
 }) {
   const expired = tick >= challenge.expiresAtTick;
   useEffect(() => {
@@ -60,9 +62,13 @@ export function KeyChallenge({
       </div>
       <p>
         {expired
-          ? '서버의 도전 종료를 확인하고 있습니다.'
+          ? local
+            ? '도전 시간이 끝났습니다. 다시 시작하세요.'
+            : '서버의 도전 종료를 확인하고 있습니다.'
           : index >= 4
-            ? '입력 완료 · 서버 시간과 결과를 확인하고 있습니다.'
+            ? local
+              ? '입력 완료 · 잠시 자세를 유지하세요.'
+              : '입력 완료 · 서버 시간과 결과를 확인하고 있습니다.'
             : `${Math.max(0, Math.ceil((challenge.expiresAtTick - tick) / 20))}초 남음`}
       </p>
       <button className="quiet" onClick={onCancel}>

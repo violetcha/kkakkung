@@ -82,8 +82,8 @@ export function LocalControls({
             정면을 보고 얼굴과 양쪽 어깨·팔이 보이도록 자세를 맞춘 뒤 보정해 주세요.
           </p>
         )}
-        {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}
       </details>
+      {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}
     </aside>
   );
 }
