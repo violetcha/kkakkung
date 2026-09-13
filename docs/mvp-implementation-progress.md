@@ -8,6 +8,25 @@
 
 ## 2026-09-13 구현 재개
 
+### 배포 연습 음성 대조 동선 — 207
+
+- [207](https://ssafy.atlassian.net/browse/S15P21C204-207),
+  `fix/S15P21C204-207-smoke-practice-approach`, 시작 소스 `90aca14c`.
+- develop `12bb0bf4`의 배포 #101은 이미지 교체 전 로컬 검사에서 실패했다.
+  2,472/2,473개 통과, DP06_PRACTICE_MEDIA_UNCONFIRMED:
+  6인 연습 영상은 확인됐으나 음성 수신 전에 MAP_FINALIZING으로 전환됐다.
+  종료 참가자6·drain 성공이며 운영은 배포 #100 `62a9496c` READY/OPEN 상태를 유지했다.
+  이 로컬 실패를 실제 Cloud 장애나 204 HTTP 상한 결함으로 확정하지 않는다.
+- 임의 회전 대신 전체 게시 준비 후 참가자별 서버 승인 전진3회를 사용한다.
+  실제 양성 음성·영상 수신, 연습/경기 기한·정리 기준은 유지한다.
+  [배포 검사 절차](testing.md#dp-06-배포-합성-미디어-검사)를 따른다.
+- 실제 코어·가청 정책 회귀를 포함한3개와 실제 로컬6클라이언트 smoke3개가 통과했다.
+  smoke 파일 소요50.69초, QA 타입·lint도 통과했다. 이는 LOCAL_CONTRACT_ONLY다.
+  205/206과 통합한 전체 검사·정확한 소스 CI·MR·실제 배포는 후속 확인한다.
+- 205 소스 `90aca14c`는 Jenkins MR #107 SUCCESS, 245파일·2,491개·E2E14개 통과했다.
+  [MR !131](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/131)에
+  206/207을 합친 뒤 최종 소스로 다시 검사한다. 기존 CI만 보고 후속 변경을 병합하지 않는다.
+
 ### 회수 완료 후 조회 복구 — 205
 
 - [205](https://ssafy.atlassian.net/browse/S15P21C204-205),
