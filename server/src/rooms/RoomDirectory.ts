@@ -12,6 +12,7 @@ import type { MediaControl, PreparationResult } from '../game/ports.js';
 export interface ProductRoomHandle {
   readonly roomCode: string;
   readonly matchId: string;
+  canManageInvitations(playerId: string): boolean;
   /** Current media instance for a participant's requested purpose, or null when none exists. */
   mediaScopeFor(
     playerId: string,

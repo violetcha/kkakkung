@@ -104,13 +104,14 @@ export class InviteStore implements InvitationPort {
     this.records.delete(inviteId);
   }
 
-  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null {
+  verify(input: InvitationCheck): Readonly<{ inviteId: string; expiresAt: number }> | null {
     this.prune(this.options.now());
     const record = this.findByToken(input.inviteToken);
     if (!record || record.revoked || this.options.now() >= record.expiresAt) return null;
-    if (input.createRoom) return record.allowCreate ? { inviteId: record.inviteId } : null;
+    const verified = { inviteId: record.inviteId, expiresAt: record.expiresAt };
+    if (input.createRoom) return record.allowCreate ? verified : null;
     const allowed = record.roomCodes.has(input.roomCode) || record.createdRooms.has(input.roomCode);
-    return allowed ? { inviteId: record.inviteId } : null;
+    return allowed ? verified : null;
   }
 
   bindCreatedRoom(inviteId: string, roomCode: string): void {

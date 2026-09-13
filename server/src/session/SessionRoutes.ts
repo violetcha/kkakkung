@@ -11,15 +11,20 @@ import {
   SESSION_ROUTE,
   SESSION_ACCESS_ROUTE,
   SESSION_CANCEL_ROUTE,
+  ROOM_INVITATION_ROUTE,
+  roomInvitationRequestSchema,
   sessionCancelRequestSchema,
   sessionRequestSchema,
   type SessionErrorCode,
   type SessionResponse,
+  type RoomInvitationErrorCode,
 } from '@kkakkung/protocol/game-messages';
 import { AdmissionLimiter } from './AdmissionLimiter.js';
 import type { InvitationPort } from './invite-types.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import type { SlotRegistry } from './SlotRegistry.js';
+import type { RoomInvitations } from './RoomInvitations.js';
+import type { SessionAuth } from './session-types.js';
 
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -49,6 +54,8 @@ export type SessionRouteDeps = Readonly<{
   admissionMode?: 'invitation' | 'gitlab-sso';
   /** Reclaim expired reservations before a new admission checks capacity. */
   cleanupReservations?: () => void;
+  roomInvitations?: RoomInvitations;
+  canManageInvitations?: (session: SessionAuth) => boolean;
 }>;
 
 export function clientIp(
@@ -99,6 +106,43 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
     res.vary('X-SSO-User');
     res.json({ method: ssoPrincipal(req) ? 'gitlab-sso' : 'invitation' });
   });
+  const manageInvitation = (req: Request, res: Response, revoke: boolean) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const reject = (status: number, error: RoomInvitationErrorCode) =>
+      void res.status(status).json({ error });
+    if (!roomInvitationRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {})).success)
+      return reject(400, 'INVALID_REQUEST');
+    const header = req.headers.authorization;
+    const session = header?.startsWith('Bearer ')
+      ? deps.sessions.authenticate(header.slice(7))
+      : null;
+    if (!session) return reject(401, 'INVALID_SESSION');
+    if (
+      !deps.roomInvitations ||
+      !deps.sessions.activeConnection(session.sessionId) ||
+      deps.canManageInvitations?.(session) !== true
+    )
+      return reject(403, 'INVITATION_UNAVAILABLE');
+    if (
+      deps.limiter === null ||
+      deps.limiter.attempt(
+        { inviteId: `host-invite:${session.sessionId}`, ip: clientIp(req, deps.trustProxy) },
+        deps.monotonicNow(),
+      ) !== 'allowed'
+    )
+      return reject(429, 'RATE_LIMITED');
+    if (revoke) {
+      deps.roomInvitations.revoke(session.roomCode);
+      return void res.status(204).end();
+    }
+    if (deps.admission() !== 'OPEN') return reject(503, 'ADMISSION_CLOSED');
+    const invitation = deps.roomInvitations.rotate(session.roomCode);
+    if (!invitation) return reject(503, 'INVITATION_UNAVAILABLE');
+    deps.slots.touch(session.roomCode, deps.monotonicNow());
+    return void res.status(201).json(invitation);
+  };
+  router.post(ROOM_INVITATION_ROUTE, (req, res) => manageInvitation(req, res, false));
+  router.delete(ROOM_INVITATION_ROUTE, (req, res) => manageInvitation(req, res, true));
   router.delete(SESSION_CANCEL_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     // Cleanup remains available while admission is closed. No caller-supplied identity.
@@ -136,18 +180,19 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       return fail(res, 503, 'ADMISSION_CLOSED');
     const body = parsed.data;
     const principal = ssoPrincipal(req);
-    const verified = principal
-      ? { inviteId: principal }
-      : body.inviteToken
-        ? deps.invites.verify(
-            body.createRoom
-              ? { inviteToken: body.inviteToken, createRoom: true }
-              : { inviteToken: body.inviteToken, createRoom: false, roomCode: body.roomCode },
-          )
+    // An explicitly supplied link must pass its own scope/expiry checks, including for SSO.
+    const verified: Readonly<{ inviteId: string; expiresAt?: number }> | null = body.inviteToken
+      ? deps.invites.verify(
+          body.createRoom
+            ? { inviteToken: body.inviteToken, createRoom: true }
+            : { inviteToken: body.inviteToken, createRoom: false, roomCode: body.roomCode },
+        )
+      : principal
+        ? { inviteId: principal }
         : null;
     if (!verified) return fail(res, 403, 'INVALID_INVITATION');
     const verdict = deps.limiter.attempt(
-      { inviteId: verified.inviteId, ip: clientIp(req, deps.trustProxy) },
+      { inviteId: principal ?? verified.inviteId, ip: clientIp(req, deps.trustProxy) },
       deps.monotonicNow(),
     );
     if (verdict !== 'allowed') return fail(res, 429, 'RATE_LIMITED');
@@ -163,6 +208,9 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
           nickname: body.nickname,
           inviteId: verified.inviteId,
           roomCode,
+          ...(verified.expiresAt === undefined
+            ? {}
+            : { admissionDeadlineEpochMs: verified.expiresAt }),
         });
         playerId = issued.playerId;
         const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs, { create: true });
@@ -170,7 +218,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
           deps.sessions.invalidate(issued.sessionId);
           return fail(res, 503, 'CAPACITY');
         }
-        if (!principal) deps.invites.bindCreatedRoom(verified.inviteId, roomCode);
+        if (body.inviteToken) deps.invites.bindCreatedRoom(verified.inviteId, roomCode);
       } else {
         roomCode = body.roomCode;
         if (!deps.slots.hasRoom(roomCode)) return fail(res, 404, 'ROOM_NOT_AVAILABLE');
@@ -178,6 +226,9 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
           nickname: body.nickname,
           inviteId: verified.inviteId,
           roomCode,
+          ...(verified.expiresAt === undefined
+            ? {}
+            : { admissionDeadlineEpochMs: verified.expiresAt }),
         });
         playerId = issued.playerId;
         const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs);

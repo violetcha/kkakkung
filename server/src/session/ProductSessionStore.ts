@@ -47,8 +47,20 @@ export class ProductSessionStore {
     return this.sessions.size;
   }
 
-  issue(input: { nickname: string; inviteId: string; roomCode: string }) {
+  issue(input: {
+    nickname: string;
+    inviteId: string;
+    roomCode: string;
+    /** An invitation may expire before the normal first-connection deadline. */
+    admissionDeadlineEpochMs?: number;
+  }) {
     const now = this.options.now();
+    if (
+      input.admissionDeadlineEpochMs !== undefined &&
+      (!Number.isSafeInteger(input.admissionDeadlineEpochMs) ||
+        input.admissionDeadlineEpochMs <= now)
+    )
+      throw new Error('INVALID_ADMISSION_DEADLINE');
     this.prune(now);
     if (this.sessions.size >= this.maxEntries) throw new Error('SESSION_CAPACITY');
     const sessionToken = randomBytes(32).toString('base64url');
@@ -61,7 +73,10 @@ export class ProductSessionStore {
       nickname: input.nickname,
       issuedAt: now,
       expiresAt: now + this.leaseTtlMs,
-      admissionExpiresAt: now + this.admissionTtlMs,
+      admissionExpiresAt: Math.min(
+        now + this.admissionTtlMs,
+        input.admissionDeadlineEpochMs ?? Number.POSITIVE_INFINITY,
+      ),
       activeConnectionId: null,
       invalidated: false,
     };

@@ -41,6 +41,7 @@ import { RoomDirectory } from './rooms/RoomDirectory.js';
 import { AdmissionLimiter } from './session/AdmissionLimiter.js';
 import { checkOrigin, installHttpBoundary } from './session/HttpBoundary.js';
 import { InviteStore } from './session/InviteStore.js';
+import { RoomInvitations } from './session/RoomInvitations.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -184,6 +185,16 @@ export function createApplication<State = unknown>(
         })
       : null;
   const limiter = product?.sessionAttempts ? new AdmissionLimiter(product.sessionAttempts) : null;
+  const roomInvitations =
+    product && invites && slots
+      ? new RoomInvitations({
+          invites,
+          sessions: productSessions,
+          slots,
+          now: epochNow,
+          maxTtlMs: product.inviteMaxTtlMs,
+        })
+      : null;
   // Outer gate includes failed JSON and matchmaking requests. Four attempts per configured
   // session IP allowance leave room for access checks, joins and canceled reservations.
   const entryLimiter = limiter
@@ -197,7 +208,10 @@ export function createApplication<State = unknown>(
         sessions: productSessions,
         slots,
         hasLiveRoom: (roomCode) => directory.get(roomCode) !== null,
-        onRoomClosed: (roomCode) => invites?.forgetRoom(roomCode),
+        onRoomClosed: (roomCode) => {
+          roomInvitations?.revoke(roomCode);
+          invites?.forgetRoom(roomCode);
+        },
       })
     : () => {};
   const roomExpiry = new RoomExpiry(product?.roomIdleTtlMs ?? null);
@@ -332,6 +346,9 @@ export function createApplication<State = unknown>(
             trustProxy: product.trustProxy,
             admissionMode: config.sessionAdmissionMode,
             cleanupReservations,
+            ...(roomInvitations ? { roomInvitations } : {}),
+            canManageInvitations: (session) =>
+              directory.get(session.roomCode)?.canManageInvitations(session.playerId) === true,
           }),
         );
         if (authorize) {
@@ -440,7 +457,10 @@ export function createApplication<State = unknown>(
       canStart: operationsReady,
       strictProduct: product.strictProduct,
       random: product.random,
-      onInvalidateRoom: (roomCode) => invites?.forgetRoom(roomCode),
+      onInvalidateRoom: (roomCode) => {
+        roomInvitations?.revoke(roomCode);
+        invites?.forgetRoom(roomCode);
+      },
     });
     server.define(PRODUCT_ROOM_NAME, RoomClass).filterBy(['roomCode']);
   } else {
@@ -530,6 +550,7 @@ export function createApplication<State = unknown>(
       reservationTimer = setInterval(() => {
         cleanupReservations();
         invites?.prune();
+        roomInvitations?.prune();
       }, 1000);
       reservationTimer.unref();
       histogram.enable();

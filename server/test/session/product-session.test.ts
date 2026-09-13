@@ -8,6 +8,32 @@ function store() {
 }
 
 describe('ProductSessionStore', () => {
+  it('bounds first admission by invitation expiry and preserves the claimed player lease', () => {
+    const h = store();
+    const issue = () =>
+      h.sessions.issue({
+        nickname: 'n',
+        inviteId: 'inv',
+        roomCode: 'ABC234',
+        admissionDeadlineEpochMs: h.now() + 1000,
+      });
+    const pending = issue();
+    const joined = issue();
+    expect(h.sessions.claimConnection(joined.sessionId, 'joined')).toBe('claimed');
+    h.advance(1000);
+    expect(h.sessions.authenticate(pending.sessionToken)).toBeNull();
+    expect(h.sessions.claimConnection(pending.sessionId, 'late')).toBe('invalid');
+    expect(h.sessions.authenticate(joined.sessionToken)).not.toBeNull();
+    for (const deadline of [h.now(), -1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() =>
+        h.sessions.issue({
+          nickname: 'n',
+          inviteId: 'inv',
+          roomCode: 'ABC234',
+          admissionDeadlineEpochMs: deadline,
+        }),
+      ).toThrow('INVALID_ADMISSION_DEADLINE');
+  });
   it('issues random ids, authenticates without consuming and refuses a second concurrent connection', () => {
     const h = store();
     const a = h.sessions.issue({ nickname: '같은이름', inviteId: 'inv', roomCode: 'ABC234' });

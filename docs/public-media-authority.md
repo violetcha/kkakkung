@@ -36,6 +36,54 @@ Jira [S15P21C204-192](https://ssafy.atlassian.net/browse/S15P21C204-192), MVP W0
 
 ## 실제 실행 상태
 
-진단 초기 구현 소스는 `9b388e61bcefb91eff1a78aa9c6c34564d051afc`다. 사전검사/증거 판정 35개와 선행 부하 판정기 MR !120 통합 이후 전체 `pnpm verify`(235개 파일·2,319개 테스트, 브라우저 9개)를 통과했다. 이후 Jenkins MR #93/GitLab #191252 PASS와 MR !121 병합을 확인했으며 현재 develop `dab788ac`에 포함된다. Jira192는 실제 진단이 남아 진행 중이다.
+진단 초기 구현 소스는 `9b388e61bcefb91eff1a78aa9c6c34564d051afc`다. 사전검사/증거 판정35개와
+전체 `pnpm verify`(235파일·2,319개·E2E9개), Jenkins MR #93/GitLab #191252를 통과했고
+MR !121에 병합됐다. 당시 별도 로컬 시험으로 운영 자격을 추출하는 실행은 자동 승인 심사에서
+거절됐다. 이 이력과 이후 사용자의 전체 접근 승인·중단·재개는 [기록](mvp-resume-2026-09-13.md)에 보존한다.
 
-**실제 Cloud 진단은 미실행이다.** 당시 운영 자격을 별도 시험에 전달하는 실행이 자동 승인 심사에서 거절됐다. 이후 사용자의 전체 접근 승인과 구현 중단도 [중단 기록](mvp-resume-2026-09-13.md)에 보존한다. 이번 재검토에서는 새 Cloud를 실행하지 않았으며 어떤 후보도 검증됐다고 표시하지 않는다. [S1-D](mvp-plan-review-2026-09-13.md)의 초반 작업에서 정식 자격 전달·유계 예산·namespace·정리 경로를 확인하고 실제 결과의 소스 SHA·허용/차단 관측·정리 상태를 남긴다. 기존 DP-06 성공은 이 진단의 성공을 대신하지 않는다.
+**2026-09-13 15:54–15:55 KST 실제 Cloud 진단을 실행했다.** 기존 자격 파일은 같은 운영
+호스트의 격리 시험 자식 프로세스에서만 읽고, 로컬 장치/명령 인자/로그/증거로 추출하지 않았다.
+Jenkins 작업이 끝난 뒤 독립된 깨끗한 checkout에서 기존 공통 실행기를 사용했다.
+
+| 항목            | 실제 관측                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| 소스            | `92fe505c553a2e07208b603e6d78de14c826b98e`                                                |
+| lockfile SHA256 | `469b418cc3a6d656d9f5ea61292d3e7801b5b7bcfc89af3bec29580342944fdf`                        |
+| namespace       | `qa-public-20260913-c13e88c6`                                                             |
+| 시간/종결       | 시험38,758ms, exit0, 정상 API8회·정리17회, cleanupConfirmed=true                          |
+| 최소 토큰       | 관리자 허용 새 수신 미확인, 직접 차단 확인, 제거 후 차단 미확인                           |
+| publisher 목록  | 정상 허용/직접 차단 확인, 송신자 변조로 금지 수신 우회 재현                               |
+| 격리 방 전달    | API 수락, 허용 새 수신·직접 차단·제거 후 차단·금지 수신자의 허용 전환 양성 대조 모두 확인 |
+
+15:50 KST 로그인한 Billing 화면에서 Build 포함량5,000분/50GB, 사용275분/약1GB를
+확인했다. 보수 잔량4,000분/40GB 중50분/400MB·3방/8참가자, 실행240초+정리90초만
+예약했다. 요금제 업그레이드나 운영 quota/capability/입장 설정을 바꾸지 않았다.
+참가자·방과 시험 전달 정리를 확인했지만 별도 청구액, 대규모 복제 참가자 quota와 지연은
+측정하지 않았다. 이 API 수락을10방 운영 용량이나 비용 확정으로 확대하지 않는다.
+
+증거는 호스트의 격리 checkout
+`/var/lib/jenkins/.local/kkakkung-diagnostics/public-authority-20260913-92fe505c` 아래
+`.local/qa/public-authority-1789282484320`에 보존한다. 토큰/자격 원문은 포함하지 않는다.
+
+| 파일                           | SHA256                                                             |
+| ------------------------------ | ------------------------------------------------------------------ |
+| public-authority-evidence.json | `d51acd4df50f58a61b3137e3d4cfc1ab80f5e7a01d7ea0ed3ce57574b63cdf9c` |
+| run-summary.json               | `95ae2ca13ec9bd1559b72f3486d7486ee9063e89163a92c599728be1329bd43f` |
+| preflight.json                 | `2eba0884177714111f70718999239deaa3af0ffd8e545978fa419a0e2fa4ebcc` |
+| devices.json                   | `daa358924bebcd78db6fcf14c6dd318b4a5a7f5db7bf572d76c96540018c1e99` |
+
+판정은 `serverControlledVerified=false`, `publisherControlBypassObserved=true`,
+`forwardedIsolationVerified=true`, `candidateAvailable=true`다.
+`productPublicReady=false`, `promotionAllowed=false`를 유지한다.
+
+## W02의 다음 구현
+
+수신자를 서버가 지정한 격리 방에 배치하고 필요한 송신자만 전달하는 후보를 제품으로 연결한다.
+원본/복제 SID와 세대·정책 revision의 바인딩, 늦은 허용 결과와 재연결 뒤 회수, 수신 차단 기한,
+방/참가자/사용량 예약과 durable 복구, 웹의 송수신 연결 수명을 함께 구현해야 한다.
+공개 readiness는 실제 새 미디어 수신/차단 관문이 충족된 경우에만 허용한다.
+송신자가 협조하는 기존 팀 모드의 성공을 공개 보안 통과로 재사용하지 않는다.
+
+6인 한 경기의 source/receiver 방과 전달 복제 수는 새 설계에서 산정하고 실제 현재 요금제의
+동시 자원·호출·사용량과 대조한다. 제품 통합 → 소규모 Cloud 회귀 → 6화면/6대 → 단계 부하
+순으로 진행한다. 이 진단은 W01 후보 검증이며 W02/G1/공개 전환 전체 인수가 아니다.

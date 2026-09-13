@@ -51,6 +51,31 @@ test('a failed access check stays closed, can retry, and does not reuse SSO as a
   ).toBeVisible();
 });
 
+test('an explicit friend invitation is submitted and cannot silently fall back to team access', async ({
+  page,
+}) => {
+  const attempts: unknown[] = [];
+  await page.route('**/api/sessions/access', (route) =>
+    route.fulfill({ json: { method: 'gitlab-sso' } }),
+  );
+  await page.route('**/api/sessions', async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } });
+  });
+  await page.goto('/play#invite=synthetic-friend-invitation&room=ABCDEF');
+  await page.getByLabel('닉네임').fill('friend');
+  await page.getByRole('button', { name: '방 참가', exact: true }).click();
+  await expect(page.getByText('유효한 초대 링크가 필요합니다.')).toBeVisible();
+  expect(attempts).toEqual([
+    {
+      nickname: 'friend',
+      inviteToken: 'synthetic-friend-invitation',
+      createRoom: false,
+      roomCode: 'ABCDEF',
+    },
+  ]);
+});
+
 test('same-tab invitations refresh a rejected form and its next request', async ({ page }) => {
   const attempts: unknown[] = [];
   await page.route('**/api/sessions', async (route) => {

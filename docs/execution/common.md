@@ -228,6 +228,17 @@ checkpoint-budget는 이 모드에서 로컬 기록 flush와 쓰기 가능 여�
 
 B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
 
+친구 초대는 별도 `ROOM_INVITATION_ROUTE`에서 현재 접속 중인 방장의 게임 세션 Bearer만 받는다.
+서버가 세션에서 방/행위자를 정하고 LOBBY/DEVICE_CHECK를 확인한다. 빈 POST는 새 링크201,
+빈 DELETE는 회수204이며 요청에서 방 코드·대상 신원·TTL·운영 권한을 받지 않는다.
+최대10분(운영 초대 최대 기한이 더 짧으면 그 기한)의 현 방 참가 전용 링크 하나만 유지한다.
+재발급/회수는 이전 링크와 해당 링크의 미접속 RESERVED 세션을 함께 무효화하고 이미 JOINED/
+RETIRING인 참가자는 보존한다. 초대 만료는 최초 입장 예약의 상한이며, 최초 접속 뒤 세션 기한은
+기존 정책을 따른다. SSO 상태라도 명시한 초대가 거절되면 SSO 코드 참가로 자동 우회하지 않는다.
+초대를 명시하지 않은 팀원 코드 참가는 유지하므로 이를 막으려면 방 입장을 잠근다.
+웹은 session Bearer를 URL에 넣지 않고 초대/방 코드만 fragment로 공유한다.
+네트워크 결과 미확인·재발급 중에는 이전 링크를 숨기고, 만료 시 복사를 중단한다.
+
 F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 선택 운영 모드와 함께 검증하고 B가 factory에 전달한다. publicWindow=null은 운영 범위 미정으로 잠금이며, continuous의 명시적 `{mode:'continuous'}`와 구분한다. 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·해당 모드의 예산·운영 범위 조건을 검사한다. 일반 운영 명령은 operationTimeoutMs 이후 미완료 회수를 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 입장이 DRAINING이고 경기·연습·입장 대기가 없으며 검증된 과거 기록 전체가 REVOKED인 조회 실패 복구 checkpoint에만 서버가 접수부터 최대180초를 적용한다. 같은 writer·소유권·기록·세대·API 예산을 전송 전후에 재검사하고 중복 sweep·지연 성공을 거절한다. 손상 이력은 복원하지 않으며 성공 후에도 별도 resume가 필요하다. Cloud 개별 응답/실시간 권한 회수 기한은 유지한다. 정확한 env 매핑과 조회 복구 절차는 현재 F config export 및 상시 운영 문서를 대조한다.
 
 관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
@@ -334,6 +345,19 @@ export type SessionResponse = Readonly<{
 // Owner-only cancellation before the first game connection; no identity in the body.
 export const SESSION_CANCEL_ROUTE = '/api/sessions/current' as const;
 export type SessionCancelErrorCode = 'INVALID_REQUEST' | 'INVALID_SESSION' | 'SESSION_IN_USE';
+// Current connected host, LOBBY/DEVICE_CHECK only. POST returns 201, DELETE returns 204.
+export const ROOM_INVITATION_ROUTE = '/api/sessions/current/invitation' as const;
+export type RoomInvitationResponse = Readonly<{
+  inviteToken: string;
+  roomCode: string;
+  expiresAt: number;
+}>;
+export type RoomInvitationErrorCode =
+  | 'INVALID_REQUEST'
+  | 'INVALID_SESSION'
+  | 'INVITATION_UNAVAILABLE'
+  | 'RATE_LIMITED'
+  | 'ADMISSION_CLOSED';
 // Server/operator-only. These endpoints do not accept a player's session Bearer token.
 export const INVITATION_ROUTES = {
   issue: '/api/operations/invitations',
@@ -355,7 +379,7 @@ export type InvitationCheck = Readonly<{ inviteToken: string }> &
 export interface InvitationPort {
   issue(input: IssueInvitation): InvitationIssueResult;
   revoke(inviteId: string): void;
-  verify(input: InvitationCheck): Readonly<{ inviteId: string }> | null;
+  verify(input: InvitationCheck): Readonly<{ inviteId: string; expiresAt?: number }> | null;
   bindCreatedRoom(inviteId: string, roomCode: string): void;
 }
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';

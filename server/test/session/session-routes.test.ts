@@ -214,6 +214,39 @@ describe('GitLab team admission through the trusted ingress', () => {
   const create = { nickname: 'team', createRoom: true };
   const identity = (user: string) => ({ 'x-sso-user': user });
 
+  it('validates an explicitly supplied link for team members while retaining link-free code admission', async () => {
+    const host = sessionResponseSchema.parse(await (await post(create, identity('host'))).json());
+    const link = deps.invites.issue({
+      scope: { allowCreate: false, roomCodes: [host.roomCode] },
+      expiresAt: 1_030_000,
+    });
+    if (link.status !== 'issued') throw new Error(link.code);
+    const request = {
+      nickname: 'friend',
+      createRoom: false,
+      roomCode: host.roomCode,
+      inviteToken: link.invitation.inviteToken,
+    };
+    const friend = sessionResponseSchema.parse(
+      await (await post(request, identity('friend'))).json(),
+    );
+    expect(deps.sessions.authenticate(friend.sessionToken)?.inviteId).toBe(
+      link.invitation.inviteId,
+    );
+    deps.invites.revoke(link.invitation.inviteId);
+    const revoked = await post(request, identity('revoked-link-user'));
+    expect(revoked.status).toBe(403);
+    expect(await revoked.json()).toEqual({ error: 'INVALID_INVITATION' });
+    expect(
+      (
+        await post(
+          { nickname: 'code-user', createRoom: false, roomCode: host.roomCode },
+          identity('code-user'),
+        )
+      ).status,
+    ).toBe(201);
+  });
+
   it('lets team members create and fill one room by code without operator-issued invites', async () => {
     const created = await post(create, identity('host'));
     expect(created.status).toBe(201);
