@@ -30,12 +30,25 @@ import type {
   SessionRequest,
   SessionAccessResponse,
   PublicRoundState,
+  RoomAccess,
 } from './types.ts';
 
 // Shared planning examples. These fixtures do not run product modules or certify a real map,
 // Cloud connection, journal recovery, deployment, or device test.
 
 // API handoff examples only. No account, public window or Cloud capability is authorized.
+export const roomAccessFixture = {
+  matchId: 'fixture-match',
+  revision: 1,
+  locked: true,
+} as const satisfies RoomAccess;
+export const hostCommandFixture = {
+  matchId: 'fixture-match',
+  requestId: '10000000-0000-4000-8000-000000000001',
+  sequence: 1,
+  type: 'ROOM_KICK',
+  payload: { targetPlayerId: 'friend' },
+} as const satisfies CommandEnvelope;
 export const localAudioFixture = {
   preferences: { volume: 0.7, muted: false, mutedPlayerIds: ['friend'] },
   microphoneLevel: null,

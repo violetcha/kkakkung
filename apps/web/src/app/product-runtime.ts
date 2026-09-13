@@ -6,13 +6,16 @@ import {
 } from '@kkakkung/protocol/game-schema';
 import {
   roomRosterSchema,
+  roomAccessSchema,
   audioPolicySchema,
   mediaBindingsSchema,
   mediaGrantSchema,
   MEDIA_ROUTES,
   ROOM_EXPIRED_CLOSE_CODE,
+  ROOM_REMOVED_CLOSE_CODE,
   type SessionResponse,
   type RoomRosterMessage,
+  type RoomAccessMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
@@ -71,6 +74,7 @@ export type ProductSnapshot = {
   round: PublicRoundState | null;
   view: PrivateView | null;
   roster: RoomRosterMessage | null;
+  roomAccess?: RoomAccessMessage | null;
   devices: DeviceStatus;
   media: MediaStatus | null;
   request: RequestDisplay | null;
@@ -86,6 +90,7 @@ export type ProductSnapshot = {
   practiceReady: boolean;
   lost: boolean;
   roomExpired?: boolean;
+  removedByHost?: boolean;
   error: string | null;
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
@@ -229,7 +234,11 @@ export function bindProductRoom(
   const lose = (code?: number) => {
     if (!active || snapshot.lost) return;
     audioPreferences = DEFAULT_AUDIO_PREFERENCES;
-    publish({ lost: true, roomExpired: code === ROOM_EXPIRED_CLOSE_CODE });
+    publish({
+      lost: true,
+      roomExpired: code === ROOM_EXPIRED_CLOSE_CODE,
+      removedByHost: code === ROOM_REMOVED_CLOSE_CODE,
+    });
     clock.clear();
     heartbeat.dispose();
     void participation.leave().catch(error);
@@ -556,6 +565,19 @@ export function bindProductRoom(
     const currentTick = clock.renderTick() ?? snapshot.round.serverTick;
     if (!permitsExchange(snapshot.view, command, currentTick)) return '';
     const own = snapshot.view?.self;
+    if (command.type === 'ROOM_LOCK' || command.type === 'ROOM_KICK') {
+      if (
+        !['LOBBY', 'DEVICE_CHECK'].includes(snapshot.round.phase) ||
+        snapshot.roster?.hostId !== session.playerId ||
+        !snapshot.roomAccess ||
+        (command.type === 'ROOM_KICK' &&
+          (command.payload.targetPlayerId === session.playerId ||
+            !snapshot.roster.players.some(
+              (player) => player.playerId === command.payload.targetPlayerId && player.connected,
+            )))
+      )
+        return '';
+    }
     if (command.type === 'PRACTICE_READY') {
       if (
         snapshot.round.phase !== 'TEAM_PRACTICE' ||
@@ -620,6 +642,8 @@ export function bindProductRoom(
         'EXCHANGE_ACCEPT',
         'EXCHANGE_CANCEL',
         'REMATCH',
+        'ROOM_LOCK',
+        'ROOM_KICK',
       ].includes(command.type)
     ) {
       const pending = commands.pending(command.type);
@@ -800,6 +824,7 @@ export function bindProductRoom(
       publish({
         view: null,
         roster: null,
+        roomAccess: null,
         endedSelf: null,
         devices: INITIAL_DEVICES,
         media: null,
@@ -856,6 +881,15 @@ export function bindProductRoom(
   on('command-outcome', commands.outcome);
   on('request-status-result', commands.lookup);
   on('private-event', events.receive);
+  on('room-access', (value) => {
+    const result = roomAccessSchema.safeParse(value);
+    if (
+      result.success &&
+      result.data.matchId === snapshot.round?.matchId &&
+      result.data.revision >= (snapshot.roomAccess?.revision ?? -1)
+    )
+      publish({ roomAccess: result.data });
+  });
   on('room-roster', (value) => {
     const result = roomRosterSchema.safeParse(value);
     if (

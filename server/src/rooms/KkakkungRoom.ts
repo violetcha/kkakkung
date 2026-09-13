@@ -16,6 +16,7 @@ import {
   PRODUCT_CLIENT_MESSAGES,
   PRODUCT_SERVER_MESSAGES,
   ROOM_EXPIRED_CLOSE_CODE,
+  ROOM_REMOVED_CLOSE_CODE,
   productJoinOptionsSchema,
   requestStatusSchema,
   type AudioPolicy,
@@ -403,6 +404,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (auth.roomCode !== parsed.data.roomCode) throw new ServerError(403, 'WRONG_ROOM');
       const slot = deps.slots.slotState(auth.roomCode, auth.playerId);
       if (!slot || slot === 'RETIRING') throw new ServerError(403, 'ROOM_CLOSED');
+      if (slot === 'RESERVED' && !deps.slots.canJoin(auth.roomCode))
+        throw new ServerError(403, 'ROOM_CLOSED');
       const phase = deps.slots.phaseOf(auth.roomCode);
       if (phase !== null && phase !== 'LOBBY' && phase !== 'DEVICE_CHECK' && slot !== 'JOINED')
         throw new ServerError(403, 'ROOM_CLOSED');
@@ -607,11 +610,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       const allowed: Record<string, readonly Phase[]> = {
         READY: ['DEVICE_CHECK'],
+        ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
+        ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
       };
-      return allowed[type]?.includes(this.phase) ? null : 'INVALID_PHASE';
+      if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
+      if ((type === 'ROOM_LOCK' || type === 'ROOM_KICK') && playerId !== this.lobby.host)
+        return 'NOT_ALLOWED';
+      return null;
     }
 
     private sendReceipt(
@@ -648,6 +656,27 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private handlePhaseCommand(entry: LedgerEntry, _tick: number): OutcomeResult {
       const command = entry.command;
       switch (command.type) {
+        case 'ROOM_LOCK':
+        case 'ROOM_KICK': {
+          // Recheck at execution: the host or phase may have changed since acceptance.
+          if (!['LOBBY', 'DEVICE_CHECK'].includes(this.phase))
+            return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (command.type === 'ROOM_LOCK') {
+            this.setWaitingLock(command.payload.locked);
+          } else {
+            const target = this.clientsByPlayer.get(command.payload.targetPlayerId);
+            if (!target || command.payload.targetPlayerId === entry.actorId)
+              return { result: 'rejected', code: 'NOT_ALLOWED' };
+            // Close the entry race before removing the participant. The host can reopen it.
+            this.setWaitingLock(true);
+            this.removeConnection(target);
+            target.leave(ROOM_REMOVED_CLOSE_CODE, 'REMOVED_BY_HOST');
+          }
+          this.broadcastRoster();
+          return { result: 'applied', code: null };
+        }
         case 'READY': {
           const result = this.lobby.applyReady(entry.actorId, command.payload.ready, this.phase);
           if (result.result === 'applied') this.broadcastRoster();
@@ -679,6 +708,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         }
         default:
           return { result: 'rejected', code: 'INVALID_COMMAND' };
+      }
+    }
+
+    private setWaitingLock(locked: boolean) {
+      if (!deps.slots.setJoinLocked(this.roomCode, locked)) return;
+      if (!locked) return;
+      // Invalidate grants issued before the lock, including onAuth -> onJoin races.
+      // Joined and remotely retiring seats retain their existing lifetimes.
+      for (const member of deps.slots.members(this.roomCode)) {
+        if (member.state !== 'RESERVED') continue;
+        const session = deps.sessions.getByPlayer(member.playerId);
+        if (session) deps.sessions.invalidate(session.sessionId);
+        deps.slots.release(this.roomCode, member.playerId);
       }
     }
 
@@ -1341,9 +1383,18 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private broadcastRoster() {
+      const access = deps.slots.access(this.roomCode);
+      if (access)
+        this.broadcast(
+          PRODUCT_SERVER_MESSAGES.roomAccess,
+          { matchId: this.context.matchId, ...access },
+          { afterNextPatch: true },
+        );
+      // The client must observe a new match before its roster; old-match data is rejected.
       this.broadcast(
         PRODUCT_SERVER_MESSAGES.roomRoster,
         this.lobby.roster(this.context.matchId, this.context.stateVersion, this.phase),
+        { afterNextPatch: true },
       );
     }
 

@@ -1,0 +1,49 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { expect, it } from 'vitest';
+import { LobbyScreen } from './LobbyScreen';
+import { ConnectionLostScreen } from '../game/flow/ConnectionLostScreen';
+
+const roster = {
+  matchId: 'm',
+  stateVersion: 1,
+  phase: 'LOBBY' as const,
+  hostId: 'host',
+  players: ['host', 'friend'].map((playerId) => ({
+    playerId,
+    nickname: playerId,
+    connected: true,
+    ready: false,
+  })),
+};
+it('offers controls only to the host and disables them until authoritative access arrives', () => {
+  const render = (
+    selfId: string,
+    access?: { matchId: string; revision: number; locked: boolean },
+  ) =>
+    renderToStaticMarkup(
+      createElement(LobbyScreen, {
+        roster,
+        selfId,
+        roomCode: 'ABCDEF',
+        access,
+        onLock() {},
+        onKick() {},
+      }),
+    );
+  expect(render('friend')).not.toContain('<button');
+  expect(render('host').match(/disabled=""/g)).toHaveLength(2);
+  const html = render('host', { matchId: 'm', revision: 1, locked: true });
+  expect(html).toContain('입장 잠금 해제');
+  expect(html).toContain('friend 내보내기');
+  expect(html).not.toContain('host 내보내기');
+  expect(html).not.toContain('disabled');
+});
+it('explains host removal separately from room expiry and keeps a return action', () => {
+  const html = renderToStaticMarkup(
+    createElement(ConnectionLostScreen, { removed: true, onLeave() {} }),
+  );
+  expect(html).toContain('방장이 대기방에서 내보냈습니다');
+  expect(html).toContain('입장 화면으로');
+  expect(html).not.toContain('대기 시간이 끝났습니다');
+});
