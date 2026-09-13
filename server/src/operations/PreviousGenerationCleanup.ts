@@ -260,8 +260,10 @@ export class PreviousGenerationCleanup {
         }
       }
 
+      let receivedRoomList = false;
       try {
         const listed = await checked(() => this.options.listRooms(context));
+        receivedRoomList = true;
         if (!Array.isArray(listed)) throw new Error('INVALID_ROOM_LIST');
         for (const room of listed) {
           if (!room || typeof room.name !== 'string') throw new Error('INVALID_ROOM_LIST');
@@ -272,7 +274,9 @@ export class PreviousGenerationCleanup {
       } catch {
         assertCurrent();
         unresolved++;
-        historyComplete = false;
+        // A failed transport leaves the remote observation unresolved. It does not prove
+        // that the verified local history is missing. Invalid returned data still does.
+        if (receivedRoomList) historyComplete = false;
       }
       remaining = rooms.size;
       // Recorded-only rooms also need participant enumeration: the global list is not exhaustive proof.
@@ -337,8 +341,10 @@ export class PreviousGenerationCleanup {
       });
 
       const finalRooms = new Set<string>();
+      let receivedFinalRoomList = false;
       try {
         const listed = await checked(() => this.options.listRooms(context));
+        receivedFinalRoomList = true;
         if (!Array.isArray(listed)) throw new Error('INVALID_ROOM_LIST');
         const owned = new Set<string>();
         for (const room of listed) {
@@ -353,6 +359,7 @@ export class PreviousGenerationCleanup {
       } catch {
         assertCurrent();
         unresolved++;
+        if (receivedFinalRoomList) historyComplete = false;
       }
       // Verify every known target after deletion, including rooms omitted from the final global list.
       await forEachRoom(new Set([...rooms, ...finalRooms]), async (roomName) => {

@@ -1,6 +1,8 @@
 # 운영·미디어 HTTP 자원 상한
 
 관련 Jira: [S15P21C204-204](https://ssafy.atlassian.net/browse/S15P21C204-204).
+
+운영 명령 접수 이후의 대기/감사 상한은 [감사와 명령 대기](operations-audit-limits.md)를 따른다.
 K01/W04/W14의 요청 입구·동시 작업 제한이다. 감사 파일의 장기 보관·축약은 K02에 남는다.
 운영 도메인의 팀원 SSO와 LiveKit API 예산은 유지한다.
 

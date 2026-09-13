@@ -162,6 +162,8 @@ class Coordinator implements MediaCoordinatorRuntime {
       nowEpochMs,
       isWritable: writable,
       allowMissingHistory: services.firstAuditConfirmed,
+      emitMetric: (name, value) =>
+        deps.emitMetric({ name, value, unit: 'count', atMs: deps.monotonicNow() }),
     });
     this.audit = audit;
     const recoveryCleanup = new RecoveryCleanupBindings({
@@ -265,6 +267,7 @@ class Coordinator implements MediaCoordinatorRuntime {
       onUnresolved: () => this.metric('media.retirement.unresolved'),
     });
     this.runtime = createReadinessRuntime({
+      emitMetric: deps.emitMetric,
       config,
       recovery: this.recovery,
       registry: this.registry,

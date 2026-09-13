@@ -10,6 +10,8 @@ import type {
 import { OperationsAudit } from '../../src/operations/OperationsAudit.js';
 import {
   OperationsController,
+  OperationsCapacityError,
+  MAX_PENDING_OPERATIONS,
   parseOperationsCommand,
   isOperationsRequestId,
   type OperationsControllerOptions,
@@ -408,6 +410,88 @@ describe('durable operation queue', () => {
 });
 
 describe('operation reception deadline and stale completion fences', () => {
+  it('keeps timed-out durable writes in capacity until their real completion', async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    const storage = gate();
+    f.record.mockImplementation(() => storage.promise);
+    for (let i = 0; i < MAX_PENDING_OPERATIONS; i++)
+      f.controller.submit({ requestId: `slow-storage-${i}`, action: 'checkpoint' });
+    await flush();
+    await f.advance(1000);
+    await flush();
+    expect(
+      f.record.mock.calls.filter(([, snapshot]) => snapshot.status === 'pending'),
+    ).toHaveLength(MAX_PENDING_OPERATIONS);
+    expect(() =>
+      f.controller.submit({ requestId: 'while-storage-blocked', action: 'checkpoint' }),
+    ).toThrow(OperationsCapacityError);
+    expect(f.run).not.toHaveBeenCalled();
+    storage.resolve();
+    await flush();
+    expect(f.controller.submit({ requestId: 'after-storage', action: 'checkpoint' }).status).toBe(
+      'accepted',
+    );
+    await flush();
+  });
+
+  it('bounds queued commands, preserves duplicates and reserves one drain slot', async () => {
+    const f = await fixture();
+    f.run.mockImplementation(() => new Promise<void>(() => {}));
+    for (let i = 0; i < MAX_PENDING_OPERATIONS; i++)
+      f.controller.submit({ requestId: `bounded-${i}`, action: 'checkpoint' });
+    expect(() => f.controller.submit({ requestId: 'excess', action: 'checkpoint' })).toThrow(
+      OperationsCapacityError,
+    );
+    expect(f.controller.submit({ requestId: 'bounded-0', action: 'checkpoint' }).status).toBe(
+      'accepted',
+    );
+    expect(f.controller.submit({ requestId: 'reserved-drain', action: 'drain' }).status).toBe(
+      'accepted',
+    );
+    expect(f.changes).toContain('DRAINING');
+    expect(() => f.controller.submit({ requestId: 'second-drain', action: 'drain' })).toThrow(
+      OperationsCapacityError,
+    );
+    expect(f.controller.getSnapshot('excess')).toBeNull();
+    expect(f.changes).not.toContain('LOCKED');
+    await flush();
+  });
+
+  it('bounds a server-selected recovery deadline without extending other queued commands', async () => {
+    vi.useFakeTimers();
+    const f = await fixture({
+      timeoutForCommand: (command) => (command.action === 'checkpoint' ? 180_000 : undefined),
+    });
+    const backend = gate();
+    f.run.mockImplementationOnce(() => backend.promise);
+    f.controller.submit({ requestId: 'recovery', action: 'checkpoint' });
+    f.controller.submit({ requestId: 'ordinary', action: 'retry-retirement', retirementId: 'r' });
+    await flush();
+    await f.advance(10_000);
+    expect(f.controller.getSnapshot('recovery')?.status).toBe('pending');
+    expect(f.controller.getSnapshot('ordinary')?.code).toBe('OPERATION_TIMEOUT');
+    await f.advance(170_000);
+    expect(f.controller.getSnapshot('recovery')?.code).toBe('OPERATION_TIMEOUT');
+    backend.resolve();
+    await flush();
+    expect(f.controller.getSnapshot('recovery')?.status).toBe('failed');
+    expect(f.run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, -1, NaN, Infinity, 180_001])(
+    'rejects unsafe internal deadline %s before dispatch',
+    async (value) => {
+      const f = await fixture({ timeoutForCommand: () => value });
+      expect(() =>
+        f.controller.submit({ requestId: 'invalid-deadline', action: 'checkpoint' }),
+      ).toThrow('INVALID_OPERATION_TIMEOUT');
+      await flush();
+      expect(f.run).not.toHaveBeenCalled();
+      expect(f.controller.getSnapshot('invalid-deadline')).toBeNull();
+    },
+  );
+
   it('expires queued work from submission without dispatching it after its deadline', async () => {
     vi.useFakeTimers();
     const f = await fixture();

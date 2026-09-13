@@ -233,9 +233,9 @@ export class RecoveryCleanupBindings {
   }
 
   /** A retry ACK alone is insufficient: rerun delete and final room/participant observations. */
-  reconcile(): Promise<CleanupReport> {
+  reconcile(context?: CleanupCallContext): Promise<CleanupReport> {
     if (this.activeSweep) return this.activeSweep;
-    const work = this.sweep();
+    const work = this.sweep(context);
     this.activeSweep = work;
     void work
       .finally(() => {
@@ -247,6 +247,49 @@ export class RecoveryCleanupBindings {
 
   snapshot(): CleanupReport | null {
     return this.lastReport ? structuredClone(this.lastReport) : null;
+  }
+
+  /** Only retry an unresolved observation of this process's verified retired history. */
+  canRetryObservation(): boolean {
+    return (
+      this.canDispatch() &&
+      this.activeSweep === null &&
+      this.input?.historyComplete === true &&
+      this.historyComplete &&
+      this.lastReport?.historyComplete === true &&
+      (this.lastReport.unresolved > 0 || this.lastReport.ownedRoomsRemaining > 0) &&
+      this.retiredHistoryMatches()
+    );
+  }
+
+  retryObservation(context: CleanupCallContext): Promise<CleanupReport> {
+    if (!this.canRetryObservation() || !this.canDispatch(context))
+      return Promise.reject(new Error('RECOVERY_OBSERVATION_NOT_RETRYABLE'));
+    return this.reconcile({
+      ...context,
+      beforeDispatch: () => this.retiredHistoryMatches() && context.beforeDispatch(),
+    });
+  }
+
+  private retiredHistoryMatches(): boolean {
+    try {
+      const journal = this.options.journal.readSnapshot();
+      const usage = this.options.usageBudget.readSnapshot();
+      return (
+        this.observed.size === 0 &&
+        journal.records.length === this.records.size &&
+        journal.records.every(
+          (entry) =>
+            entry.record.state === 'REVOKED' &&
+            this.records.get(recordKey(entry.record))?.checksum === entry.checksum,
+        ) &&
+        this.retries.snapshot().every((intent) => intent.status === 'REVOKED') &&
+        usage.integrity === 'ok' &&
+        usage.writable
+      );
+    } catch {
+      return false;
+    }
   }
 
   private async initialize(input: RecoveryCleanupInput): Promise<void> {
@@ -326,35 +369,33 @@ export class RecoveryCleanupBindings {
     await this.retries.restore([...this.intents.values()]);
   }
 
-  private async sweep(): Promise<CleanupReport> {
+  private async sweep(context?: CleanupCallContext): Promise<CleanupReport> {
+    const pass: CleanupCallContext = {
+      signal: context?.signal ? AbortSignal.any([this.signal, context.signal]) : this.signal,
+      beforeDispatch: () => this.canDispatch(context),
+    };
     try {
       if (!this.initialization) throw new Error('RECOVERY_NOT_INITIALIZED');
       await this.initialization;
-      this.assertOpen();
+      this.assertOpen(pass);
       const report = await this.cleanup.run({
         records: [...this.records.values()].sort((a, b) => a.seq - b.seq),
         observedTargets: [...this.observed.values()],
         historyComplete: this.historyComplete,
         singleWriter: true,
         serverEpoch: this.input!.serverEpoch,
-        signal: this.signal,
-        beforeDispatch: () => this.canDispatch(),
+        ...pass,
       });
-      this.assertOpen();
+      this.assertOpen(pass);
       this.historyComplete &&= report.historyComplete;
       if (this.historyComplete && report.unresolved === 0 && report.ownedRoomsRemaining === 0) {
         // This also recovers a crash after durable REVOKED but before usage confirmation.
         // Wait until the whole sweep rules out unknown identities sharing the same room.
         const roots = new Set([...this.records.values()].map(({ record }) => record.reservationId));
-        for (const root of roots) await this.confirmUsage(root);
-        await this.persistReport(
-          { ...report, historyComplete: this.historyComplete },
-          {
-            signal: this.signal,
-            beforeDispatch: () => this.canDispatch(),
-          },
-        );
+        for (const root of roots) await this.confirmUsage(root, pass);
+        await this.persistReport({ ...report, historyComplete: this.historyComplete }, pass);
       }
+      this.assertOpen(pass);
       this.lastReport = { ...report, historyComplete: this.historyComplete };
       if (report.unresolved || report.ownedRoomsRemaining || !this.historyComplete)
         this.notify('RECOVERY_UNCONFIRMED');
@@ -362,11 +403,18 @@ export class RecoveryCleanupBindings {
       return structuredClone(this.lastReport);
     } catch {
       if (!this.closed) {
-        this.lastReport = failedReport();
+        // An operator timeout invalidates this observation, not verified durable history.
+        // Ownership loss, shutdown and storage failures still invalidate the recovery proof.
+        const canceledObservation =
+          context?.signal?.aborted === true && this.canDispatch() && this.retiredHistoryMatches();
+        this.lastReport = {
+          ...failedReport(),
+          historyComplete: canceledObservation && this.historyComplete,
+        };
         this.notify('RECOVERY_UNCONFIRMED');
         this.publish();
       }
-      return failedReport();
+      return structuredClone(this.lastReport ?? failedReport());
     }
   }
 
@@ -560,7 +608,10 @@ export class RecoveryCleanupBindings {
     });
   }
 
-  private async confirmUsage(root: string | undefined): Promise<void> {
+  private async confirmUsage(
+    root: string | undefined,
+    context?: CleanupCallContext,
+  ): Promise<void> {
     if (!root || !this.historyComplete) return;
     const entries = [...this.records.values()].filter(
       ({ record }) => record.reservationId === root,
@@ -584,11 +635,16 @@ export class RecoveryCleanupBindings {
       return;
     }
     for (const reservation of reservations) {
-      if (!this.canDispatch()) return;
-      if (
-        !(await this.options.usageBudget.markRetiring(reservation.request.reservationId)) ||
-        !(await this.options.usageBudget.markRemoteConfirmed(reservation.request.reservationId))
-      ) {
+      this.assertOpen(context);
+      const retiring = await this.options.usageBudget.markRetiring(
+        reservation.request.reservationId,
+      );
+      this.assertOpen(context);
+      const confirmed =
+        retiring &&
+        (await this.options.usageBudget.markRemoteConfirmed(reservation.request.reservationId));
+      this.assertOpen(context);
+      if (!confirmed) {
         this.historyComplete = false;
         this.notify('RECOVERY_UNCONFIRMED');
         return;
@@ -599,6 +655,8 @@ export class RecoveryCleanupBindings {
   private persistReport(report: CleanupReport, context: CleanupCallContext): Promise<void> {
     this.assertOpen(context);
     return this.serialize(async () => {
+      // A canceled operation must not become a storage-integrity failure while queued.
+      if (!this.canDispatch(context)) return;
       this.historyComplete &&= report.historyComplete;
       await this.writeCleanupCheckpoint({ ...report, historyComplete: this.historyComplete });
     });
@@ -641,7 +699,7 @@ export class RecoveryCleanupBindings {
       requestId: randomUUID(),
       deadlineMs: this.options.monotonicNow() + queueWaitMs,
       priority: 'cleanup',
-      signal: this.signal,
+      signal: context.signal ? AbortSignal.any([this.signal, context.signal]) : this.signal,
       beforeDispatch: () => this.canDispatch(context),
     };
   }
@@ -664,6 +722,7 @@ export class RecoveryCleanupBindings {
         !this.closed &&
         !this.failed &&
         !this.signal.aborted &&
+        context?.signal?.aborted !== true &&
         this.verifiedScope() &&
         this.options.journal.writable &&
         this.options.retryCheckpoint.writable &&

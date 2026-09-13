@@ -1,5 +1,26 @@
 # F 공개 인계 기록
 
+## 2026-09-13 운영 감사·명령 상한 관측 — S15P21C204-206
+
+- E의 OperationsAudit/ReadinessRuntime에서 오류 유입·합친 오류·표본 수·대기 합산·접수 거절을
+  수치로 전달한다. F registry·수집기·관측 계약에 `operations.audit.events/coalesced/retained`,
+  `operations.queue.pending/rejected`를 같은 count 단위로 등록했다. 식별자 label은 없다.
+- 파일 version과 명령 entries는 유지하며 오류 표본은24시간/4,096개, 동일 kind/code는60초 첫 표본이다.
+  [상한과 운영 경계](../../operations-audit-limits.md)를 따른다. 미디어 기록 축약은 K02다.
+- localStage: INTEGRATED. 관련 운영115회귀와 감사 실패 공유/제품 HTTP 조립 회귀를 검사했다.
+  205/206/207 최종 verify는246파일·2,500개·E2E14개 및 전체 도구 검사 통과다.
+  blockedOn: 원격 CI·병합·배포·실제 부하 인수. 이전 결과로 인수하지 않는다.
+
+## 2026-09-13 배포 연습 음성 대조 — S15P21C204-207
+
+- localStage: LOCAL_VERIFIED. 실제 practice-v1 코어/공간 음성 정책 회귀3개와
+  로컬6클라이언트 배포 smoke3개(50.69초), QA 타입·lint를 통과했다.
+- 전체 게시 준비 후 참가자별 서버 승인 전진3회로 연습 양성 음성 대조를 수행한다.
+  실제 수신 없이 이동만으로 성공하지 않는다. Cloud 수신/경기/회수 실패 판정은 유지한다.
+- blockedOn: 205/206 통합 전체 검사·정확한 소스 CI·MR·실제 배포.
+  #101은 이미지 교체 전 LOCAL_CONTRACT_ONLY 연습 음성 실패였으며 운영은 #100을 유지했다.
+  실제6대/MC-PUBLIC·60세션 인수는 별도다.
+
 ## 2026-09-13 HTTP 자원 관측 — S15P21C204-204
 
 B 제품 조립과 F registry/수집기에 `http.requests.active/count`,

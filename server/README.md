@@ -1,5 +1,8 @@
 # 까꿍 게임 서버
 
+운영 중 과거 미디어 회수는 끝났지만 Cloud 조회가 실패한 경우
+[조회 재검증](../docs/recovery-observation.md)의 기존 운영 checkpoint 경로를 따른다.
+
 Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프로토콜 문서](../docs/protocol.md), [최신 결정 정정표](../docs/spec/decisions.md), [공통 실행 계약](../docs/execution/common.md), [B 실행 문서](../docs/execution/b-game-server.md), [B 인계 기록](../docs/execution/handoffs/B.md)을 따른다. [기존 개발 프로토콜](docs/protocol.md)은 개발 `kkakkung` Room의 0.1 호환 동작만 설명한다.
 
 ## 실행

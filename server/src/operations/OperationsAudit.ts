@@ -37,6 +37,12 @@ type AuditState = Readonly<{
   events: readonly OperationsAuditEvent[];
 }>;
 
+export const AUDIT_EVENT_LIMIT = 4096;
+export const AUDIT_EVENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const EVENT_SAMPLE_INTERVAL_MS = 60_000;
+type AuditMetric =
+  'operations.audit.events' | 'operations.audit.coalesced' | 'operations.audit.retained';
+
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() === value && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
 const actor = (value: unknown): value is string =>
@@ -155,6 +161,11 @@ export class OperationsAudit {
   private closing: Promise<void> | null = null;
   private queue: Promise<void> = Promise.resolve();
   private readonly actorAlias: string;
+  // One sample per fixed event kind/code, independent of caller-controlled identifiers.
+  private readonly eventSamples = new Map<
+    string,
+    { at: number; work: Promise<void>; pending: boolean }
+  >();
 
   constructor(
     private readonly options: {
@@ -164,6 +175,7 @@ export class OperationsAudit {
       isWritable: () => boolean;
       /** Explicit evidence that this installation has never accepted an operation. */
       allowMissingHistory?: () => boolean;
+      emitMetric?: (name: AuditMetric, value: number) => void;
     },
   ) {
     this.actorAlias = options.actorAlias ?? 'operator';
@@ -213,6 +225,8 @@ export class OperationsAudit {
               : entry,
           );
           await this.save({ ...this.state, entries });
+        } else if (this.retainedEvents(this.state.events).length !== this.state.events.length) {
+          await this.save(this.state);
         }
       } else if (result.integrity === 'missing' && this.options.allowMissingHistory?.() === true) {
         await this.save(this.state);
@@ -268,6 +282,7 @@ export class OperationsAudit {
     command?: OperationsCommand;
     operationId?: string;
   }): Promise<void> {
+    if (this.closed) return Promise.reject(new Error('OPERATIONS_CLOSED'));
     const value = strictObject(input, ['kind', 'code'], ['command', 'operationId']);
     if (
       !(['rejected', 'locked', 'auth-failed'] as readonly unknown[]).includes(value.kind) ||
@@ -294,10 +309,31 @@ export class OperationsAudit {
       resultCode: value.code,
       atEpochMs: this.time(),
     };
-    return this.serialize(async () => {
+    if (!this.writable) return Promise.reject(new Error('AUDIT_NOT_READY'));
+    this.metric('operations.audit.events', 1);
+    const key = `${event.kind}:${event.resultCode}`;
+    const previous = this.eventSamples.get(key);
+    if (
+      previous &&
+      (previous.pending ||
+        (event.atEpochMs >= previous.at &&
+          event.atEpochMs - previous.at < EVENT_SAMPLE_INTERVAL_MS))
+    ) {
+      this.metric('operations.audit.coalesced', 1);
+      return previous.work;
+    }
+    const work = this.serialize(async () => {
       this.assertReady();
       await this.save({ ...this.state, events: [...this.state.events, event] });
     });
+    const sample = { at: event.atEpochMs, work, pending: true };
+    this.eventSamples.set(key, sample);
+    void work
+      .finally(() => {
+        sample.pending = false;
+      })
+      .catch(() => undefined);
+    return work;
   }
 
   /** Only compensate a durable success that the controller has never exposed or applied. */
@@ -370,15 +406,31 @@ export class OperationsAudit {
   }
 
   private async save(state: AuditState): Promise<void> {
-    const captured = validateState(state);
+    const captured = validateState({ ...state, events: this.retainedEvents(state.events) });
     try {
       await this.store.write({ lastSeq: this.sequence + 1, state: captured });
       this.state = captured;
       this.sequence++;
       this.integrity = 'ok';
+      this.metric('operations.audit.retained', captured.events.length);
     } catch {
       this.failed = true;
       throw new Error('AUDIT_WRITE_FAILED');
+    }
+  }
+
+  private retainedEvents(events: readonly OperationsAuditEvent[]): readonly OperationsAuditEvent[] {
+    const now = this.time();
+    return events
+      .filter((event) => now < event.atEpochMs || now - event.atEpochMs <= AUDIT_EVENT_MAX_AGE_MS)
+      .slice(-AUDIT_EVENT_LIMIT);
+  }
+
+  private metric(name: AuditMetric, value: number): void {
+    try {
+      this.options.emitMetric?.(name, value);
+    } catch {
+      /* Observer only. */
     }
   }
 

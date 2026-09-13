@@ -1,6 +1,11 @@
 import { GrantIssuer, type GrantIssuerDeps } from '../media/GrantIssuer.js';
 import type { Generation } from '../media/MediaGenerationRegistry.js';
-import type { MediaInitializationResult, OperationsPort, Readiness } from '../media/types.js';
+import type {
+  MediaCoordinatorDeps,
+  MediaInitializationResult,
+  OperationsPort,
+  Readiness,
+} from '../media/types.js';
 import { MediaUsageLease } from '../operations/MediaUsageLease.js';
 import {
   OperationsBindings,
@@ -15,7 +20,7 @@ export type ReadinessRuntimeOptions = Omit<
   'isInitialized' | 'pendingPreparations'
 > &
   Pick<OperationsBindingsOptions, 'getGameActivity' | 'getOfficialRevision' | 'recoveryCleanup'> &
-  Readonly<{ monotonicNow: () => number }>;
+  Readonly<{ monotonicNow: () => number; emitMetric?: MediaCoordinatorDeps['emitMetric'] }>;
 
 /** E-owned readiness/operations/issuance assembly. B still owns HTTP and game bootstrap. */
 export function createReadinessRuntime(options: ReadinessRuntimeOptions): ReadinessRuntime {
@@ -70,6 +75,22 @@ export class ReadinessRuntime {
       nowEpochMs: options.nowEpochMs,
       monotonicNow: options.monotonicNow,
       timeoutMs: options.config.operationTimeoutMs,
+      timeoutForCommand: (command) => this.bindings.recoveryCheckpointTimeout(command),
+      observePressure: (pending, rejected) => {
+        options.emitMetric?.({
+          name: 'operations.queue.pending',
+          value: pending,
+          unit: 'count',
+          atMs: options.monotonicNow(),
+        });
+        if (rejected)
+          options.emitMetric?.({
+            name: 'operations.queue.rejected',
+            value: 1,
+            unit: 'count',
+            atMs: options.monotonicNow(),
+          });
+      },
       setAdmission: (state) => {
         if (state === 'LOCKED') this.gate.lock('READINESS_UNCONFIRMED');
         this.bindings.setAdmission(state);

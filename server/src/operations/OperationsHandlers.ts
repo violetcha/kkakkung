@@ -5,7 +5,11 @@ import {
   OPERATIONS_AUDIT_CODES,
   type OperationsAuditCode,
 } from './OperationsAudit.js';
-import { isOperationsRequestId, validateOperationsCommand } from './OperationsController.js';
+import {
+  isOperationsRequestId,
+  OperationsCapacityError,
+  validateOperationsCommand,
+} from './OperationsController.js';
 
 const oneOf = (value: unknown, allowed: readonly unknown[]): boolean => allowed.includes(value);
 const count = (value: unknown): value is number =>
@@ -127,7 +131,12 @@ export function createOperationsHandlers(deps: {
           throw new Error('INVALID_OPERATION_RESPONSE');
         response.status(202).json(safe);
       } else throw new Error('INVALID_OPERATION_RESPONSE');
-    } catch {
+    } catch (error) {
+      if (error instanceof OperationsCapacityError) {
+        response.setHeader('Retry-After', '1');
+        response.status(429).json({ code: 'OPERATIONS_BUSY' });
+        return;
+      }
       await unavailable(response);
     }
   };

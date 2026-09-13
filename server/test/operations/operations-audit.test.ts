@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   OperationsAudit,
   fingerprintOperationsCommand,
+  AUDIT_EVENT_LIMIT,
+  AUDIT_EVENT_MAX_AGE_MS,
 } from '../../src/operations/OperationsAudit.js';
 import { OperationJournal } from '../../src/operations/OperationJournal.js';
 import { checksum } from '../../src/operations/CheckpointStore.js';
@@ -48,18 +50,30 @@ async function fixture(initialize = true) {
   const journal = new OperationJournal({ opsDataDir });
   await journal.restore();
   closers.push(() => journal.close());
+  let now = 2_000;
+  const metrics = vi.fn();
   const options = {
     opsDataDir,
-    nowEpochMs: () => 2_000,
+    nowEpochMs: () => now,
     actorAlias: 'fixture-operator',
     isWritable: () => journal.writable,
     allowMissingHistory: () => true,
+    emitMetric: metrics,
   };
   const audit = new OperationsAudit(options);
   closers.push(() => audit.close());
   if (initialize) await audit.restore();
   const file = path.join(opsDataDir, 'operations-audit.json');
-  return { audit, journal, options, file };
+  return {
+    audit,
+    journal,
+    options,
+    file,
+    metrics,
+    setNow: (value: number) => {
+      now = value;
+    },
+  };
 }
 
 function reopen(options: ConstructorParameters<typeof OperationsAudit>[0]) {
@@ -89,6 +103,99 @@ async function rewrite(file: string, mutate: (value: Awaited<ReturnType<typeof d
 }
 
 describe('E-14 durable operation acceptance and recovery audit', () => {
+  it('rejects every coalesced observer when the shared durable write fails', async () => {
+    const { audit, file } = await fixture();
+    const before = await fs.readFile(file, 'utf8');
+    vi.spyOn(fs, 'rename').mockRejectedValue(new Error('DISK_UNAVAILABLE'));
+    const observers = Array.from({ length: 100 }, () =>
+      audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' }),
+    );
+    expect(new Set(observers).size).toBe(1);
+    const results = await Promise.allSettled(observers);
+    expect(results.every((result) => result.status === 'rejected')).toBe(true);
+    expect(audit.writable).toBe(false);
+    expect(await fs.readFile(file, 'utf8')).toBe(before);
+    await expect(audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' })).rejects.toThrow(
+      'AUDIT_NOT_READY',
+    );
+  });
+
+  it('coalesces a slow repeated error write across time windows and keeps observation counts', async () => {
+    const { audit, file, metrics, setNow, journal } = await fixture();
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    releases.push(release);
+    const rename = fs.rename.bind(fs);
+    let first = true;
+    vi.spyOn(fs, 'rename').mockImplementation(async (source, target) => {
+      if (first && String(target) === file) {
+        first = false;
+        enter();
+        await gate;
+      }
+      await rename(source, target);
+    });
+    const initial = audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' });
+    await entered;
+    setNow(122_001);
+    const repeated = Array.from({ length: 1000 }, () =>
+      audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' }),
+    );
+    expect(new Set([initial, ...repeated]).size).toBe(1);
+    expect((await disk(file)).lastSeq).toBe(1);
+    release();
+    await Promise.all([initial, ...repeated]);
+    expect((await disk(file)).lastSeq).toBe(2);
+    expect((await disk(file)).state.events).toHaveLength(1);
+    expect(metrics.mock.calls.filter(([name]) => name === 'operations.audit.events')).toHaveLength(
+      1001,
+    );
+    expect(
+      metrics.mock.calls.filter(([name]) => name === 'operations.audit.coalesced'),
+    ).toHaveLength(1000);
+    await audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' });
+    expect((await disk(file)).lastSeq).toBe(3);
+    await journal.close();
+    await expect(
+      audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' }),
+    ).rejects.toThrow();
+  });
+
+  it('bounds legacy event count and age while retaining terminal command identities and file schema', async () => {
+    const { audit, options, file, setNow } = await fixture();
+    await audit.record(command, pending);
+    await audit.record(command, { ...pending, status: 'succeeded' });
+    await audit.recordEvent({ kind: 'auth-failed', code: 'UNAUTHORIZED' });
+    await audit.close();
+    setNow(AUDIT_EVENT_MAX_AGE_MS * 2);
+    await rewrite(file, (data) => {
+      const sample = data.state.events[0]!;
+      data.state.events = Array.from({ length: AUDIT_EVENT_LIMIT + 100 }, (_, index) => ({
+        ...sample,
+        atEpochMs: AUDIT_EVENT_MAX_AGE_MS + index + 1,
+      }));
+      data.state.events.unshift({ ...sample, atEpochMs: 1 });
+    });
+    const restored = reopen(options);
+    expect(await restored.restore()).toMatchObject({ integrity: 'ok' });
+    const bounded = await disk(file);
+    expect(bounded.state.events).toHaveLength(AUDIT_EVENT_LIMIT);
+    expect(Object.keys(bounded).sort()).toEqual(['checksum', 'lastSeq', 'state', 'version']);
+    expect(Object.keys(bounded.state).sort()).toEqual(['entries', 'events']);
+    expect(restored.get(command.requestId)?.snapshot.status).toBe('succeeded');
+    setNow(AUDIT_EVENT_MAX_AGE_MS * 3 + 10_000);
+    await restored.recordEvent({ kind: 'locked', code: 'OPERATION_FAILED' });
+    expect((await disk(file)).state.events).toHaveLength(1);
+    expect((await disk(file)).state.entries).toEqual(bounded.state.entries);
+    await expect(restored.record(command, pending)).rejects.toThrow('AUDIT_TERMINAL_CONFLICT');
+  });
+
   it('initializes only with explicit first-history proof and never stores the raw target', async () => {
     const { audit, file } = await fixture();
     expect(audit.writable).toBe(true);

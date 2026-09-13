@@ -329,7 +329,7 @@ checkpoint-budget는 이 모드에서 로컬 기록 flush와 쓰기 가능 여�
 
 B는 중앙 `INVITATION_ROUTES`의 issue/revoke를 자기 session 모듈에서 구현한다. E의 `CreateOperatorAuth`로 생성한 인증 함수를 B가 `/api/operations` 전체와 초대 경로보다 앞에 적용한다. `OPS_TOKEN`은 인증 factory에만 주입하고 브라우저/protocol로 전달하지 않는다. F 운영 스크립트도 이 경로를 소비하며 별도 비인증 발급 CLI나 초대 endpoint를 만들지 않는다.
 
-F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 선택 운영 모드와 함께 검증하고 B가 factory에 전달한다. publicWindow=null은 운영 범위 미정으로 잠금이며, continuous의 명시적 `{mode:'continuous'}`와 구분한다. 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·해당 모드의 예산·운영 범위 조건을 검사한다. operationTimeoutMs 이후에도 미완료 회수는 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 정확한 env 매핑은 현재 F config export와 상시 운영 문서를 대조한다.
+F는 `MediaConfiguration`의 projectAlias·publicWindow·officialBudgetMaxAgeMs·operationTimeoutMs를 선택 운영 모드와 함께 검증하고 B가 factory에 전달한다. publicWindow=null은 운영 범위 미정으로 잠금이며, continuous의 명시적 `{mode:'continuous'}`와 구분한다. 예시 창·예시 잔량을 실제 허용으로 쓰지 않는다. productSecurityReady는 환경의 임의 true가 아니라 B가 제품 인증·입장 보호 초기화를 확인해 주입하는 서버 내부 값이다. E는 이 값과 회수·저널·해당 모드의 예산·운영 범위 조건을 검사한다. 일반 운영 명령은 operationTimeoutMs 이후 미완료 회수를 성공으로 바꾸지 않고 unknown/LOCKED와 작업 상태 조회에 남긴다. 입장이 DRAINING이고 경기·연습·입장 대기가 없으며 검증된 과거 기록 전체가 REVOKED인 조회 실패 복구 checkpoint에만 서버가 접수부터 최대180초를 적용한다. 같은 writer·소유권·기록·세대·API 예산을 전송 전후에 재검사하고 중복 sweep·지연 성공을 거절한다. 손상 이력은 복원하지 않으며 성공 후에도 별도 resume가 필요하다. Cloud 개별 응답/실시간 권한 회수 기한은 유지한다. 정확한 env 매핑과 조회 복구 절차는 현재 F config export 및 상시 운영 문서를 대조한다.
 
 관측은 F가 소유하는 `MetricSample` 수집 callback을 B가 조립하여 B Tick/queue와 `MediaCoordinatorDeps.emitMetric`에 주입한다. F의 `MetricRegistry`가 name/unit allowlist를 정의하고 B/E는 같은 목록을 소비한다. atMs는 서버 monotonic ms이고 matchRef는 비식별 상관값이다. 토큰·nickname·원본 mediaIdentity·좌표·전체 객체를 label로 넣지 않는다. callback은 유계 큐에 수치/enum을 적재하며 게임 Tick이나 E 정책 실행에서 IO 대기·throw를 하지 않는다. 실제 관측 구현이 없으면 관측 인수를 완료로 기록하지 않는다.
 
@@ -343,11 +343,12 @@ B는 coordinator.getOperations()의 OperationsPort를 위임받아 submit/getSna
 - POST /api/media/grants: Bearer 세션 + MediaGrantRequest → MediaGrant. 이전 회수/예산/phase 불충족은 409, 인증 오류 401/403, 공급자 불명 503으로 안전 code만 반환한다.
 - POST /api/media/report: Bearer 세션 + MediaStatusReport → 204. 수신자 신원과 scope를 검사한다. 신고만으로 원격 회수·권한 성공을 확정하지 않는다.
 - POST /api/livekit/webhook: raw body + 공급자 Authorization을 E가 검증하며 JSON 재직렬화·인증 생략을 하지 않는다.
-- POST /api/operations/commands: OPS_TOKEN + OperationsCommand → 202 OperationSnapshot(pending). 같은 requestId/같은 본문은 같은 operationId, 다른 본문 재사용은 409다. retry-retirement에만 retirementId를 요구한다.
+- POST /api/operations/commands: OPS_TOKEN + OperationsCommand → 202 OperationSnapshot(pending). 같은 requestId/같은 본문은 같은 operationId, 다른 본문 재사용은 409다. retry-retirement에만 retirementId를 요구한다. 명령 대기·미완료 backend·감사 쓰기의 접수 상한은 64이며 drain용 여유 한 개를 둔다. 초과는 429 OPERATIONS_BUSY와 Retry-After: 1로 거절하며 접수되지 않은 같은 requestId를 다시 시도할 수 있다. 중복 결과 조회는 이 상한 때문에 새 명령으로 바꾸지 않는다.
 - GET /api/operations/commands/:requestId: OPS_TOKEN → 200 OperationSnapshot 또는 404. 완료 상태는 succeeded/failed이며 HTTP 202를 작업 성공으로 해석하지 않는다.
 - GET /api/operations/status: OPS_TOKEN → OperationsStatus. remaining 값이 null이면 미확인이고 0으로 바꾸지 않는다.
 - /health/live는 프로세스 생존, /health/ready는 회수·저널·예산·인증 준비의 conjunction이다. RECOVERING을 재시작 루프로 우회하지 않는다.
 - admission과 readiness는 독립이다. 정상 drain은 admission만 DRAINING으로 바꾸고 건강한 readiness는 READY를 유지한다. 새 입장/grant는 readiness=READY이고 admission=OPEN일 때만 허용한다. resume은 READY를 확인한 뒤 OPEN으로 전환한다. 실제 저널·보안·예산 장애는 readiness를 LOCKED로 만든다.
+- 반복 오류 감사는 고정 kind/resultCode마다 60초 첫 표본을 공유하고 최근24시간/최대4,096개를 보관한다. 미완료 쓰기를 추가로 쌓지 않으며 실패를 성공으로 숨기지 않는다. 명령 entries의 requestId fingerprint·최종 결과와 파일 형식은 보존한다. 과부하 거절 자체는 영구 잠금 사유가 아니며 실제 감사 쓰기 실패는 기존처럼 잠근다. 수치 관측과 정확한 계수 범위는 [감사·명령 상한](../operations-audit-limits.md)을 따른다.
 - attested의 checkpoint-budget는 `OPS_DATA_DIR/official-usage-input.json`의 OfficialBudgetCheckpoint를 읽어 검증한다. F가 실제 Cloud 사용량 보고서의 조회 시각·잔량·근거를 넣고 E가 신선도·비음수·같은 프로젝트 여부를 검사한다. continuous에서는 같은 명령이 로컬 기록 flush와 쓰기 가능 여부를 확인하며 공식 사용량 파일 갱신을 요구하지 않는다. 어느 모드도 예시 잔량이나 클라이언트 신고를 공식 증거로 쓰지 않는다.
 
 ## 격리 상태의 배포 검증 — B/E/F
