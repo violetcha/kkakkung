@@ -60,6 +60,10 @@ describe('actual split media factory with durable files and controlled Cloud tra
   it('connects six full pairs within the conservative 72-resource ceiling and cleans all seven rooms', async () => {
     const f = await setup(72, 6);
     const grants = await Promise.all(Array.from({ length: 6 }, (_, player) => f.prepare(player)));
+    // Reproduce CI's earlier absent lookup before either original connection is published.
+    // Both signed join events must refresh their independent owners after that observation.
+    await f.coordinator.reconcile();
+    expect(f.remote.size).toBe(0);
     for (const result of grants) f.publish(result.grant);
     f.clock.offset += 5001;
     for (const result of grants) await f.announce(result.grant);

@@ -168,16 +168,18 @@ export async function splitCoordinatorFixture(capacity = 100, count = 2) {
     return result as Extract<PreparationResult, { status: 'ready' }>;
   };
   const announce = async (grant: MediaGrant) => {
-    const rawBody = JSON.stringify({
-      event: 'participant_joined',
-      id: randomUUID(),
-      createdAt: '1',
-      room: { name: grant.roomName },
-      participant: { identity: grant.mediaIdentity },
-    });
-    const token = new AccessToken(config.apiKey, config.apiSecret, { ttl: 60 });
-    token.sha256 = createHash('sha256').update(rawBody).digest('base64');
-    return coordinator.handleWebhook(rawBody, await token.toJwt());
+    for (const target of [grant, grant.facePublication!]) {
+      const rawBody = JSON.stringify({
+        event: 'participant_joined',
+        id: randomUUID(),
+        createdAt: '1',
+        room: { name: target.roomName },
+        participant: { identity: target.mediaIdentity },
+      });
+      const token = new AccessToken(config.apiKey, config.apiSecret, { ttl: 60 });
+      token.sha256 = createHash('sha256').update(rawBody).digest('base64');
+      await coordinator.handleWebhook(rawBody, await token.toJwt());
+    }
   };
   const retire = (result: Extract<PreparationResult, { status: 'ready' }>) => {
     coordinator.lifecycle.report({ ...result, status: 'closed' });
