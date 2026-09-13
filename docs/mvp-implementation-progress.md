@@ -8,6 +8,21 @@
 
 ## 2026-09-13 구현 재개
 
+### 제품 로비 무활동 기한 — 208
+
+- [208](https://ssafy.atlassian.net/browse/S15P21C204-208),
+  `fix/S15P21C204-208-product-lobby-ttl`, 시작 소스 `03d2ba4d`.
+- 승인된10분을 제품 preflight 환경과 두 제품 Compose overlay에 적용한다.
+  비밀 환경 파일의 과거30분 값보다 우선하며 제품 정책을 다음 배포에도 유지한다.
+  RoomExpiry와 단계별 기한·경고·회수 장벽은 기존 구현을 사용한다.
+- RoomExpiry·실제 Room 회수·제품 preflight·배포 순서59개와 script lint/문법을 통과했다.
+  첫 전체 검사는2,499/2,500개 통과: 기존 attested 재경기 중 MEDIA_POLICY_UNCERTAIN이
+  한 번 발생했고 최종 namespace 관측도 미확인으로 남았다. 해당 단독 재검사는76.98초에
+  통과했다. 로비 설정이 이 회귀의 서버 입력에는 사용되지 않지만 원인이 확정되지 않았으므로
+  간헐 실패 이력을 유지하며 전체/원격 검사를 후속 확인한다.
+  MR·실제 컨테이너 값도 별도 확인한다.
+  변경 전 운영 관측은30분이며 코드 변경만으로 배포 완료라고 하지 않는다.
+
 ### 운영 감사·대기 상한 — 206
 
 - [206](https://ssafy.atlassian.net/browse/S15P21C204-206),
