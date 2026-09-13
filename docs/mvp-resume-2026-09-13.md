@@ -17,11 +17,14 @@
   READY/OPEN·미해결0·last-good·동일 게임/웹 버전·팀 SSO를 확인했다.
 - 216: 2/5ms 시각 보정에 의한 운영 잠금 수정, !143 병합 `ae40a5ea`.
   정확한 소스 `5653bec5`의 Jenkins MR123/GitLab191814에서259파일2,697개·22 E2E·이미지 PASS.
+  배포114 SUCCESS/실제 Cloud DP-06 PASS218.38초,22:22:52 READY/OPEN·미해결0·last-good·
+  게임/웹ae40a5ea 일치·팀 SSO 유지·Jira216 완료를 확인했다.
 - 215의 마감 브랜치는 `test/S15P21C204-215-unjoined-cloud-revocation`이며 작업 폴더는
   `.local/worktrees/mvp-unjoined-cloud-20260913`이다. 실제 Cloud 첫 소스 `911de4ee`에서
   미입장 토큰/최초 생성 후 거절·정리를 확인했으나 재생성의 즉시 목록은 미확인이다.
-  없는 방의404로 제품 회수가 완료되지 않는 경로를 수정하고 실제 제품 조회 함수를
-  진단에도 연결한다. 상세 관측은 [회수 검증](unjoined-media-revocation.md)을 따른다.
+  없는 방의404로 제품 회수가 완료되지 않는 경로를 수정했다. d3cb136b의 실제 Cloud에서
+  같은 제품 조회 함수의 부재 확인·미입장 거절·최초 생성 후 거절·정리를 확인했다.
+  재생성 목록 불일치는 그대로 남긴다. 상세 관측은 [회수 검증](unjoined-media-revocation.md)을 따른다.
 - 이 문서는 마감 변경과 함께 병합한다. 이후 확정되는 마지막 소스·MR·배포 결과는
   [Jira215](https://ssafy.atlassian.net/browse/S15P21C204-215)와
   [Jira216](https://ssafy.atlassian.net/browse/S15P21C204-216)의 연결 MR 본문에 기록한다.

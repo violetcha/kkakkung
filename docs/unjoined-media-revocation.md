@@ -55,6 +55,19 @@ unjoined-revocation-evidence.json SHA-256:
 52d44d9328d8f2bc9fabcca78388ee138d9822521e4d8ea8deb6ee88c2bbebb2
 ```
 
+22:26 KST 수정 소스 `d3cb136b796e55fe4597ab1c77e9d97ad8ef5ca5`로 한 번 더 확인했다.
+30,287ms, 정상27/정리16 호출이며 세 방 모두404인 상태에서 실제 제품 함수의
+productAbsenceConfirmed와 currentProductListAbsenceCompatible가 true였다.
+미입장 토큰 거절·새 신원 정상 접속·최초 생성 뒤 거절·최종 정리도 확인했다.
+재생성의 즉시 목록 불일치는 그대로 남아 전체 시험은 exit1이고 승격 값은 모두 false다.
+사용자의 중단 요청에 따라 재생성 추가 조사와 제품 발급/조립부 인수는 다음 재개로 넘긴다.
+
+```text
+/var/lib/jenkins/.local/kkakkung-diagnostics/unjoined-215e2-20260913-d3cb136b/.local/qa/unjoined-revocation-1789305974649
+unjoined-revocation-evidence.json SHA-256:
+c47f17b98f81861e7f10f86a07944bc76e41716e6057203b59e809005ea6d9fa
+```
+
 ## 실행·보존
 
 깨끗한 실제 소스 SHA·lockfile과 같은 preflight, 공식 잔량 관측·유계 예약을 먼저 확인한다.
