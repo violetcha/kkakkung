@@ -300,7 +300,7 @@ describe('F runtime evidence provider', () => {
         writeFileSync(f.path, JSON.stringify({ ...record, checkedBy: 'changed' }));
       if (failure === 'missing') rmSync(f.path);
       if (failure === 'expired') f.setNow(NOW + 20_000);
-      if (failure === 'rollback') f.setNow(NOW - 1);
+      if (failure === 'rollback') f.setNow(NOW - 6);
       if (failure === 'closed') await services.close();
       await services.refresh();
       const reason = services.getDiagnostic().reason;
@@ -358,8 +358,93 @@ describe('F runtime evidence provider', () => {
     expect((await loadRuntimeEvidence(stale.options)).namespaceOwnershipConfirmed()).toBe(false);
     const rollback = fixture();
     const active = await loadRuntimeEvidence(rollback.options);
-    rollback.setNow(NOW - 1);
+    rollback.setNow(NOW - 6);
     expect(active.namespaceOwnershipConfirmed()).toBe(false);
+  });
+
+  it.each([2, 5])(
+    'retains verified policy during a bounded %ims clock correction',
+    async (delta) => {
+      const f = fixture();
+      const services = await loadRuntimeEvidence(f.options);
+      f.setNow(NOW - delta);
+      expect(services.namespaceOwnershipConfirmed()).toBe(true);
+      expect(services.getDiagnostic()).toMatchObject({
+        reason: null,
+        clockRollbackMs: 0,
+        clockCorrectionCount: 1,
+        maxClockCorrectionMs: delta,
+      });
+      f.setNow(NOW + 1);
+      expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    },
+  );
+
+  it('does not accumulate small backwards steps or restore a large rollback', async () => {
+    const f = fixture();
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW + 20);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    for (const delta of [2, 4, 5]) {
+      f.setNow(NOW + 20 - delta);
+      expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    }
+    f.setNow(NOW + 14);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    f.setNow(NOW + 21);
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: 'CLOCK_ROLLBACK',
+      clockRollbackMs: 6,
+      clockCorrectionCount: 3,
+      maxClockCorrectionMs: 5,
+    });
+  });
+
+  it('retains the original expiry and cannot revive it using a small correction', async () => {
+    const f = fixture({ ...valid(), expiresAtEpochMs: NOW + 10 });
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW + 9);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    f.setNow(NOW + 6);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    f.setNow(NOW + 10);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    f.setNow(NOW + 8);
+    await services.refresh();
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic().reason).toBe('EVIDENCE_EXPIRED');
+  });
+
+  it('keeps the monotonic verification lease during a correction', async () => {
+    const monotonic = vi.spyOn(performance, 'now').mockReturnValue(100);
+    const f = fixture();
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW - 2);
+    monotonic.mockReturnValue(5100);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic().reason).toBe('MONOTONIC_LEASE_EXPIRED');
+  });
+
+  it('does not bypass stale or changed evidence after a correction', async () => {
+    const f = fixture();
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW + 399);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    f.setNow(NOW + 397);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    f.setNow(NOW + 401);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic().reason).toBe('EVIDENCE_STALE');
+    const changed = fixture();
+    const second = await loadRuntimeEvidence(changed.options);
+    changed.setNow(NOW - 2);
+    expect(second.namespaceOwnershipConfirmed()).toBe(true);
+    writeFileSync(changed.path, JSON.stringify({ ...valid(), checkedBy: 'changed' }));
+    await second.refresh();
+    expect(second.namespaceOwnershipConfirmed()).toBe(false);
+    expect(second.getDiagnostic().reason).toBe('FILE_CHANGED');
   });
 
   it.each([
@@ -435,6 +520,19 @@ describe('continuous service configuration', () => {
     expect(restarted.namespaceOwnershipConfirmed()).toBe(true);
     expect(await restarted.firstInstallationConfirmed()).toBe(false);
     expect(restarted.firstAuditConfirmed()).toBe(false);
+  });
+  it('keeps continuous policy through bounded clock corrections but locks a larger reversal', async () => {
+    const f = continuous();
+    const services = await loadRuntimeEvidence(f.options);
+    f.setNow(NOW - 5);
+    expect(services.namespaceOwnershipConfirmed()).toBe(true);
+    f.setNow(NOW - 6);
+    expect(services.namespaceOwnershipConfirmed()).toBe(false);
+    expect(services.getDiagnostic()).toMatchObject({
+      reason: 'CLOCK_ROLLBACK',
+      clockRollbackMs: 6,
+      maxClockCorrectionMs: 5,
+    });
   });
   it('rejects a changed project even if the replacement configuration and environment agree', async () => {
     const f = continuous();

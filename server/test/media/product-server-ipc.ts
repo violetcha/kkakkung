@@ -119,6 +119,8 @@ export const productServerReplySchema = z.discriminatedUnion('ok', [
             refreshPending: z.boolean(),
             maxRefreshDurationMs: z.number().nonnegative(),
             clockRollbackMs: z.number().int().nonnegative(),
+            clockCorrectionCount: z.number().int().nonnegative(),
+            maxClockCorrectionMs: z.number().int().nonnegative(),
           })
           .nullable(),
         removedIdentityHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(1000),
