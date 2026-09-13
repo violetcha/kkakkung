@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { PRODUCT_PROTOCOL_VERSION } from '../version.js';
 
 export const SESSION_ROUTE = '/api/sessions';
-/** Request-scoped hint only; POST independently authenticates the trusted SSO request. */
+/** Request-scoped hint only; POST independently validates identity and invitation scope. */
 export const SESSION_ACCESS_ROUTE = '/api/sessions/access';
 export const sessionAccessResponseSchema = z.strictObject({
-  method: z.enum(['invitation', 'gitlab-sso']),
+  method: z.enum(['invitation', 'gitlab-sso', 'guest']),
 });
 export type SessionAccessResponse = z.infer<typeof sessionAccessResponseSchema>;
 /** DELETE with the owner's Bearer token; never accepts a playerId or roomCode. */

@@ -83,6 +83,11 @@ export const teamSessionFixture = {
   createRoom: true,
 } as const satisfies SessionRequest;
 export const teamAccessFixture = { method: 'gitlab-sso' } as const satisfies SessionAccessResponse;
+export const guestAccessFixture = { method: 'guest' } as const satisfies SessionAccessResponse;
+export const guestSessionFixture = {
+  nickname: '친구',
+  createRoom: true,
+} as const satisfies SessionRequest;
 export const roomInvitationFixture = {
   inviteToken: 'synthetic-room-invitation-only',
   roomCode: 'ABCDEF',

@@ -6,7 +6,7 @@ import {
   productRoomPort,
   cancelSessionReservation,
 } from '../features/room/product-session';
-import type { SessionResponse } from '@kkakkung/protocol/game-messages';
+import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
@@ -45,7 +45,7 @@ export function ProductApp({
   const [solo, setSolo] = useState(false);
   const finishSolo = useCallback(() => setSolo(false), []);
   const [error, setError] = useState('');
-  const [access, setAccess] = useState<'checking' | 'invitation' | 'gitlab-sso' | 'failed'>(
+  const [access, setAccess] = useState<'checking' | SessionAccessResponse['method'] | 'failed'>(
     'checking',
   );
   const [accessAttempt, setAccessAttempt] = useState(0);
@@ -281,7 +281,9 @@ export function ProductApp({
             <br />
             {access === 'gitlab-sso'
               ? '방을 만들고 친구들에게 방 코드를 알려 주세요.'
-              : '초대받은 친구들과 함께 시작하세요.'}
+              : access === 'guest'
+                ? '닉네임으로 방을 만들고 친구들에게 초대 링크를 보내 주세요.'
+                : '초대받은 친구들과 함께 시작하세요.'}
           </p>
           <p>
             PC 브라우저에서 6명이 함께하는 게임입니다. 카메라 필수 · 마이크 선택. 도망자 2명이
@@ -289,7 +291,7 @@ export function ProductApp({
           </p>
           <ol>
             <li>혼자 카메라와 조작을 먼저 점검해요.</li>
-            <li>방 코드를 나누고 여섯 명이 모여요.</li>
+            <li>{access === 'guest' ? '초대 링크' : '방 코드'}를 나누고 여섯 명이 모여요.</li>
             <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
           </ol>
           <button type="button" disabled={joining} onClick={() => setSolo(true)}>
@@ -330,7 +332,12 @@ export function ProductApp({
                 />
               </>
             )}
-            <button disabled={joining || (!invitation && access !== 'gitlab-sso')}>
+            <button
+              disabled={
+                joining ||
+                (!invitation && access !== 'gitlab-sso' && !(access === 'guest' && createRoom))
+              }
+            >
               {joining ? '입장 중…' : createRoom ? '방 만들기' : '방 참가'}
             </button>
             {joining && (
@@ -345,6 +352,15 @@ export function ProductApp({
           )}
           {access === 'gitlab-sso' && (
             <p className="notice">팀원 로그인이 확인됐습니다. 바로 방을 만들거나 참가하세요.</p>
+          )}
+          {access === 'guest' && (
+            <p className="notice">
+              {createRoom
+                ? '가입 없이 시작해요. 방을 만든 뒤 초대 링크를 공유하세요.'
+                : invitation
+                  ? '초대받은 방에 참가합니다. 링크가 만료됐다면 방장에게 새 링크를 받아 주세요.'
+                  : '친구 방은 방장이 보낸 초대 링크로 열어 주세요.'}
+            </p>
           )}
           {access === 'failed' && (
             <p className="notice">
