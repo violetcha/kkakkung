@@ -65,5 +65,35 @@ Billing은 Build 포함5,000분/50GB, 사용293분/약1GB, 다음 청구0달러�
 
 ## 실행 상태
 
-관련 Gateway/증거 판정3파일28회귀를 통과했다. 실제 Cloud는 아직 실행하지 않았다.
-전체 검사·MR·실제 진단과 한계는 [구현 기록](mvp-implementation-progress.md)에 기록한다.
+관련 Gateway/증거 판정3파일28회귀와 최종 `pnpm verify`를 통과했다.
+전체250파일·2,560개 테스트·E2E19개(53.0초), 계약fixture31/도구11·lint·타입·빌드·자산 검사 포함이다.
+처음에는 Cloud 사례 allowlist의 정확한 목록 기대값1건이 새 사례를 빠뜨렸고 보완 후 통과했다.
+
+2026-09-13 17:17:12–17:17:41 KST, 깨끗한 소스
+`d1aa2ca069a4804016e5ebb6544c360456862d87`의 동호스트 격리 폴더에서 실제 MC-PUBLIC-02를
+실행했다. 17:09 KST Billing 잔량을 확인하고 정상 Jenkins 작업 종료 뒤 실행했다.
+시험25,033ms/exit0, 정상15·정리16호출이며 위 아홉 조건을 모두 통과했다.
+`splitTransportVerified=true`, `productPublicReady=false`, `promotionAllowed=false`다.
+운영 게임 설정은 바꾸지 않았다.
+
+- CAMERA/MIC 게시 권한 분리, 얼굴만 수신, 악의적 직접 음성 구독 차단을 확인했다.
+- 음성 허용·차단 중 얼굴 유지·같은 목적지 재허용·반대 방향 허용에서 새 표식과 수신 bytes를 확인했다.
+- 얼굴/음성/재허용 음성 모두 원본과 전달본의 participant SID 및 track SID가 같은 것으로 관측됐다.
+  이는 이번 실행의 관측이며 다른 세대·재게시의 동일성을 가정하는 근거가 아니다.
+- 허용 표식까지 약275ms, 차단 및2초 안정 구간 확인까지 약2,286ms, 재허용 표식까지 약265ms였다.
+  차단 측정에는 의도한2초 안정 구간이 포함되며 G1의1초 차단 인수나 부하 성능 결과로 환산하지 않는다.
+- 시험 참가자·방의 최종 부재를 확인했다. namespace는 `qa-public-20260913-b6697fb1`이다.
+
+| 증거                      | SHA-256                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| pnpm-lock.yaml            | `469b418cc3a6d656d9f5ea61292d3e7801b5b7bcfc89af3bec29580342944fdf` |
+| preflight.json            | `dc4700bf67c901177839f716c9266e362fe5ee14de8b21a65f747f8cab174ef8` |
+| devices.json              | `ea359d1870c7aa68d38167caee3e399bf602ae84cd91b085e83753797db1ade0` |
+| run-summary.json          | `c73354093c55c86d302bd0e6ad8729ade2bc87c2d12140489cae5ae11ec76f62` |
+| split-media-evidence.json | `c1faa4172fbfdaae5d50ffac75e0e7289c94cdc7dad75751d5faad8ef37694ff` |
+
+증거는 호스트의 격리 checkout `split-media-20260913-d1aa2ca0` 아래
+`.local/qa/split-media-1789287432811`에 보존한다. 로컬 기록에는 비밀값 없는 요약만 수집했다.
+합성 Canvas/오실레이터와4개 브라우저 연결의 실제 Cloud 전달 결과다.
+실제 게임 Runtime의 두 연결 수명, 전체 G1, 실제6대·10방·요금제 용량은 후속 인수다.
+MR·배포 상태는 [구현 기록](mvp-implementation-progress.md)에 기록한다.
