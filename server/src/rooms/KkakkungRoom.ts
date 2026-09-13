@@ -69,6 +69,8 @@ import { LobbyCoordinator } from './LobbyCoordinator.js';
 import { PracticeCoordinator } from './PracticeCoordinator.js';
 import { RematchCoordinator } from './RematchCoordinator.js';
 import { preparationIssue } from './preparation-issue.js';
+
+const MAP_FINALIZING_TIMEOUT_MS = 30_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -815,7 +817,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           this.endPractice(next);
           return;
         }
-        case 'MAP_FINALIZING':
+        case 'MAP_FINALIZING': {
+          const startedAt = deps.slots.phaseStartedAt(this.roomCode);
+          if (startedAt !== null && now - startedAt >= MAP_FINALIZING_TIMEOUT_MS) {
+            this.abortMatch(
+              this.hasUnresolvedMedia() ? 'MEDIA_UNAVAILABLE' : null,
+              'MAP_FINALIZING_TIMEOUT',
+            );
+            return;
+          }
           if (this.hasUnresolvedMedia()) return;
           if (!this.finalizing) this.startFinalizing();
           if (this.pendingLayout) {
@@ -826,6 +836,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             else this.returnToDeviceCheck(`LAYOUT:${result.diagnostic}`);
           }
           return;
+        }
         case 'GAME_LOADING': {
           const verdict = this.loading.evaluate(now);
           if (verdict === 'complete') this.startCountdown(now);
@@ -1287,6 +1298,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           this.releaseRetiredSeat(result.playerId);
         }
       } else if (control.type === 'MEDIA_FAILED') {
+        // Practice instances are already detached here. A failure for their pending
+        // retirement still belongs to this transition, but must never release its barrier.
+        if (
+          this.phase === 'MAP_FINALIZING' &&
+          control.matchId === this.matchId &&
+          this.pendingRetirements.has(this.generationKey(control))
+        ) {
+          this.abortMatch(
+            control.code === 'POLICY_UNKNOWN' ? 'MEDIA_POLICY_UNCERTAIN' : 'MEDIA_UNAVAILABLE',
+            `MEDIA_FINALIZING:${control.code}`,
+          );
+          return;
+        }
         const current = this.playerGenerations.get(control.playerId);
         const instance = this.context.instanceOf(control.playerId);
         if (
