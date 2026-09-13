@@ -55,6 +55,7 @@ export type DeviceManagerDeps = Readonly<{
 
 export interface DeviceManager {
   start(input: { microphone: boolean }): Promise<DeviceStatus>;
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   unlockAudio(): Promise<DeviceStatus>;
   getStatus(): DeviceStatus;
   getCameraStream(): MediaStream | null;
@@ -316,24 +317,35 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     publish({ microphone: 'ready' });
   };
 
+  const updateMicrophoneSource = (enabled: boolean, request: number) => {
+    if (microphoneWanted !== enabled) {
+      microphoneWanted = enabled;
+      microphoneGeneration++;
+      microphoneRequest = null;
+    }
+    if (!enabled) {
+      releaseMicrophone();
+      microphoneRequest = null;
+      publish({ microphone: 'off' });
+      return Promise.resolve();
+    }
+    return acquireMicrophone(request);
+  };
+
   return {
+    async setMicrophone(enabled) {
+      if (disposed) return status;
+      const audioStep = unlockAudio();
+      const microphoneStep = updateMicrophoneSource(enabled, generation);
+      await Promise.race([Promise.all([microphoneStep, audioStep]), closed]);
+      return status;
+    },
     async start(input) {
       if (disposed) return status;
       const request = generation;
       const audioStep = unlockAudio();
-      if (microphoneWanted !== input.microphone) {
-        microphoneWanted = input.microphone;
-        microphoneGeneration++;
-        microphoneRequest = null;
-      }
-      if (!input.microphone) {
-        // 마이크를 끄면 기존 송신 트랙만 닫고 카메라/보정 상태는 유지한다.
-        releaseMicrophone();
-        microphoneRequest = null;
-        publish({ microphone: 'off' });
-      }
       const cameraStep = acquireCamera(request);
-      const microphoneStep = input.microphone ? acquireMicrophone(request) : Promise.resolve();
+      const microphoneStep = updateMicrophoneSource(input.microphone, request);
       await Promise.race([Promise.all([cameraStep, microphoneStep, audioStep]), closed]);
       return status;
     },

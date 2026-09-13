@@ -226,6 +226,7 @@ export type InteractionDeps = Readonly<{
 
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;
@@ -747,6 +748,14 @@ export const createInteractionRuntime = (
       gestures.setMode(nextMode);
     },
     onFailure: (code) => {
+      // A missing face is expected after a failed calibration. Keep its actionable cause
+      // until a new calibration/device attempt; terminal camera/worker errors still replace it.
+      if (
+        code === 'FACE_INVALID' &&
+        lastStatus.calibration === 'failed' &&
+        lastStatus.errorCode?.startsWith('CALIBRATION_')
+      )
+        return;
       patch({ errorCode: code });
     },
   });
@@ -1122,7 +1131,28 @@ export const createInteractionRuntime = (
     return devices;
   };
 
+  const publishMicrophone = async (manager: DeviceManager) => {
+    const microphone = manager.getMicrophoneTrack();
+    const scope = media.getScope();
+    if (microphone && publisher && scope && lifecycle.canOperate() && matchesAcceptedScope(scope)) {
+      try {
+        await publisher.publishMicrophone(microphone, scope);
+      } catch {
+        patch({ microphone: 'failed', errorCode: 'MICROPHONE_PUBLISH_FAILED' });
+      }
+    }
+  };
+
   return {
+    async setMicrophone(enabled) {
+      if (disposed) return lastStatus;
+      const manager = ensureDevices();
+      await manager.setMicrophone(enabled);
+      if (disposed) return lastStatus;
+      reconcileAudio();
+      await publishMicrophone(manager);
+      return lastStatus;
+    },
     async startDevices(input) {
       if (disposed) return lastStatus;
       const manager = ensureDevices();
@@ -1138,21 +1168,7 @@ export const createInteractionRuntime = (
           failVision('VISION_START_FAILED');
         }
       }
-      const microphone = manager.getMicrophoneTrack();
-      const scope = media.getScope();
-      if (
-        microphone &&
-        publisher &&
-        scope &&
-        lifecycle.canOperate() &&
-        matchesAcceptedScope(scope)
-      ) {
-        try {
-          await publisher.publishMicrophone(microphone, scope);
-        } catch {
-          patch({ microphone: 'failed', errorCode: 'MICROPHONE_PUBLISH_FAILED' });
-        }
-      }
+      await publishMicrophone(manager);
       return lastStatus;
     },
 

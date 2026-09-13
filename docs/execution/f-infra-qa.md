@@ -213,6 +213,7 @@ A-01은 `PracticeLayoutTemplate`과 `PracticeLayoutPort.preparePracticeLayout(ra
 - C는 현재 가시 아군만 교환 후보로 삼는다. 기존 후보가 계속 보이면 유지하고, 없으면 셀 제곱 거리·동률 playerId 순으로 고른다. 후보 선택은 서버의 거리·활동·지식 차이 검사를 대신하지 않는다.
 - **READY true는 DEVICE_CHECK에서 로컬 장치 점검을 완료했다는 클라이언트 신고**다. 카메라·vision·calibration이 ready일 때만 보내고 장치 장애·취소는 false로 갱신한다. 마이크는 선택이다. 서버는 신고·인원·단계를 검증하며 원격 웹캠 정상 여부를 독립 증명한다고 쓰지 않는다.
 - vision ready는 모델 로드만 뜻하지 않는다. 현재 유효 얼굴·첫 안전 가공 프레임·살아있는 가공 트랙까지 확보해야 한다. 실패 원인은 DeviceStatus.errorCode로 보고한다.
+- 마이크 단독 변경은 InteractionRuntime.setMicrophone을 사용해 카메라 권한을 새로 요청하지 않는다. 보정 실패의 구체 사유는 이후 FACE_INVALID가 덮지 않으며 새 보정·카메라/Worker 오류는 정상 갱신한다. 새 경기 런타임은 사용자가 선택한 품질을 다시 적용한다.
 - 미니맵은 기억한 허용 출구를 표시할 수 있지만, **3D 포털·소유자 식별은 현재 관찰 중인 출구 벽면에만** 그린다. 폐쇄 시 같은 벽면의 일반 벽을 복원한다. 술래에게 출구를 보내지 않는다.
 - 포즈 탈출 완료는 C가 단독 전송한다. 새롭고 유효한 동일 pose 관측으로 1.2초 유지하고 minSuccessTick도 충족해야 한다. 키 폴백은 challengeId 해시로 고정한 4방향 순환 순서를 사용한다. 최소 시간 조기 거절은 동일 도전·기한·유효 조건을 재확인한 경우에만 새 requestId로 제한 재시도한다.
 
@@ -1149,6 +1150,8 @@ export type LocalAudioStatus = Readonly<{
 export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  /** Changes only microphone permission/source/publication; never acquires a camera. */
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;

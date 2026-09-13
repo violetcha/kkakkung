@@ -430,6 +430,7 @@ export function bindProductRoom(
       deps.interactionFactory,
     );
     created.runtime.setAudioPreferences(audioPreferences);
+    created.runtime.setQualityPreset(snapshot.quality);
     return created;
   }
   function retireAndReport(

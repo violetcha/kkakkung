@@ -779,6 +779,8 @@ export type LocalAudioStatus = Readonly<{
 export type TestToneResult = 'played' | 'unavailable' | 'muted';
 export interface InteractionRuntime {
   startDevices(input: { microphone: boolean }): Promise<DeviceStatus>;
+  /** Changes only microphone permission/source/publication; never acquires a camera. */
+  setMicrophone(enabled: boolean): Promise<DeviceStatus>;
   calibrate(): Promise<DeviceStatus>;
   setContext(context: InteractionContext): void;
   connectMedia(grant: MediaGrant): Promise<void>;

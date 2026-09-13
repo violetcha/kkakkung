@@ -26,6 +26,7 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
     endParticipation: end,
     dispose,
     startDevices: vi.fn(async () => INITIAL_DEVICES),
+    setMicrophone: vi.fn(async () => INITIAL_DEVICES),
     calibrate: vi.fn(async () => INITIAL_DEVICES),
     connectMedia: vi.fn(async () => {}),
     applyAudioPolicy: vi.fn(),
@@ -1103,6 +1104,27 @@ it('recreates a disposed runtime for new match and rejects old view and command 
   f.messages.get('private-view')!(viewFixture({ stateVersion: 500 }));
   expect(f.runtime.getSnapshot().view).toBeNull();
   await f.runtime.leave();
+});
+
+it('reapplies the selected low quality to every new runtime across three rematches', async () => {
+  const f = fixture();
+  try {
+    f.runtime.quality('low');
+    const initial = vi.mocked(f.fake.setQualityPreset).mock.calls.length;
+    for (let i = 0; i < 3; i++) {
+      f.state({ matchId: i === 0 ? 'm' : `rematch-${i}`, phase: 'RESULT', stateVersion: 11 });
+      f.state({ matchId: `rematch-${i + 1}`, phase: 'DEVICE_CHECK', stateVersion: 0 });
+      await vi.waitFor(() =>
+        expect(f.fake.setQualityPreset).toHaveBeenCalledTimes(initial + i + 1),
+      );
+      expect(f.fake.setQualityPreset).toHaveBeenLastCalledWith('low');
+      expect(f.runtime.getSnapshot().quality).toBe('low');
+      f.runtime.quality('low');
+      expect(f.fake.setQualityPreset).toHaveBeenCalledTimes(initial + i + 1);
+    }
+  } finally {
+    await f.runtime.leave();
+  }
 });
 
 it('reports and retires an empty face publication without requesting bindings', async () => {
