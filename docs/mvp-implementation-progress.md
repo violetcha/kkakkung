@@ -8,6 +8,17 @@
 
 ## 2026-09-13 구현 재개
 
+### 미디어 이력 축약의 호환 reader — 209
+
+- [209](https://ssafy.atlassian.net/browse/S15P21C204-209),
+  `fix/S15P21C204-209-durable-retention`, 시작 소스 `c01497be`.
+- 선택 aggregate의 검증·누계 보존, 시각이 포함된 서버 예약 ID, 옛 요청/공유 retry 재생성 거절을
+  연결했다. 기존 파일에 자동으로 새 aggregate를 쓰지 않으며 명령 감사 이력도 보존한다.
+- 실제 디스크와 Coordinator 조립을 포함한5파일108회귀·타입 검사 통과.
+  새 시험 기대값2건과 private 필드 상속 타입 오류는 수정 후 통과했다.
+- [적용 단계와 형식](durable-retention.md)을 따른다. 먼저 reader 정상 배포/last-good을 확인하고
+  후속 journal→retry→사용량 제품 축약을 구현한다. K02 전체 완료·실제 부하 인수는 아니다.
+
 ### 205·206·207 통합 검증
 
 - 소스 `03d2ba4d`의 최종 `pnpm verify` 통과: 246개 파일·2,500개 테스트·E2E14개,

@@ -13,6 +13,8 @@ export type SharedRetryCheckpointOptions = Readonly<{
   fileName?: string;
   /** The single journal lease remains held until this store and its writers have closed. */
   isWritable: () => boolean;
+  /** A durable usage boundary must not be undone by an engine's old full snapshot. */
+  isRetiredReservation?: (reservationId: string) => boolean;
 }>;
 
 function validateState(value: unknown): RetryState {
@@ -68,12 +70,12 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
   private loaded = false;
   private current: Checkpoint<RetryState> | null = null;
 
-  constructor(options: SharedRetryCheckpointOptions) {
+  constructor(private readonly retryOptions: SharedRetryCheckpointOptions) {
     super({
-      opsDataDir: options.opsDataDir,
-      fileName: options.fileName ?? 'revocation-checkpoint.json',
+      opsDataDir: retryOptions.opsDataDir,
+      fileName: retryOptions.fileName ?? 'revocation-checkpoint.json',
       validate: validateState,
-      isWritable: options.isWritable,
+      isWritable: retryOptions.isWritable,
     });
   }
 
@@ -121,7 +123,9 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
         lastSeq: Math.max(this.current?.lastSeq ?? 0, incoming.lastSeq),
         state: validateState([...next.values()]),
       };
+      this.assertReservations(merged.state);
       await super.write(merged);
+      this.assertReservations(merged.state);
       this.current = merged;
       this.loaded = true;
     });
@@ -149,6 +153,12 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
       return result;
     }
     const checkpoint = result.integrity === 'ok' ? capture(result.checkpoint) : null;
+    try {
+      this.assertReservations(checkpoint?.state ?? []);
+    } catch {
+      this.mergeFailed = true;
+      return { integrity: 'corrupt', checkpoint: null };
+    }
     if (this.loaded && JSON.stringify(checkpoint) !== JSON.stringify(this.current)) {
       // Another writer, deletion or an uncoordinated compactor is not a new trusted snapshot.
       this.mergeFailed = true;
@@ -159,5 +169,10 @@ export class SharedRetryCheckpoint extends CheckpointStore<RetryState> {
     return checkpoint === null
       ? { integrity: 'missing', checkpoint: null }
       : { integrity: 'ok', checkpoint: structuredClone(checkpoint) };
+  }
+
+  private assertReservations(intents: RetryState): void {
+    if (intents.some((intent) => this.retryOptions.isRetiredReservation?.(intent.reservationId)))
+      throw new Error('RETRY_RESERVATION_COMPACTED');
   }
 }

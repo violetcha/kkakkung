@@ -33,6 +33,15 @@ export type UsageReservation = Readonly<{
   remoteConfirmedAtEpochMs: number | null;
   releasedAtEpochMs: number | null;
 }>;
+export type UsageCompaction = Readonly<{
+  version: 1;
+  /** Unknown requests at/before this boundary are retired, not fresh reservations. */
+  retiredThroughEpochMs: number;
+  compactedAtEpochMs: number;
+  reservationCount: number;
+  minutes: number;
+  bytes: number;
+}>;
 export type UsageState = Readonly<{
   official: Readonly<{
     checkpoint: OfficialBudgetCheckpoint;
@@ -40,6 +49,8 @@ export type UsageState = Readonly<{
     version: number;
   }> | null;
   reservations: readonly UsageReservation[];
+  /** Absent in legacy files. Readers are deployed before the first aggregate is written. */
+  compacted?: UsageCompaction;
 }>;
 
 export function validateOfficialBudget(
@@ -120,7 +131,29 @@ export function validateUsageRequest(value: unknown): UsageRequest {
 }
 
 export function validateUsageState(value: unknown, providerQuota = false): UsageState {
-  const o = strictObject(value, ['official', 'reservations']);
+  const o = strictObject(value, ['official', 'reservations'], ['compacted']);
+  let compacted: UsageCompaction | undefined;
+  if ('compacted' in o) {
+    const record = strictObject(o.compacted, [
+      'version',
+      'retiredThroughEpochMs',
+      'compactedAtEpochMs',
+      'reservationCount',
+      'minutes',
+      'bytes',
+    ]);
+    if (
+      record.version !== 1 ||
+      Object.values(record).some((item) => !Number.isSafeInteger(item) || (item as number) < 0) ||
+      (record.reservationCount as number) < 1 ||
+      (record.minutes as number) < (record.reservationCount as number) ||
+      (record.bytes as number) < (record.reservationCount as number) ||
+      (record.compactedAtEpochMs as number) - (record.retiredThroughEpochMs as number) <
+        24 * 60 * 60 * 1000
+    )
+      throw new Error('INVALID_USAGE_COMPACTION');
+    compacted = { ...record } as UsageCompaction;
+  }
   let official: UsageState['official'] = null;
   if (o.official !== null) {
     const record = strictObject(o.official, ['checkpoint', 'periodId', 'version']);
@@ -213,9 +246,16 @@ export function validateUsageState(value: unknown, providerQuota = false): Usage
       throw new Error('INVALID_RELEASED_RESERVATION');
     return { ...record, request } as UsageReservation;
   });
-  if (!providerQuota && !official && reservations.length)
+  if (!providerQuota && !official && (reservations.length || compacted))
     throw new Error('RESERVATIONS_WITHOUT_OFFICIAL_HISTORY');
-  return { official, reservations };
+  const totalMinutes = reservations.reduce(
+    (sum, item) => sum + item.minutes,
+    compacted?.minutes ?? 0,
+  );
+  const totalBytes = reservations.reduce((sum, item) => sum + item.bytes, compacted?.bytes ?? 0);
+  if (!Number.isSafeInteger(totalMinutes) || !Number.isSafeInteger(totalBytes))
+    throw new Error('USAGE_OVERFLOW');
+  return { official, reservations, ...(compacted ? { compacted } : {}) };
 }
 
 export class UsageCheckpoint extends CheckpointStore<UsageState> {

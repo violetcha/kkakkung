@@ -135,10 +135,6 @@ class Coordinator implements MediaCoordinatorRuntime {
     this.gateway = gateway;
     this.journal = new OperationJournal({ opsDataDir: config.opsDataDir });
     const writable = () => this.journal.writable;
-    const retryCheckpoint = new SharedRetryCheckpoint({
-      opsDataDir: config.opsDataDir,
-      isWritable: writable,
-    });
     const cleanupCheckpoint = new CheckpointStore({
       opsDataDir: config.opsDataDir,
       fileName: 'cleanup-checkpoint.json',
@@ -156,6 +152,11 @@ class Coordinator implements MediaCoordinatorRuntime {
       providerQuota: config.operatingMode === 'continuous',
       now: nowEpochMs,
       canIssue: () => ({ allowed: this.canIssue() }),
+    });
+    const retryCheckpoint = new SharedRetryCheckpoint({
+      opsDataDir: config.opsDataDir,
+      isWritable: writable,
+      isRetiredReservation: (reservationId) => usageBudget.isRetiredReservation(reservationId),
     });
     const audit = new OperationsAudit({
       opsDataDir: config.opsDataDir,

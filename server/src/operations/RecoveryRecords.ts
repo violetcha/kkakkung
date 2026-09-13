@@ -127,10 +127,17 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
   if (input.usage.integrity === 'corrupt') reasons.add('USAGE_INTEGRITY');
   else if (input.usage.integrity === 'ok') {
     try {
-      reservations = validateUsageState(
-        { official: input.usage.official, reservations: input.usage.reservations },
+      const verified = validateUsageState(
+        {
+          official: input.usage.official,
+          reservations: input.usage.reservations,
+          ...('compacted' in input.usage ? { compacted: input.usage.compacted } : {}),
+        },
         input.usage.budgetPolicy === 'provider-quota',
-      ).reservations;
+      );
+      if (verified.compacted && verified.compacted.compactedAtEpochMs > input.epochNowMs)
+        throw new Error('USAGE_COMPACTION_FUTURE');
+      reservations = verified.reservations;
     } catch {
       reasons.add('USAGE_INTEGRITY');
     }
@@ -138,7 +145,7 @@ export function reconcileRecoveryRecords(input: RecoveryRecordsInput): RecoveryR
   if (input.usage.integrity === 'missing' && (records.length > 0 || input.journal.lastSeq > 0))
     reasons.add('USAGE_HISTORY_MISSING');
   if (
-    reservations.length > 0 &&
+    (reservations.length > 0 || input.usage.compacted !== undefined) &&
     (input.journal.integrity === 'missing' || input.journal.lastSeq === 0)
   )
     reasons.add('JOURNAL_HISTORY_MISSING');
