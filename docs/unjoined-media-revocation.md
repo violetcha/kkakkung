@@ -70,6 +70,29 @@ c47f17b98f81861e7f10f86a07944bc76e41716e6057203b59e809005ea6d9fa
 
 ## 실행·보존
 
+### 재개 후 실제 Cloud 통과 — 2026-09-13 23:20 KST
+
+소스 `e41e234692ecd8f205a45b37241fa90120c1e2f4`의 실제 MC-PUBLIC-03은
+159,852ms/exit0, 정상29·정리16호출로10개 조건을 모두 통과했다.
+삭제 뒤120,000ms를 기다렸고 생성/삭제/안정화/재생성/최종 목록 모두 첫 조회에서 일치했다.
+재생성된 세 방의 SID가 이전과 다르며 마지막에도 유지됨을 확인했다.
+기존 네 토큰은 생성 전·최초 생성 후·재생성 후 모두 거절됐고 두 정상 대조군은
+재생성 전후에 접속했다.16번 SDK 결과의 토큰 유효기간을 접속 전후 검사했다.
+원본/전달 대상과 대조군의 최종 회수·모든 방의 부재도 확인했다.
+
+emptyRoomRevocationVerified=true이며 productPublicReady/promotionAllowed는 false다.
+제품 소유 구조와 실제 부재 함수는 사용했지만 서명은 진단용이고 제품 발급기/Coordinator는
+사용하지 않았다. 실제 미디어 게시·장치 시험도 아니다. 이전 즉시 재생성의 실패 이력은
+보존하며 이번 결과는 유계 안정화 뒤의 새 SID·토큰 경계를 입증한다.
+
+```text
+/var/lib/jenkins/.local/kkakkung-diagnostics/unjoined-215e3-20260913-e41e2346/.local/qa/unjoined-revocation-1789309047431
+unjoined-revocation-evidence.json SHA-256:
+a1391176b05062da3375fb583322d7b3e6ae764b6a36370bfffbd486489f73ed
+preflight.json SHA-256:
+739068b8b6c07883a9c1843dff9cc1622367149a5aec539ca80e77dcce87fe84
+```
+
 ### 재생성 관측 보강
 
 사용자 재개 요청 뒤 기존 실패의 관측 방법을 점검했다.
