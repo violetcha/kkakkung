@@ -1,6 +1,68 @@
 # MVP 작업 중단·재개 기록 — 2026-09-13
 
-## 최신 사용자 요청 — 구현 재개
+## 최신 요청 — 현재 내구성 수정 마감·잔여 계획 정리 후 중지
+
+사용자는 재개 중 **현재 작업까지만 진행하고 MVP 완성 단계와 실행계획을 꼼꼼히 정리**하도록
+요청했다. 마감 범위는 215의 전달/예약 내구성 수정, 검증·커밋·푸시·MR 병합·배포 확인과
+계획 문서다. 다음 Cloud 하네스·실행과 새 기능 구현은 시작하지 않는다. 운영 서비스는
+팀 테스트용으로 유지하며 팀원 SSO와 도망자 아이템 제외는 바꾸지 않는다.
+
+### 마감 산출물
+
+- !145 소스 `e533d368`의 Jenkins MR125/GitLab191901 SUCCESS 후 develop
+  `9c7d810fd06b215729dda89cca4fd961edbf134d` 병합. 배포116 SUCCESS,
+  실제 기존 팀 모드 Cloud DP-06 PASS73.99초, 23:44:16 KST READY/OPEN·미해결0·
+  last-good·게임/웹 동일 SHA·SSO302/익명운영403을 확인했다.
+- 전달 내구성 D `d49c826`은 전체 261파일2,731개·22 E2E, 예약 준비 R `52b29c5`는
+  전체 262파일2,748개·22 E2E를 통과했다. D/R 코드 통합은 `b23b43d`다.
+  문서 충돌은 최신 검증 결과를 보존해 해결했고 제품 코드 충돌은 없었다.
+- 두 수정과 최신 계획을 같은 [MR !146](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/146)
+  /`fix/S15P21C204-215-split-durable-boundaries`로 마감한다. 이전 소스 f59dd55의
+  대기 Jenkins MR126은 중복 검증을 피하려 의도적으로 취소했으며 코드 실패가 아니다.
+  **정확한 최종 소스·CI·병합·배포 결과는 !146 본문과 Jira215에 후속 기록한다.**
+- 215는 전체 제품/Cloud 권한 인수가 남아 진행 중이다. 미확인 요청 보존은 안전 차단의
+  완료이며 해소/서비스 재개 완료가 아니다. split 예약 준비도 단일 공유 lease 공백까지
+  해결하지 않는다. [잔여 실행계획](mvp-remaining-execution-2026-09-13.md)에 구체 종료 기준을 기록했다.
+
+### 보존한 초안과 재개 위치
+
+C 회수 전용 근거 포트는 다음 작업트리에 **미커밋 10파일**로 보존한다.
+
+- 폴더: `.local/worktrees/mvp-split-cloud-20260913`
+- 브랜치: `test/S15P21C204-215-split-recovery-cloud`
+- HEAD: `d4b0c9bcad672574be14ad318acd4e793a7ffdc2` (선행 !145 통합, D/R 마감 통합 전)
+- 구현: `VerifiedRevocationBasis.ts`, `RemoteRevocation.ts`, `ForwardedMediaEdge.ts`,
+  `SplitMediaPolicyBindings.ts`, `RecoveryCleanupBindings.ts`.
+- 시험: `component-revocation-fixture.ts`, `verified-revocation-basis.test.ts`,
+  `forwarded-media-edge.test.ts`, `split-grant-issuer.test.ts`, `recovery-cleanup-bindings.test.ts`.
+- 관련 6파일146개·QA 타입·변경10파일 lint/포맷·역할 E 범위0위반 PASS.
+  동료 검토의 project 불일치/큐 대기 중 소유권 상실 문제도 보완했다.
+  전체 verify·원격 원문 적용·제품 통합·Cloud 인수·구현 커밋/푸시/MR은 미완료다.
+
+재개할 때 이 초안을 덮어쓰지 않는다. D/R 최종 develop을 통합하고 실제 MC03 원문
+hash/source/lock/project/관측 namespace와 신규 실측 clock을 연결한 뒤 MC04 계약·하네스를
+작성한다. 회수 포트만으로 전체 SUPPORTED/발급/readiness를 열지 않는다. 구체 예산·시험
+순서·미확인 해소·단일 모드 공백은 잔여 계획 3절을 따른다.
+
+D 마감 작업트리는 `.local/worktrees/mvp-durable-split-20260913`, R 검증 작업트리는
+`.local/worktrees/mvp-issuance-intent-20260913`다. R은 D/MR146에 포함하므로 별도 중복 MR을
+만들지 않는다. 보존한 C 이외 새 작업을 자동 재개하지 않는다.
+
+손동작 내부 2모델·MediaPipe SDK 번들 권리는 다시 확인했지만 새로운 확정 근거를 얻지 못했다.
+모델 카드에는 해당 라이선스 명시가 없고 npm의 Apache 메타데이터만으로 번들 고지를 확정하지
+않았다. 원문/파일 hash는 `.local/audit/w13-license-recheck-20260913.md`에 보존한다.
+214의 기존 7개 모델 완료를 반복하지 않는다. 공급자나 팀원에게 외부 메시지는 보내지 않았다.
+
+### 다음 실행의 끝까지
+
+잔여는 W02 실제 권한/복구 → W07 audience 통합 → W06/W17 관측/제품 UI →
+최종 렌더·실제6대/초보 → W19 비용 모델/용량 확보/단계 부하 → W20 같은 이미지 인수다.
+권리·문의·경보·외부 백업 준비는 초반부터 병행한다. 각 작업의 코드 근거·선행·종료 기준·
+사람/장비/결정 대기는 [최신 잔여 실행계획](mvp-remaining-execution-2026-09-13.md)에 모았다.
+
+아래 재개·중단 내용은 역사 기록이다. 현재 요청은 이 절을 우선한다.
+
+## 이전 사용자 요청 — 구현 재개
 
 사용자가 명시적으로 재개를 요청했다. 원격 develop `45f02c101ab923428173ce2ac6765e5f9c6209dd`와
 Jenkins 배포115 SUCCESS를 다시 확인하고 아래 잔여 순서의 W02부터 이어간다.
