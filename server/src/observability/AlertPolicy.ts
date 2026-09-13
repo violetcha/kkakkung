@@ -54,7 +54,7 @@ export const ALERT_RULES: Readonly<Record<AlertId, AlertRule>> = Object.freeze({
     severity: 'warning',
     requiresManualClear: false,
     locksOperations: false,
-    description: 'media.api.total60s reached 90 % of the 900 calls / 60 s ceiling',
+    description: 'media.api.total60s reached 90 % of the configured calls / 60 s ceiling',
   },
   MEDIA_API_RATE_LIMITED: {
     id: 'MEDIA_API_RATE_LIMITED',
@@ -126,6 +126,8 @@ export type ReadinessState = 'READY' | 'RECOVERING' | 'LOCKED';
 
 export type AlertPolicyOptions = Readonly<{
   now: () => number;
+  /** Same total ceiling used by ApiBudget. Omission keeps the 900-call default. */
+  mediaApiTotalLimit?: number;
   /** Receives `alert.raised` / `alert.cleared` events. Usually `createStructuredEventLogger(...).emit`. */
   onEvent?: (event: StructuredEvent) => void;
 }>;
@@ -137,11 +139,21 @@ type MutableAlert = {
 export class AlertPolicy {
   private readonly now: () => number;
   private readonly onEvent: AlertPolicyOptions['onEvent'];
+  private readonly mediaApiTotalLimit: number;
+  private readonly mediaApiNearLimit: number;
   private readonly alerts = new Map<AlertId, MutableAlert>();
 
   constructor(options: AlertPolicyOptions) {
     this.now = options.now;
     this.onEvent = options.onEvent;
+    this.mediaApiTotalLimit = options.mediaApiTotalLimit ?? 900;
+    if (
+      !Number.isSafeInteger(this.mediaApiTotalLimit) ||
+      this.mediaApiTotalLimit < 1 ||
+      this.mediaApiTotalLimit > 900
+    )
+      throw new Error('INVALID_ALERT_API_BUDGET');
+    this.mediaApiNearLimit = Math.ceil((this.mediaApiTotalLimit * 9) / 10);
   }
 
   /** Evaluates one registered metric sample. Never throws. */
@@ -151,9 +163,9 @@ export class AlertPolicy {
         case 'media.api.total60s':
           this.set(
             'MEDIA_API_BUDGET_NEAR_LIMIT',
-            sample.value >= ALERT_THRESHOLDS.mediaApiTotal60sNearLimit,
+            sample.value >= this.mediaApiNearLimit,
             sample,
-            `total60s=${sample.value} >= ${ALERT_THRESHOLDS.mediaApiTotal60sNearLimit}`,
+            `total60s=${sample.value}; warning=${this.mediaApiNearLimit}; limit=${this.mediaApiTotalLimit}`,
           );
           return;
         case 'media.api.429':
