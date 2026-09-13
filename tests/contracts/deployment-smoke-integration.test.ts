@@ -1,6 +1,6 @@
 // Actual public A/B/C/E/F consumers. Transport counters below are fixtures, not Cloud RTP evidence.
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type {
   AudioPolicy,
   MediaBindings,
@@ -11,53 +11,73 @@ import { runDeploymentSmoke } from '../cloud/DeploymentSmokeHarness.js';
 import type { DeploymentMediaProbe } from '../cloud/DeploymentInteraction.js';
 import { localDeploymentDevices, localDeploymentPlan } from '../fixtures/deployment-smoke-plan.js';
 
-it('DP06 closes a partially joined game client and drains after browser initialization fails', async () => {
-  const opsToken = randomUUID();
-  const server = await startProductServerProcess(opsToken);
-  try {
-    await expect
-      .poll(async () => (await server.inspect()).readiness?.state, { timeout: 5000 })
-      .toBe('READY');
-    const headers = { authorization: `Bearer ${opsToken}`, 'content-type': 'application/json' };
-    const requestId = randomUUID();
-    await fetch(server.endpoint + '/api/operations/commands', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ requestId, action: 'resume' }),
+it.each(['DRAINING', 'LOCKED'])(
+  'DP06 confirms terminal drain in %s after browser initialization fails',
+  async (admission) => {
+    const opsToken = randomUUID();
+    const server = await startProductServerProcess(opsToken);
+    const realFetch = globalThis.fetch;
+    let failed = false;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const response = await realFetch(input, init);
+      if (
+        failed &&
+        String(input) === server.endpoint + '/api/operations/status' &&
+        admission === 'LOCKED'
+      ) {
+        const status = await response.json();
+        return Response.json({ ...status, readiness: 'LOCKED', admission });
+      }
+      return response;
     });
-    await expect
-      .poll(
-        async () =>
-          (
-            (await (
-              await fetch(server.endpoint + `/api/operations/commands/${requestId}`, { headers })
-            ).json()) as { status: string }
-          ).status,
-      )
-      .toBe('succeeded');
-    const report = await runDeploymentSmoke({
-      mode: 'local-contract',
-      baseUrl: server.endpoint,
-      origin: 'http://localhost:5173',
-      cookie: '',
-      opsToken,
-      preflight: localDeploymentPlan(),
-      deviceManifest: localDeploymentDevices,
-      async createProbe() {
-        throw new Error('SYNTHETIC_BROWSER_INIT_FAILURE');
-      },
-    });
-    expect(report).toMatchObject({
-      status: 'FAIL',
-      failureCode: 'DP06_SESSION_OR_JOIN_FAILED',
-      participants: 0,
-      cleanup: { drainConfirmed: true, resumed: false },
-    });
-    expect((await server.inspect()).participantCount).toBe(0);
-  } finally {
-    await server.close();
-  }
-}, 30_000);
+    try {
+      await expect
+        .poll(async () => (await server.inspect()).readiness?.state, { timeout: 5000 })
+        .toBe('READY');
+      const headers = { authorization: `Bearer ${opsToken}`, 'content-type': 'application/json' };
+      const requestId = randomUUID();
+      await fetch(server.endpoint + '/api/operations/commands', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ requestId, action: 'resume' }),
+      });
+      await expect
+        .poll(
+          async () =>
+            (
+              (await (
+                await fetch(server.endpoint + `/api/operations/commands/${requestId}`, { headers })
+              ).json()) as { status: string }
+            ).status,
+        )
+        .toBe('succeeded');
+      const report = await runDeploymentSmoke({
+        mode: 'local-contract',
+        baseUrl: server.endpoint,
+        origin: 'http://localhost:5173',
+        cookie: '',
+        opsToken,
+        preflight: localDeploymentPlan(),
+        deviceManifest: localDeploymentDevices,
+        async createProbe() {
+          failed = true;
+          throw new Error('SYNTHETIC_BROWSER_INIT_FAILURE');
+        },
+      });
+      expect(report).toMatchObject({
+        status: 'FAIL',
+        failureCode: 'DP06_SESSION_OR_JOIN_FAILED',
+        participants: 0,
+        cleanup: { drainConfirmed: true, resumed: false },
+      });
+      expect((await server.inspect()).participantCount).toBe(0);
+    } finally {
+      fetchSpy.mockRestore();
+      await server.close();
+    }
+  },
+  30_000,
+);
 
 it('DP06 local harness follows real six-client grant/phase/input/retirement APIs', async () => {
   const opsToken = randomUUID();
