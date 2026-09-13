@@ -49,6 +49,7 @@ import { createMetricRegistry, createProcessSampler } from './observability/Metr
 import { createLogOptions, createStructuredEventLogger } from './observability/StructuredEvents.js';
 import { createAlertPolicy } from './observability/AlertPolicy.js';
 import { ProductSessionStore } from './session/ProductSessionStore.js';
+import { ProductHttpLimiter } from './session/ProductHttpLimiter.js';
 import { createReservationCleanup } from './session/ReservationCleanup.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
 import { clientIp, createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
@@ -229,6 +230,15 @@ export function createApplication<State = unknown>(
     const header = req.headers.authorization;
     return typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : null;
   };
+  const httpLimiter = product
+    ? new ProductHttpLimiter({
+        now: monotonicNow,
+        clientIp: (request) => clientIp(request, product.trustProxy),
+        authorize: (header) => authorize?.(header) === true,
+        sessionId: (token) => productSessions.authenticate(token)?.sessionId ?? null,
+      })
+    : null;
+  const protect = (handler: express.RequestHandler) => httpLimiter?.wrap(handler) ?? handler;
 
   const server = new Server({
     transport,
@@ -328,9 +338,9 @@ export function createApplication<State = unknown>(
           app.use(createInvitationRoutes({ invites, authorize }));
           if (media?.createOperationsHandlers) {
             const handlers = media.createOperationsHandlers(authorize);
-            app.post(OPERATIONS_ROUTES.commands, handlers.command);
-            app.get(OPERATIONS_ROUTES.snapshot, handlers.snapshot);
-            app.get(OPERATIONS_ROUTES.status, handlers.status);
+            app.post(OPERATIONS_ROUTES.commands, protect(handlers.command));
+            app.get(OPERATIONS_ROUTES.snapshot, protect(handlers.snapshot));
+            app.get(OPERATIONS_ROUTES.status, protect(handlers.status));
           } else
             app.use(
               createOperationsRoutes({
@@ -348,41 +358,47 @@ export function createApplication<State = unknown>(
           if (!auth) res.status(401).json({ error: 'INVALID_SESSION' });
           return auth;
         };
-        app.post(MEDIA_ROUTES.grants, async (req, res) => {
-          res.setHeader('Cache-Control', 'no-store');
-          const auth = authenticate(req, res);
-          if (!auth) return;
-          const parsed = mediaGrantRequestSchema.safeParse(req.body);
-          if (!parsed.success) return void res.status(400).json({ error: 'INVALID_REQUEST' });
-          const room = directory.get(auth.roomCode);
-          if (!room || room.matchId !== parsed.data.matchId)
-            return void res.status(409).json({ error: 'WRONG_SCOPE' });
-          const scope = room.mediaScopeFor(auth.playerId, parsed.data.purpose);
-          if (!scope) return void res.status(409).json({ error: 'NOT_READY' });
-          if (!media) return void res.status(503).json({ error: 'MEDIA_UNAVAILABLE' });
-          if (!operationsReady()) return void res.status(409).json({ error: 'NOT_READY' });
-          const result = await room.requestMediaGrant(
-            auth.playerId,
-            parsed.data.purpose,
-            parsed.data.previousReceiverGeneration ?? null,
-          );
-          if (!result) return void res.status(409).json({ error: 'WRONG_SCOPE' });
-          if (result.status === 'ready') return void res.status(200).json(result.grant);
-          res.status(result.status === 'unknown' ? 503 : 409).json({ error: result.code });
-        });
-        app.post(MEDIA_ROUTES.report, (req, res) => {
-          res.setHeader('Cache-Control', 'no-store');
-          const auth = authenticate(req, res);
-          if (!auth) return;
-          const parsed = mediaStatusReportSchema.safeParse(req.body);
-          if (!parsed.success) return void res.status(400).json({ error: 'INVALID_REQUEST' });
-          const room = directory.get(auth.roomCode);
-          if (!room || room.matchId !== parsed.data.matchId)
-            return void res.status(409).json({ error: 'WRONG_SCOPE' });
-          if (!room.acceptMediaReport(auth.playerId, parsed.data))
-            return void res.status(409).json({ error: 'WRONG_SCOPE' });
-          res.status(204).end();
-        });
+        app.post(
+          MEDIA_ROUTES.grants,
+          protect(async (req, res) => {
+            res.setHeader('Cache-Control', 'no-store');
+            const auth = authenticate(req, res);
+            if (!auth) return;
+            const parsed = mediaGrantRequestSchema.safeParse(req.body);
+            if (!parsed.success) return void res.status(400).json({ error: 'INVALID_REQUEST' });
+            const room = directory.get(auth.roomCode);
+            if (!room || room.matchId !== parsed.data.matchId)
+              return void res.status(409).json({ error: 'WRONG_SCOPE' });
+            const scope = room.mediaScopeFor(auth.playerId, parsed.data.purpose);
+            if (!scope) return void res.status(409).json({ error: 'NOT_READY' });
+            if (!media) return void res.status(503).json({ error: 'MEDIA_UNAVAILABLE' });
+            if (!operationsReady()) return void res.status(409).json({ error: 'NOT_READY' });
+            const result = await room.requestMediaGrant(
+              auth.playerId,
+              parsed.data.purpose,
+              parsed.data.previousReceiverGeneration ?? null,
+            );
+            if (!result) return void res.status(409).json({ error: 'WRONG_SCOPE' });
+            if (result.status === 'ready') return void res.status(200).json(result.grant);
+            res.status(result.status === 'unknown' ? 503 : 409).json({ error: result.code });
+          }),
+        );
+        app.post(
+          MEDIA_ROUTES.report,
+          protect((req, res) => {
+            res.setHeader('Cache-Control', 'no-store');
+            const auth = authenticate(req, res);
+            if (!auth) return;
+            const parsed = mediaStatusReportSchema.safeParse(req.body);
+            if (!parsed.success) return void res.status(400).json({ error: 'INVALID_REQUEST' });
+            const room = directory.get(auth.roomCode);
+            if (!room || room.matchId !== parsed.data.matchId)
+              return void res.status(409).json({ error: 'WRONG_SCOPE' });
+            if (!room.acceptMediaReport(auth.playerId, parsed.data))
+              return void res.status(409).json({ error: 'WRONG_SCOPE' });
+            res.status(204).end();
+          }),
+        );
       }
       const onError: ErrorRequestHandler = (_error, _req, res, _next) => {
         res.status(400).json({ error: 'INVALID_REQUEST' });
@@ -490,7 +506,8 @@ export function createApplication<State = unknown>(
         installHttpBoundary(httpServer, {
           allowedOrigins: config.allowedOrigins,
           rawBodyPaths: [MEDIA_ROUTES.webhook],
-          allowRequest: (request, path) => {
+          allowRequest: (request, path, response) => {
+            if (httpLimiter && !httpLimiter.allow(request, path, response)) return false;
             if (
               !entryLimiter ||
               (!path.startsWith('/api/sessions') && !path.startsWith('/matchmake/'))
@@ -518,6 +535,16 @@ export function createApplication<State = unknown>(
       histogram.enable();
       metricsTimer = setInterval(() => {
         sampleProcess();
+        if (httpLimiter) {
+          for (const [name, value] of Object.entries(httpLimiter.totals)) {
+            emitMetric({
+              name: `http.requests.${name}`,
+              value,
+              unit: 'count',
+              atMs: monotonicNow(),
+            });
+          }
+        }
         for (const sample of metrics.drain()) {
           alerts.observe(sample);
           logger.info({ metric: sample }, 'metric');

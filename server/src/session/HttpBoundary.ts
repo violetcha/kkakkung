@@ -36,8 +36,9 @@ export type BoundaryPolicy = Readonly<{
   /** Exact paths whose bodies are left untouched (raw-body signature verification). */
   rawBodyPaths?: readonly string[];
   bodyLimitBytes?: number;
+  bodyTimeoutMs?: number;
   /** Optional rate gate before any body read/JSON parsing or matchmaking allocation. */
-  allowRequest?: (request: IncomingMessage, path: string) => boolean;
+  allowRequest?: (request: IncomingMessage, path: string, response: ServerResponse) => boolean;
   onRejected?: (info: { path: string; status: number; code: string }) => void;
 }>;
 
@@ -55,6 +56,9 @@ function reject(res: ServerResponse, status: number, code: string) {
  */
 export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) {
   const limit = policy.bodyLimitBytes ?? HTTP_BODY_LIMIT_BYTES;
+  const bodyTimeoutMs = policy.bodyTimeoutMs ?? 5000;
+  if (!Number.isSafeInteger(bodyTimeoutMs) || bodyTimeoutMs <= 0)
+    throw new Error('INVALID_BODY_TIMEOUT');
   const cappedPrefixes = policy.cappedPrefixes ?? ['/matchmake/', '/api/'];
   const rawBodyPaths = new Set(policy.rawBodyPaths ?? []);
   const downstream = server.listeners('request') as Listener[];
@@ -71,8 +75,8 @@ export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) 
     }
   };
   const boundary: Listener = (req, res) => {
-    const path = (req.url ?? '/').split('?')[0] ?? '/';
-    if (policy.allowRequest && !policy.allowRequest(req, path)) {
+    const path = ((req.url ?? '/').split('?')[0] ?? '/').toLowerCase();
+    if (policy.allowRequest && !policy.allowRequest(req, path, res)) {
       reject(res, 429, 'RATE_LIMITED');
       req.resume();
       return;
@@ -102,11 +106,34 @@ export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) 
     const chunks: Buffer[] = [];
     let received = 0;
     let finished = false;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      chunks.length = 0;
+      res.setHeader('connection', 'close');
+      res.once('finish', () => req.destroy());
+      reject(res, 408, 'BODY_TIMEOUT');
+      req.resume();
+    }, bodyTimeoutMs);
+    timer.unref();
+    const stop = () => {
+      clearTimeout(timer);
+      chunks.length = 0;
+    };
+    req.once('aborted', () => {
+      finished = true;
+      stop();
+    });
+    res.once('close', () => {
+      finished = true;
+      stop();
+    });
     req.on('data', (chunk: Buffer) => {
       if (finished) return;
       received += chunk.length;
       if (received > limit) {
         finished = true;
+        stop();
         policy.onRejected?.({ path, status: 413, code: 'PAYLOAD_TOO_LARGE' });
         reject(res, 413, 'PAYLOAD_TOO_LARGE');
         req.destroy();
@@ -117,7 +144,9 @@ export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) 
     req.on('end', () => {
       if (finished) return;
       finished = true;
+      clearTimeout(timer);
       const raw = Buffer.concat(chunks).toString('utf8');
+      chunks.length = 0;
       const contentType = String(req.headers['content-type'] ?? '');
       const target = req as IncomingMessage & { body?: unknown; _body?: boolean };
       if (contentType.includes('application/json')) {
@@ -135,6 +164,7 @@ export function installHttpBoundary(server: HttpServer, policy: BoundaryPolicy) 
     req.on('error', () => {
       if (!finished) {
         finished = true;
+        stop();
         reject(res, 400, 'INVALID_REQUEST');
       }
     });
