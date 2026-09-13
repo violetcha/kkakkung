@@ -98,6 +98,9 @@ export class PreviousGenerationCleanup {
       deleteRoom: (roomName: string, context: CleanupCallContext) => Promise<unknown>;
       checkpoint: (report: CleanupReport, context: CleanupCallContext) => Promise<void>;
       onUnresolved?: (report: CleanupReport) => void;
+      /** Revalidate durable revocation/accounting and original/refreshed token expiry.
+       * Absence from a global list or a JWT expiry alone is never sufficient. */
+      canReuseRetiredRoom?: (roomName: string) => boolean;
     }>,
   ) {
     if (!validNamespace(options.namespace)) throw new Error('INVALID_NAMESPACE');
@@ -261,16 +264,20 @@ export class PreviousGenerationCleanup {
       }
 
       let receivedRoomList = false;
+      let initialInventoryComplete = false;
+      const initiallyObservedRooms = new Set<string>();
       try {
         const listed = await checked(() => this.options.listRooms(context));
         receivedRoomList = true;
         if (!Array.isArray(listed)) throw new Error('INVALID_ROOM_LIST');
         for (const room of listed) {
           if (!room || typeof room.name !== 'string') throw new Error('INVALID_ROOM_LIST');
+          initiallyObservedRooms.add(room.name);
           if (!safeRoom(room.name)) continue;
           rooms.add(room.name);
           if (!recordedRooms.has(room.name)) historyComplete = false;
         }
+        initialInventoryComplete = true;
       } catch {
         assertCurrent();
         unresolved++;
@@ -278,8 +285,21 @@ export class PreviousGenerationCleanup {
         // that the verified local history is missing. Invalid returned data still does.
         if (receivedRoomList) historyComplete = false;
       }
+      const retiredAbsentRooms = new Set<string>();
+      if (initialInventoryComplete && historyComplete && unresolved === 0) {
+        for (const name of rooms) {
+          if (
+            initiallyObservedRooms.has(name) ||
+            records.some((record) => record.roomName === name && record.state !== 'REVOKED')
+          )
+            continue;
+          if (this.options.canReuseRetiredRoom?.(name) !== true) continue;
+          retiredAbsentRooms.add(name);
+          rooms.delete(name);
+        }
+      }
       remaining = rooms.size;
-      // Recorded-only rooms also need participant enumeration: the global list is not exhaustive proof.
+      // Unconfirmed/unexpired recorded rooms still require all three per-room checks.
       await forEachRoom(rooms, async (roomName) => {
         try {
           const participants = await checked(() =>
@@ -381,6 +401,14 @@ export class PreviousGenerationCleanup {
           unresolved++;
         }
       });
+      // Reappearance, failed inventory, changed durable proof or cancellation never becomes success.
+      for (const name of retiredAbsentRooms) {
+        assertCurrent();
+        if (this.options.canReuseRetiredRoom?.(name) !== true) {
+          unresolved++;
+          historyComplete = false;
+        }
+      }
       try {
         await checked(() => this.options.checkpoint(Object.freeze(report()), context));
       } catch {

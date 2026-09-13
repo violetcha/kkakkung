@@ -47,7 +47,9 @@ attested에서는 기존 공식 사용량 revision/시각 대조도 계속 통�
 4. succeeded 이후 READY·미확인 0·DRAINING을 다시 확인하고 별도 `resume`를 접수·종결 확인한다.
 
 최초 기동의 기록 누락 예외는 [별도 복구 절차](failed-startup-recovery.md)를 따른다.
-장기 기록 축약과 많은 과거 방에 대한 복구 시간 상한은 K02에 남으며 이 변경만으로 해결되지 않는다.
+장기 기록 축약과 이미 회수·정산되고 원래/갱신 토큰 기한까지 지난 방의 조회 개선은
+[K02 내구 이력 절차](durable-retention.md#축약-전-과거-방의-재조회)를 따른다.
+이는 기존 회수 보호와 checkpoint/resume 분리를 유지하며 실제 Cloud 부하 인수를 대신하지 않는다.
 
 ## 검증 범위
 
