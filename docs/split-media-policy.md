@@ -29,7 +29,9 @@ ForwardedMediaEdge는 원본의 신원·SID·트랙을 전달 전후에 재조�
 전달이 정리될 때까지 기다린 뒤 최종 부재를 확인한다. 늦은 성공으로 생긴 clone도 정리한다.
 
 원격 forward의 처리 결과 자체가 불명확한 경우에는, 이후 한 번의 부재만으로 성공을 추정하지
-않는다. 현재 프로세스의 해당 세대를 UNRESOLVED로 보존하고 예약 해제·새 입장을 막는다.
+않는다. 해당 세대를 UNRESOLVED로 보존하고 예약 해제·새 입장을 막는다.
+[전달 요청 내구 기록](split-forward-durability.md)은 전송 전 journal fsync와 재기동 reader까지
+연결해 프로세스 종료 뒤에도 미확인 효과를 보존한다. 이 변경의 실제 Cloud 인수는 후속이다.
 재기동 복구의 실제 provider 경계는 별도 Cloud 인수가 필요하다. 알 수 없는 처리를 성공으로
 바꾸기 위해 journal을 지우거나 capability를 임의 승격하지 않는다.
 
