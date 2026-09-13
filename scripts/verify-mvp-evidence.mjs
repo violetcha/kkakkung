@@ -11,7 +11,16 @@
 // Exit 0 when every required gate PASSes and publication conditions hold, 1 otherwise, 3 when the
 // manifest is missing. The report is written in both cases so the honest state is always visible.
 
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { isCommit, isObject } from './evidence-values.mjs';
+import {
+  createEvidenceReader,
+  evaluateRelease,
+  readBoundArtifact,
+  validateGateArtifact,
+} from './gate-artifacts.mjs';
 import { basename, resolve } from 'node:path';
 
 export const GATE_STATUSES = Object.freeze([
@@ -38,66 +47,74 @@ export const PENDING_GATES = Object.freeze(['G3-C']);
 const MARK_START = '<!-- mvp-gate-report:start -->';
 const MARK_END = '<!-- mvp-gate-report:end -->';
 
-/**
- * Pure evaluation. `exists(ref)` says whether an evidence reference resolves to a non-empty file
- * or directory; `headCommit` is the checkout being reported (40 hex) or null when unknown.
- */
-export function evaluateGates(manifest, exists, headCommit) {
-  const gates = Array.isArray(manifest.gates) ? manifest.gates : [];
-  const results = gates.map((g) => {
+/** Evaluate the bytes supplied by the reader against the actual checkout/build, not manifest claims. */
+export function evaluateGates(manifest, read, headCommit, options = {}) {
+  const source = isObject(manifest) ? manifest : {};
+  const gates = Array.isArray(source.gates) ? source.gates : [];
+  const build = { sourceCommit: headCommit, lockfileHash: options.lockfileHash };
+  const now = options.nowEpochMs ?? Date.now();
+  const manifestProblems = [];
+  if (!isCommit(headCommit) || source.headCommit !== headCommit)
+    manifestProblems.push('manifest checkout differs from actual checkout');
+  if (!/^[0-9a-f]{64}$/.test(options.lockfileHash ?? ''))
+    manifestProblems.push('actual lockfileHash unavailable');
+  const frequencies = new Map();
+  for (const gate of gates) frequencies.set(gate?.gate, (frequencies.get(gate?.gate) ?? 0) + 1);
+  const results = gates.map((input) => {
+    const g = isObject(input) ? input : {};
     const problems = [];
-    if (!GATE_STATUSES.includes(g.status)) problems.push(`unknown status ${g.status}`);
+    const measuredLimits = {};
+    if (![...REQUIRED_GATES, ...PENDING_GATES].includes(g.gate)) problems.push('unknown gate');
+    if (frequencies.get(g.gate) !== 1) problems.push('duplicate gate');
+    if (!GATE_STATUSES.includes(g.status)) problems.push('unknown status');
+    if (PENDING_GATES.includes(g.gate) && g.status !== 'PRODUCT_DECISION_PENDING')
+      problems.push('pending gate cannot be accepted');
     const refs = Array.isArray(g.evidenceRefs) ? g.evidenceRefs : [];
-    const missing = refs.filter((ref) => !exists(ref));
     if (g.status === 'PASS' || g.status === 'FAIL') {
-      if (refs.length === 0) problems.push('no evidence reference');
-      if (missing.length) problems.push(`evidence missing: ${missing.join(', ')}`);
-      if (!/^[0-9a-f]{40}$/.test(g.sourceCommit ?? '')) problems.push('sourceCommit missing');
-      else if (headCommit && g.sourceCommit !== headCommit && !g.sourceCommitIsFeatureBranch)
-        problems.push(
-          `sourceCommit ${g.sourceCommit.slice(0, 7)} differs from the reported checkout ${headCommit.slice(0, 7)}`,
-        );
+      if (!refs.length) problems.push('no evidence reference');
+      if (new Set(refs).size !== refs.length) problems.push('duplicate evidence reference');
+      if (!isCommit(g.sourceCommit) || g.sourceCommit !== headCommit)
+        problems.push('sourceCommit differs from the reported checkout');
       if (!g.environmentRef) problems.push('environmentRef missing');
+      for (const ref of refs) {
+        try {
+          const doc = readBoundArtifact(ref, g.evidenceSha256, read);
+          Object.assign(measuredLimits, validateGateArtifact(doc, g, build, now));
+        } catch (error) {
+          problems.push(error instanceof Error ? error.message : 'invalid evidence');
+        }
+      }
+      problems.push(...manifestProblems);
     }
-    const status =
-      problems.length && (g.status === 'PASS' || g.status === 'FAIL') ? 'UNVERIFIED' : g.status;
     return {
-      gate: g.gate,
-      status,
-      declared: g.status,
+      gate: g.gate ?? 'unknown',
+      status: problems.length ? 'UNVERIFIED' : g.status,
+      declared: g.status ?? 'NOT_RUN',
       sourceCommit: g.sourceCommit ?? null,
       environmentRef: g.environmentRef ?? null,
       evidenceRefs: refs,
-      measuredLimits: g.measuredLimits ?? {},
-      defects: g.defects ?? [],
+      measuredLimits: problems.length ? {} : measuredLimits,
+      defects: Array.isArray(g.defects) ? g.defects : [],
       problems,
     };
   });
-  const byGate = new Map(results.map((r) => [r.gate, r]));
-  const count = (s) =>
-    results.filter((r) => REQUIRED_GATES.includes(r.gate) && r.status === s).length;
-  const requiredMissing = REQUIRED_GATES.filter((g) => !byGate.has(g));
+  const byGate = new Map(results.map((g) => [g.gate, g]));
+  const count = (status) =>
+    REQUIRED_GATES.filter(
+      (gate) => frequencies.get(gate) === 1 && byGate.get(gate)?.status === status,
+    ).length;
+  const requiredMissing = REQUIRED_GATES.filter((gate) => !byGate.has(gate));
   const mvpComplete =
-    requiredMissing.length === 0 && REQUIRED_GATES.every((g) => byGate.get(g).status === 'PASS');
-  const pending = results.filter(
-    (r) => r.status === 'PRODUCT_DECISION_PENDING' || PENDING_GATES.includes(r.gate),
-  );
-
-  // Publication (public window reopening) is a separate decision from the gates.
-  const pub = manifest.publication ?? {};
-  const publicationProblems = [];
-  if (pub.isolationVerified !== true) publicationProblems.push('external isolation not verified');
-  if (pub.unresolvedRetirements !== 0)
-    publicationProblems.push(`unresolved retirements: ${pub.unresolvedRetirements ?? 'unknown'}`);
-  if (pub.officialBudgetCheckedAt == null)
-    publicationProblems.push('official budget not confirmed');
-  if (pub.smokeCleanupConfirmed !== true)
-    publicationProblems.push('smoke session/media cleanup not confirmed');
-  if (pub.resumeOpenConfirmed !== true) publicationProblems.push('resume → OPEN not confirmed');
-  if (pub.publicWindowOpen !== true) publicationProblems.push('public window not open');
-
-  // Verified capacity: the largest room count that passed, game-only and with media, separately.
-  const capacity = manifest.capacity ?? { gameOnlyRooms: 0, withMediaRooms: 0 };
+    manifestProblems.length === 0 &&
+    results.every((g) => g.status !== 'UNVERIFIED') &&
+    REQUIRED_GATES.every(
+      (gate) => frequencies.get(gate) === 1 && byGate.get(gate)?.status === 'PASS',
+    );
+  const release = evaluateRelease(source.publication, read, build, now);
+  const publicationProblems = [...release.problems];
+  if (!mvpComplete) publicationProblems.push('MVP gates not accepted');
+  if (release.audience !== 'public')
+    publicationProblems.push('team access restriction retained or audience unknown');
   return {
     gates: results,
     summary: {
@@ -106,14 +123,24 @@ export function evaluateGates(manifest, exists, headCommit) {
       fail: count('FAIL'),
       blocked: count('BLOCKED'),
       notRun: count('NOT_RUN'),
-      unverified: count('UNVERIFIED'),
+      unverified: REQUIRED_GATES.filter((gate) => byGate.get(gate)?.status === 'UNVERIFIED').length,
       requiredMissing,
-      pending: pending.map((p) => p.gate),
+      pending: [
+        ...new Set(
+          results.filter((g) => g.status === 'PRODUCT_DECISION_PENDING').map((g) => g.gate),
+        ),
+      ],
       mvpComplete,
-      /** Feature state and verified limit are reported apart (26.2). */
-      featureState: manifest.featureState ?? 'unknown',
-      capacity,
+      featureState: source.featureState ?? 'unknown',
+      manifestProblems,
+      // No capacity is inferred from manifest numbers or unit tests. G6 recomputes actual 10-room media measurements.
+      capacity: {
+        gameOnlyRooms: 0,
+        withMediaRooms: frequencies.get('G6') === 1 && byGate.get('G6')?.status === 'PASS' ? 10 : 0,
+      },
+      declaredCapacity: source.capacity ?? null,
     },
+    release,
     publication: { allowed: publicationProblems.length === 0, problems: publicationProblems },
   };
 }
@@ -151,7 +178,7 @@ export function renderReport(result, manifest, generatedAt) {
   }
   lines.push('');
   lines.push(
-    `공개 재개 조건: **${result.publication.allowed ? '충족' : '미충족'}**${result.publication.problems.length ? ` — ${result.publication.problems.join('; ')}` : ''}. 공개창 오픈·Jira 완료·원격 배포는 이 보고서 작성으로 실행되지 않는다.`,
+    `운영 배포 준비: **${result.release.ready ? '충족' : '미충족'}** (${result.release.operatingMode}, ${result.release.audience}). 공개 재개 조건: **${result.publication.allowed ? '충족' : '미충족'}**${result.publication.problems.length ? ` — ${result.publication.problems.join('; ')}` : ''}. 공개창 오픈·Jira 완료·원격 배포는 이 보고서 작성으로 실행되지 않는다.`,
   );
   lines.push('');
   lines.push(
@@ -184,13 +211,23 @@ if (basename(process.argv[1] ?? '') === 'verify-mvp-evidence.mjs') {
   } else {
     const manifest = JSON.parse(readFileSync(gatesPath, 'utf8'));
     const root = process.cwd();
-    const exists = (ref) => {
-      const candidates = [resolve(root, ref), resolve(input, ref)];
-      return candidates.some(
-        (p) => existsSync(p) && (statSync(p).isDirectory() || statSync(p).size > 0),
-      );
-    };
-    const result = evaluateGates(manifest, exists, manifest.headCommit ?? null);
+    let headCommit = null;
+    try {
+      headCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+        windowsHide: true,
+      }).trim();
+    } catch {
+      /* No actual checkout means no accepted gates. */
+    }
+    const lockfileHash = createHash('sha256')
+      .update(readFileSync(resolve(root, 'pnpm-lock.yaml')))
+      .digest('hex');
+    const result = evaluateGates(manifest, createEvidenceReader(root, input), headCommit, {
+      lockfileHash,
+    });
+    manifest.headCommit = headCommit;
     const section = renderReport(result, manifest, new Date().toISOString());
     const current = existsSync(report) ? readFileSync(report, 'utf8') : '';
     writeFileSync(report, injectReport(current, section));

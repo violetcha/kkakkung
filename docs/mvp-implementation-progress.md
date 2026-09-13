@@ -8,6 +8,30 @@
 
 ## 2026-09-13 구현 재개
 
+### 첫 구현 묶음 병합과 인수 도구 보강 — 201
+
+- 196·198·199·200은 [MR !127](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/127)로
+  develop `f68a949009e2bcf6832d03d1cd421915aff97ae4`에 병합했다.
+  최종 소스 `d859b9b6`의 Jenkins MR #103/GitLab #191340 SUCCESS:
+  242개 파일·2,418개 테스트·E2E14개 및 이미지 빌드 통과.
+- 로컬 통합 실행은 continuous 미디어 재발급에서 한 번 시간 초과(2,417개 통과)가 있었다.
+  동일 소스의 해당 attested/continuous 단독 재검사2개, 빌드·자산·E2E14개와 원격 전체 검사는
+  통과했다. 후속 요청/자원 검사에서 간헐 실패 이력을 유지한다. 실패 기대값을 낮추지 않았다.
+- develop 배포 #98은 실제 수신 검사 실패 후 이전 이미지로 rollback했으며 재검사도 실패해
+  ROLLBACK_BLOCKED로 끝났다. 기존 `9b641663`에서 입장이 LOCKED이고,
+  [203](https://ssafy.atlassian.net/browse/S15P21C204-203)에서 복구를 우선한다.
+  배포 완료·실제 Cloud 인수를 코드 병합으로 대신하지 않는다.
+- [S15P21C204-201](https://ssafy.atlassian.net/browse/S15P21C204-201),
+  `fix/S15P21C204-201-acceptance-evidence-validation`: S1-B / K03·K04 구현.
+  6대 5판의 동일 소스·유효한 연속 시각·실제 허용 영상/음성 수신과 마이크 거부 경로를 확인한다.
+  종합 판정은 실제 파일 바이트/해시·checkout/lockfile·관문/환경/실행 방식·원시 결과를 검증한다.
+  G5/G2/G6은 원시 기록에서 다시 계산하고, 다른 관문은 필수 파일의 네이티브 assertion과 개수를 확인한다.
+  중복·디렉터리·경로 탈출·빈/깨진/다른 버전 증거는 통과하지 않는다.
+- 관련 회귀72개, 최종 `pnpm verify` 242개 파일·2,445개 테스트·E2E14개 및
+  포맷·계약·lint·타입·빌드·자산 검사 통과. 원격 CI·MR/배포는 203 복구 이후 진행한다.
+  [인수 증거 형식](mvp-evidence-format.md)의 엄격한 판정과 기존 팀 전용 continuous 배포는 별개다.
+  Cloud 시나리오 생산자 연결·실제 인수는 W06/W18/W19/W20에 남는다.
+
 ### 재개 후 구현 — 196·198·199·200
 
 - 197 문서 MR [!126](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/126)은
