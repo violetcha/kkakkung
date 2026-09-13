@@ -408,6 +408,40 @@ describe('durable operation queue', () => {
 });
 
 describe('operation reception deadline and stale completion fences', () => {
+  it('bounds a server-selected recovery deadline without extending other queued commands', async () => {
+    vi.useFakeTimers();
+    const f = await fixture({
+      timeoutForCommand: (command) => (command.action === 'checkpoint' ? 180_000 : undefined),
+    });
+    const backend = gate();
+    f.run.mockImplementationOnce(() => backend.promise);
+    f.controller.submit({ requestId: 'recovery', action: 'checkpoint' });
+    f.controller.submit({ requestId: 'ordinary', action: 'retry-retirement', retirementId: 'r' });
+    await flush();
+    await f.advance(10_000);
+    expect(f.controller.getSnapshot('recovery')?.status).toBe('pending');
+    expect(f.controller.getSnapshot('ordinary')?.code).toBe('OPERATION_TIMEOUT');
+    await f.advance(170_000);
+    expect(f.controller.getSnapshot('recovery')?.code).toBe('OPERATION_TIMEOUT');
+    backend.resolve();
+    await flush();
+    expect(f.controller.getSnapshot('recovery')?.status).toBe('failed');
+    expect(f.run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, -1, NaN, Infinity, 180_001])(
+    'rejects unsafe internal deadline %s before dispatch',
+    async (value) => {
+      const f = await fixture({ timeoutForCommand: () => value });
+      expect(() =>
+        f.controller.submit({ requestId: 'invalid-deadline', action: 'checkpoint' }),
+      ).toThrow('INVALID_OPERATION_TIMEOUT');
+      await flush();
+      expect(f.run).not.toHaveBeenCalled();
+      expect(f.controller.getSnapshot('invalid-deadline')).toBeNull();
+    },
+  );
+
   it('expires queued work from submission without dispatching it after its deadline', async () => {
     vi.useFakeTimers();
     const f = await fixture();

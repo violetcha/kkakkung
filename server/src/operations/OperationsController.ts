@@ -54,6 +54,8 @@ export type OperationsControllerOptions = Readonly<{
   nowEpochMs: () => number;
   monotonicNow: () => number;
   timeoutMs: number;
+  /** Internal override for bounded recovery only; never read a deadline from HTTP input. */
+  timeoutForCommand?: (command: OperationsCommand) => number | undefined;
   setAdmission: (state: OperationsStatus['admission']) => void;
   getStatus: () => OperationsStatus;
   canResume: () => boolean;
@@ -142,13 +144,19 @@ export class OperationsController implements OperationsPort {
     }
     if (this.closed) throw new Error('OPERATIONS_CLOSED');
     if (this.faulted) throw new Error('AUDIT_WRITE_FAILED');
+    const override = this.deps.timeoutForCommand?.(command);
+    if (
+      override !== undefined &&
+      (!Number.isSafeInteger(override) || override <= 0 || override > 180_000)
+    )
+      throw new Error('INVALID_OPERATION_TIMEOUT');
+    const timeoutMs = override ?? this.deps.timeoutMs;
     let now: number;
     let updatedAtEpochMs: number;
     try {
       now = this.readMonotonic();
       updatedAtEpochMs = this.timestamp();
-      if (now + this.deps.timeoutMs > Number.MAX_SAFE_INTEGER)
-        throw new Error('INVALID_OPERATION_CLOCK');
+      if (now + timeoutMs > Number.MAX_SAFE_INTEGER) throw new Error('INVALID_OPERATION_CLOCK');
     } catch {
       this.admissionRevision++;
       this.deps.setAdmission('LOCKED');
@@ -173,7 +181,7 @@ export class OperationsController implements OperationsPort {
       pending,
       command,
       abort: new AbortController(),
-      deadline: now + this.deps.timeoutMs,
+      deadline: now + timeoutMs,
       timeout: null,
       stopReason: null,
       admissionRevision: this.admissionRevision,

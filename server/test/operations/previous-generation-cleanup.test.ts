@@ -280,7 +280,10 @@ describe('previous generation cleanup failure boundaries', () => {
   it('still retires known targets when the initial global list times out, retaining the lock', async () => {
     const s = setup();
     s.listRooms.mockRejectedValueOnce(new Error('timeout'));
-    expect(await s.cleanup.run(input())).toMatchObject({ revoked: 1, historyComplete: false });
+    const report = await s.cleanup.run(input());
+    expect(report).toMatchObject({ revoked: 1, historyComplete: true });
+    expect(report.unresolved).toBeGreaterThan(0);
+    expect(s.onUnresolved).toHaveBeenCalledOnce();
     expect(s.revoke).toHaveBeenCalledOnce();
     expect(s.checkpoint).toHaveBeenCalledOnce();
   });
