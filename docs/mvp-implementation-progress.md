@@ -8,6 +8,22 @@
 
 ## 2026-09-13 구현 재개
 
+### 최신 배포·통합 상태
+
+- [MR !128](https://lab.ssafy.com/s15-ai-image-sub1/S15P21C204/-/merge_requests/128)은
+  소스 `3ce4064c`의 Jenkins MR #104/GitLab #191360 SUCCESS 후 develop
+  `644af64b144b5357a35baf203567383dd6aabbc4`에 병합됐다. Jenkins 배포 #99 SUCCESS,
+  2026-09-13 12:46 KST game/web 동일 revision·DP-06 PASS(119.89초)·READY/OPEN·
+  unresolved0·last-good을 확인했다. 팀 SSO302와 무인증 운영403은 유지된다.
+- 아래 #98의 LOCKED·rollback 실패는 당시 이력이다. #99에서 정상 복구됐으며
+  196·198·199·200·203 구현이 운영에 포함됐다. Jira198·199·200·203 완료,
+  196은 배포된 실제 팀원 방 UI 인수 확인을 남겨 진행 중이다.
+- 201+202+203을 통합한 최종 `pnpm verify`가 통과했다: 244개 파일·2,467개 테스트,
+  E2E14개·포맷·계약·lint·타입·빌드·자산 검사. 소스 병합 후 트리 내용이 같은 것도 확인했다.
+  201·202는 한 MR로 제출하며 동일 소스 원격 CI·병합·배포 결과를 후속 기록한다.
+- 204 HTTP 상한은 별도 폴더에서 검증 중이다. K01 장기 감사 보관, K02 내구 기록 축약,
+  K10 조회 복구, 실제 Cloud/6대/60세션 인수는 남아 있다.
+
 ### 역할별 연습·최종 결과 — 202
 
 - [202](https://ssafy.atlassian.net/browse/S15P21C204-202), 로컬 커밋 `9171bb6`에서
@@ -32,7 +48,7 @@
   [203](https://ssafy.atlassian.net/browse/S15P21C204-203)에서 복구를 우선한다.
   배포 완료·실제 Cloud 인수를 코드 병합으로 대신하지 않는다.
 - [S15P21C204-201](https://ssafy.atlassian.net/browse/S15P21C204-201),
-  `fix/S15P21C204-201-acceptance-evidence-validation`: S1-B / K03·K04 구현.
+  `fix/S15P21C204-201-acceptance-evidence-validation`: S1-C / K03·K04 구현.
   6대 5판의 동일 소스·유효한 연속 시각·실제 허용 영상/음성 수신과 마이크 거부 경로를 확인한다.
   종합 판정은 실제 파일 바이트/해시·checkout/lockfile·관문/환경/실행 방식·원시 결과를 검증한다.
   G5/G2/G6은 원시 기록에서 다시 계산하고, 다른 관문은 필수 파일의 네이티브 assertion과 개수를 확인한다.
