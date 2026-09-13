@@ -51,6 +51,34 @@ function setup() {
   };
 }
 describe('remote retirement barrier; local fault injection only', () => {
+  it('revokes originals before waiting for pending forwarding, and verifies absence only afterwards', async () => {
+    const s = setup();
+    const drained = deferred<void>();
+    s.deps.awaitPendingPermissions = vi.fn(() => drained.promise);
+    const pending = s.barrier.retire(input);
+    await flush();
+    expect(s.deps.remove).toHaveBeenCalledOnce();
+    expect(s.deps.awaitPendingPermissions).toHaveBeenCalledOnce();
+    expect(s.deps.absent).not.toHaveBeenCalled();
+    expect(s.states).toEqual(['REVOKING']);
+    drained.resolve();
+    expect(await pending).toMatchObject({ status: 'confirmed' });
+    expect(s.deps.absent).toHaveBeenCalledOnce();
+    expect(s.states).toEqual(['REVOKING', 'REVOKED']);
+  });
+
+  it('keeps a transport-unknown forwarding outcome unresolved even when original revocation succeeded', async () => {
+    const s = setup();
+    s.deps.awaitPendingPermissions = async () => {
+      throw new Error('FORWARD_EFFECT_UNCONFIRMED');
+    };
+    expect(await s.barrier.retire(input)).toMatchObject({ status: 'unknown' });
+    expect(s.deps.remove).toHaveBeenCalledOnce();
+    expect(s.deps.absent).not.toHaveBeenCalled();
+    expect(s.deps.onConfirmed).not.toHaveBeenCalled();
+    expect(s.states).toEqual(['REVOKING', 'UNRESOLVED']);
+  });
+
   it('attempts the first cleanup of an issuance failure already marked terminal and unresolved', async () => {
     const s = setup();
     s.generation.terminal = true;

@@ -12,6 +12,7 @@ export type LifecycleReport = PlayerScope &
   }>;
 export type LifecycleInspection = Readonly<{
   participantSid: string | null;
+  faceParticipantSid?: string | null;
   dirty: boolean;
   terminal: boolean;
   lastVerifiedAt: number | null;
@@ -29,7 +30,12 @@ export type MediaLifecycleOptions = Readonly<{
   /** The coordinator can end a recovery after an already-reported fatal policy/phase failure. */
   isRecoveryAllowed?: (generation: Generation) => boolean;
 }>;
-type Recovery = { startedAt: number; baselineSid: string | null; cancel: () => void };
+type Recovery = {
+  startedAt: number;
+  baselineSid: string | null;
+  baselineFaceSid: string | null;
+  cancel: () => void;
+};
 
 const keyOf = (scope: PlayerScope) => JSON.stringify([scope.matchId, scope.playerId]);
 
@@ -131,6 +137,7 @@ export class MediaLifecycle {
     const recovery: Recovery = {
       startedAt: now,
       baselineSid: state && !state.terminal && state.participantSid ? state.participantSid : null,
+      baselineFaceSid: state && !state.terminal ? (state.faceParticipantSid ?? null) : null,
       cancel: () => {},
     };
     this.recovering.set(generation, recovery);
@@ -260,6 +267,9 @@ export class MediaLifecycle {
       !state.dirty &&
       !state.terminal &&
       state.participantSid === recovery.baselineSid &&
+      (!generation.splitOwnership ||
+        (recovery.baselineFaceSid !== null &&
+          state.faceParticipantSid === recovery.baselineFaceSid)) &&
       state.lastVerifiedAt !== null &&
       state.lastVerifiedAt > recovery.startedAt &&
       state.lastVerifiedAt <= now &&
@@ -268,9 +278,11 @@ export class MediaLifecycle {
           binding.matchId === generation.request.matchId &&
           binding.playerId === generation.request.playerId &&
           binding.mediaInstanceId === generation.request.mediaInstanceId &&
-          binding.mediaIdentity === generation.identity &&
+          binding.mediaIdentity ===
+            (generation.splitOwnership?.faceIdentity ?? generation.identity) &&
           binding.publisherGeneration === generation.generation &&
-          binding.participantSid === recovery.baselineSid &&
+          binding.participantSid ===
+            (generation.splitOwnership ? recovery.baselineFaceSid : recovery.baselineSid) &&
           binding.source === 'camera' &&
           binding.verifiedAt > recovery.startedAt &&
           binding.verifiedAt <= now,

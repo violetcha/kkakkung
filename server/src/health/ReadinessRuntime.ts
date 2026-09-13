@@ -163,7 +163,8 @@ export class ReadinessRuntime {
       registry: this.options.registry,
       nowEpochMs: this.options.nowEpochMs,
       capability: this.options.capability,
-      canIssue: (generation) => this.canIssue() && (callbacks.canIssue?.(generation) ?? true),
+      canIssue: (generation, requested) =>
+        this.canIssue() && (callbacks.canIssue?.(generation, requested) ?? true),
       lock: this.lock,
       reserve: async (generation) => {
         this.pending.add(generation);

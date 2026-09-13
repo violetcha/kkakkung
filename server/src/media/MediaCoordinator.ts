@@ -22,6 +22,12 @@ import { LiveKitGateway, type GatewayOptions } from './LiveKitGateway.js';
 import { MediaGenerationRegistry, type Generation } from './MediaGenerationRegistry.js';
 import { MediaLifecycle } from './MediaLifecycle.js';
 import { MediaPolicyBindings } from './MediaPolicyBindings.js';
+import { SplitMediaPolicyBindings } from './SplitMediaPolicyBindings.js';
+import {
+  ownedMediaRooms,
+  ownedMediaTargets,
+  sameMediaOwnership,
+} from '../operations/SplitMediaOwnership.js';
 import { RequestHistory } from './RequestHistory.js';
 import type { GrantIssuerDeps } from './GrantIssuer.js';
 import type {
@@ -85,7 +91,7 @@ class Coordinator implements MediaCoordinatorRuntime {
   private readonly currentCleanup: RevocationRetryBindings;
   private readonly durableRetention: DurableRetention;
   private readonly recovery: ReturnType<typeof createRecoveryBootstrap>;
-  private readonly policy: MediaPolicyBindings;
+  private readonly policy: MediaPolicyBindings | SplitMediaPolicyBindings;
   private readonly transition: GenerationTransition;
   private readonly pruneGrantRequests: () => void;
   private readonly pendingRetirements = new Map<Generation, number>();
@@ -123,7 +129,11 @@ class Coordinator implements MediaCoordinatorRuntime {
     )
       throw new Error('INVALID_MEDIA_CAPACITY');
     const nowEpochMs = () => Math.floor(deps.epochNowSeconds() * 1000);
-    this.registry = new MediaGenerationRegistry(config.namespace, true);
+    this.registry = new MediaGenerationRegistry(
+      config.namespace,
+      true,
+      config.subscriptionMode === 'server-forwarding' ? 'split' : 'single',
+    );
     this.apiBudget = new ApiBudget({
       monotonicNow: deps.monotonicNow,
       maxNormalCallsPer60s: config.maxNormalApiCallsPer60s,
@@ -236,6 +246,12 @@ class Coordinator implements MediaCoordinatorRuntime {
       monotonicNow: deps.monotonicNow,
       epochNowMs: nowEpochMs,
       stopPermissions: (g) => this.policy.retire(g),
+      ...(config.subscriptionMode === 'server-forwarding'
+        ? {
+            awaitPendingPermissions: (g: Generation) =>
+              (this.policy as SplitMediaPolicyBindings).quiesce(g),
+          }
+        : {}),
       onOccupancyEnded: async (g) => {
         const group = this.registry
           .all()
@@ -243,24 +259,9 @@ class Coordinator implements MediaCoordinatorRuntime {
             (other) =>
               other.reservationId === g.reservationId && !this.registry.wasNeverIssued(other),
           );
-        const durable = this.journal.readSnapshot().records.map((entry) => entry.record);
-        if (
-          group.length &&
-          group.every(
-            (other) =>
-              other.state === 'REVOKED' &&
-              durable.some(
-                (r) =>
-                  r.identity === other.identity &&
-                  r.roomName === other.roomName &&
-                  r.generation === other.generation &&
-                  r.reservationId === other.reservationId &&
-                  r.state === 'REVOKED',
-              ),
-          )
-        ) {
+        if (group.length && group.every((other) => this.durablyRevoked(other))) {
           await this.runtime.usageLease.markRetiring(g.roomName);
-          await this.cleanupRoom(g.roomName);
+          for (const roomName of ownedMediaRooms(g)) await this.cleanupRoom(roomName);
         }
       },
       lockIssuance: (reason) => {
@@ -324,7 +325,7 @@ class Coordinator implements MediaCoordinatorRuntime {
         if (!this.closed) this.runtime.lock('JOURNAL_WRITE_FAILED');
       },
     });
-    this.policy = new MediaPolicyBindings({
+    const policyOptions = {
       registry: this.registry,
       gateway,
       config,
@@ -333,15 +334,23 @@ class Coordinator implements MediaCoordinatorRuntime {
       enqueueAudioPolicy: deps.enqueueAudioPolicy,
       emitMetric: deps.emitMetric,
       emitEvent: deps.emitEvent,
-      isPermissionsAllowed: (g) =>
+      isPermissionsAllowed: (g: Generation) =>
         !this.closed &&
         this.registry.isCurrent(g) &&
         !this.lifecycle.hasLocalRetirement(g) &&
         this.lifecycle.isGameConnected(g.request.matchId, g.request.playerId) &&
         this.transition.isAllowed(g.request.matchId, g.request.playerId) &&
         this.getReadiness().state === 'READY',
-      onFailure: (g, code) => this.fail(g, code),
-    });
+      onFailure: (g: Generation, code: MediaFailureCode) => this.fail(g, code),
+    };
+    this.policy =
+      config.subscriptionMode === 'server-forwarding'
+        ? new SplitMediaPolicyBindings({
+            ...policyOptions,
+            capability: () => this.capability,
+            epochNowSeconds: deps.epochNowSeconds,
+          })
+        : new MediaPolicyBindings(policyOptions);
     this.lifecycle = new MediaLifecycle({
       registry: this.registry,
       monotonicNow: deps.monotonicNow,
@@ -355,14 +364,15 @@ class Coordinator implements MediaCoordinatorRuntime {
     const issuer = this.runtime.createGrantIssuer({
       sign: services.sign,
       onPrepared: () => {},
-      canIssue: (g) =>
+      canIssue: (g, requested) =>
         !this.closed &&
         this.registry
           .all()
           .filter(
             (current) => !this.registry.wasNeverIssued(current) && !this.durablyRevoked(current),
-          ).length <=
-          config.maxConcurrentParticipants - (g ? 0 : 1) &&
+          )
+          .reduce((total, current) => total + ownedMediaTargets(current).length, 0) <=
+          config.maxConcurrentParticipants - (g ? 0 : this.registry.capacityFor(requested)) &&
         (!g || (this.activePlayer(g.request) && !this.lifecycle.hasLocalRetirement(g))),
       retire: (g) => {
         this.track(this.rawRetire(this.retirement(g, 'policy-unknown')));
@@ -395,6 +405,11 @@ class Coordinator implements MediaCoordinatorRuntime {
           g.generation === result.receiverGeneration &&
           g.identity === result.grant.mediaIdentity &&
           g.roomName === result.grant.roomName &&
+          (g.splitOwnership
+            ? result.grant.subscriptionMode === 'server-forwarding' &&
+              result.grant.facePublication?.roomName === g.splitOwnership.faceRoomName &&
+              result.grant.facePublication?.mediaIdentity === g.splitOwnership.faceIdentity
+            : result.grant.facePublication === undefined) &&
           this.canIssue() &&
           result.grant.expiresAt > deps.epochNowSeconds()
         );
@@ -622,7 +637,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     const removed = this.registry.prune(
       (generation) =>
         !this.retirements.has(generation) &&
-        !this.roomCleanups.has(generation.roomName) &&
+        ownedMediaRooms(generation).every((roomName) => !this.roomCleanups.has(roomName)) &&
         now - generation.expiresAtEpochMs >= 600_000 &&
         (this.registry.wasNeverIssued(generation) ||
           this.currentCleanup.canForgetGeneration(generation)) &&
@@ -768,7 +783,11 @@ class Coordinator implements MediaCoordinatorRuntime {
             record.reservationId === g.reservationId &&
             record.matchId === g.request.matchId &&
             record.mediaInstanceId === g.request.mediaInstanceId &&
-            record.serverEpoch === g.serverEpoch,
+            record.serverEpoch === g.serverEpoch &&
+            record.namespace === this.deps.config.namespace &&
+            record.issuedAtEpochMs === g.issuedAtEpochMs &&
+            record.expiresAtEpochMs === g.expiresAtEpochMs &&
+            sameMediaOwnership(record, g),
         )
     );
   }
@@ -783,7 +802,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     const allRevoked = () => {
       const group = this.registry
         .all()
-        .filter((g) => g.roomName === roomName && !this.registry.wasNeverIssued(g));
+        .filter((g) => ownedMediaRooms(g).includes(roomName) && !this.registry.wasNeverIssued(g));
       return group.length > 0 && group.every((g) => this.durablyRevoked(g));
     };
     if (!allRevoked()) return;

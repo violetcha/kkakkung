@@ -165,6 +165,15 @@ export class MediaGenerationRegistry {
     return [...this.generations];
   }
 
+  capacityFor(input?: PrepareGenerationRequest): number {
+    if (this.transport !== 'split') return 1;
+    if (!input) return 12;
+    const key = instanceKey(input.matchId, input.mediaInstanceId);
+    return (
+      2 * (this.splitRosters.get(key)?.length ?? this.frames.get(key)?.participants.length ?? 6)
+    );
+  }
+
   /** Only a definitive reservation rejection BEFORE persistence/signing may use this path. */
   abandonUnissued(value: Generation): void {
     if (!this.generations.includes(value)) throw new Error('UNKNOWN_GENERATION');

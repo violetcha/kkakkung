@@ -10,6 +10,7 @@ export type RetirementBarrierDeps = {
   nowEpochSeconds: () => number;
   persist: (generation: Generation) => Promise<void>;
   stopPermissions: (generation: Generation) => void;
+  awaitPendingPermissions?: (generation: Generation) => Promise<void>;
   remove: (generation: Generation, cutoff?: bigint) => Promise<void>;
   absent: (generation: Generation) => Promise<boolean>;
   onUnresolved: (generation: Generation) => void;
@@ -113,7 +114,12 @@ export class RetirementBarrier {
       await confirmRemoteRevocation({
         capability: () => d.capability(),
         nowEpochSeconds: () => d.nowEpochSeconds(),
-        remove: (cutoff) => d.remove(generation, cutoff),
+        remove: async (cutoff) => {
+          // Revoke original publications promptly even if forwarding is still in flight.
+          await d.remove(generation, cutoff);
+          // Late known effects must finish cleanup before the final absence observation.
+          await d.awaitPendingPermissions?.(generation);
+        },
         absent: () => d.absent(generation),
       });
       generation.state = 'REVOKED';

@@ -43,7 +43,13 @@ UsageBudget이100% 여유를 추가한다. 기존 단일 방의6명 공유 예�
 두 예약·열두 자원의 재기동 복원과 실제 예산의 두 번째 블록 거절을 검증한다. Cloud 호출은 없다.
 관련6파일75개·QA 타입·lint를 통과했다. 최종 `pnpm verify`257파일2,663개·22 E2E(55.6초),
 포맷·계약33/도구11·lint·타입·빌드·실제 Worker/자산 PASS, 변경 문서4개86개 파일 링크 PASS다.
-정확한 소스의 원격 CI·병합·배포는 후속 확인한다.
+소스 `c3e74bf1`의 Jenkins MR120/GitLab191720 SUCCESS 뒤 !141을20:40:18 KST
+develop `0e50ad3b`에 병합하고 소스 브랜치를 삭제했다. 배포112/GitLab191728 SUCCESS,
+기존 팀 모드 실제 Cloud DP-06 PASS73.23초·20:50:21 READY/OPEN·미해결0·last-good·
+게임/웹0e50ad3b 일치·팀 SSO 확인이다. 새 공개 발급 경로의 Cloud 인수는 별도다.
+
+다음 [서버 제어 조립](split-media-policy.md)에서 아래 코드 경로를 연결하며,
+실제 provider 인수 전에는 공개 설정을 열지 않는다.
 
 아래가 연결되기 전에는 전체215·W02·PUBLIC_READY를 완료로 계산하지 않는다.
 
