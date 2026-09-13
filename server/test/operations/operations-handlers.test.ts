@@ -129,6 +129,54 @@ async function fixture(realController = false) {
 }
 
 describe('E-14 operations HTTP handler exports through a local Express fixture', () => {
+  it('returns retryable capacity responses without locking status and keeps a drain slot', async () => {
+    const f = await fixture(true);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    closers.push(async () => {
+      release();
+    });
+    f.run.mockImplementationOnce(() => gate);
+    const initial = await f.request('/api/operations/commands', {
+      requestId: 'slow-operation',
+      action: 'checkpoint',
+    });
+    expect(initial.status).toBe(202);
+    const accepted = await initial.json();
+    await vi.waitFor(() => expect(f.run).toHaveBeenCalledOnce());
+    const responses = await Promise.all(
+      Array.from({ length: 100 }, (_, i) =>
+        f.request('/api/operations/commands', { requestId: `burst-${i}`, action: 'checkpoint' }),
+      ),
+    );
+    expect(responses.some((response) => response.status === 429)).toBe(true);
+    expect(responses.every((response) => [202, 429].includes(response.status))).toBe(true);
+    const busy = responses.find((response) => response.status === 429)!;
+    expect(busy.headers.get('retry-after')).toBe('1');
+    expect(await busy.json()).toEqual({ code: 'OPERATIONS_BUSY' });
+    expect(f.onAuditFailure).not.toHaveBeenCalled();
+    expect((await f.request('/api/operations/status')).status).toBe(200);
+    const duplicate = await f.request('/api/operations/commands', {
+      requestId: 'slow-operation',
+      action: 'checkpoint',
+    });
+    expect(duplicate.status).toBe(202);
+    expect(await duplicate.json()).toEqual(accepted);
+    const drain = await f.request('/api/operations/commands', {
+      requestId: 'reserved-drain',
+      action: 'drain',
+    });
+    expect(drain.status).toBe(202);
+    expect(f.controller.getStatus().admission).toBe('DRAINING');
+    release();
+    await vi.waitFor(() =>
+      expect(f.controller.getSnapshot('reserved-drain')?.status).toBe('succeeded'),
+    );
+    expect(f.onAuditFailure).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['/api/operations/commands', { requestId: 'attacker-never-saved', action: 'drain' }],
     ['/api/operations/commands/attacker-never-saved', undefined],

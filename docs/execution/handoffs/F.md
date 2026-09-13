@@ -1,5 +1,15 @@
 # F 공개 인계 기록
 
+## 2026-09-13 운영 감사·명령 상한 관측 — S15P21C204-206
+
+- E의 OperationsAudit/ReadinessRuntime에서 오류 유입·합친 오류·표본 수·대기 합산·접수 거절을
+  수치로 전달한다. F registry·수집기·관측 계약에 `operations.audit.events/coalesced/retained`,
+  `operations.queue.pending/rejected`를 같은 count 단위로 등록했다. 식별자 label은 없다.
+- 파일 version과 명령 entries는 유지하며 오류 표본은24시간/4,096개, 동일 kind/code는60초 첫 표본이다.
+  [상한과 운영 경계](../../operations-audit-limits.md)를 따른다. 미디어 기록 축약은 K02다.
+- localStage: IMPLEMENTED. 관련 운영115회귀·서버 타입 검사 통과, 통합 전체 검증은 후속이다.
+  blockedOn: 원격 CI·병합·배포·실제 부하 인수. 이전 결과로 인수하지 않는다.
+
 ## 2026-09-13 HTTP 자원 관측 — S15P21C204-204
 
 B 제품 조립과 F registry/수집기에 `http.requests.active/count`,
