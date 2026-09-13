@@ -10,83 +10,92 @@ import {
   validateSixDeviceRecords,
 } from '../../scripts/collect-six-device-results.mjs';
 
-const SHA = 'a'.repeat(40);
-const deviceIds = ['dev-1', 'dev-2', 'dev-3', 'dev-4', 'dev-5', 'dev-6'];
-
-function devices(
-  over: (d: Record<string, unknown>, i: number) => Record<string, unknown> = (d) => d,
-) {
-  return {
-    sourceCommit: SHA,
-    network: { kind: 'campus-wifi-6e', measured: 'RTT 12ms / 210 Mbps down / 95 Mbps up' },
-    devices: deviceIds.map((deviceId, i) =>
-      over(
-        {
-          deviceId,
-          realDevice: true,
-          model: 'Samsung Galaxy Book 960XGL',
-          os: 'Windows 11 Enterprise 26200',
-          browser: 'Chrome 152.0.7977',
-          camera: 'Intel AVStream',
-          preset: i < 4 ? 'mid' : 'low',
-          participant: `P${i + 1}`,
-          verifiedAt: '2026-09-11T09:50:00+09:00',
-        },
-        i,
-      ),
-    ),
-  };
-}
-
-const perDevice = (over: Partial<Record<string, unknown>> = {}) =>
-  Object.fromEntries(
-    deviceIds.map((id, i) => [
-      id,
-      {
-        fpsAvg: i < 4 ? 52 : 34,
-        fpsMin: i < 4 ? 41 : 28,
-        remoteFaces: 5,
-        nearVoice: true,
-        audioDuplicate: false,
-        playbackPermission: 'granted',
-        afterEnd: { tracks: 0, workers: 1, textures: 12, rooms: 0 },
-        ...over,
-      },
-    ]),
-  );
-
-/** Five matches whose coverage together spans every required behaviour. */
-function matches(
-  patch: (m: Record<string, unknown>, order: number) => Record<string, unknown> = (m) => m,
-) {
-  const chunks = [
-    REQUIRED_COVERAGE.slice(0, 5),
-    REQUIRED_COVERAGE.slice(5, 10),
-    REQUIRED_COVERAGE.slice(10, 15),
-    REQUIRED_COVERAGE.slice(15, 20),
-    REQUIRED_COVERAGE.slice(20),
-  ];
-  return {
-    matches: chunks.map((coverage, i) =>
-      patch(
-        {
-          matchId: `match-${i + 1}`,
-          order: i + 1,
-          startedAt: `2026-09-11T10:${10 + i * 5}:00+09:00`,
-          endedAt: `2026-09-11T10:${13 + i * 5}:20+09:00`,
-          result: ['two-captured', 'two-escaped', 'timeout', 'two-captured', 'two-escaped'][i],
-          rematch: ['same', 'swap', 'lobby', 'same', 'none'][i],
-          coverage,
-          devices: perDevice(),
-          failures: [],
-        },
-        i + 1,
-      ),
-    ),
-  };
-}
+import { devices, matches, perDevice, SHA } from '../fixtures/six-device-records.js';
 
 describe('six-device five-match record', () => {
+  it.each(['not-a-date', '2026-02-30T10:00:00Z', '2026-09-11T10:00:00', '2026-09-11T25:00:00Z'])(
+    'does not accept invalid or timezone-free timestamps: %s',
+    (invalid) => {
+      expect(
+        validateSixDeviceRecords({
+          devices: devices(),
+          matches: matches((m) => ({ ...m, startedAt: invalid })),
+        }).status,
+      ).not.toBe('PASS');
+    },
+  );
+
+  it('rejects reversed/overlapping matches, per-match source drift and recorded failures', () => {
+    for (const patch of [
+      { endedAt: '2026-09-11T09:00:00+09:00' },
+      { startedAt: '2026-09-11T10:00:00+09:00' },
+      { sourceCommit: 'b'.repeat(40) },
+      { failures: [{ stage: 'audio', fixedIn: SHA }] },
+    ])
+      expect(
+        validateSixDeviceRecords({
+          devices: devices(),
+          matches: matches((m) => ({ ...m, ...patch })),
+        }).status,
+      ).not.toBe('PASS');
+    expect(
+      validateSixDeviceRecords({
+        devices: devices(),
+        matches: { ...matches(), sourceCommit: 'b'.repeat(40) },
+      }).status,
+    ).toBe('FAIL');
+  });
+
+  it('rejects zero faces/voice, missing pair observations and claimed microphone-denied coverage without an actual denied path', () => {
+    for (const patch of [
+      { devices: perDevice({ remoteFaces: 0, nearVoice: false }) },
+      { mediaChecks: [] },
+      { devices: perDevice({ microphonePermission: 'granted' }) },
+      { devices: perDevice({ micDeniedAction: undefined }) },
+    ])
+      expect(
+        validateSixDeviceRecords({
+          devices: devices(),
+          matches: matches((m) => ({ ...m, ...patch })),
+        }).status,
+      ).not.toBe('PASS');
+  });
+
+  it('rejects forbidden reception, self/unknown peers and media observations outside the match', () => {
+    for (const patch of [
+      { allowed: false, observed: true },
+      { senderDeviceId: 'dev-1', receiverDeviceId: 'dev-1' },
+      { senderDeviceId: 'unknown' },
+      { observedAt: '2026-09-11T09:00:00+09:00' },
+    ])
+      expect(
+        validateSixDeviceRecords({
+          devices: devices(),
+          matches: matches((m) => ({
+            ...m,
+            mediaChecks: (m.mediaChecks as Record<string, unknown>[]).map((c) => ({
+              ...c,
+              ...patch,
+            })),
+          })),
+        }).status,
+      ).toBe('FAIL');
+  });
+
+  it.each([
+    { remoteFaces: -1 },
+    { remoteFaces: 6 },
+    { remoteFaces: 0.5 },
+    { afterEnd: { tracks: -1, workers: 0, textures: 0, rooms: 0 } },
+  ])('rejects invalid observed counts %j', (patch) => {
+    expect(
+      validateSixDeviceRecords({
+        devices: devices(),
+        matches: matches((m) => ({ ...m, devices: perDevice(patch) })),
+      }).status,
+    ).not.toBe('PASS');
+  });
+
   it('a complete real record passes with 6/6 devices, 5/5 matches and full coverage', () => {
     const r = validateSixDeviceRecords({ devices: devices(), matches: matches() });
     expect(r).toMatchObject({ status: 'PASS', issues: [], incomplete: [] });

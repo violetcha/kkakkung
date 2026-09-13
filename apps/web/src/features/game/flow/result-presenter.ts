@@ -8,7 +8,22 @@ const ABORT_LABELS: Record<AbortReason, string> = {
 export function resultPresenter(round: PublicRoundState, self: PrivateView['self']) {
   const ended = round.phase === 'RESULT' || round.phase === 'ABORTED';
   const reason = round.result?.reason;
+  const personal =
+    self?.status === 'ESCAPED' ? '탈출 성공' : self?.status === 'CAPTURED' ? '포획됨' : null;
+  const team = self?.role === 'runner' ? 'runners' : self?.role === 'tagger' ? 'taggers' : null;
   return {
+    personalResult:
+      ended && personal
+        ? round.phase === 'ABORTED'
+          ? `경기 중 기록: ${self?.status === 'ESCAPED' ? '탈출' : '포획'} · 경기는 무효 처리되었습니다.`
+          : `나의 결과: ${personal}`
+        : null,
+    teamResult:
+      round.phase === 'RESULT' && round.result && team
+        ? round.result.winner === team
+          ? '우리 팀 승리'
+          : '우리 팀 패배'
+        : null,
     title:
       round.phase === 'ABORTED'
         ? '경기 무효'

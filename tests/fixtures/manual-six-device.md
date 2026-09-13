@@ -1,6 +1,6 @@
 # QA-09 · 대표 장치 6대 5판 수동 기록 양식 (F-15)
 
-2026-09-13 재검토: 현재 집계기는 얼굴0·음성false·잘못된 시각을 거절하지 않는 허점이 있다. 아래 형식/목표를 유지하되 [K03 수정 및 증거 인수](../../docs/mvp-plan-review-2026-09-13.md)를 선행한다. 현재 도구의 PASS만으로 G5 완료를 선언하지 않는다.
+2026-09-13 S15P21C204-201: K03 판정 보강을 반영했다. 같은 빌드·유효한 시간·실제 허용 영상/음성 대조와 마이크 거부 경로를 검사한다. 합성 기록은 실제 G5 인수가 아니다. [종합 인수 형식](../../docs/mvp-evidence-format.md)도 따른다.
 
 G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.local/qa/six-device/` 기록이다.
 자동 브라우저(QA-09-browser)는 보조 증거일 뿐이며, 이 기록이 없으면 G5 는 PASS 가 될 수 없다.
@@ -46,10 +46,12 @@ G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.
 
 ```json
 {
+  "sourceCommit": "<실제 배포 SHA, devices.json과 동일>",
   "matches": [
     {
       "matchId": "<서버 matchId>",
       "order": 1,
+      "sourceCommit": "<이 판을 실행한 실제 배포 SHA>",
       "startedAt": "2026-09-11T10:10:00+09:00",
       "endedAt": "2026-09-11T10:13:20+09:00",
       "result": "two-captured | two-escaped | timeout",
@@ -67,13 +69,26 @@ G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.
         "dev-1": {
           "fpsAvg": 52,
           "fpsMin": 41,
-          "remoteFaces": 5,
+          "remoteFaces": 2,
+          "cameraReady": true,
+          "microphonePermission": "denied",
+          "micDeniedAction": "map-exchange",
           "nearVoice": true,
           "audioDuplicate": false,
           "playbackPermission": "granted",
           "afterEnd": { "tracks": 0, "workers": 1, "textures": 12, "rooms": 0 }
         }
       },
+      "mediaChecks": [
+        {
+          "receiverDeviceId": "dev-1",
+          "senderDeviceId": "dev-2",
+          "kind": "audio",
+          "allowed": true,
+          "observed": true,
+          "observedAt": "2026-09-11T10:11:00+09:00"
+        }
+      ],
       "failures": []
     }
   ]
@@ -83,7 +98,11 @@ G5 실장치 완료의 **기준 파일**은 이 양식대로 사람이 채운 `.
 - `matches` 는 **정확히 5개**, `order` 1~5 연속, 모두 `result` 와 `endedAt` 이 있어야 한다.
 - 각 판의 `devices` 에 6개 `deviceId` 가 전부 있어야 한다.
 - `afterEnd` 는 판 종료 후 DevTools 로 읽은 남은 Track/Worker/Texture/Room 수. 5판에 걸쳐 **증가하면 누수**로 실패한다 (재경기 완주만으로는 통과하지 않는다).
-- `failures` 에는 실패 단계 / 수정 commit / 재시험 판 을 적는다.
+- `failures`에 남은 실패가 있으면 그 5판 묶음은 통과하지 않는다. 실패·수정 이력은 별도 기록하고 수정된 동일 빌드에서 5판을 다시 검증한다.
+- 모든 시각은 시간대가 있는 유효한 ISO 시각이다. 장치 확인은 첫 판 시작 전이며 각 판은 종료가 시작 뒤이고 다음 판과 겹치지 않는다. 전체/판별 `sourceCommit`은 devices.json과 일치해야 한다.
+- `remoteFaces`는 0~5 정수다. 모든 시점에 5명이 보여야 하는 것은 아니지만 각 장치는 5판 중 허용 영상/음성 수신을 최소 한 번씩 실제 확인한다. 각 판에도 허용 영상·음성의 양성 표본이 필요하다.
+- `mediaChecks`에는 실제 송신/수신 장치, video/audio, 서버 허용 여부와 관찰 여부, 판 안의 관찰 시각을 적는다. 자기 자신·미등록 장치·허용/관찰 모순은 거절한다. 원본 영상·음성은 저장하지 않는다.
+- 마이크 거부자는 `microphonePermission: denied`, `cameraReady: true` 상태에서 음성을 수신하고 `micDeniedAction: map-exchange|escape` 중 하나를 실제 수행한 기록이 최소 한 번 필요하다. coverage 태그만으로 대신하지 않는다.
 
 ## 필수 행동 coverage (5판 합쳐서 최소 1회씩)
 
@@ -115,7 +134,7 @@ MP-06 · EQ-06 · EQ-07 · EQ-08 · EQ-09 · EQ-12 · G3-C (아이템 종류·�
 
 ## 판정 목표와 현재 검사 한계 (collect-six-device-results)
 
-- 장치6·판5·coverage·누수/FPS 목표뿐 아니라 실제 허용 관계의 영상/음성 대조·유효한 순차 시간·같은 배포 SHA까지 확인해야 G5를 인수한다. 이 추가 검사는 K03의 후속 구현이며 현재 자동화됐다고 보고하지 않는다.
+- 장치6·판5·coverage·누수/FPS 목표뿐 아니라 실제 허용 관계의 영상/음성 대조·유효한 순차 시간·같은 배포 SHA까지 확인해야 G5를 인수한다. 집계기가 이 정합성을 검사한다. 실제 장치에서 해당 기록을 얻는 작업은 여전히 사람의 관찰이 필요하다.
 - 어느 하나라도 빈 칸 → `INCOMPLETE` (PASS 아님)
 - `realDevice:false` 포함, coverage 누락, 누수 증가, FPS 미달 → `FAIL`
 - 결정 대기 항목 미사용은 어떤 경우에도 실패가 아니다
