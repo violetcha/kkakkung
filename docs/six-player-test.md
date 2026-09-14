@@ -109,7 +109,7 @@ docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.p
 
 - `room.phase`: 방의 단계 전환(`stage` → `phase`)과 접속 인원(`count`).
 - `room.preparation_failed`: 무효 처리(`outcome=ABORTED`) 또는 장치 점검 복귀(`DEVICE_CHECK`), 내부 진단(`reason`: `LOADING_TIMEOUT`, `MAP_FINALIZING_TIMEOUT`, `LAYOUT:…`, `MEDIA_PREPARE:…`), 중단 사유(`code`), 로딩 집계(`total`/`reported`/`faceConfirmed`), 미결 미디어 여부.
-- `room.command_rejected`: 참가자의 LOAD_READY 가 거절된 이유(`code`).
+- `room.command_rejected`: READY·PRACTICE_READY·LOAD_READY·REMATCH 가 거절된 이유(`code`)와 지점(`stage`: gate·queue·apply). `room.load_ready`: LOAD_READY 가 수락된 순간의 집계(`reported`/`total`). 실패 시 `room.load_ready` 가 0건이면 클라이언트가 보고를 보내지 않은 것이고, 거절 이벤트가 있으면 서버가 거절한 것이다.
 - `media.prepare_failed` / `media.retirement.unresolved` / `media.api.failed` / `media.webhook`: 미디어 세대 준비 실패 코드, 회수 미결 사유, LiveKit API 실패(메서드·HTTP 상태), 웹훅 종류별 수신 결과.
 
 참가자 화면의 로딩 안내에는 **내 준비 대기: 경기장 자산 · 카메라 연결 · 내 얼굴 게시 확인** 처럼 자기 쪽에서 아직 못 낸 항목이 표시된다. 6명이 각자 화면을 사진으로 남기면 누가 어디서 막혔는지 서버 로그와 대조할 수 있다.
