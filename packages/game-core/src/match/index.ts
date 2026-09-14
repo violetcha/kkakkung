@@ -286,8 +286,6 @@ export {
 export { mergeKnowledge, type ExchangeMergeResult, type MergedParty } from './exchange/merge.js';
 
 export {
-  TRACE_DELAY_TICKS,
-  TRACE_VISIBLE_TICKS,
   midpointOf,
   releaseTraces,
   scheduleTrace,

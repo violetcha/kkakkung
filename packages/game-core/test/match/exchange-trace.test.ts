@@ -2,14 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { DomainEvent } from '../../src/match/core-types.js';
 import type { MatchState } from '../../src/match/engine.js';
-import {
-  TRACE_DELAY_TICKS,
-  TRACE_VISIBLE_TICKS,
-  midpointOf,
-  releaseTraces,
-  scheduleTrace,
-} from '../../src/match/exchange/trace.js';
-import { command, player, startedMatch, step } from './match-fixture.js';
+import { midpointOf, releaseTraces, scheduleTrace } from '../../src/match/exchange/trace.js';
+import { command, player, startedMatch, step, tuning } from './match-fixture.js';
 
 /** Places players on chosen cells/dirs without moving through the maze. */
 function place(
@@ -74,9 +68,9 @@ describe('delayed tagger trace of a successful exchange', () => {
       showAtTick: 120,
       expiresTick: 160,
     });
-    // 1 second delay, 2 second display, on the 50ms tick.
-    expect(marker.payload.showAtTick - marker.payload.occurredTick).toBe(TRACE_DELAY_TICKS);
-    expect(marker.payload.expiresTick - marker.payload.showAtTick).toBe(TRACE_VISIBLE_TICKS);
+    // 1 second delay, 2 second display, on the 50ms tick - both from the tuning.
+    expect(marker.payload.showAtTick - marker.payload.occurredTick).toBe(tuning().traceDelayTicks);
+    expect(marker.payload.expiresTick - marker.payload.showAtTick).toBe(tuning().traceVisibleTicks);
     // Every active tagger, and only taggers, receives it.
     expect([...marker.audience].sort()).toEqual(['t-a', 't-b', 't-c']);
     expect(published.state.traces.size).toBe(0);
@@ -204,5 +198,43 @@ describe('delayed tagger trace of a successful exchange', () => {
     expect(aborted.state.phase).toBe('ABORTED');
     const later = step(aborted.state, 120);
     expect(markers(later.events)).toEqual([]);
+  });
+  it('takes the delay and the display window from the injected tuning', () => {
+    const base = startedMatch(100);
+    const tuned = {
+      ...base,
+      tuning: { ...base.tuning, traceDelayTicks: 5, traceVisibleTicks: 12 },
+    } as MatchState;
+    const point = midpointOf({ x: 4, y: 4 }, { x: 5, y: 4 });
+
+    const scheduled = scheduleTrace(tuned, {
+      markerId: 'mk-1',
+      kind: 'exchange',
+      point,
+      occurredTick: 100,
+    });
+    const delayed = scheduled.traces.get('mk-1')!;
+    expect(delayed.publishTick).toBe(105);
+    expect(delayed.expiresTick).toBe(117);
+
+    // A device trace publishes at once but still uses the tuned display window.
+    const immediate = scheduleTrace(scheduled, {
+      markerId: 'mk-2',
+      kind: 'trap',
+      point,
+      occurredTick: 100,
+      delayTicks: 0,
+    });
+    const now = immediate.traces.get('mk-2')!;
+    expect(now.publishTick).toBe(100);
+    expect(now.expiresTick).toBe(112);
+
+    // Each window really ends where its own tuning put it: at 112 the device
+    // trace has expired and is dropped, while the longer exchange one still goes out.
+    expect(releaseTraces(immediate, 111).due.map((trace) => trace.markerId)).toEqual([
+      'mk-1',
+      'mk-2',
+    ]);
+    expect(releaseTraces(immediate, 112).due.map((trace) => trace.markerId)).toEqual(['mk-1']);
   });
 });

@@ -765,6 +765,8 @@ export type MatchTuning = Readonly<{
   restraintTicks: 30;
   restraintImmunityTicks: 40;
   exchangeExpiryTicks: 40;
+  traceDelayTicks: 20;
+  traceVisibleTicks: 40;
   exitMinimumTicks: 40;
   exitExpiryTicks: 160;
   exitRetryTicks: 10;

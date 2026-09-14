@@ -2,12 +2,6 @@ import type { TracePoint } from '../core-types.js';
 import type { MatchState } from '../state.js';
 import type { Cell } from '../types.js';
 
-/** 1 second: a trace is published 20 ticks after the event it came from. */
-export const TRACE_DELAY_TICKS = 20;
-
-/** 2 seconds: how long a published trace stays valid. */
-export const TRACE_VISIBLE_TICKS = 40;
-
 /**
  * A scheduled tagger trace. `point` is a midpoint, so it is not a Cell: on
  * adjacent cells the coordinates land on halves. Neither the source players
@@ -41,7 +35,8 @@ export function midpointOf(a: Cell, b: Cell): TracePoint {
 /**
  * Schedules one delayed trace (KN-08). The completion id keys the schedule, so
  * a repeated completion neither books nor sends a second marker. The point is
- * frozen here and never follows the players' later movement.
+ * frozen here and never follows the players' later movement. The delay and the
+ * display window come from the match's tuning, like every other rule value.
  */
 export function scheduleTrace(
   state: MatchState,
@@ -50,12 +45,12 @@ export function scheduleTrace(
     kind: PendingTrace['kind'];
     point: TracePoint;
     occurredTick: number;
-    /** Ticks between the event and its publication; defaults to the 1 second delay. */
+    /** Ticks between the event and its publication; defaults to the tuned delay. */
     delayTicks?: number;
   }>,
 ): MatchState {
   if (state.traces.has(entry.markerId)) return state;
-  const publishTick = entry.occurredTick + (entry.delayTicks ?? TRACE_DELAY_TICKS);
+  const publishTick = entry.occurredTick + (entry.delayTicks ?? state.tuning.traceDelayTicks);
   const traces = new Map(state.traces);
   traces.set(
     entry.markerId,
@@ -65,7 +60,7 @@ export function scheduleTrace(
       point: Object.freeze({ x: entry.point.x, y: entry.point.y }),
       occurredTick: entry.occurredTick,
       publishTick,
-      expiresTick: publishTick + TRACE_VISIBLE_TICKS,
+      expiresTick: publishTick + state.tuning.traceVisibleTicks,
     }),
   );
   return { ...state, traces };
