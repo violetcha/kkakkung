@@ -102,6 +102,66 @@ describe('EventDispatcher', () => {
     });
   });
 
+  it('compares view content structurally: a rebuilt identical body never resends, deep edits do', () => {
+    const h = setup();
+    const instance = h.context.createInstance('game');
+    h.context.enterInstance('r1', instance.gameInstanceId);
+    h.bodies.set('r1', body(2));
+    h.dispatcher.publishView('r1', 'initial', 'PLAYING');
+    const sent = () => h.views.length;
+    const afterInitial = sent();
+
+    // The projection builds a new object every tick. Identical content is not a change.
+    h.bodies.set('r1', body(2));
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).toBeNull();
+    h.bodies.set('r1', body(2));
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).toBeNull();
+    expect(sent()).toBe(afterInitial);
+
+    // A value nested inside an array element is a change.
+    const deep = { ...body(2), knownTerrain: [{ x: 2, y: 9, kind: 'floor' as const }] };
+    h.bodies.set('r1', deep);
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).not.toBeNull();
+    h.bodies.set('r1', { ...deep, knownTerrain: [{ x: 2, y: 9, kind: 'floor' as const }] });
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).toBeNull();
+
+    // Array length is a change.
+    const longer = {
+      ...deep,
+      visibleCells: [
+        { x: 2, y: 1 },
+        { x: 3, y: 1 },
+      ],
+    };
+    h.bodies.set('r1', longer);
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).not.toBeNull();
+
+    // Order inside an array is a change: the same cells in a different order still resend.
+    h.bodies.set('r1', {
+      ...longer,
+      visibleCells: [
+        { x: 3, y: 1 },
+        { x: 2, y: 1 },
+      ],
+    });
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).not.toBeNull();
+
+    // Dropping a nested object entirely is a change.
+    h.bodies.set('r1', {
+      ...longer,
+      visibleCells: [
+        { x: 3, y: 1 },
+        { x: 2, y: 1 },
+      ],
+      self: null,
+    });
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')).not.toBeNull();
+    // Every view that went out carries a strictly newer version than the one before it.
+    const versions = h.views.map((entry) => entry.view.stateVersion);
+    expect(versions).toEqual([...versions].sort((a, b) => a - b));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+
   it('delivers events only to recipients scoped to the producing instance with their current scope', () => {
     const h = setup();
     const practice = h.context.createInstance('practice', 'runner');
