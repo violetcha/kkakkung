@@ -450,7 +450,11 @@ export function ProductApp({
           {round &&
             !inResult &&
             ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
-              <LoadingOverlay round={round} serverNow={clockTime} />
+              <LoadingOverlay
+                round={round}
+                serverNow={clockTime}
+                pending={snapshot.loadingPending}
+              />
             )}
           {worldVisible && round && view?.self?.status === 'ACTIVE' && (
             <GameHud round={round} self={view.self} mode={snapshot.interaction.mode} />

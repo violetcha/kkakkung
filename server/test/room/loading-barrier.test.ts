@@ -110,3 +110,27 @@ describe('LoadingCoordinator', () => {
     expect(loading.loadingView('p1', 1, 'a')).toBeNull();
   });
 });
+
+describe('LoadingCoordinator summary', () => {
+  it('counts reports and face confirmations without identities, and is null when closed', () => {
+    const loading = new LoadingCoordinator({ requireFace: true });
+    expect(loading.summary()).toBeNull();
+    loading.open({ loadId: 'load-1', mediaInstanceId: 'media-1', playerIds: players, nowMs: 0 });
+    for (const id of players) loading.setReceiverGeneration(id, 'media-1', 1);
+    loading.applyLoadReady('p1', {
+      loadId: 'load-1',
+      mediaInstanceId: 'media-1',
+      receiverGeneration: 1,
+    });
+    loading.applyLoadReady('p2', {
+      loadId: 'load-1',
+      mediaInstanceId: 'media-1',
+      receiverGeneration: 1,
+    });
+    loading.confirmSelfFace('p1', 'media-1', 1, 'face');
+    expect(loading.summary()).toEqual({ total: 3, reported: 2, faceConfirmed: 1 });
+    expect(loading.evaluate(1000)).toBe('waiting');
+    loading.invalidate();
+    expect(loading.summary()).toBeNull();
+  });
+});

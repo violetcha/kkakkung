@@ -69,6 +69,7 @@ import { LobbyCoordinator } from './LobbyCoordinator.js';
 import { PracticeCoordinator } from './PracticeCoordinator.js';
 import { RematchCoordinator } from './RematchCoordinator.js';
 import { preparationIssue } from './preparation-issue.js';
+import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
@@ -103,6 +104,12 @@ export type ProductRoomDeps<State> = Readonly<{
   emitMetric?: EmitMetric;
   random?: () => number;
   onInvalidateRoom?: (roomCode: string) => void;
+  /**
+   * F structured event sink (observability/StructuredEvents). Phase changes, preparation
+   * failures and rejected preparation commands are written here with counts and codes only,
+   * so a "미로를 준비하고 있어요" failure on real devices can be explained from the server log.
+   */
+  emitEvent?: (event: StructuredEvent) => void;
 }>;
 
 type PendingLayout =
@@ -698,10 +705,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           return this.phase === 'TEAM_PRACTICE'
             ? this.practice.applyPracticeReady(entry.actorId, command.payload.ready)
             : { result: 'rejected', code: 'INVALID_PHASE' };
-        case 'LOAD_READY':
-          return this.phase === 'GAME_LOADING'
-            ? this.loading.applyLoadReady(entry.actorId, command.payload)
-            : { result: 'rejected', code: 'INVALID_PHASE' };
+        case 'LOAD_READY': {
+          const result =
+            this.phase === 'GAME_LOADING'
+              ? this.loading.applyLoadReady(entry.actorId, command.payload)
+              : { result: 'rejected' as const, code: 'INVALID_PHASE' as const };
+          if (result.result === 'rejected')
+            this.emitEvent('room.command_rejected', 'warn', {
+              command: 'LOAD_READY',
+              phase: this.phase,
+              code: result.code,
+            });
+          return result;
+        }
         case 'REMATCH': {
           const decision = this.rematch.apply({
             actorId: entry.actorId,
@@ -1050,7 +1066,44 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.setPhase('RESULT');
     }
 
+    private emitEvent(
+      event: StructuredEvent['event'],
+      level: StructuredEvent['level'],
+      fields: NonNullable<StructuredEvent['fields']>,
+    ) {
+      try {
+        deps.emitEvent?.({
+          event,
+          level,
+          atMs: deps.monotonicNow(),
+          fields: { roomRef: this.roomCode, ...fields },
+        });
+      } catch {
+        // Diagnostics never change the room outcome.
+      }
+    }
+
+    private reportPreparationFailure(
+      outcome: 'ABORTED' | 'DEVICE_CHECK',
+      diagnostic: string,
+      abortReason: string | null,
+    ) {
+      const loading = this.loading.summary();
+      this.emitEvent('room.preparation_failed', 'warn', {
+        phase: this.phase,
+        outcome,
+        reason: diagnostic,
+        code: abortReason,
+        total: loading?.total ?? null,
+        reported: loading?.reported ?? null,
+        faceConfirmed: loading?.faceConfirmed ?? null,
+        unresolvedMedia: this.hasUnresolvedMedia(),
+        count: this.clientsByPlayer.size,
+      });
+    }
+
     private abortMatch(reason: PublicMatchState['abortReason'] | null, diagnostic: string) {
+      this.reportPreparationFailure('ABORTED', diagnostic, reason);
       this.invalidateLayout();
       this.blockedReason = diagnostic;
       this.abortReason = reason;
@@ -1070,6 +1123,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.abortMatch('MEDIA_UNAVAILABLE', diagnostic);
         return;
       }
+      this.reportPreparationFailure('DEVICE_CHECK', diagnostic, null);
       this.invalidateLayout();
       this.blockedReason = diagnostic;
       this.lobby.clearReady();
@@ -1248,6 +1302,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private setPhase(next: Phase) {
       if (this.phase === next) return;
+      this.emitEvent('room.phase', 'info', {
+        phase: next,
+        stage: this.phase,
+        count: this.clientsByPlayer.size,
+      });
       this.phase = next;
       if (next !== 'ABORTED') this.abortReason = null;
       this.context.bumpVersion();

@@ -28,6 +28,8 @@ export class LiveKitWebhook {
       now: () => number;
       verifier?: WebhookVerifier;
       maxEventIds?: number;
+      /** Diagnostics: event type and what happened to it. Never identities or bodies. */
+      onEvent?: (name: string, outcome: 'accepted' | 'ignored' | 'unauthenticated') => void;
     },
   ) {
     this.verifier = options.verifier ?? new WebhookReceiver(options.apiKey, options.apiSecret);
@@ -38,23 +40,42 @@ export class LiveKitWebhook {
     rawBody: string,
     authorization: string,
   ): Promise<{ status: 'accepted' | 'ignored' }> {
-    if (!authorization) throw new WebhookAuthenticationError();
+    const note = (name: string, outcome: 'accepted' | 'ignored' | 'unauthenticated') => {
+      try {
+        this.options.onEvent?.(name, outcome);
+      } catch {
+        /* Diagnostics never change webhook handling. */
+      }
+    };
+    if (!authorization) {
+      note('unknown', 'unauthenticated');
+      throw new WebhookAuthenticationError();
+    }
     let event: WebhookEvent;
     try {
       event = await this.verifier.receive(rawBody, authorization, false);
     } catch {
+      note('unknown', 'unauthenticated');
       throw new WebhookAuthenticationError();
     }
-    if (!event.id || !events.has(event.event) || !event.room?.name) return { status: 'ignored' };
-    if (this.seen.has(event.id) || this.pending.has(event.id)) return { status: 'ignored' };
+    const name = typeof event.event === 'string' ? event.event : 'unknown';
+    const ignored = () => {
+      note(name, 'ignored');
+      return { status: 'ignored' as const };
+    };
+    if (!event.id || !events.has(event.event) || !event.room?.name) return ignored();
+    if (this.seen.has(event.id) || this.pending.has(event.id)) return ignored();
     const identity = event.participant?.identity;
-    if (event.event !== 'room_finished' && !identity) return { status: 'ignored' };
+    if (event.event !== 'room_finished' && !identity) return ignored();
     const matched = this.options.registry.markEvent({
       roomName: event.room.name,
       ...(identity ? { identity } : {}),
     });
-    if (!matched) return { status: 'ignored' };
-    const result = this.accept(event.id);
+    if (!matched) return ignored();
+    const result = this.accept(event.id).then((outcome) => {
+      note(name, outcome.status);
+      return outcome;
+    });
     this.pending.set(event.id, result);
     return result;
   }

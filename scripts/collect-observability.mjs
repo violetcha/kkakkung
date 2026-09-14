@@ -66,6 +66,12 @@ export const EVENT_NAMES = Object.freeze([
   'alert.raised',
   'alert.cleared',
   'observability.dropped',
+  'room.phase',
+  'room.preparation_failed',
+  'room.command_rejected',
+  'media.prepare_failed',
+  'media.api.failed',
+  'media.webhook',
 ]);
 
 export const ALERT_THRESHOLDS = Object.freeze({
