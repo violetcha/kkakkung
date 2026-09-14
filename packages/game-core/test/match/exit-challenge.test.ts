@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { DomainEvent } from '../../src/match/core-types.js';
 import type { MatchState } from '../../src/match/engine.js';
 import { getPlayerSelf } from '../../src/match/engine.js';
-import { facesExit } from '../../src/match/exits/challenge.js';
+import { advanceChallenges, facesExit } from '../../src/match/exits/challenge.js';
 import { closeExit, exitOfOwner } from '../../src/match/exits/registry.js';
 import type { PlayerRecord } from '../../src/match/state.js';
 import { command, player, startedMatch, step } from './match-fixture.js';
@@ -293,5 +293,25 @@ describe('exit challenge start, locks, cancel and deadline', () => {
     const shut = step({ ...start, exits: closeExit(start.exits, 'r-a').registry }, 102);
     expect(player(shut.state, 'r-a').challenge).toBeNull();
     expect(ended(shut.events)).toHaveLength(1);
+  });
+
+  it('judges a live challenge on the tick it is given, not the one the state carries', () => {
+    const state = atOwnExit();
+    const id = exitId(state);
+    const start = step(state, 101, [command('r-a', 'EXIT_START', { exitId: id })]).state;
+    // A restraint ending at 140, on a state whose own tick is still an older one.
+    const stale = { ...patch(start, 'r-a', { restraintUntilTick: 140 }), tick: 120 };
+
+    // One tick before the end the runner is still bound and the pose is canceled.
+    const during = advanceChallenges(stale, 139);
+    expect(during.ended).toEqual([
+      expect.objectContaining({ playerId: 'r-a', result: 'canceled', reason: 'NOT_ALLOWED' }),
+    ]);
+    expect(player(during.state, 'r-a').challenge).toBeNull();
+
+    // At the end tick the restraint is over, so the attempt survives.
+    const after = advanceChallenges(stale, 140);
+    expect(after.ended).toEqual([]);
+    expect(player(after.state, 'r-a').challenge).toMatchObject({ challengeId: 'ch-1' });
   });
 });
