@@ -70,6 +70,9 @@ export interface ProductRoomPort {
   onError(handler: () => void): () => void;
   leave(): Promise<unknown>;
 }
+/** 첫 게시가 재협상 중 실패했을 때 한 번 다시 시도하기 전 대기. */
+const PUBLISH_RETRY_DELAY_MS = 500;
+
 export type ProductSnapshot = {
   round: PublicRoundState | null;
   view: PrivateView | null;
@@ -544,11 +547,13 @@ export function bindProductRoom(
     const key = loading.update(snapshot.round, snapshot.view);
     // Only this locally compiled primitive asset version is known. Unknown server versions stay blocked.
     loading.assetsLoaded(key, SCENE_ASSET_VERSION);
-    const ready = deviceReady(snapshot.devices);
-    if (ready) loading.check(snapshot.view, bindings, snapshot.media);
+    // LOAD_READY 는 장치 상태(카메라·추적·보정·소리)에 묶지 않는다. 얼굴 게시는 서버가 바인딩으로
+    // 독립 확인하고, 추적이 잠깐 끊긴 것은 경기 중 폴백이 다룬다. 2026-09-14 실기기: 얼굴 6/6 확인에도
+    // 클라이언트가 '장치 준비' 대기로 보고를 보내지 않아 30초 타임아웃이 반복됐다.
+    loading.check(snapshot.view, bindings, snapshot.media);
     const pending =
       snapshot.round.phase === 'GAME_LOADING'
-        ? loading.pending(snapshot.view, bindings, snapshot.media, ready)
+        ? loading.pending(snapshot.view, bindings, snapshot.media)
         : [];
     if ((snapshot.loadingPending ?? []).join('|') !== pending.join('|'))
       publish({ loadingPending: pending });
@@ -766,7 +771,18 @@ export function bindProductRoom(
         await owner.runtime.connectMedia(grant);
         if (!current() || !sameMediaScope(grant)) return;
         mediaStage = 'MEDIA_PUBLISH_FAILED';
-        const faceSid = await owner.runtime.publishMedia();
+        // SDK 가 연결 직후 재협상 중이면 첫 게시가 닫힌 peer connection 으로 실패할 수 있다
+        // (2026-09-14 실기기: "could not createOffer with closed peer connection"). 한 번만 다시 시도한다.
+        let faceSid: string | null;
+        try {
+          faceSid = await owner.runtime.publishMedia();
+        } catch (firstFailure) {
+          if (!current() || !sameMediaScope(grant)) return;
+          await new Promise((resolve) => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
+          if (!current() || !sameMediaScope(grant)) return;
+          if (owner.runtime.getGenerationState() !== 'live') throw firstFailure;
+          faceSid = await owner.runtime.publishMedia();
+        }
         if (!current() || !sameMediaScope(grant)) return;
         if (!faceSid) {
           mediaStage = 'FACE_PUBLICATION_MISSING';
