@@ -11,7 +11,11 @@ import { roundFixture, viewFixture } from '../features/room/product-fixture';
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
 import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
-function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRuntime) {
+import { createRuntimeMetrics, type RuntimeMetrics } from './runtime-metrics';
+function fixture(
+  interactionFactory?: (deps: InteractionDeps) => InteractionRuntime,
+  metrics?: RuntimeMetrics,
+) {
   let now = 0;
   let sequence = 0;
   const messages = new Map<string, (value: unknown) => void>();
@@ -89,6 +93,7 @@ function fixture(interactionFactory?: (deps: InteractionDeps) => InteractionRunt
         callbacks = deps;
         return interactionFactory?.(deps) ?? fake;
       },
+      ...(metrics ? { metrics } : {}),
     },
   );
   return {
@@ -1141,4 +1146,58 @@ it('reports and retires an empty face publication without requesting bindings', 
   expect(f.fake.retireMediaGeneration).toHaveBeenCalled();
   expect(f.send.mock.calls.some(([type]) => type === 'media-bindings-refresh')).toBe(false);
   f.close();
+});
+
+it('feeds the opt-in collector with match boundaries, sensors, media states and face tracks', () => {
+  let clock = 1000;
+  const metrics = createRuntimeMetrics({ now: () => clock });
+  const f = fixture(undefined, metrics);
+  const scope = { matchId: 'm', mediaInstanceId: 'mi-1', receiverGeneration: 1 };
+
+  // Binding already opened a bucket for the room's current match.
+  expect(metrics.report().matches.map((entry) => entry.matchId)).toEqual(['m']);
+  f.state({ matchId: 'm', phase: 'PLAYING', stateVersion: 10 });
+  f.callbacks.onMediaStatus({ ...scope, state: 'connected', code: null });
+  clock = 1200;
+  f.callbacks.onSensors({
+    runtimeGeneration: 1,
+    emittedAtMs: 1200,
+    face: { frameId: 4, sampledAtMs: 1100, receivedAtMs: 1160, status: 'missing', data: null },
+    pose: null,
+    gesture: null,
+  });
+  f.callbacks.onFaceTrack({
+    ...scope,
+    playerId: 'friend',
+    publisherGeneration: 1,
+    trackSid: 'TR_1',
+    // The node suite has no DOM; the runtime only needs a non-null element here.
+    element: {} as HTMLVideoElement,
+  });
+  clock = 1500;
+  f.state({ matchId: 'm', phase: 'RESULT', stateVersion: 11 });
+
+  const [match] = metrics.report().matches;
+  expect(match?.matchId).toBe('m');
+  expect(match?.endedAtMs).toBe(1500);
+  expect(match?.inference.face).toMatchObject({ count: 1, max: 60 });
+  expect(match?.media.map((event) => event.kind)).toEqual(['state', 'face-track-attached']);
+  // A rematch opens its own bucket instead of extending the finished one.
+  f.state({ matchId: 'm-2', phase: 'DEVICE_CHECK', stateVersion: 12 });
+  expect(metrics.report().matches.map((entry) => entry.matchId)).toEqual(['m', 'm-2']);
+});
+
+it('keeps the normal runtime path when the run did not ask for measurements', () => {
+  const f = fixture();
+  f.state({ matchId: 'm', phase: 'PLAYING', stateVersion: 10 });
+  f.callbacks.onSensors({
+    runtimeGeneration: 1,
+    emittedAtMs: 10,
+    face: { frameId: 1, sampledAtMs: 0, receivedAtMs: 10, status: 'missing', data: null },
+    pose: null,
+    gesture: null,
+  });
+  // No collector was injected: the sensor path itself is untouched and there is
+  // nothing to read back, because nothing was published for this run.
+  expect(f.runtime.sensors?.face?.frameId).toBe(1);
 });
