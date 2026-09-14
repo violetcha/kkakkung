@@ -72,11 +72,9 @@ export function createLoadingController(
       view: PrivateView | null,
       bindings: MediaBindings | null,
       media: MediaStatus | null,
-      devicesReady: boolean,
     ): string[] {
       if (!current || sent) return [];
       const waiting: string[] = [];
-      if (!devicesReady) waiting.push('장치 준비');
       if (!assetReady) waiting.push('경기장 자산');
       if (view?.self?.status !== 'ACTIVE' || view.stateVersion < current.initialViewVersion)
         waiting.push('초기 화면');

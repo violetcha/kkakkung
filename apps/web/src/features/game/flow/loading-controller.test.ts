@@ -88,22 +88,22 @@ it('lists what this client is still waiting for, and nothing once the report is 
       },
     ],
   };
-  // Nothing loaded or connected yet: every gate is listed, in a fixed order.
-  expect(loader.pending(loaded, null, null, false)).toEqual([
-    '장치 준비',
+  // Nothing loaded or connected yet: every gate is listed, in a fixed order. Device readiness
+  // (camera/vision/calibration/audio) is deliberately not a gate: the server confirms the face.
+  expect(loader.pending(loaded, null, null)).toEqual([
     '경기장 자산',
     '카메라 연결',
     '내 얼굴 게시 확인',
   ]);
   loader.assetsLoaded(key, 'asset');
-  expect(
-    loader.pending(loaded, bindings, { ...media, state: 'connecting' as const }, true),
-  ).toEqual(['카메라 연결']);
-  expect(loader.pending(loaded, { ...bindings, participants: [] }, media, true)).toEqual([
+  expect(loader.pending(loaded, bindings, { ...media, state: 'connecting' as const })).toEqual([
+    '카메라 연결',
+  ]);
+  expect(loader.pending(loaded, { ...bindings, participants: [] }, media)).toEqual([
     '내 얼굴 게시 확인',
   ]);
-  expect(loader.pending(loaded, bindings, media, true)).toEqual([]);
+  expect(loader.pending(loaded, bindings, media)).toEqual([]);
   expect(loader.check(loaded, bindings, media)).toBe(true);
   // Sent: the rest is other participants, so nothing is pending on this side.
-  expect(loader.pending(loaded, null, null, false)).toEqual([]);
+  expect(loader.pending(loaded, null, null)).toEqual([]);
 });
