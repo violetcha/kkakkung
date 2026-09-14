@@ -99,4 +99,19 @@ continuous는 해당 예약의 모든 미디어 세대가 실제로 회수된 �
 
 각 결과에는 소스 SHA·이미지 digest, 날짜·단계·익명 참가자, OS/브라우저·장치, 네트워크, 기대/실제 결과, 비밀값 없는 오류 코드를 기록한다. 미실행 칸은 NOT_RUN으로 남기고 실제 기기 6대의 결과만 G5에 반영한다. 실패한 경계를 수정한 뒤 해당 회귀와 전체 흐름을 다시 확인한다.
 
+### "미로를 준비하고 있어요"에서 실패했을 때 (2026-09-14)
+
+준비 단계(MAP_FINALIZING·GAME_LOADING) 실패의 원인은 서버 로그에 구조화 이벤트로 남는다. 운영자가 서버에서 다음으로 읽는다(신원·토큰은 기록되지 않는다).
+
+```bash
+docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
+```
+
+- `room.phase`: 방의 단계 전환(`stage` → `phase`)과 접속 인원(`count`).
+- `room.preparation_failed`: 무효 처리(`outcome=ABORTED`) 또는 장치 점검 복귀(`DEVICE_CHECK`), 내부 진단(`reason`: `LOADING_TIMEOUT`, `MAP_FINALIZING_TIMEOUT`, `LAYOUT:…`, `MEDIA_PREPARE:…`), 중단 사유(`code`), 로딩 집계(`total`/`reported`/`faceConfirmed`), 미결 미디어 여부.
+- `room.command_rejected`: 참가자의 LOAD_READY 가 거절된 이유(`code`).
+- `media.prepare_failed` / `media.retirement.unresolved` / `media.api.failed` / `media.webhook`: 미디어 세대 준비 실패 코드, 회수 미결 사유, LiveKit API 실패(메서드·HTTP 상태), 웹훅 종류별 수신 결과.
+
+참가자 화면의 로딩 안내에는 **내 준비 대기: 경기장 자산 · 카메라 연결 · 내 얼굴 게시 확인** 처럼 자기 쪽에서 아직 못 낸 항목이 표시된다. 6명이 각자 화면을 사진으로 남기면 누가 어디서 막혔는지 서버 로그와 대조할 수 있다.
+
 로컬 회귀: `pnpm verify`. 빌드된 Worker·고정 모델의 초기화 및 빈 프레임 실제 추론: `node scripts/check-product-assets.mjs` (`pnpm build` 이후). 이 검사는 실제 카메라·얼굴 인식 품질·Cloud 수신 증거가 아니다. 대표 장치 전체 G5/G6와 장시간 부하/복구 인수는 별도 실제 결과로 완료 판단한다.

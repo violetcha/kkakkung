@@ -77,6 +77,8 @@ export type ProductSnapshot = {
   roomAccess?: RoomAccessMessage | null;
   devices: DeviceStatus;
   media: MediaStatus | null;
+  /** GAME_LOADING 에서 내가 아직 못 낸 준비 항목. 보고를 보낸 뒤에는 빈 배열이다. */
+  loadingPending?: string[];
   request: RequestDisplay | null;
   requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
   interaction: InteractionState;
@@ -542,7 +544,14 @@ export function bindProductRoom(
     const key = loading.update(snapshot.round, snapshot.view);
     // Only this locally compiled primitive asset version is known. Unknown server versions stay blocked.
     loading.assetsLoaded(key, SCENE_ASSET_VERSION);
-    if (deviceReady(snapshot.devices)) loading.check(snapshot.view, bindings, snapshot.media);
+    const ready = deviceReady(snapshot.devices);
+    if (ready) loading.check(snapshot.view, bindings, snapshot.media);
+    const pending =
+      snapshot.round.phase === 'GAME_LOADING'
+        ? loading.pending(snapshot.view, bindings, snapshot.media, ready)
+        : [];
+    if ((snapshot.loadingPending ?? []).join('|') !== pending.join('|'))
+      publish({ loadingPending: pending });
   }
   function updateChallenge() {
     if (!bridge) return;

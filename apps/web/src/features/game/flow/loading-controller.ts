@@ -64,6 +64,40 @@ export function createLoadingController(
       });
       return true;
     },
+    /**
+     * 사용자에게 보여 줄 "아직 기다리는 것" 목록. check() 와 같은 조건을 읽기 전용으로 본다.
+     * 이미 보고를 보냈으면 다른 참가자를 기다리는 중이므로 빈 배열이다.
+     */
+    pending(
+      view: PrivateView | null,
+      bindings: MediaBindings | null,
+      media: MediaStatus | null,
+      devicesReady: boolean,
+    ): string[] {
+      if (!current || sent) return [];
+      const waiting: string[] = [];
+      if (!devicesReady) waiting.push('장치 준비');
+      if (!assetReady) waiting.push('경기장 자산');
+      if (view?.self?.status !== 'ACTIVE' || view.stateVersion < current.initialViewVersion)
+        waiting.push('초기 화면');
+      if (
+        media?.state !== 'connected' ||
+        media.matchId !== view?.matchId ||
+        media.mediaInstanceId !== current.mediaInstanceId ||
+        media.receiverGeneration !== current.receiverGeneration
+      )
+        waiting.push('카메라 연결');
+      const self = bindings?.participants.find((p) => p.playerId === view?.self?.playerId);
+      if (
+        !bindings ||
+        bindings.mediaInstanceId !== current.mediaInstanceId ||
+        bindings.receiverGeneration !== current.receiverGeneration ||
+        !self?.faceTrackSid ||
+        self.publisherGeneration !== current.receiverGeneration
+      )
+        waiting.push('내 얼굴 게시 확인');
+      return waiting;
+    },
     clear() {
       current = null;
       key = '';
