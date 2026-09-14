@@ -74,7 +74,9 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOUR
 
 브랜치에 Jenkinsfile 이 없으면(develop 미머지) MR 빌드가 "Jenkinsfile not found" 로 실패한다. 브랜치에 develop 을 한 번 merge 하면 해결된다.
 
-**동시 실행 (2026-09-10 변경)**: 컨트롤러 `numExecutors` 는 **1** 이다(`/var/lib/jenkins/config.xml`, 백업 `config.xml.bak-2026-09-10`). 잡 안의 겹침은 Jenkinsfile 의 `disableConcurrentBuilds()`, 잡 사이(`kkakkung` ↔ `kkakkung-mr`)의 겹침은 executor 1개로 막는다. 두 빌드가 겹치면 4 vCPU 가 모자라 서버 tick 이 250ms 를 넘어 6인 통합 시험이 깨졌다(kkakkung-mr #70). 대기열은 그대로 순서대로 돈다. 잠금 플러그인(lockable-resources)은 설치돼 있지 않다.
+**동시 실행 (2026-09-14 변경)**: 컨트롤러 `numExecutors` 는 **2** 로 되돌렸다. 잡 안의 겹침은 Jenkinsfile 의 `disableConcurrentBuilds()`, 잡 사이(`kkakkung` ↔ `kkakkung-mr`)의 겹침은 **Verify 단계만** 호스트 `flock /var/lib/jenkins/verify.lock` 으로 직렬화한다. 두 빌드의 vitest 가 겹치면 4 vCPU 가 모자라 서버 tick 이 250ms 를 넘어 6인 통합 시험이 깨졌기 때문이다(kkakkung-mr #70). 9/10~9/14 사이 executor 1개로 운영했을 때는 MR 빌드가 develop 배포 뒤에 통째로 줄을 서서 한 빌드가 14분까지 걸렸다(#130: 대기 6분 + 파이프라인 8분). 잠금 플러그인(lockable-resources)은 설치돼 있지 않다.
+
+**Verify 생략 (2026-09-14)**: Verify 가 빌드 시간의 7~8분이다(vitest 약 4분 + 포맷·린트·타입 약 1.7분 + 빌드·e2e·자산 약 2.2분). MR 빌드가 성공하면 `scripts/verified-tree.mjs record` 가 `/opt/kkakkung/verified-trees/<tree>.json` 에 소스 **트리 해시**를 남기고, develop(배포) 빌드는 자기 트리가 기록돼 있으면 Verify 를 생략한다("Verify 생략: …" 로그). GitLab 머지 커밋은 커밋 id 는 다르지만 사이에 다른 MR 이 들어오지 않았으면 트리가 같다. 트리가 다르면(진짜 병합) 전부 다시 검증한다. 이미지 빌드·Trivy·배포는 그대로 돈다. 결과적으로 머지 → 배포가 약 1.5분이다.
 
 **파이프라인 끝나기 전 머지 막기**: Jenkins 가 `updateGitlabCommitStatus name: 'jenkins'` 로 MR 커밋 상태를 게시하므로 GitLab 은 이를 외부 파이프라인으로 본다. GitLab 프로젝트 **Settings → Merge requests → Merge checks → "Pipelines must succeed"** 를 켜면 jenkins 상태가 success 가 되기 전엔 Merge 버튼이 잠긴다("Skipped pipelines are considered successful" 은 끔). Maintainer 권한이 필요해 UI 에서 사람이 켠다. 켠 뒤 웹훅을 놓친 MR 은 댓글 `Jenkins please retry a build` 로 다시 돌린다.
 
