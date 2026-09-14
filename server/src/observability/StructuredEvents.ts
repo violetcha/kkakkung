@@ -32,6 +32,12 @@ export const EVENT_NAMES = Object.freeze([
   'alert.raised',
   'alert.cleared',
   'observability.dropped',
+  'room.phase',
+  'room.preparation_failed',
+  'room.command_rejected',
+  'media.prepare_failed',
+  'media.api.failed',
+  'media.webhook',
 ] as const);
 
 export type StructuredEventName = (typeof EVENT_NAMES)[number];
@@ -59,6 +65,16 @@ export const EVENT_FIELD_KEYS = Object.freeze([
   'stage',
   'name',
   'evidence',
+  'roomRef',
+  'phase',
+  'outcome',
+  'total',
+  'reported',
+  'faceConfirmed',
+  'unresolvedMedia',
+  'method',
+  'status',
+  'command',
 ] as const);
 
 export type StructuredEventFieldKey = (typeof EVENT_FIELD_KEYS)[number];
@@ -303,4 +319,21 @@ export function createStructuredEventLogger(sink: EventSink): StructuredEventLog
     },
     rejected: () => rejected,
   };
+}
+
+/**
+ * Turns an unknown thrown value into a short diagnostic code for a log line: a GatewayError
+ * code, an UPPER_SNAKE message such as STALE_GENERATION, or the error name. Never a message
+ * body, never a secret; returns 'REQUEST_FAILED' when nothing safe is available.
+ */
+export function diagnosticCode(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[A-Za-z_][A-Za-z0-9_]{1,63}$/.test(code)) return code;
+    if (error instanceof Error) {
+      if (/^[A-Z][A-Z0-9_]{2,63}$/.test(error.message)) return error.message;
+      if (error.name && error.name !== 'Error') return error.name;
+    }
+  }
+  return 'REQUEST_FAILED';
 }

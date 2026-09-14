@@ -1,3 +1,4 @@
+import { diagnosticCode } from '../observability/StructuredEvents.js';
 import type { CapabilityReport } from './CloudCapabilityProbe.js';
 import type { Generation } from './MediaGenerationRegistry.js';
 import { confirmRemoteRevocation } from './RemoteRevocation.js';
@@ -13,7 +14,7 @@ export type RetirementBarrierDeps = {
   awaitPendingPermissions?: (generation: Generation) => Promise<void>;
   remove: (generation: Generation, cutoff?: bigint) => Promise<void>;
   absent: (generation: Generation) => Promise<boolean>;
-  onUnresolved: (generation: Generation) => void;
+  onUnresolved: (generation: Generation, reason: string) => void;
   onFailure?: (generation: Generation, error: unknown) => void;
   onConfirmed: (generation: Generation) => Promise<void>;
 };
@@ -139,7 +140,7 @@ export class RetirementBarrier {
         /* The unresolved state stays terminal. */
       }
       try {
-        d.onUnresolved(generation);
+        d.onUnresolved(generation, diagnosticCode(error));
       } catch {
         /* Observation cannot create an unhandled rejection. */
       }

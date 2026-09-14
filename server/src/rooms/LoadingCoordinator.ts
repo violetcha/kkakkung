@@ -99,6 +99,18 @@ export class LoadingCoordinator {
     return true;
   }
 
+  /** Counts only (no identities): what the barrier is still waiting for. Null when closed. */
+  summary(): { total: number; reported: number; faceConfirmed: number } | null {
+    if (!this.barrier) return null;
+    let reported = 0;
+    let faceConfirmed = 0;
+    for (const participant of this.participants.values()) {
+      if (participant.reported) reported++;
+      if (participant.faceConfirmed) faceConfirmed++;
+    }
+    return { total: this.participants.size, reported, faceConfirmed };
+  }
+
   evaluate(nowMs: number): 'waiting' | 'complete' | 'timeout' {
     if (!this.barrier) return 'waiting';
     if (nowMs - this.barrier.openedAtMs >= this.timeoutMs) return 'timeout';

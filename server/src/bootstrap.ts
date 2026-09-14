@@ -454,6 +454,7 @@ export function createApplication<State = unknown>(
       media,
       assetVersion: product.assetVersion ?? 'assets-unversioned',
       emitMetric,
+      emitEvent: eventLogger.emit,
       canStart: operationsReady,
       strictProduct: product.strictProduct,
       random: product.random,

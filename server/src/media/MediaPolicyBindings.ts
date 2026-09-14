@@ -135,6 +135,18 @@ export class MediaPolicyBindings {
       registry: this.tracks,
       now: options.monotonicNow,
       verifier: options.webhookVerifier,
+      onEvent: (name, outcome) => {
+        try {
+          options.emitEvent?.({
+            event: 'media.webhook',
+            level: 'info',
+            atMs: options.monotonicNow(),
+            fields: { name, code: outcome },
+          });
+        } catch {
+          /* Diagnostics cannot affect webhook handling. */
+        }
+      },
     });
   }
 

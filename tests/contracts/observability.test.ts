@@ -25,6 +25,7 @@ import {
 } from '../../server/src/observability/AlertPolicy.ts';
 import {
   EVENT_NAMES,
+  diagnosticCode,
   createLogOptions,
   createStructuredEventLogger,
   sanitizeLogObject,
@@ -579,5 +580,56 @@ describe('collect-observability script', () => {
     const result = run(['--input', input, '--output', join(dir, 'c.json')]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('alerts=none');
+  });
+});
+
+describe('preparation diagnostics (2026-09-14)', () => {
+  it('registers the room and media cause events so a loading failure is explainable from the log', () => {
+    for (const name of [
+      'room.phase',
+      'room.preparation_failed',
+      'room.command_rejected',
+      'media.prepare_failed',
+      'media.api.failed',
+      'media.webhook',
+    ])
+      expect(EVENT_NAMES).toContain(name);
+    const accepted = validateEvent({
+      event: 'room.preparation_failed',
+      level: 'warn',
+      atMs: 10,
+      fields: {
+        roomRef: 'AB12',
+        phase: 'GAME_LOADING',
+        outcome: 'DEVICE_CHECK',
+        reason: 'LOADING_TIMEOUT',
+        code: null,
+        total: 6,
+        reported: 4,
+        faceConfirmed: 3,
+        unresolvedMedia: false,
+        count: 6,
+      },
+    });
+    expect(accepted.ok).toBe(true);
+    // Identities never fit through the field allowlist.
+    expect(
+      validateEvent({ event: 'room.phase', level: 'info', atMs: 1, fields: { identity: 'x' } }),
+    ).toMatchObject({ ok: false, reason: 'BAD_FIELD' });
+  });
+
+  it('reduces a thrown value to a short code: gateway code, UPPER_SNAKE message, name, or REQUEST_FAILED', () => {
+    class GatewayLike extends Error {
+      constructor(readonly code: string) {
+        super(code);
+        this.name = 'GatewayError';
+      }
+    }
+    expect(diagnosticCode(new GatewayLike('not_found'))).toBe('not_found');
+    expect(diagnosticCode(new Error('STALE_GENERATION'))).toBe('STALE_GENERATION');
+    expect(diagnosticCode(new TypeError('cannot read properties of undefined'))).toBe('TypeError');
+    expect(diagnosticCode(new Error('Bearer abc.def secret body'))).toBe('REQUEST_FAILED');
+    expect(diagnosticCode('string')).toBe('REQUEST_FAILED');
+    expect(diagnosticCode(undefined)).toBe('REQUEST_FAILED');
   });
 });
