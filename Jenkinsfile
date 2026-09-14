@@ -18,9 +18,9 @@ pipeline {
     // GitLab 커밋 상태 게시 (Jenkins 관리 → System → GitLab connection 'ssafy-gitlab', 크리덴셜 gitlab-api-token)
     gitLabConnection('ssafy-gitlab')
     timestamps()
-    // 같은 잡 안의 동시 실행 금지. 잡 사이(kkakkung ↔ kkakkung-mr)의 겹침은 컨트롤러 executor 1개로
-    // 막는다 (infra/jenkins/SETUP.md §6). 2026-09-10 두 빌드가 겹쳐 4 vCPU 가 모자라 tick 250ms 초과로
-    // product-integration 시험이 깨진 뒤 정한 규칙.
+    // 같은 잡 안의 동시 실행 금지. 잡 사이(kkakkung ↔ kkakkung-mr)의 겹침은 Verify 단계의 호스트
+    // flock 으로만 막는다 (infra/jenkins/SETUP.md §6). 2026-09-10 두 빌드의 vitest 가 겹쳐 4 vCPU 가
+    // 모자라 tick 250ms 초과로 product-integration 시험이 깨진 뒤 정한 규칙.
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '20'))
     timeout(time: 40, unit: 'MINUTES')
@@ -91,8 +91,26 @@ pipeline {
         // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·check:execution·lint·typecheck·test·build·e2e).
         // 개별 pnpm 검사 목록을 여기 다시 나열하지 않습니다 (DP-04).
         // jenkins uid 로 돌려 root 소유 파일이 안 남게 하고, pnpm store 는 호스트 jenkins 홈에 캐시합니다.
+        //
+        // 시간 (2026-09-14): 이 단계가 빌드의 7~8분을 차지합니다.
+        // - 같은 소스 트리를 MR 빌드가 이미 검증했으면 develop(배포) 빌드는 검증을 생략합니다.
+        //   키는 git tree 해시라서, 사이에 다른 MR 이 머지돼 트리가 달라지면 다시 전부 검증합니다.
+        // - Verify 는 호스트 flock 으로 한 번에 하나만 돕니다. 두 빌드의 vitest 가 4 vCPU 를 나누면
+        //   tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70). 다른 단계는 겹쳐도 됩니다.
+        script {
+          env.TREE_SHA = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
+          env.VERIFIED_BY = env.IS_DEPLOY == 'true'
+            ? sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA"', returnStdout: true).trim()
+            : ''
+        }
         sh '''
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
+          if [ -n "$VERIFIED_BY" ]; then
+            echo "Verify 생략: 동일 트리 $TREE_SHA 는 $VERIFIED_BY 가 검증했습니다"
+            exit 0
+          fi
+          flock /var/lib/jenkins/verify.lock \
+            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
+          node scripts/verified-tree.mjs record --state-dir "$STATE_DIR" --tree "$TREE_SHA" --commit "$GIT_SHA" --build "$JOB_NAME#$BUILD_NUMBER"
         '''
       }
     }
