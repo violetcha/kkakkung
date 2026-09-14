@@ -832,3 +832,29 @@ kbd {
   display: grid;
   gap: 0.5rem;
 }
+
+/* 진단 오버레이(features/debug, 제거 가능). 미리보기 video 위에 겹치는 캔버스. */
+.preview-host {
+  position: relative;
+}
+.debug-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+.debug-readout {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  font:
+    11px/1.4 ui-monospace,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  color: #dff5ea;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+}
+/* 내 미리보기는 거울처럼 보인다(2026-09-14 실기기 요청). 추론은 원본 프레임을 쓰므로 영향 없음. */
+.preview-host video {
+  transform: scaleX(-1);
+}

@@ -18,7 +18,12 @@ export type PoseSensor = Readonly<{
 
 export type GestureKind = 'palm' | 'victory' | 'none';
 
-export type GestureSensor = Readonly<{ kind: GestureKind; score: number }>;
+export type GestureSensor = Readonly<{
+  kind: GestureKind;
+  score: number;
+  /** 손별 21점 landmarks. 진단 오버레이 표시용이며 판정에는 쓰지 않는다. 손이 없으면 생략. */
+  hands?: readonly (readonly NormalizedLandmark[])[];
+}>;
 
 /**
  * 한 모델이 실제로 실행한 프레임의 관측 기록.

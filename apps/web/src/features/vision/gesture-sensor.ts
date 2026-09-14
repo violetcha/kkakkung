@@ -1,7 +1,7 @@
 // D-05 / IN-05. GestureRecognizerResult를 GestureSensor로 정규화한다.
 // 두 손이 서로 다른 유효 제스처면 none, 같은 종류면 최고 score 하나만 고른다.
 // 손별 후보 배열은 이 모듈 밖으로 넘기지 않는다.
-import type { GestureKind, GestureSensor, ModelOutcome } from './sensor-types';
+import type { GestureKind, GestureSensor, ModelOutcome, NormalizedLandmark } from './sensor-types';
 
 /** SDK categoryName과 제품 제스처의 대응. 목록에 없는 이름은 사용하지 않는다. */
 export const GESTURE_CATEGORY_MAP: Readonly<Record<string, Exclude<GestureKind, 'none'>>> =
@@ -15,7 +15,27 @@ export const GESTURE_MIN_SCORE = 0.6;
 
 type RawCategory = Readonly<{ categoryName: string; score: number }>;
 
-export type RawGestureResult = Readonly<{ gestures: readonly (readonly RawCategory[])[] }>;
+type RawPoint = Readonly<{ x: number; y: number; z: number }>;
+
+export type RawGestureResult = Readonly<{
+  gestures: readonly (readonly RawCategory[])[];
+  /** GestureRecognizerResult.landmarks. 있으면 진단 표시용으로 함께 넘긴다. */
+  landmarks?: readonly (readonly RawPoint[])[];
+}>;
+
+/** 유한한 손 landmarks 만 남긴다. 하나도 없으면 undefined 로 필드를 만들지 않는다. */
+export function readHandLandmarks(
+  landmarks: RawGestureResult['landmarks'],
+): readonly (readonly NormalizedLandmark[])[] | undefined {
+  if (!landmarks) return undefined;
+  const hands: NormalizedLandmark[][] = [];
+  for (const hand of landmarks) {
+    if (!hand || hand.length === 0) continue;
+    const points = hand.map((p: RawPoint) => ({ x: p.x, y: p.y, z: p.z }));
+    if (points.every((p) => [p.x, p.y, p.z].every(Number.isFinite))) hands.push(points);
+  }
+  return hands.length ? hands : undefined;
+}
 
 export const NONE_GESTURE: GestureSensor = Object.freeze({ kind: 'none', score: 0 });
 
@@ -55,5 +75,7 @@ export function readGestureSensor(
 ): ModelOutcome<GestureSensor> {
   if (!result || !Array.isArray(result.gestures)) return { status: 'missing', data: null };
   const hands = result.gestures.map((categories) => pickHandGesture(categories));
-  return { status: 'valid', data: combineHands(hands) };
+  const combined = combineHands(hands);
+  const points = readHandLandmarks(result.landmarks);
+  return { status: 'valid', data: points ? { ...combined, hands: points } : combined };
 }

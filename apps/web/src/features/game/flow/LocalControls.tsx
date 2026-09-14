@@ -78,9 +78,7 @@ export function LocalControls({
           </p>
         )}
         {status.camera === 'ready' && status.calibration !== 'ready' && (
-          <p role="status">
-            정면을 보고 얼굴과 양쪽 어깨·팔이 보이도록 자세를 맞춘 뒤 보정해 주세요.
-          </p>
+          <p role="status">정면을 보고 얼굴과 양쪽 어깨가 보이도록 자세를 맞춘 뒤 보정해 주세요.</p>
         )}
       </details>
       {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}

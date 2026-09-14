@@ -1,7 +1,8 @@
 // D-06 / IN-06. 사용자 중립 보정.
-// 신선한 서로 다른 face/pose Sample만 모아 중립 yaw/lean 기준을 정한다.
+// 신선한 서로 다른 face/pose Sample만 모아 중립 yaw·어깨 거리·얼굴 크기 기준을 정한다.
 // 표본이 부족하면 미보정으로 남기고 이전 사용자·장치의 기준을 재사용하지 않는다.
-import { torsoLeanRad, type PoseLandmark } from '../vision/pose-sensor';
+import type { PoseLandmark } from '../vision/pose-sensor';
+import { leanComponents } from './lean-signal';
 import {
   isSampleFresh,
   isUsableQuality,
@@ -13,8 +14,12 @@ import {
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
 
 export type NeutralReference = Readonly<{
+  /** 사용자 오른쪽이 양수인 중립 yaw. */
   yawRad: number;
-  leanRad: number;
+  /** 중립 어깨 x 거리 신호 ln(span). 라디안이 아니다(pose-sensor leanSignal). */
+  shoulderSpan: number;
+  /** 중립 얼굴 크기 신호 ln(뺨 사이 거리). 표본이 모자라면 null 이고 어깨만 쓴다. */
+  faceSpan: number | null;
   tuningVersion: string;
   /** 이 보정을 만든 장치 세대. 세대가 바뀌면 재사용하지 않는다. */
   runtimeGeneration: number;
@@ -37,7 +42,8 @@ type Observation = Readonly<{
   frameId: number;
   poseFrameId: number;
   yawRad: number;
-  leanRad: number;
+  shoulderSpan: number;
+  faceSpan: number | null;
 }>;
 
 export interface Calibrator {
@@ -112,9 +118,15 @@ export function createCalibrator(tuning: InputTuning = INPUT_TUNING): Calibrator
       // 같은 프레임을 다시 세지 않는다.
       if (observations.some((item) => item.frameId === frameId || item.poseFrameId === poseFrameId))
         return false;
-      const lean = torsoLeanRad(pose.landmarks as readonly PoseLandmark[]);
-      if (lean === null || !Number.isFinite(face.yawRad)) return false;
-      observations.push({ frameId, poseFrameId, yawRad: face.yawRad, leanRad: lean });
+      const lean = leanComponents(pose.landmarks as readonly PoseLandmark[], face.landmarks);
+      if (lean.shoulder === null || !Number.isFinite(face.yawRad)) return false;
+      observations.push({
+        frameId,
+        poseFrameId,
+        yawRad: face.yawRad,
+        shoulderSpan: lean.shoulder,
+        faceSpan: lean.face,
+      });
       return true;
     },
 
@@ -131,10 +143,16 @@ export function createCalibrator(tuning: InputTuning = INPUT_TUNING): Calibrator
         return { state: 'failed', neutral: null, errorCode };
       }
       const yaws = observations.map((item) => item.yawRad);
-      const leans = observations.map((item) => item.leanRad);
+      const shoulders = observations.map((item) => item.shoulderSpan);
+      // 얼굴 크기는 표본이 충분할 때만 성분으로 쓴다. 부족하면 어깨만으로 보정한다.
+      const faces = observations
+        .map((item) => item.faceSpan)
+        .filter((value): value is number => value !== null);
+      const useFace = faces.length >= tuning.calibrationMinSamples;
       if (
         spread(yaws) > tuning.calibrationMaxSpreadRad ||
-        spread(leans) > tuning.calibrationMaxSpreadRad
+        spread(shoulders) > tuning.calibrationMaxSpreadRad ||
+        (useFace && spread(faces) > tuning.calibrationMaxSpreadRad)
       ) {
         state = 'failed';
         neutral = null;
@@ -143,7 +161,8 @@ export function createCalibrator(tuning: InputTuning = INPUT_TUNING): Calibrator
       }
       neutral = {
         yawRad: median(yaws),
-        leanRad: median(leans),
+        shoulderSpan: median(shoulders),
+        faceSpan: useFace ? median(faces) : null,
         tuningVersion: tuning.tuningVersion,
         runtimeGeneration: generation,
         sampleCount: observations.length,

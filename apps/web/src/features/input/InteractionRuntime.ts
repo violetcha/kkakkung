@@ -33,7 +33,8 @@ import {
   type Sample,
   type PoseSensor,
 } from '../vision/sensor-types';
-import { torsoLeanRad } from '../vision/pose-sensor';
+import { leanComponents, relativeLean } from './lean-signal';
+import { describeMotionDebug, type MotionDebugState } from './motion-debug';
 import {
   createFaceCompositor,
   type CompositorContext,
@@ -110,7 +111,7 @@ import {
 import { createInputFallback, type InputFallback } from './input-fallback';
 import { createMoveIntentController, type MoveIntentController } from './move-intent';
 import { createTurnIntentController, type TurnIntentController } from './turn-intent';
-import { INPUT_TUNING, type InputTuning } from './input-tuning';
+import { INPUT_TUNING, headTurnedForMove, type InputTuning } from './input-tuning';
 import type { SensorSnapshot } from '../vision/sensor-types';
 
 export type { DeviceStatus } from '../devices/device-status';
@@ -232,6 +233,8 @@ export type InteractionDeps = Readonly<{
   onSensors: (snapshot: SensorSnapshot) => void;
   onInteractionState: (state: InteractionState) => void;
   onLocalPreview: (element: HTMLVideoElement | null) => void;
+  /** 진단 오버레이용(features/debug). 판정과 무관하며 생략 가능. 제거 시 함께 지운다. */
+  onMotionDebug?: (state: MotionDebugState) => void;
 }>;
 
 export interface InteractionRuntime {
@@ -926,6 +929,28 @@ export const createInteractionRuntime = (
    */
   const applyMotionIntents = (snapshot: SensorSnapshot) => {
     const nowMs = vision.now();
+    if (deps.onMotionDebug) {
+      // 진단 오버레이(제거 가능). 판정보다 먼저, 보정 전에도 원시 신호를 보여 준다.
+      const debugNeutral = calibrator.getNeutral();
+      deps.onMotionDebug(
+        describeMotionDebug({
+          snapshot,
+          nowMs,
+          neutral: debugNeutral,
+          neutralUsable: isNeutralUsable(debugNeutral, runtimeGeneration, tuning),
+          tuning,
+          move: move.current,
+          motionActive: move.motionActive,
+          turnLatched: turn.latched,
+          mode: context.get()?.mode ?? null,
+          accepting:
+            context.acceptsInput &&
+            !context.inChallenge &&
+            context.get()?.mode === 'motion' &&
+            !fallback.degraded,
+        }),
+      );
+    }
     if (
       !context.acceptsInput ||
       context.inChallenge ||
@@ -946,37 +971,38 @@ export const createInteractionRuntime = (
       yawFilter.reset(nowMs);
       return;
     }
+    const face = snapshot.face;
+    const usableFace =
+      isSampleFresh(face, 'face', nowMs) &&
+      face!.status === 'valid' &&
+      isUsableQuality(face!.data.quality);
+    const relativeYaw = usableFace ? relativeToNeutral(face!.data.yawRad, neutral.yawRad) : null;
+
     const pose = snapshot.pose;
     const usablePose =
       isSampleFresh(pose, 'pose', nowMs) &&
       pose!.status === 'valid' &&
       isUsableQuality(pose!.data.quality);
+    // 어깨 x 거리와 얼굴 크기를 각각 중립 대비로 만들어 평균한다(lean-signal). 어깨는 필수다.
     const lean = usablePose
-      ? torsoLeanRad((pose as Sample<PoseSensor> & { status: 'valid' }).data.landmarks)
+      ? relativeLean(
+          leanComponents(
+            (pose as Sample<PoseSensor> & { status: 'valid' }).data.landmarks,
+            usableFace ? face!.data.landmarks : null,
+          ),
+          neutral,
+        ).combined
       : null;
-    const motion = leanFilter.observe(
-      pose,
-      lean === null ? null : relativeToNeutral(lean, neutral.leanRad),
-      nowMs,
-      snapshot.runtimeGeneration,
-    );
+    // 고개가 돌아간 동안은 어깨·얼굴 거리가 줄어 보이므로 이동 판정을 만들지 않는다.
+    const leanInput = lean === null || headTurnedForMove(relativeYaw, tuning) ? null : lean;
+    const motion = leanFilter.observe(pose, leanInput, nowMs, snapshot.runtimeGeneration);
     if (motion.status === 'unavailable') move.updateMotion(null, nowMs);
     if (motion.status === 'new') {
       if (motion.restarted) move.updateMotion(null, motion.sampledAtMs);
       move.updateMotion(motion.value, motion.sampledAtMs);
     }
 
-    const face = snapshot.face;
-    const usableFace =
-      isSampleFresh(face, 'face', nowMs) &&
-      face!.status === 'valid' &&
-      isUsableQuality(face!.data.quality);
-    const rotation = yawFilter.observe(
-      face,
-      usableFace ? relativeToNeutral(face!.data.yawRad, neutral.yawRad) : null,
-      nowMs,
-      snapshot.runtimeGeneration,
-    );
+    const rotation = yawFilter.observe(face, relativeYaw, nowMs, snapshot.runtimeGeneration);
     if (rotation.status === 'unavailable') turn.reset();
     if (rotation.status === 'new') {
       if (rotation.restarted) turn.reset();

@@ -7,6 +7,9 @@ import { KeyChallenge } from '../pose/KeyChallenge';
 import { POSE_LABELS } from '../pose/PoseChallenge';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS } from './solo-world';
+// 진단 오버레이(제거 가능): 아래 두 import 와 DebugOverlay 마운트·토글·단축키만 지우면 된다.
+import { DebugOverlay } from '../../debug/DebugOverlay';
+import { debugFeed, installDebugShortcut, useDebugOverlayEnabled } from '../../debug/debug-feed';
 
 const DEVICE_LABELS = {
   camera: '카메라',
@@ -31,6 +34,9 @@ const STATES: Record<string, string> = {
 export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const session = useRef<ReturnType<typeof createSoloSession> | null>(null);
   const host = useRef<HTMLDivElement | null>(null);
+  const [hostElement, setHostElement] = useState<HTMLDivElement | null>(null);
+  const debugOverlay = useDebugOverlayEnabled();
+  useEffect(() => installDebugShortcut(window), []);
   const [snapshot, setSnapshot] = useState<SoloSnapshot | null>(null);
   const [stopped, setStopped] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
@@ -106,6 +112,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   }, [stopped, stop]);
   const preview = useCallback((element: HTMLDivElement | null) => {
     host.current = element;
+    setHostElement(element);
     session.current?.setPreviewHost(element);
   }, []);
   const renderTick = useCallback(() => performance.now() / 50, []);
@@ -195,6 +202,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                   }}
                   canRecover={!closing && !busy}
                 />
+                {debugOverlay && <DebugOverlay host={hostElement} />}
                 <AudioControls
                   readStatus={readAudio}
                   onPreferences={changeAudio}
@@ -234,9 +242,17 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                 <button disabled={busy || closing} onClick={() => void start()}>
                   {busy ? '장치·추적·보정 준비 중…' : '카메라 켜고 모션 점검하기'}
                 </button>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={debugOverlay}
+                    onChange={(event) => debugFeed.setEnabled(event.target.checked)}
+                  />{' '}
+                  추적 디버그 표시 (Ctrl+Shift+D)
+                </label>
                 <p>
-                  정면을 보고 얼굴과 양쪽 어깨·팔꿈치·손을 카메라 안에 두세요. 카메라 없이도 키보드
-                  체험은 가능합니다. 실제 경기를 시작하려면 카메라가 필요합니다.
+                  정면을 보고 얼굴과 양쪽 어깨를 카메라 안에 두세요. 카메라 없이도 키보드 체험은
+                  가능합니다. 실제 경기를 시작하려면 카메라가 필요합니다.
                 </p>
               </div>
             </div>

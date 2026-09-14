@@ -4,7 +4,7 @@ export function deviceFeedback(code: string): string {
     CALIBRATION_NO_FACE:
       '얼굴을 찾지 못했습니다. 얼굴 전체가 밝게 보이도록 정면을 보고 다시 보정해 주세요.',
     CALIBRATION_NO_POSE:
-      '상체를 찾지 못했습니다. 양쪽 어깨·팔꿈치·손이 모두 보이도록 카메라에서 조금 떨어져 주세요.',
+      '상체를 찾지 못했습니다. 얼굴과 양쪽 어깨가 보이도록 카메라에서 조금 떨어져 주세요.',
     CALIBRATION_NOT_ENOUGH_SAMPLES:
       '보정 표본이 부족합니다. 얼굴과 상체가 가려지지 않게 정면을 보고 잠시 유지해 주세요.',
     CALIBRATION_UNSTABLE:
@@ -23,7 +23,7 @@ export function deviceFeedback(code: string): string {
   )
     return '추적 모델을 준비하지 못했습니다. 네트워크 상태를 확인하고 장치를 다시 점검해 주세요.';
   if (code.startsWith('CALIBRATION_'))
-    return '얼굴과 양쪽 어깨·팔이 보이도록 정면을 보고 잠시 자세를 유지한 뒤 다시 보정해 주세요.';
+    return '얼굴과 양쪽 어깨가 보이도록 정면을 보고 잠시 자세를 유지한 뒤 다시 보정해 주세요.';
   if (
     [
       'DEVICE_LOST',

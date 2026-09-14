@@ -1,5 +1,6 @@
 import type { Role } from '@kkakkung/protocol/game-schema';
 import { createInteractionBridge } from '../../../app/interaction-bridge';
+import { debugFeed } from '../../debug/debug-feed'; // 진단 오버레이(제거 가능)
 import {
   createInteractionRuntime,
   type InteractionDeps,
@@ -108,6 +109,7 @@ export function createSoloSession(
       },
       onSensors(value) {
         sensors = value;
+        debugFeed.publishSensors(value); // 진단 오버레이(제거 가능)
         if (interaction.mode === 'motion' && !freshPosture()) world.cancelNeutral();
       },
       onInteractionState(value) {
@@ -124,6 +126,7 @@ export function createSoloSession(
       onFaceTrack() {},
       onMediaStatus() {},
       onLocalPreview() {},
+      onMotionDebug: (state) => debugFeed.publishMotion(state), // 진단 오버레이(제거 가능)
     },
     factory,
   );

@@ -8,7 +8,8 @@ import {
   POSE_MIN_VISIBILITY,
   poseQuality,
   readPoseSensor,
-  torsoLeanRad,
+  leanSignal,
+  armsVisible,
   type PoseLandmark,
 } from './pose-sensor';
 import { isSampleFresh, isUsableQuality } from './sensor-types';
@@ -41,35 +42,64 @@ describe('readPoseSensor', () => {
     if (outcome.status !== 'valid') throw new Error('expected a valid pose');
     expect(outcome.data.quality).toBe('valid');
     expect(isUsableQuality(outcome.data.quality)).toBe(true);
-    const lean = torsoLeanRad(outcome.data.landmarks as readonly PoseLandmark[]);
+    const lean = leanSignal(outcome.data.landmarks as readonly PoseLandmark[]);
     expect(lean).not.toBeNull();
-    expect(Math.abs(lean!)).toBeLessThan(0.1);
+    // 어깨 거리 0.2 의 자연로그. 중립을 빼면 0 이 된다.
+    expect(lean!).toBeCloseTo(Math.log(0.2), 6);
   });
 
-  it('uses face-to-shoulder depth for forward/back without relying on hips', () => {
+  it('reads forward/back from the shoulder span growing or shrinking, not from nose depth', () => {
+    const neutral = leanSignal(normalizePoseLandmarks(body())!)!;
     const forward = body({
-      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.1, z: -0.1, visibility: 0.9 },
+      [POSE_KEY_POINTS.leftShoulder]: { x: 0.38, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.rightShoulder]: { x: 0.62, y: 0.3, z: 0, visibility: 0.9 },
     });
     const back = body({
-      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.1, z: 0.1, visibility: 0.9 },
+      [POSE_KEY_POINTS.leftShoulder]: { x: 0.42, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.rightShoulder]: { x: 0.58, y: 0.3, z: 0, visibility: 0.9 },
+    });
+    // Nose depth alone changes nothing: the whole upper body moves together on a webcam.
+    const noseOnly = body({
+      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.1, z: -0.1, visibility: 0.9 },
     });
 
-    const leanForward = torsoLeanRad(normalizePoseLandmarks(forward)!);
-    const leanBack = torsoLeanRad(normalizePoseLandmarks(back)!);
-
-    expect(leanForward!).toBeGreaterThan(0);
-    expect(leanBack!).toBeLessThan(0);
+    expect(leanSignal(normalizePoseLandmarks(forward)!)! - neutral).toBeCloseTo(Math.log(1.2), 6);
+    expect(leanSignal(normalizePoseLandmarks(back)!)! - neutral).toBeCloseTo(Math.log(0.8), 6);
+    expect(leanSignal(normalizePoseLandmarks(noseOnly)!)! - neutral).toBeCloseTo(0, 6);
   });
 
-  it('marks a hidden wrist uncertain so the consumer resets its hold', () => {
+  it('ignores shoulder depth: a head turn that shakes z must not look like leaning', () => {
+    const neutral = leanSignal(normalizePoseLandmarks(body())!)!;
+    const shakenZ = body({
+      [POSE_KEY_POINTS.leftShoulder]: { x: 0.4, y: 0.3, z: -0.15, visibility: 0.9 },
+      [POSE_KEY_POINTS.rightShoulder]: { x: 0.6, y: 0.3, z: 0.12, visibility: 0.9 },
+    });
+    expect(leanSignal(normalizePoseLandmarks(shakenZ)!)! - neutral).toBeCloseTo(0, 6);
+  });
+
+  it('returns null for a collapsed shoulder span', () => {
+    const collapsed = body({
+      [POSE_KEY_POINTS.leftShoulder]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.rightShoulder]: { x: 0.505, y: 0.3, z: 0, visibility: 0.9 },
+    });
+    expect(leanSignal(normalizePoseLandmarks(collapsed)!)).toBeNull();
+    expect(readPoseSensor({ landmarks: [collapsed] }).status).toBe('missing');
+  });
+
+  it('stays valid with hidden wrists and elbows: calibration and movement need only face and shoulders', () => {
     const hidden = body({
+      [POSE_KEY_POINTS.leftElbow]: { x: 0.35, y: 0.5, z: 0, visibility: 0.1 },
+      [POSE_KEY_POINTS.rightElbow]: { x: 0.65, y: 0.5, z: 0, visibility: 0.1 },
       [POSE_KEY_POINTS.leftWrist]: { x: 0.4, y: 0.6, z: 0, visibility: 0.1 },
+      [POSE_KEY_POINTS.rightWrist]: { x: 0.6, y: 0.6, z: 0, visibility: 0.1 },
     });
     const outcome = readPoseSensor({ landmarks: [hidden] });
     if (outcome.status !== 'valid') throw new Error('expected a valid pose');
 
-    expect(outcome.data.quality).toBe('uncertain');
-    expect(isUsableQuality(outcome.data.quality)).toBe(false);
+    expect(outcome.data.quality).toBe('valid');
+    expect(isUsableQuality(outcome.data.quality)).toBe(true);
+    expect(armsVisible(outcome.data.landmarks as readonly PoseLandmark[])).toBe(false);
+    expect(armsVisible(normalizePoseLandmarks(body())!)).toBe(true);
   });
 
   it('accepts a seated upper body even when the hips are unseen or invalid', () => {
@@ -81,7 +111,10 @@ describe('readPoseSensor', () => {
     if (outcome.status !== 'valid') throw new Error('expected a valid pose');
 
     expect(outcome.data.quality).toBe('valid');
-    expect(torsoLeanRad(outcome.data.landmarks as readonly PoseLandmark[])).toBe(0);
+    expect(leanSignal(outcome.data.landmarks as readonly PoseLandmark[])).toBeCloseTo(
+      Math.log(0.2),
+      6,
+    );
   });
 
   it('accepts face, shoulders and hands without any lower-body landmarks', () => {
@@ -100,17 +133,18 @@ describe('readPoseSensor', () => {
     }
   });
 
-  it('reports missing for no body, a non finite coordinate or a flat upper-body axis', () => {
+  it('reports missing for no body, a non finite coordinate or a collapsed shoulder span', () => {
     expect(readPoseSensor({ landmarks: [] })).toEqual({ status: 'missing', data: null });
     expect(readPoseSensor(null)).toEqual({ status: 'missing', data: null });
     const broken = body({
       [POSE_KEY_POINTS.leftShoulder]: { x: Number.POSITIVE_INFINITY, y: 0.3, z: 0 },
     });
     expect(readPoseSensor({ landmarks: [broken] })).toEqual({ status: 'missing', data: null });
-    const flat = body({
-      [POSE_KEY_POINTS.nose]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
+    const collapsed = body({
+      [POSE_KEY_POINTS.leftShoulder]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
+      [POSE_KEY_POINTS.rightShoulder]: { x: 0.5, y: 0.3, z: 0, visibility: 0.9 },
     });
-    expect(readPoseSensor({ landmarks: [flat] })).toEqual({ status: 'missing', data: null });
+    expect(readPoseSensor({ landmarks: [collapsed] })).toEqual({ status: 'missing', data: null });
   });
 
   it('normalizes a missing visibility to zero instead of guessing presence', () => {
@@ -123,7 +157,9 @@ describe('readPoseSensor', () => {
     });
     if (outcome.status !== 'valid') throw new Error('expected a valid pose');
     expect(outcome.data.landmarks[POSE_KEY_POINTS.leftWrist]!.visibility).toBe(0);
-    expect(outcome.data.quality).toBe('uncertain');
+    // A hidden wrist no longer blocks calibration or movement; only the arm check sees it.
+    expect(outcome.data.quality).toBe('valid');
+    expect(armsVisible(outcome.data.landmarks as readonly PoseLandmark[])).toBe(false);
   });
 
   it('does not read a presence or overall confidence field the SDK lacks', () => {

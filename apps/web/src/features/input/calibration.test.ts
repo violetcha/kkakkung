@@ -14,9 +14,11 @@ function poseLandmarks(leanOffset = 0) {
     z: 0,
     visibility: 0.9,
   }));
-  points[POSE_KEY_POINTS.nose] = { x: 0.5, y: 0.1, z: -leanOffset, visibility: 0.9 };
-  points[POSE_KEY_POINTS.leftShoulder] = { x: 0.4 + leanOffset, y: 0.3, z: 0, visibility: 0.9 };
-  points[POSE_KEY_POINTS.rightShoulder] = { x: 0.6 + leanOffset, y: 0.3, z: 0, visibility: 0.9 };
+  // leanOffset widens the shoulder span (closer to the camera): span = 0.2 * e^leanOffset.
+  const half = 0.1 * Math.exp(leanOffset);
+  points[POSE_KEY_POINTS.nose] = { x: 0.5, y: 0.1, z: 0, visibility: 0.9 };
+  points[POSE_KEY_POINTS.leftShoulder] = { x: 0.5 - half, y: 0.3, z: 0, visibility: 0.9 };
+  points[POSE_KEY_POINTS.rightShoulder] = { x: 0.5 + half, y: 0.3, z: 0, visibility: 0.9 };
   points[POSE_KEY_POINTS.leftHip] = { x: 0.4, y: 1.7, z: 0, visibility: 0 };
   points[POSE_KEY_POINTS.rightHip] = { x: 0.6, y: 1.7, z: 0, visibility: 0 };
   return points;
@@ -215,7 +217,8 @@ describe('isNeutralUsable', () => {
   it('refuses a neutral from another generation or tuning version', () => {
     const neutral = {
       yawRad: 0,
-      leanRad: 0,
+      shoulderSpan: 0,
+      faceSpan: null,
       tuningVersion: INPUT_TUNING.tuningVersion,
       runtimeGeneration: GENERATION,
       sampleCount: 10,
