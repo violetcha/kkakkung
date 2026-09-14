@@ -107,6 +107,18 @@ export class SplitMediaPolicyBindings {
       ...options.config,
       now: options.monotonicNow,
       verifier: options.webhookVerifier,
+      onEvent: (name, outcome) => {
+        try {
+          options.emitEvent?.({
+            event: 'media.webhook',
+            level: 'info',
+            atMs: options.monotonicNow(),
+            fields: { name, code: outcome },
+          });
+        } catch {
+          /* Diagnostics cannot affect webhook handling. */
+        }
+      },
       registry: {
         markEvent: (event) => {
           let matched = this.tracks.markEvent(event);

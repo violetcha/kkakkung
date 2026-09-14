@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { StructuredEvent } from '../observability/StructuredEvents.js';
 import { createReadinessRuntime, type ReadinessRuntime } from '../health/ReadinessRuntime.js';
 import { ApiBudget } from '../operations/ApiBudget.js';
 import { DurableRetention } from '../operations/DurableRetention.js';
@@ -143,6 +144,18 @@ class Coordinator implements MediaCoordinatorRuntime {
       monotonicNow: deps.monotonicNow,
       requestTimeoutMs: config.operationTimeoutMs,
       clientFactory: services.clientFactory,
+      observe: (observation) => {
+        if (observation.result !== 'failed') return;
+        this.event('media.api.failed', 'warn', {
+          method: observation.method,
+          status: observation.statusCode ?? null,
+          requestId: observation.requestId,
+          durationMs:
+            observation.completedAtMs === undefined
+              ? null
+              : Math.max(0, observation.completedAtMs - observation.sentAtMs),
+        });
+      },
     });
     this.gateway = gateway;
     this.journal = new OperationJournal({ opsDataDir: config.opsDataDir });
@@ -269,6 +282,8 @@ class Coordinator implements MediaCoordinatorRuntime {
         else this.runtime.getReadiness(); // UNKNOWN drains OPEN; retry success never auto-resumes.
       },
       onUnresolved: () => this.metric('media.retirement.unresolved'),
+      onRetirementUnresolved: (g, reason) =>
+        this.event('media.retirement.unresolved', 'warn', { generation: g.generation, reason }),
     });
     this.runtime = createReadinessRuntime({
       emitMetric: deps.emitMetric,
@@ -945,6 +960,7 @@ class Coordinator implements MediaCoordinatorRuntime {
     if (failures.has(code) || this.closed) return;
     failures.add(code);
     this.failures.set(g, failures);
+    this.event('media.prepare_failed', 'warn', { generation: g.generation, code });
     try {
       this.deps.enqueueControl({
         type: 'MEDIA_FAILED',
@@ -966,6 +982,17 @@ class Coordinator implements MediaCoordinatorRuntime {
       .catch(() => {
         this.runtime.lock('READINESS_UNCONFIRMED');
       });
+  }
+  private event(
+    event: StructuredEvent['event'],
+    level: StructuredEvent['level'],
+    fields: NonNullable<StructuredEvent['fields']>,
+  ): void {
+    try {
+      this.deps.emitEvent?.({ event, level, atMs: this.deps.monotonicNow(), fields });
+    } catch {
+      /* Observer only. */
+    }
   }
   private metric(name: string): void {
     try {

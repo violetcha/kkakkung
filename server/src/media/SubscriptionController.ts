@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { GatewayError } from './LiveKitGateway.js';
+import { diagnosticCode } from '../observability/StructuredEvents.js';
 import { PolicyUncertainty, type PolicyTimer } from './PolicyUncertainty.js';
 import type { MediaScope, MetricSample } from './types.js';
 
@@ -287,27 +287,11 @@ export class SubscriptionController {
           this.drain(target);
         },
         (error: unknown) => {
+          // The real cause (GatewayError code, STALE_GENERATION, …) goes to the log; nothing else.
           this.diagnostic(
             target,
             request.subscribe ? 'allow-rejected' : 'block-rejected',
-            error instanceof GatewayError &&
-              [
-                'not_found',
-                'permission_denied',
-                'unauthenticated',
-                'resource_exhausted',
-                'unavailable',
-                'internal',
-                'unknown',
-                'deadline_exceeded',
-                'invalid_argument',
-                'already_exists',
-                'failed_precondition',
-                'TRANSPORT_ERROR',
-                'REMOTE_ERROR',
-              ].includes(error.code)
-              ? error.code
-              : 'REQUEST_FAILED',
+            diagnosticCode(error),
           );
           if (target.terminal || target.inFlight !== request) {
             this.lateResponse(target, request.id, 'rejected');

@@ -53,6 +53,8 @@ export type RevocationRetryBindingsOptions = Readonly<{
   onOccupancyEnded: (generation: Generation) => Promise<void>;
   lockIssuance: (reason: 'RETIREMENT_UNRESOLVED' | 'JOURNAL_WRITE_FAILED') => void;
   onUnresolved: (intent: RetryIntent) => void;
+  /** Diagnostics only: why a retirement ended UNRESOLVED (a short code, never a message body). */
+  onRetirementUnresolved?: (generation: Generation, reason: string) => void;
   setTimer?: RevocationRetryOptions['setTimer'];
   clearTimer?: RevocationRetryOptions['clearTimer'];
 }>;
@@ -115,7 +117,14 @@ export class RevocationRetryBindings {
           this.context(generation),
         ),
       onFailure: (generation, error) => this.failures.set(generation, error),
-      onUnresolved: () => options.lockIssuance('RETIREMENT_UNRESOLVED'),
+      onUnresolved: (generation, reason) => {
+        options.lockIssuance('RETIREMENT_UNRESOLVED');
+        try {
+          options.onRetirementUnresolved?.(generation, reason);
+        } catch {
+          /* Diagnostics never change the latch. */
+        }
+      },
       onConfirmed: (generation) => this.confirmOccupancy(generation),
     });
     this.retries = new RevocationRetries({
