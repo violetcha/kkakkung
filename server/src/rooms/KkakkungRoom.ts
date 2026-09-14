@@ -597,7 +597,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           code: 'RATE_LIMITED',
         });
       const gate = this.acceptanceGate(parsed.kind, command.type, auth.playerId);
-      if (gate) return this.sendReceipt(client, { ...correlation, status: 'rejected', code: gate });
+      if (gate) {
+        this.logPreparationRejection(command.type, gate, 'gate');
+        return this.sendReceipt(client, { ...correlation, status: 'rejected', code: gate });
+      }
       const instance = parsed.kind === 'core' ? this.context.instanceOf(auth.playerId) : null;
       const accepted = this.queue.accept({
         actorId: auth.playerId,
@@ -606,16 +609,29 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         nowMs: now,
         stateVersion: this.dispatcher.applicableVersion(auth.playerId),
       });
-      if (accepted.status === 'rejected')
+      if (accepted.status === 'rejected') {
+        this.logPreparationRejection(command.type, accepted.code, 'queue');
         return this.sendReceipt(client, {
           ...correlation,
           status: 'rejected',
           code: accepted.code,
         });
+      }
       deps.sessions.touch(auth.sessionId);
       client.send(PRODUCT_SERVER_MESSAGES.commandResult, accepted.receipt);
       if (accepted.status === 'duplicate' && accepted.outcome)
         client.send(PRODUCT_SERVER_MESSAGES.commandOutcome, accepted.outcome);
+    }
+
+    /** Rejections of the commands that gate a match start are worth a log line each. */
+    private logPreparationRejection(type: string, code: string, stage: 'gate' | 'queue') {
+      if (!['READY', 'PRACTICE_READY', 'LOAD_READY', 'REMATCH'].includes(type)) return;
+      this.emitEvent('room.command_rejected', 'warn', {
+        command: type,
+        phase: this.phase,
+        code,
+        stage,
+      });
     }
 
     private acceptanceGate(
@@ -715,7 +731,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
               command: 'LOAD_READY',
               phase: this.phase,
               code: result.code,
+              stage: 'apply',
             });
+          else {
+            const summary = this.loading.summary();
+            this.emitEvent('room.load_ready', 'info', {
+              phase: this.phase,
+              reported: summary?.reported ?? null,
+              faceConfirmed: summary?.faceConfirmed ?? null,
+              total: summary?.total ?? null,
+            });
+          }
           return result;
         }
         case 'REMATCH': {
