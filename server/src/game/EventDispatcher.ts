@@ -38,7 +38,40 @@ export type ViewSender = Readonly<{
 
 export type ViewReason = 'initial' | 'change' | 'scope' | 'phase' | 'resync';
 
-type Delivered = { stateVersion: number; scope: GameViewScope; phase: Phase; key: string };
+type Delivered = {
+  stateVersion: number;
+  scope: GameViewScope;
+  phase: Phase;
+  body: PrivateViewBody;
+};
+
+/**
+ * Structural equality for the JSON-shaped values a view is made of. The projection rebuilds the
+ * body on every tick, so identity comparison would report a change every time; serializing both
+ * sides just to compare them walks the whole body and allocates a string per recipient per tick.
+ * This walks once and stops at the first difference.
+ */
+function sameContent(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+  const isArray = Array.isArray(a);
+  if (isArray !== Array.isArray(b)) return false;
+  if (isArray) {
+    const left = a as readonly unknown[];
+    const right = b as readonly unknown[];
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) if (!sameContent(left[i], right[i])) return false;
+    return true;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  for (const key of keys) {
+    if (!Object.hasOwn(right, key) || !sameContent(left[key], right[key])) return false;
+  }
+  return true;
+}
 
 export class EventDispatcher {
   private readonly delivered = new Map<string, Delivered>();
@@ -68,9 +101,9 @@ export class EventDispatcher {
     const scope = context.scopeOf(playerId);
     const body =
       scope.kind === 'none' ? EMPTY_VIEW_BODY : (this.deps.viewBody(playerId) ?? EMPTY_VIEW_BODY);
-    const key = JSON.stringify([scope, body]);
     const previous = this.delivered.get(playerId);
-    const contentChanged = !previous || previous.key !== key;
+    const contentChanged =
+      !previous || !sameContent(previous.scope, scope) || !sameContent(previous.body, body);
     const forced = reason !== 'change' || !previous;
     if (!contentChanged && !forced) return null;
     if (contentChanged && reason === 'change') context.bumpVersion();
@@ -83,7 +116,7 @@ export class EventDispatcher {
     )
       stateVersion = context.bumpVersion();
     const view: PrivateView = { ...body, matchId: context.matchId, gameScope: scope, stateVersion };
-    this.delivered.set(playerId, { stateVersion, scope, phase: publicPhase, key });
+    this.delivered.set(playerId, { stateVersion, scope, phase: publicPhase, body });
     this.deps.sender.sendView(playerId, view);
     return view;
   }
