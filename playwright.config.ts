@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
   workers: 1,
+  // CI 의 SwiftShader 소프트웨어 WebGL 은 60초 렌더 시험이 가끔 넘친다(kkakkung-mr #140, 17회 중 1회).
+  // 한 번만 다시 돌려 진짜 회귀와 느린 실행을 구분한다. 로컬은 재시도 없음.
+  retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   use: {
