@@ -171,4 +171,33 @@ describe('CommandQueue ledger', () => {
     // Pruned history does not re-open execution: an old sequence stays stale.
     expect(accept(queue, 'p1', move(2))).toEqual({ status: 'rejected', code: 'STALE_REQUEST' });
   });
+
+  it('bounds each actor on its own and drops only the expired head, whenever pruning runs', () => {
+    const queue = new CommandQueue();
+    // p2 completes one request first, then p1 runs far past its own limit.
+    accept(queue, 'p2', { ...move(1), requestId: uuid(900001) }, 0);
+    queue.freeze();
+    queue.complete(uuid(900001), { result: 'applied', code: null, tick: 1 }, 41, 0);
+    for (let i = 1; i <= 520; i++) {
+      accept(queue, 'p1', move(i), i);
+      queue.freeze();
+      queue.complete(uuid(i), { result: 'applied', code: null, tick: i }, 41, i);
+    }
+    // p1 keeps its newest 512; the 8 oldest are gone and p2's older entry is untouched.
+    expect(queue.completedCount('p1')).toBe(512);
+    expect(queue.completedCount('p2')).toBe(1);
+    expect(queue.status('p1', 'match-1', uuid(8)).status).toBe('unknown');
+    expect(queue.status('p1', 'match-1', uuid(9)).status).toBe('done');
+    expect(queue.status('p2', 'match-1', uuid(900001)).status).toBe('done');
+    // Only what is actually older than the TTL goes, per actor, and repeating the prune at the
+    // same instant changes nothing.
+    queue.pruneCompleted(120_000);
+    queue.pruneCompleted(120_000);
+    expect(queue.completedCount('p2')).toBe(0);
+    expect(queue.completedCount('p1')).toBe(512);
+    queue.pruneCompleted(120_100);
+    expect(queue.completedCount('p1')).toBe(420);
+    expect(queue.status('p1', 'match-1', uuid(100)).status).toBe('unknown');
+    expect(queue.status('p1', 'match-1', uuid(101)).status).toBe('done');
+  });
 });

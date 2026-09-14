@@ -54,7 +54,8 @@ function sameContent(a: CommandEnvelope, b: CommandEnvelope) {
 export class CommandQueue {
   private readonly pending = new Map<string, PendingEntry>();
   private readonly done = new Map<string, DoneEntry>();
-  private readonly doneOrder: string[] = [];
+  /** Per actor, the actor's completed requestIds in completion order (oldest first). */
+  private readonly doneByActor = new Map<string, string[]>();
   private readonly lastSequence = new Map<string, number>();
   private readonly heldMove = new Map<
     string,
@@ -73,9 +74,7 @@ export class CommandQueue {
 
   completedCount(actorId?: string) {
     if (actorId === undefined) return this.done.size;
-    let count = 0;
-    for (const record of this.done.values()) if (record.entry.actorId === actorId) count++;
-    return count;
+    return this.doneByActor.get(actorId)?.length ?? 0;
   }
 
   /** Registers an accepted command exactly once. Limits are checked before insertion. */
@@ -185,7 +184,9 @@ export class CommandQueue {
           ? { ...base, result: 'rejected', code: result.code }
           : { ...base, result: 'canceled', code: result.code };
     this.done.set(requestId, { entry, outcome, completedAtMs: nowMs });
-    this.doneOrder.push(requestId);
+    const completed = this.doneByActor.get(entry.actorId);
+    if (completed) completed.push(requestId);
+    else this.doneByActor.set(entry.actorId, [requestId]);
     this.trackHeldMove(entry, outcome, nowMs);
     this.pruneCompleted(nowMs);
     return { actorId: entry.actorId, outcome };
@@ -258,7 +259,7 @@ export class CommandQueue {
   reset() {
     if (this.pending.size > 0) throw new Error('PENDING_NOT_TERMINAL');
     this.done.clear();
-    this.doneOrder.length = 0;
+    this.doneByActor.clear();
     this.lastSequence.clear();
     this.heldMove.clear();
   }
@@ -278,25 +279,26 @@ export class CommandQueue {
     });
   }
 
+  /**
+   * Drops expired and over-limit completions. Each actor's list is appended in completion order,
+   * so only its head can be expired and only its head is inspected: the cost follows the number
+   * of actors and of dropped entries, not the size of the ledger.
+   */
   pruneCompleted(nowMs: number) {
-    const perActor = new Map<string, number>();
-    for (const requestId of this.doneOrder) {
-      const record = this.done.get(requestId);
-      if (!record) continue;
-      perActor.set(record.entry.actorId, (perActor.get(record.entry.actorId) ?? 0) + 1);
-    }
-    const kept: string[] = [];
-    for (const requestId of this.doneOrder) {
-      const record = this.done.get(requestId);
-      if (!record) continue;
-      const count = perActor.get(record.entry.actorId) ?? 0;
-      const expired = nowMs - record.completedAtMs >= this.limits.completedTtlMs;
-      if (expired || count > this.limits.completedPerActor) {
+    for (const [actorId, requestIds] of this.doneByActor) {
+      let dropped = 0;
+      for (const requestId of requestIds) {
+        const record = this.done.get(requestId);
+        if (record && nowMs - record.completedAtMs < this.limits.completedTtlMs) break;
         this.done.delete(requestId);
-        perActor.set(record.entry.actorId, count - 1);
-      } else kept.push(requestId);
+        dropped++;
+      }
+      if (dropped > 0) requestIds.splice(0, dropped);
+      while (requestIds.length > this.limits.completedPerActor) {
+        const oldest = requestIds.shift();
+        if (oldest !== undefined) this.done.delete(oldest);
+      }
+      if (requestIds.length === 0) this.doneByActor.delete(actorId);
     }
-    this.doneOrder.length = 0;
-    this.doneOrder.push(...kept);
   }
 }
