@@ -201,8 +201,13 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
                 ? {
                     status: 'valid',
                     data: {
+                      // leanDepth is the shoulder-span signal ln(span/neutral): widen both shoulders.
                       landmarks: poseLandmarks().map((point, index) =>
-                        index === POSE_KEY_POINTS.nose ? { ...point, z: -leanDepth } : point,
+                        index === POSE_KEY_POINTS.leftShoulder
+                          ? { ...point, x: 0.5 - 0.1 * Math.exp(leanDepth) }
+                          : index === POSE_KEY_POINTS.rightShoulder
+                            ? { ...point, x: 0.5 + 0.1 * Math.exp(leanDepth) }
+                            : point,
                       ),
                       quality: 'valid',
                     },

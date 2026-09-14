@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   FACE_KEY_POINTS,
   FACE_MAX_YAW_RAD,
+  faceYawFromLandmarks,
   faceYawFromMatrix,
   mirrorForDisplay,
   mirrorNormalizedX,
   mirrorYaw,
   readFaceSensor,
+  toUserYaw,
   type RawFaceResult,
 } from './face-sensor';
 import { isSampleFresh, isUsableQuality, type Sample } from './sensor-types';
@@ -103,7 +105,10 @@ describe('readFaceSensor', () => {
     const outcome = readFaceSensor({ faceLandmarks: [turned] });
     if (outcome.status !== 'valid') throw new Error('expected a valid face');
 
-    expect(outcome.data.yawRad).toBeGreaterThan(0);
+    // Nose toward the subject's left cheek (large x in the unmirrored frame) = head turned to the
+    // user's left = negative user yaw.
+    expect(outcome.data.yawRad).toBeLessThan(0);
+    expect(faceYawFromLandmarks(turned)).toBeGreaterThan(0);
   });
 
   it('does not read a face-level confidence field that the installed SDK lacks', () => {
@@ -137,13 +142,15 @@ describe('mirror helpers', () => {
     expect(mirrorYaw(mirrorYaw(0.3))).toBeCloseTo(0.3, 12);
   });
 
-  it('keeps the semantic yaw untouched by the display mirror', () => {
+  it('reports the user-side yaw: raw screen-right rotation becomes a negative (left) turn', () => {
     const outcome = readFaceSensor(result({ facialTransformationMatrixes: [yawMatrix(0.4)] }));
     if (outcome.status !== 'valid') throw new Error('expected a valid face');
     const displayed = outcome.data.landmarks.map(mirrorForDisplay);
 
     expect(displayed[0]!.x).toBeCloseTo(1 - outcome.data.landmarks[0]!.x, 12);
-    expect(outcome.data.yawRad).toBeCloseTo(0.4, 6);
+    expect(faceYawFromMatrix(yawMatrix(0.4))).toBeCloseTo(0.4, 6);
+    expect(outcome.data.yawRad).toBeCloseTo(-0.4, 6);
+    expect(toUserYaw(toUserYaw(0.3))).toBeCloseTo(0.3, 12);
   });
 });
 
