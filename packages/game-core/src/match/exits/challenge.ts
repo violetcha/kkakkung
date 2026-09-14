@@ -47,9 +47,10 @@ function poseConditions(
   state: MatchState,
   player: PlayerRecord,
   exitId: string,
+  tick: number,
 ): CommandCode | null {
   if (player.role !== 'runner' || player.status !== 'ACTIVE') return 'NOT_ACTIVE';
-  if (isRestrained(player, state.tick ?? 0)) return 'NOT_ALLOWED';
+  if (isRestrained(player, tick)) return 'NOT_ALLOWED';
   const exit = state.exits.get(exitId);
   if (!exit || !exit.active || exit.ownerId !== player.playerId) return 'NOT_ALLOWED';
   if (!facesExit(player, exit)) return 'NOT_ALLOWED';
@@ -156,7 +157,7 @@ export function advanceChallenges(state: MatchState, tick: number): ChallengeUpk
       ended.push({ playerId, challenge, result: 'failed', reason: 'EXPIRED' });
       continue;
     }
-    const broken = poseConditions(next, player, challenge.exitId);
+    const broken = poseConditions(next, player, challenge.exitId, tick);
     if (!broken) continue;
     next = endChallenge(next, playerId, tick);
     ended.push({ playerId, challenge, result: 'canceled', reason: broken });
