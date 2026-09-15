@@ -226,5 +226,12 @@ export function createSplitLiveKitConnection(
       const track = received.get(sid)?.track;
       return track?.kind === 'audio' ? track.mediaStreamTrack : null;
     },
+    /** S15P21C204-246. 증거에 싣는 실제 구독 상태. 모르면 구독 중으로 적는다. */
+    getSubscriptions: () =>
+      [...received.entries()].map(([trackSid, entry]) => ({
+        trackSid,
+        kind: entry.track?.kind === 'audio' ? ('audio' as const) : ('video' as const),
+        subscribed: entry.publication.isSubscribed ?? true,
+      })),
   };
 }
