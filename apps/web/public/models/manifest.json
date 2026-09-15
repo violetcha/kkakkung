@@ -54,7 +54,102 @@
     ],
     "licenseReviewedAt": "2026-09-13",
     "bundledNoticesReview": "pending",
-    "licenseNote": "The installed 1.0.1 package declares Apache-2.0 but does not include LICENSE/NOTICE files. The SDK license text is supplied here; bundled third-party notices require further review."
+    "licenseNote": "The installed 1.0.1 package declares Apache-2.0 and ships no LICENSE/NOTICE file. The SDK license text is supplied here. Bundled third-party components are now inventoried from the shipped artifacts (sdk.bundledComponents) but their notices are not yet reproduced on the product notice page, so this review stays pending.",
+    "bundledComponents": {
+      "reviewedAt": "2026-09-15",
+      "method": "Components were read out of the shipped artifacts themselves: license headers in vision_bundle.mjs.map sourcesContent, and third_party path strings inside the shipped .wasm. Upstream project docs were not used as the presence evidence.",
+      "binaryCopyrightNotices": 0,
+      "binaryCopyrightNoticesNote": "The three shipped .wasm files contain zero Copyright/License strings. Components whose licenses require reproducing a copyright notice in binary redistribution are therefore not satisfied by the binary alone; the notice must be supplied by the product notice page.",
+      "jsBundle": [
+        {
+          "component": "MediaPipe Tasks Vision (Google LLC)",
+          "license": "Apache-2.0",
+          "licenseVerified": true,
+          "evidence": "license header \"Copyright Google LLC / SPDX-License-Identifier: Apache-2.0\"",
+          "evidenceFile": "vision_bundle.mjs.map sourcesContent"
+        },
+        {
+          "component": "Closure Library",
+          "license": "Apache-2.0",
+          "licenseVerified": true,
+          "evidence": "license header \"Copyright The Closure Library Authors. / SPDX-License-Identifier: Apache-2.0\"",
+          "evidenceFile": "vision_bundle.mjs.map sourcesContent"
+        }
+      ],
+      "wasm": [
+        {
+          "component": "TensorFlow Lite",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "third_party/tensorflow/lite/kernels/conv.cc"
+        },
+        {
+          "component": "OpenCV",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "third_party/OpenCV/public/modules/core/src/matrix.cpp"
+        },
+        {
+          "component": "Abseil",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "third_party/absl/status/statusor.h"
+        },
+        {
+          "component": "XNNPACK",
+          "license": "BSD-3-Clause",
+          "licenseVerified": true,
+          "evidence": "third_party/tensorflow/lite/delegates/xnnpack/file_util.cc",
+          "licenseSourceUrl": "https://raw.githubusercontent.com/google/XNNPACK/master/LICENSE",
+          "note": "Requires reproducing the copyright notice in binary redistribution. Copyright (c) Facebook, Inc. and its affiliates; Copyright 2019 Google LLC."
+        },
+        {
+          "component": "ruy",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "third_party/ruy/ruy/prepare_packed_matrices.cc"
+        },
+        {
+          "component": "Eigen",
+          "license": "MPL-2.0",
+          "licenseVerified": true,
+          "evidence": "N6tflite13eigen_support12_GLOBAL__N_122EigenThreadPoolWrapperE",
+          "licenseSourceUrl": "https://gitlab.com/libeigen/eigen/-/raw/master/COPYING.README",
+          "note": "Primarily MPL-2.0; bundles further Apache-2.0 and BSD-style notices upstream."
+        },
+        {
+          "component": "Protocol Buffers",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "google/protobuf/any.proto"
+        },
+        {
+          "component": "FlatBuffers",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "flatbuffers::BufferHasIdentifier"
+        },
+        {
+          "component": "gemmlowp",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "gemmlowp error: %s"
+        },
+        {
+          "component": "Emscripten libc++abi",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "third_party/emscripten/stable/system/lib/libcxxabi/src/private_typeinfo.cpp"
+        },
+        {
+          "component": "libjpeg",
+          "license": "pending",
+          "licenseVerified": false,
+          "evidence": "JPEG: /usr/lib/x86_64-linux-gnu/libjpeg.so (ver 62)",
+          "note": "Appears only inside an OpenCV build-information string. Whether it is statically linked into the shipped wasm is not established."
+        }
+      ]
+    }
   },
   "models": {
     "face": {
@@ -135,7 +230,7 @@
       "acquiredAt": "2026-09-08",
       "license": "pending",
       "licenseSource": "https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer#models",
-      "licenseNote": "Hand detection/landmark cards state Apache-2.0. The gesture classification card does not state a license for the embedder/classifier. Bundle redistribution review remains pending.",
+      "licenseNote": "Hand detection/landmark cards state Apache-2.0. The gesture classification model card (2022) carries no license statement and its PDF is image-only, so no license text can be read from it. Checked on 2026-09-15: the task guide states a license for code samples only (page content is CC-BY-4.0), the MediaPipe repository Apache-2.0 LICENSE does not scope trained model binaries, and the model_maker source header covers the Python file rather than the .tflite it downloads. Redistribution rights for gesture_embedder.tflite and canned_gesture_classifier.tflite remain unconfirmed.",
       "licenseEvidence": [
         {
           "component": "hand_landmarker.task/hand_detector.tflite",

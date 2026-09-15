@@ -405,6 +405,85 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 - 완료 확인: 30초를 넘긴 준비 실패에서 막힌 단계와 원인이 화면에 남고, 같은 값이 증거에도
   들어간다. 증거 쪽 연결은 S15P21C204-246 범위다.
 
+## 손동작 2모델·SDK 번들 권리 — 2026-09-15 조사 (S15P21C204-241)
+
+S15P21C204-214가 7개 구성요소를 Apache-2.0으로 확정하고 두 건을 남겼다. 이번에 그 두 건을
+조사했고, **둘 다 확정하지 못했다.** 확정하지 못한 이유와 대체안을 아래에 남긴다.
+
+### 1. gesture_embedder.tflite · canned_gesture_classifier.tflite — 여전히 pending
+
+찾아본 1차 출처와 결과다. 어느 것도 이 두 바이너리의 재배포 조건을 말하지 않는다.
+
+| 출처                                      | 결과                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 제스처 분류 모델 카드 PDF (2022)          | **이미지 전용 PDF**라 추출 가능한 텍스트가 없다. 라이선스 항목 없음                                                            |
+| Gesture recognition task guide            | "code samples are licensed under the Apache 2.0 License" 뿐이다. 페이지 본문은 CC-BY-4.0이며 **모델 바이너리는 다루지 않는다** |
+| `google-ai-edge/mediapipe` 저장소 LICENSE | Apache-2.0이지만 **학습된 모델 바이너리를 범위로 명시하지 않는다**                                                             |
+| `model_maker/.../constants.py` 헤더       | 그 **Python 파일**의 라이선스이며, 내려받는 `.tflite`의 라이선스가 아니다                                                      |
+
+대조 근거: 같은 계열인 BlazeFace 모델 카드에는 라이선스 문구가 있다고 보고되지만, 두 PDF
+모두 CID 폰트라 이 환경에서 직접 대조하지 못했다. **따라서 "다른 카드에는 있는데 이 카드에만
+없다"를 확정 근거로 쓰지 않는다.** 남은 질문은 Google에 직접 문의해야 풀린다.
+
+### 2. 대체안과 영향 (근거 확보 실패 시)
+
+| 대체안              | 실제 영향                                                                                                                                                                                                                                           | 비용      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **기능 축소**       | 손동작은 `gesture-intent.ts`에서 `EXIT_START`·`EXIT_CANCEL`과 교환 동작만 만든다. **같은 명령의 단축키 경로(E·F·1·2·Esc)가 이미 있고** D-11이 둘을 중재한다. 제스처 모델 2개를 빼도 조작은 성립한다                                                 | 가장 낮음 |
+| **모델 교체**       | Model Maker 재학습은 **`gesture_embedder.tflite` 위에 분류기만 새로 얹는다.** 즉 재학습해도 embedder 의존은 남고 두 건 중 한 건만 해소된다. 다른 계열 손 모델로 갈아타면 D-05 판정 전체를 다시 튜닝해야 한다                                        | 높음      |
+| **런타임 다운로드** | 재배포를 피하지만 D-02 설계와 정면으로 어긋난다. `manifest.note`가 "Runtime reads only these pinned local assets. Never a latest CDN URL."이고, 고정 sha256 대조와 `MODEL_HASH_MISMATCH` 차단이 여기 걸려 있다. REQ-D-03의 CSP도 같은 origin 전제다 | 중간~높음 |
+
+권장은 **기능 축소를 예비안으로 잡고 문의 결과를 기다리는 것**이다. 조작 경로가 이미 이중이라
+손동작 제거가 기능 공백을 만들지 않는다.
+
+### 3. SDK 번들 구성요소 — 목록은 확보, 고지는 미비
+
+**상위 프로젝트 문서가 아니라 우리가 싣는 파일 자체에서 뽑았다.** 결과는
+`manifest.json`의 `sdk.bundledComponents`에 기록했다.
+
+- JS 번들(`vision_bundle.mjs.map` sourcesContent의 라이선스 헤더): **Google LLC**와
+  **Closure Library** 둘 다 `SPDX-License-Identifier: Apache-2.0`. 직접 확인했다.
+- WASM(배포하는 `.wasm` 안의 `third_party/` 경로 문자열): TensorFlow Lite · OpenCV ·
+  Abseil · **XNNPACK** · ruy · **Eigen** · Protocol Buffers · FlatBuffers · gemmlowp ·
+  Emscripten libc++abi. libjpeg는 OpenCV 빌드 정보 문자열에만 나타나 정적 링크 여부가
+  불분명하다.
+
+**핵심 발견: 배포하는 `.wasm` 세 개에 Copyright/License 문자열이 0건이다.**
+그중 **XNNPACK은 BSD-3-Clause**(1차 출처 확인: `google/XNNPACK` LICENSE, "Copyright (c)
+Facebook, Inc. and its affiliates" · "Copyright 2019 Google LLC")로 **바이너리 재배포 시
+저작권 고지 재현을 요구한다.** Eigen은 주로 **MPL-2.0**이다(1차 출처: Eigen COPYING.README).
+현재 제품 고지는 `Apache-2.0.txt` 하나만 싣는다. 즉 **지금 상태로 공개하면 최소 한 건의
+고지 의무가 충족되지 않는다.** W13 공개 차단 요인으로 남긴다.
+
+나머지 구성요소의 라이선스는 아직 1차 출처로 확인하지 않았고 `licenseVerified: false`로
+적었다. 추정으로 채우지 않는다.
+
+`sdk.bundledNoticesReview`는 `pending` 그대로 둔다. 목록이 생겼다는 것과 고지가 실렸다는
+것은 다르며, 고지 화면은 C 소유다.
+
+### REQ-D-11 · C · 고지 화면에 SDK 번들 구성요소 싣기
+
+- 대상: `apps/web/public/licenses/index.html` (C 소유. `apps/web/public/`가 C이고
+  `apps/web/public/models/`만 D다).
+- 현재 상태: "SDK에 포함된 제3자 구성 요소의 고지도 추가 확인 중입니다"로 정직하게 비워 둔
+  상태다. 이제 채울 목록이 생겼다.
+- 필요한 변경: `manifest.json`의 `sdk.bundledComponents`를 근거로 구성요소를 싣고,
+  **최소한 XNNPACK의 BSD-3-Clause 저작권 고지 원문을 재현한다.** Apache-2.0 원문 하나로
+  BSD-3-Clause 의무를 대신할 수 없다.
+- `licenseVerified: false`인 항목은 확인 중으로 표시하고 Apache-2.0으로 뭉뚱그리지 않는다.
+- 완료 확인: 고지 화면의 구성요소가 `sdk.bundledComponents`와 일치하고, BSD-3-Clause 고지가
+  실린다. 그 뒤라야 D가 `sdk.bundledNoticesReview`를 `verified`로 올릴 수 있다.
+
+### REQ-D-12 · F · 자산 대장과 검사에 번들 구성요소 반영
+
+- 대상: `docs/third-party-assets.md`, `scripts/lib/vision-asset-notices.mjs` (둘 다 F 소유).
+- 필요한 변경 두 가지다.
+  1. 자산 대장에 `sdk.bundledComponents` 내용을 옮긴다. REQ-D-04의 후속이다.
+  2. 검사가 `bundledNoticesReview: 'verified'`를 받아들이는 조건에 **고지 파일 쪽 확인을
+     추가한다.** 지금은 manifest의 문자열 하나만 보므로, 고지 화면을 고치지 않고 플래그만
+     바꿔도 통과한다.
+- 완료 확인: 고지 없이 `verified`로 바꾸면 검사가 실패한다.
+
 ## blockedOn 요약
 
 | 항목                                | 막는 대상            | 영향                                      |
@@ -417,6 +496,9 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 | C의 안내 표시 (REQ-D-08)            | S15P21C204-244 완료  | 문구는 나가지만 화면에 뜨지 않는다        |
 | F의 `.prettierignore` (REQ-D-09)    | 모든 D 티켓의 verify | `format:check`가 첫 단계에서 실패         |
 | C의 대기 항목 표시 (REQ-D-10)       | S15P21C204-240 완료  | 단계·원인은 나오지만 화면에 뜨지 않는다   |
+| C의 번들 고지 (REQ-D-11)            | W13 공개             | XNNPACK BSD-3-Clause 고지가 실리지 않았다 |
+| F의 대장·검사 (REQ-D-12)            | S15P21C204-241 완료  | 고지 없이 verified 로 바꿔도 검사가 통과  |
+| 손동작 2모델 권리 회신              | S15P21C204-241 완료  | Google 문의 전에는 확정 불가              |
 
 ## 다음 단계
 
