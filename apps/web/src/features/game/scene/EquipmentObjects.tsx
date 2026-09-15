@@ -1,7 +1,11 @@
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { visibleEquipment } from '../equipment/equipment-presenter';
 import { wallModel } from './scene-model';
+import { EQUIPMENT_COLORS } from './facility-theme';
+import { TRAP_MODEL, trapJawHeight } from './equipment-model';
+
 export function EquipmentObjects({ view }: { view: PrivateView }) {
+  const { plate, inner, jaw, post, lamp } = TRAP_MODEL;
   return (
     <group>
       {visibleEquipment(view).map((item) =>
@@ -9,40 +13,75 @@ export function EquipmentObjects({ view }: { view: PrivateView }) {
           <group key={item.id} {...wallModel(item.wall)}>
             <mesh position={[0, 0, 0.035]}>
               <boxGeometry args={[0.18, 0.2, 0.07]} />
-              <meshStandardMaterial color="#73817a" metalness={0.45} roughness={0.58} />
+              <meshStandardMaterial
+                color={EQUIPMENT_COLORS.sensorHousing}
+                metalness={0.45}
+                roughness={0.58}
+              />
             </mesh>
             <mesh position={[0, 0.01, 0.075]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.055, 0.055, 0.015, 12]} />
-              <meshStandardMaterial color="#132325" metalness={0.3} roughness={0.5} />
+              <meshStandardMaterial
+                color={EQUIPMENT_COLORS.sensorLens}
+                metalness={0.3}
+                roughness={0.5}
+              />
             </mesh>
             <mesh position={[0, -0.065, 0.074]}>
               <boxGeometry args={[item.state === 'ARMED' ? 0.07 : 0.02, 0.012, 0.01]} />
               <meshBasicMaterial
-                color={item.state === 'ARMED' ? '#8bdbbc' : '#d4a95d'}
+                color={item.state === 'ARMED' ? EQUIPMENT_COLORS.armed : EQUIPMENT_COLORS.idle}
                 toneMapped={false}
               />
             </mesh>
           </group>
         ) : (
-          <group key={item.id} position={[item.cell.x, 0.017, item.cell.y]}>
+          <group key={item.id} position={[item.cell.x, plate.height / 2, item.cell.y]}>
             <mesh>
-              <boxGeometry args={[0.36, 0.032, 0.36]} />
-              <meshStandardMaterial color="#57625d" metalness={0.6} roughness={0.65} />
+              <boxGeometry args={[plate.width, plate.height, plate.width]} />
+              <meshStandardMaterial
+                color={EQUIPMENT_COLORS.trapPlate}
+                metalness={0.6}
+                roughness={0.65}
+              />
             </mesh>
-            <mesh position={[0, 0.019, 0]}>
-              <boxGeometry args={[0.24, 0.005, 0.24]} />
-              <meshStandardMaterial color="#182726" roughness={0.85} />
+            <mesh position={[0, plate.height / 2 + inner.height / 2, 0]}>
+              <boxGeometry args={[inner.width, inner.height, inner.width]} />
+              <meshStandardMaterial color={EQUIPMENT_COLORS.trapInner} roughness={0.85} />
             </mesh>
             {[-1, 1].map((side) => (
-              <mesh key={side} position={[side * 0.145, item.state === 'ARMED' ? 0.035 : 0.021, 0]}>
-                <boxGeometry args={[0.026, item.state === 'ARMED' ? 0.035 : 0.008, 0.28]} />
+              <mesh
+                key={side}
+                position={[side * jaw.offset, plate.height / 2 + trapJawHeight(item.state) / 2, 0]}
+              >
+                <boxGeometry args={[jaw.width, trapJawHeight(item.state), jaw.depth]} />
                 <meshStandardMaterial
-                  color={item.state === 'ARMED' ? '#d4a95d' : '#859289'}
+                  color={
+                    item.state === 'ARMED'
+                      ? EQUIPMENT_COLORS.trapJawArmed
+                      : EQUIPMENT_COLORS.trapJawIdle
+                  }
                   roughness={0.64}
                   metalness={0.3}
                 />
               </mesh>
             ))}
+            {/* 인접 셀에서도 보이도록 바닥판 위에 세운 지지대와 표시등. 상태 색은 감지기와 같다. */}
+            <mesh position={[0, plate.height / 2 + post.height / 2, 0]}>
+              <cylinderGeometry args={[post.radius, post.radius * 1.4, post.height, 8]} />
+              <meshStandardMaterial
+                color={EQUIPMENT_COLORS.trapPost}
+                metalness={0.5}
+                roughness={0.55}
+              />
+            </mesh>
+            <mesh position={[0, plate.height / 2 + post.height + lamp.size / 2, 0]}>
+              <boxGeometry args={[lamp.size, lamp.size, lamp.size]} />
+              <meshBasicMaterial
+                color={item.state === 'ARMED' ? EQUIPMENT_COLORS.armed : EQUIPMENT_COLORS.idle}
+                toneMapped={false}
+              />
+            </mesh>
           </group>
         ),
       )}

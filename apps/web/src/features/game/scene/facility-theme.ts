@@ -18,6 +18,23 @@ export const FACILITY = Object.freeze({
   ambient: 0.23,
 });
 
+/** 장비·출구 표식 색. 상태는 형상으로도 구분하며 색은 HUD와 같은 규칙을 쓴다. */
+export const EQUIPMENT_COLORS = Object.freeze({
+  armed: '#8bdbbc',
+  idle: '#d4a95d',
+  sensorHousing: '#73817a',
+  sensorLens: '#132325',
+  trapPlate: '#57625d',
+  trapInner: '#182726',
+  trapJawArmed: '#d4a95d',
+  trapJawIdle: '#859289',
+  trapPost: '#6c7873',
+  ownExit: '#b8ebca',
+  otherExit: '#dfbb79',
+  ownExitGlow: '#39765d',
+  otherExitGlow: '#705c30',
+});
+
 /** Small deterministic textures authored here; no remote asset or server map seed. */
 function surfaceTexture(floor: boolean) {
   const size = 128;
