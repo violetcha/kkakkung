@@ -359,6 +359,35 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   check:product-assets·e2e 22건)는 모두 통과했다.
 - 완료 확인 명령: 해당 파일이 있는 작업 트리에서 `pnpm format:check`가 통과.
 
+### REQ-D-10 · C · 준비 대기 항목에 클라이언트 단계·원인 반영 (Jira [S15P21C204-240](https://ssafy.atlassian.net/browse/S15P21C204-240))
+
+- 대상: `apps/web/src/features/game/flow/loading-controller.ts`의 `pending()`과 준비 화면.
+- 현재 상태: `pending()`은 `'경기장 자산'`·`'초기 화면'`·`'카메라 연결'`·`'내 얼굴 게시 확인'`
+  네 문자열만 돌려준다. 어느 단계에서 얼마나 걸렸는지, 원인이 클라이언트인지 서버인지
+  화면에서 알 수 없다. S15P21C204-217이 붙인 서버 로그만으로는 장치·브라우저 쪽 원인을
+  가릴 수 없었다는 것이 이 작업의 출발점이다.
+- 필요한 변경: D가 내는 `ReadinessTrace`를 대기 항목 옆에 붙인다.
+
+  ```ts
+  const trace = runtime.getReadinessTrace?.(); // 또는 deps.onReadinessTrace 로 받는다
+  // trace.blockedStage: 'permission' | 'device-open' | 'model-load' | 'first-publish' | null
+  // trace.cause: 'permission-denied' | 'device-in-use' | 'device-missing'
+  //            | 'model-load' | 'publish-failed' | 'client-slow' | null
+  // trace.stages[].durationMs: 진행 중이면 지금까지 걸린 시간
+  ```
+
+- 대응 관계는 이렇다. `'카메라 연결'`은 `permission`·`device-open` 두 단계가 받치고,
+  `'내 얼굴 게시 확인'`은 `first-publish`가 받친다. `model-load`는 지금 어느 대기 항목에도
+  붙어 있지 않지만 30초 초과의 실제 원인인 경우가 있어 함께 보여야 한다.
+- **`cause`가 `null`인 것을 "문제 없음"으로 읽지 않는다.** 아직 원인을 말할 수 없다는 뜻이다.
+  예산(30초) 안에서 느린 것은 D가 일부러 원인을 붙이지 않는다.
+- **네 단계 합이 짧은데 대기 항목이 안 풀리면 서버 쪽이다.** D는 서버 응답 대기 구간을
+  어느 단계에도 넣지 않았다. 이 대비가 클라이언트/서버 원인 구분의 근거다.
+- `getReadinessTrace`는 선택 메서드다. C 소유 `product-integration-fixture.ts`가 facade를
+  부분 구현하고 있어 필수로 만들면 D 범위 밖 파일을 고쳐야 했다. `?.()`로 읽는다.
+- 완료 확인: 30초를 넘긴 준비 실패에서 막힌 단계와 원인이 화면에 남고, 같은 값이 증거에도
+  들어간다. 증거 쪽 연결은 S15P21C204-246 범위다.
+
 ## blockedOn 요약
 
 | 항목                                | 막는 대상            | 영향                                      |
@@ -370,6 +399,7 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 | 대표 장치·실제 브라우저             | D-01–D-13 전체       | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
 | C의 안내 표시 (REQ-D-08)            | S15P21C204-244 완료  | 문구는 나가지만 화면에 뜨지 않는다        |
 | F의 `.prettierignore` (REQ-D-09)    | 모든 D 티켓의 verify | `format:check`가 첫 단계에서 실패         |
+| C의 대기 항목 표시 (REQ-D-10)       | S15P21C204-240 완료  | 단계·원인은 나오지만 화면에 뜨지 않는다   |
 
 ## 다음 단계
 
