@@ -1201,3 +1201,30 @@ it('keeps the normal runtime path when the run did not ask for measurements', ()
   // nothing to read back, because nothing was published for this run.
   expect(f.runtime.sensors?.face?.frameId).toBe(1);
 });
+
+it('names device failures, keeps cleanup failures off the screen and clears notices on phase change', async () => {
+  const f = fixture();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    vi.mocked(f.fake.startDevices).mockRejectedValueOnce(new Error('NotAllowedError: denied'));
+    await f.runtime.startDevices(false);
+    expect(f.runtime.getSnapshot().error).toContain('카메라');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('장치 시작 실패: Error: NotAllowedError: denied'),
+    );
+    f.state({ phase: 'TEAM_PRACTICE', stateVersion: 11 });
+    expect(f.runtime.getSnapshot().error).toBeNull();
+    f.end.mockRejectedValueOnce(new Error('cleanup'));
+    f.state({ phase: 'RESULT', stateVersion: 12 });
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('경기 종료 뒤 미디어 정리 실패: Error: cleanup'),
+      ),
+    );
+    expect(f.runtime.getSnapshot().error).toBeNull();
+    // 뒷정리 실패는 화면에 알리지 않지만 leave() 는 그대로 실패를 전달한다(기존 계약).
+    await expect(f.runtime.leave()).rejects.toThrow('cleanup');
+  } finally {
+    warn.mockRestore();
+  }
+});

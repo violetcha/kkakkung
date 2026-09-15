@@ -591,9 +591,10 @@ export function ProductApp({
               </section>
             )}
           </div>
-          {commandFeedback(snapshot.request) && snapshot.request?.type !== 'REMATCH' && (
-            <p role="status">{commandFeedback(snapshot.request)}</p>
-          )}
+          {/* 문구가 생기고 사라져도 페이지 높이가 바뀌지 않도록 자리를 항상 잡아 둔다 */}
+          <p role="status" className="command-feedback">
+            {snapshot.request?.type !== 'REMATCH' ? commandFeedback(snapshot.request) : null}
+          </p>
           {snapshot.error && <p role="alert">{snapshot.error}</p>}
         </>
       )}

@@ -23,3 +23,17 @@ it('distinguishes pending, denied, and uncertain commands without disclosing raw
   expect(commandFeedback({ ...request, type: 'EXCHANGE_ACCEPT' })).toContain('바로 옆');
   expect(commandFeedback({ ...request, type: 'REMATCH' })).toContain('방장');
 });
+it('keeps movement commands silent so the status line does not flicker on every input', () => {
+  const move = {
+    requestId: 'm',
+    type: 'MOVE_INTENT' as const,
+    status: 'waiting-view' as const,
+    code: null,
+  };
+  expect(commandFeedback(move)).toBeNull();
+  expect(commandFeedback({ ...move, status: 'unconfirmed', code: 'UNCONFIRMED' })).toBeNull();
+  expect(
+    commandFeedback({ ...move, type: 'TURN', status: 'rejected', code: 'RATE_LIMITED' }),
+  ).toBeNull();
+  expect(commandFeedback({ ...move, type: 'INSTALL' })).toContain('갱신된 화면');
+});
