@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import { createLoadingController, loadingDisplay } from './loading-controller';
+import { createLoadingController, describePending, loadingDisplay } from './loading-controller';
+import { createReadinessRecorder } from '../../devices/readiness-trace';
 import { roundFixture, viewFixture } from '../../room/product-fixture';
 it('requires asset version, initial view, connected scope and verified self face before sending once', () => {
   const send = vi.fn();
@@ -106,4 +107,40 @@ it('lists what this client is still waiting for, and nothing once the report is 
   expect(loader.check(loaded, bindings, media)).toBe(true);
   // Sent: the rest is other participants, so nothing is pending on this side.
   expect(loader.pending(loaded, null, null)).toEqual([]);
+});
+it('annotates waiting items with the blocked client stage, cause and elapsed time', () => {
+  const pending = ['경기장 자산', '카메라 연결', '내 얼굴 게시 확인'];
+  const recorder = createReadinessRecorder();
+  // No trace yet: the plain items stay, never an "all good" claim.
+  expect(describePending(pending, null)).toEqual(pending);
+  expect(describePending(pending, recorder.snapshot(0))).toEqual(pending);
+
+  recorder.begin('permission', 0);
+  expect(describePending(pending, recorder.snapshot(12_400))).toEqual([
+    '경기장 자산',
+    '카메라 연결(권한 확인 중 12초)',
+    '내 얼굴 게시 확인',
+  ]);
+  recorder.fail('permission', 13_000, 'PERMISSION_DENIED');
+  expect(describePending(pending, recorder.snapshot(14_000))[1]).toBe(
+    '카메라 연결(권한 확인 실패 13초 · 카메라 권한이 거부됨)',
+  );
+
+  recorder.reset();
+  recorder.begin('permission', 0);
+  recorder.succeed('permission', 1_000);
+  recorder.begin('device-open', 1_000);
+  recorder.succeed('device-open', 2_000);
+  recorder.begin('model-load', 2_000);
+  // Past the 30 s budget a running model load is itself the cause.
+  expect(describePending(pending, recorder.snapshot(33_000))).toEqual([
+    '경기장 자산',
+    '카메라 연결',
+    '내 얼굴 게시 확인(인식 모델 준비 중 31초 · 예상보다 오래 걸림)',
+  ]);
+  recorder.succeed('model-load', 33_500);
+  recorder.begin('first-publish', 33_500);
+  recorder.succeed('first-publish', 34_000);
+  // Every client stage finished: what remains is the server or connection, left unannotated.
+  expect(describePending(pending, recorder.snapshot(40_000))).toEqual(pending);
 });

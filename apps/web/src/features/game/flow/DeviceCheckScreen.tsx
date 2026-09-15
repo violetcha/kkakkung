@@ -2,18 +2,22 @@ import { useState } from 'react';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import { deviceReady } from './device-readiness';
 import { deviceFeedback } from './device-feedback';
+import { FaceGuidanceNotice } from './FaceGuidanceNotice';
+import type { FaceConditionNotice } from '../../media/face-condition';
 export function DeviceCheckScreen({
   status,
   ready,
   onStart,
   onReady,
   previewHost,
+  faceGuidance,
 }: {
   status: DeviceStatus;
   ready: boolean;
   onStart(microphone: boolean): Promise<void>;
   onReady(value: boolean): void;
   previewHost?(element: HTMLDivElement | null): void;
+  faceGuidance?: FaceConditionNotice | null;
 }) {
   const [microphone, setMicrophone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,6 +78,7 @@ export function DeviceCheckScreen({
             {ready ? '준비 취소' : '준비 완료'}
           </button>
         </div>
+        <FaceGuidanceNotice notice={faceGuidance} />
         {status.errorCode && <p role="alert">{deviceFeedback(status.errorCode)}</p>}
       </div>
       {previewHost && (

@@ -48,8 +48,11 @@ import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readi
 import { practicePresenter } from '../features/game/flow/practice-presenter';
 import {
   createLoadingController,
+  describePending,
   SCENE_ASSET_VERSION,
 } from '../features/game/flow/loading-controller';
+import type { FaceConditionNotice } from '../features/media/face-condition';
+import type { ReadinessTrace } from '../features/devices/readiness-trace';
 import { createQualityControl, type QualityPreset } from '../features/game/scene/quality-presets';
 import type {
   DeviceStatus,
@@ -83,6 +86,8 @@ export type ProductSnapshot = {
   media: MediaStatus | null;
   /** GAME_LOADING 에서 내가 아직 못 낸 준비 항목. 보고를 보낸 뒤에는 빈 배열이다. */
   loadingPending?: string[];
+  /** 장치 런타임이 낸 얼굴 조건 안내. 표시·해제·중복 억제는 런타임이 이미 판단했다. */
+  faceGuidance?: FaceConditionNotice | null;
   request: RequestDisplay | null;
   requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
   interaction: InteractionState;
@@ -119,6 +124,8 @@ export function bindProductRoom(
   let pageActive = true;
   let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
   let generation = 0;
+  /** 가장 최근 준비 단계 기록. runtime 이 직접 읽기를 지원하지 않을 때의 대체값이다. */
+  let readinessTrace: ReadinessTrace | null = null;
   let snapshot: ProductSnapshot = {
     round: null,
     view: null,
@@ -378,6 +385,18 @@ export function bindProductRoom(
           await post(MEDIA_ROUTES.report, report);
         },
         requestBindingsRefresh: (request) => send('media-bindings-refresh', request),
+        onFaceGuidance: (notice) => {
+          if (!live()) return;
+          const current = snapshot.faceGuidance ?? null;
+          if (current?.condition === notice?.condition && current?.message === notice?.message)
+            return;
+          publish({ faceGuidance: notice });
+        },
+        onReadinessTrace: (trace) => {
+          if (!live()) return;
+          readinessTrace = trace;
+          updateLoading();
+        },
         onDeviceStatus: (devices) => {
           if (!live()) return;
           publish({ devices });
@@ -575,7 +594,10 @@ export function bindProductRoom(
     loading.check(snapshot.view, bindings, snapshot.media);
     const pending =
       snapshot.round.phase === 'GAME_LOADING'
-        ? loading.pending(snapshot.view, bindings, snapshot.media)
+        ? describePending(
+            loading.pending(snapshot.view, bindings, snapshot.media),
+            bridge?.runtime.getReadinessTrace?.() ?? readinessTrace,
+          )
         : [];
     if ((snapshot.loadingPending ?? []).join('|') !== pending.join('|'))
       publish({ loadingPending: pending });
@@ -888,6 +910,8 @@ export function bindProductRoom(
       })()
         .then(() => {
           if (!active || run !== generation) return;
+          readinessTrace = null;
+          publish({ faceGuidance: null });
           bridge = makeBridge();
           bridge.setPreviewHost(previewHost);
           participating = true;
@@ -1016,6 +1040,8 @@ export function bindProductRoom(
       views.poll();
       events.poll();
       updateChallenge();
+      // 대기 항목의 경과 시간을 갱신한다. 문자열이 바뀔 때만 발행하므로 초당 한 번 수준이다.
+      if (snapshot.round?.phase === 'GAME_LOADING') updateLoading();
       if (startPending?.until !== null && startPending && deps.now() >= startPending.until) {
         startPending = null;
         const request = snapshot.requests.EXIT_START;
