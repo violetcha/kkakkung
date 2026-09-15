@@ -21,7 +21,7 @@ SSO 회원의 해시를 기존 inviteId 제한 버킷에 사용하고 IP·인원
 
 `SERVICE_AUDIENCE=team|public`이 각각 gitlab-sso/guest를 선택한다. 함께 지정한 기존 입장
 모드가 다르면 부팅을 거절한다. guest는 전달된 SSO 신원을 사용하지 않고 생성 IP를 해시한
-시도 버킷과 임의 세션 신원을 분리한다. 공개 미디어 제품 통합 전에는 public+livekit을 거절한다.
+시도 버킷과 임의 세션 신원을 분리한다. public+livekit은 `MEDIA_SUBSCRIPTION_MODE=publisher-permissions`일 때만 허용하고 server-controlled는 거절한다(`PUBLIC_MEDIA_REQUIRES_PUBLISHER_PERMISSIONS`).
 팀·기본 invitation 동작은 호환되며 이전 웹이 알 수 없는 guest 응답을 받으면 닫힌 상태를 유지한다.
 게스트는 닉네임으로 방을 만들 수 있지만 방 코드만으로는 참가하지 못하고 방장이 만든 초대가 필요하다.
 운영은 `team`이며 공개 대상 전환(ingress·배포 manifest 연동)은 후속이다.

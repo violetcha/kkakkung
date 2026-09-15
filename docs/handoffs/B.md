@@ -7,7 +7,7 @@ B는 공개 전송 계약(protocol 0.2.0), HTTP 입장, Colyseus Room과 Tick �
 ## 상태
 
 - 제품 Room의 로비 → 장치 점검 → 팀 연습 → 맵 확정 → 로딩 → 카운트다운 → 경기 → 결과/무효 → 재경기가 실제 A/E/F와 연결돼 있고 DP-06 배포 시험에서 매 배포 통과한다.
-- 방장 제어(입장 잠금·로비 강퇴), 방장 친구 초대, 게스트 입장(`SERVICE_AUDIENCE=public`, 운영 비활성), 체류 기한(로비 10분·준비/결과/중단 5분)이 병합돼 있다.
+- 방장 제어(입장 잠금·로비 강퇴), 방장 친구 초대, 게스트 입장(`SERVICE_AUDIENCE=public`, publisher-permissions 미디어와 함께 부팅 가능, 운영 비활성), 체류 기한(로비 10분·준비/결과/중단 5분)이 병합돼 있다.
 - F-REQ-15: 한 방의 tick 예외는 그 방만 `SERVER_TICK_OVERLOAD`로 끝내고 재무장한다(`tick-isolation.test.ts`로 Room 레벨 고정).
 - F-REQ-17(GAME_LOADING 지연): 원인은 B tick이 아니라 E readiness 비교였고 E의 249로 해소. 연속 3빌드에서 `GAME_LOADING` 창 최대 lag < 100ms·CPU < 80ms 확인. B 코드 변경 없음, `overloadMs=250` 유지.
 

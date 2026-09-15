@@ -148,10 +148,14 @@ export function parseConfig(input: Record<string, string | undefined>) {
     (raw.SERVER_PROFILE !== 'product' || raw.TRUST_PROXY_HOPS !== 1)
   )
     throw new Error('Audience admission requires the product profile and trusted proxy');
-  // W02 must supply an accepted product authority path before public LiveKit can start.
-  // MC-PUBLIC-02 validates a transport candidate, not these legacy product modes.
-  if (raw.SERVICE_AUDIENCE === 'public' && raw.MEDIA_MODE === 'livekit')
-    throw new Error('PUBLIC_MEDIA_AUTHORITY_NOT_IMPLEMENTED');
+  // D-2026-09-15-01: public rooms keep publisher-permissions, whose Cloud capability passed MC-01.
+  // server-controlled never proved reception on Cloud, so it stays refused for public LiveKit.
+  if (
+    raw.SERVICE_AUDIENCE === 'public' &&
+    raw.MEDIA_MODE === 'livekit' &&
+    raw.MEDIA_SUBSCRIPTION_MODE !== 'publisher-permissions'
+  )
+    throw new Error('PUBLIC_MEDIA_REQUIRES_PUBLISHER_PERMISSIONS');
   const allowedOrigins = raw.ALLOWED_ORIGINS.split(',').map((s) => s.trim());
   if (
     !allowedOrigins.length ||

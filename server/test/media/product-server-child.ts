@@ -122,6 +122,7 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
         SESSION_ATTEMPTS_PER_IP: String(Math.max(60, rooms * 6 * 3)),
         ROOM_IDLE_TTL_MS: '600000',
         OPS_OPERATING_MODE: request.operatingMode,
+        ...(request.audience ? { SERVICE_AUDIENCE: request.audience, TRUST_PROXY_HOPS: '1' } : {}),
         ...(window && !('mode' in window)
           ? {
               OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: String(window.opensAtEpochMs),

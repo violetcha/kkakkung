@@ -55,7 +55,7 @@
 
 ## 6. 보류된 split 서버 전달 (`server-forwarding`)
 
-S15P21C204-215에서 만든 “서버 단독 통제” 후보다. D-2026-09-15-01로 보류했고 영구 폐기는 아니다. 코드는 `MEDIA_SUBSCRIPTION_MODE=server-forwarding`에서만 동작하며, 환경 파서는 이 모드와 public+livekit 조합을 운영에서 거절한다.
+S15P21C204-215에서 만든 “서버 단독 통제” 후보다. D-2026-09-15-01로 보류했고 영구 폐기는 아니다. 코드는 명시적인 `server-forwarding` 조립에서만 동작하며, 운영 환경 설정(`MEDIA_SUBSCRIPTION_MODE`)은 이 값을 받지 않는다.
 
 **구조.** 참가자마다 CAMERA 전용 얼굴 게시 연결(수신 불가 토큰)과 개인 MIC 게시·수신 방을 둔다. 서버가 `forwardParticipant`로 필요한 상대의 얼굴과 허용된 음성만 개인 방에 전달하고, 거리 밖 음성은 remove ACK와 실제 부재로 차단한다. 송신 앱의 허용 목록을 권한 근거로 쓰지 않는다.
 

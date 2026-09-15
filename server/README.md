@@ -10,8 +10,8 @@ Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프�
 기본 invitation 모드와 내부 smoke의 초대 검사는 유지한다. HTTP 계약은 [프로토콜](../docs/protocol.md)을 따른다.
 
 `SERVICE_AUDIENCE=team`도 같은 SSO 모드를 선택하며 continuous Compose가 이를 고정한다.
-`public`은 게스트 입장(닉네임 방 생성 + 방장 초대)을 선택하지만 현재 public+livekit은
-공개 미디어 제품 권한 통합 미완료로 부팅을 거절한다. 기존 입장 모드와 충돌하는 설정도 거절한다.
+`public`은 게스트 입장(닉네임 방 생성 + 방장 초대)을 선택한다. public+livekit은
+`MEDIA_SUBSCRIPTION_MODE=publisher-permissions`일 때만 부팅하고 server-controlled는 거절한다. 기존 입장 모드와 충돌하는 설정도 거절한다.
 미디어가 비활성인 실제 제품은 게스트 경로가 있어도 readiness/admission을 열지 않는다.
 
 아래 명령은 모두 `server/`가 아니라 **저장소 루트**에서 실행한다.

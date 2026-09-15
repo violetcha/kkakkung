@@ -27,7 +27,7 @@
 
 | 설정                                       | 현재 값                 | 비고                                                                  |
 | ------------------------------------------ | ----------------------- | --------------------------------------------------------------------- |
-| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. 현재 public+livekit 조합은 부팅을 거절         |
+| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용  |
 | `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                    |
 | `MAX_ROOMS` / `MAX_SLOTS`                  | `1` / `6`               | 스키마 상한 10방·60석, `MAX_SLOTS = MAX_ROOMS × 6`. 단계 부하 후 상향 |
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                            |

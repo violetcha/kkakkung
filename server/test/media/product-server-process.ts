@@ -21,6 +21,8 @@ export async function startProductServerProcess(
     operatingMode?: 'attested' | 'continuous';
     rooms?: number;
     subscriptionMode?: 'publisher-permissions';
+    /** Guest admission behind the trusted proxy (SERVICE_AUDIENCE=public). */
+    audience?: 'public';
   } = {},
 ) {
   const child = spawn(process.execPath, ['--import', 'tsx', childEntry], {
@@ -140,6 +142,7 @@ export async function startProductServerProcess(
         ...(options.cpuProfile ? { cpuProfile: true } : {}),
         ...(options.rooms ? { rooms: options.rooms } : {}),
         ...(options.subscriptionMode ? { subscriptionMode: options.subscriptionMode } : {}),
+        ...(options.audience ? { audience: options.audience } : {}),
       },
       30000,
     );
