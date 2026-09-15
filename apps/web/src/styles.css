@@ -284,6 +284,64 @@
   /* "행동 가능" ↔ "이동 중" 처럼 문구 길이가 바뀌어도 HUD 줄바꿈이 달라지지 않게 폭을 고정 */
   min-width: min(21rem, 100%);
 }
+/* 상태 표식. 색은 3D 장비 표시등(EQUIPMENT_COLORS)과 같고, 글리프·문구·테두리를 함께 쓴다. */
+.product-shell {
+  --hud-armed: #8bdbbc;
+  --hud-idle: #d4a95d;
+  --hud-spent: #6f7d78;
+}
+.hud-outcomes {
+  display: flex;
+  gap: 14px;
+}
+.hud-outcomes [data-outcome='escape'] {
+  color: #b8ebca;
+}
+.hud-outcomes [data-outcome='capture'] {
+  color: #e6c78a;
+}
+.hud-status [data-state='restrained'] {
+  color: var(--hud-idle);
+  border-left: 3px solid var(--hud-idle);
+  padding-left: 8px;
+}
+.hud-status [data-state='challenge'],
+.hud-status [data-state='installing'] {
+  border-left: 3px solid var(--hud-armed);
+  padding-left: 8px;
+}
+.game-panel button[data-kind] {
+  font-variant-numeric: tabular-nums;
+}
+.game-panel li[data-state='armed'] {
+  color: var(--hud-armed);
+}
+.game-panel li[data-state='pending'] {
+  color: var(--hud-idle);
+}
+.game-panel li[data-state='spent'] {
+  color: var(--hud-spent);
+  text-decoration: line-through;
+}
+.product-shell .restraint-hud {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.restraint-hud p {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border: 1px solid;
+}
+.restraint-hud [data-state='restrained'] {
+  color: #f0d9a6;
+  border-color: var(--hud-idle);
+  background: #1a1409;
+}
+.restraint-hud [data-state='immune'] {
+  color: #c8efe0;
+  border-color: var(--hud-armed);
+  background: #0a1a16;
+}
 .product-shell .command-feedback {
   min-height: 1.5em;
   margin: 12px 0 0;
