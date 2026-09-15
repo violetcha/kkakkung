@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { freezeSnapshot } from '../operations/ImmutableSnapshot.js';
 import type { SplitMediaOwnership } from '../operations/SplitMediaOwnership.js';
 import type { PrepareGenerationRequest, TrustedMediaFrame } from './types.js';
 
@@ -216,12 +217,13 @@ export class MediaGenerationRegistry {
       const receiverRoom = (playerId: string) =>
         this.room(JSON.stringify([input.matchId, input.mediaInstanceId, playerId]));
       roomName = receiverRoom(input.playerId);
-      splitOwnership = Object.freeze({
+      // An owned frozen snapshot lets readiness reuse its accounting without re-comparing it.
+      splitOwnership = freezeSnapshot({
         faceRoomName: sharedRoom,
         faceIdentity: `${this.namespace}--${this.serverEpoch}--${randomUUID()}`,
-        receiverRoomNames: Object.freeze(
-          roster.filter((playerId) => playerId !== input.playerId).map(receiverRoom),
-        ),
+        receiverRoomNames: roster
+          .filter((playerId) => playerId !== input.playerId)
+          .map(receiverRoom),
       });
     }
     const value: Generation = {
