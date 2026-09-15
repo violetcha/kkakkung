@@ -50,7 +50,10 @@ function poseLandmarks() {
   return points;
 }
 
-function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
+function harness(
+  overrides: Partial<InteractionRuntimeOptions> = {},
+  depOverrides: Partial<InteractionDeps> = {},
+) {
   const track = videoTrack();
   const sensors: SensorSnapshot[] = [];
   const statuses: {
@@ -153,6 +156,7 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
     onInteractionState: vi.fn(),
     onLocalPreview: (element) => previews.push(element),
   } as unknown as InteractionDeps;
+  Object.assign(deps as object, depOverrides);
 
   const runtime = createInteractionRuntime(deps, {
     environment,
@@ -166,6 +170,7 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
     runtime,
     deps,
     track,
+    compositorContext: context2d,
     processedTrack,
     faceTracks,
     refreshRequests,
@@ -244,6 +249,158 @@ function harness(overrides: Partial<InteractionRuntimeOptions> = {}) {
     },
   };
 }
+
+/** S15P21C204-244. 탭 이탈을 시험에서 직접 몰기 위한 source. */
+function visibilitySource() {
+  const listeners = new Set<() => void>();
+  let hidden = false;
+  return {
+    source: {
+      isHidden: () => hidden,
+      addEventListener: (_type: 'visibilitychange', listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: 'visibilitychange', listener: () => void) =>
+        listeners.delete(listener),
+    },
+    set: (value: boolean) => {
+      hidden = value;
+      for (const listener of [...listeners]) listener();
+    },
+    get listenerCount() {
+      return listeners.size;
+    },
+  };
+}
+
+describe('S15P21C204-244 얼굴 조건 안내와 탭 이탈 안전 전환', () => {
+  /** 기본 얼굴은 arc로만 그린다. 실사 프레임 경로는 arc를 부르지 않는다. */
+  const drewDefaultFace = (base: ReturnType<typeof harness>) =>
+    (base.compositorContext.arc as ReturnType<typeof vi.fn>).mock.calls.length;
+
+  it('drops to the default face on tab exit without waiting for the hold window', async () => {
+    const visibility = visibilitySource();
+    const base = harness({ visibility: visibility.source });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.advance(40);
+      base.emit(1);
+      base.fireTimers();
+      const beforeExit = drewDefaultFace(base);
+
+      // hold 창(1200ms)이 한참 남은 시점에 이탈한다.
+      base.advance(100);
+      visibility.set(true);
+
+      expect(drewDefaultFace(base)).toBeGreaterThan(beforeExit);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('keeps drawing the default face while the tab stays hidden', async () => {
+    const visibility = visibilitySource();
+    const base = harness({ visibility: visibility.source });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.advance(40);
+      base.emit(1);
+      base.fireTimers();
+      visibility.set(true);
+      const afterExit = drewDefaultFace(base);
+
+      // 숨은 동안 도착한 늦은 결과도 실사 프레임을 되살리지 못한다.
+      base.advance(40);
+      base.emit(2);
+      base.fireTimers();
+
+      expect(drewDefaultFace(base)).toBeGreaterThan(afterExit);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('resumes live frames from new samples after returning to the tab', async () => {
+    const visibility = visibilitySource();
+    const base = harness({ visibility: visibility.source });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      visibility.set(true);
+      base.fireTimers();
+      visibility.set(false);
+      const afterReturn = drewDefaultFace(base);
+
+      base.advance(40);
+      base.emit(1);
+      base.fireTimers();
+
+      // 복귀 뒤 새 표본이 들어오면 더 이상 기본 얼굴을 그리지 않는다.
+      expect(drewDefaultFace(base)).toBe(afterReturn);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('reports a turned-away face once the condition persists and clears it on tab exit', async () => {
+    const visibility = visibilitySource();
+    const notices: (string | null)[] = [];
+    const base = harness(
+      { visibility: visibility.source },
+      { onFaceGuidance: (notice) => notices.push(notice?.condition ?? null) },
+    );
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      // 신선한 표본을 유지한 채 안내 지연(800ms)을 넘긴다.
+      for (let i = 1; i <= 10; i += 1) {
+        base.advance(100);
+        base.emit(i, 1, 1.2);
+        base.fireTimers();
+      }
+
+      expect(notices).toContain('turned-away');
+
+      visibility.set(true);
+      expect(notices.at(-1)).toBeNull();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('does not repeat the same guidance while the condition holds', async () => {
+    const notices: (string | null)[] = [];
+    const base = harness(
+      {},
+      { onFaceGuidance: (notice) => notices.push(notice?.condition ?? null) },
+    );
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      for (let i = 1; i <= 20; i += 1) {
+        base.advance(100);
+        base.emit(i, 1, 1.2);
+        base.fireTimers();
+      }
+
+      expect(notices.filter((value) => value === 'turned-away')).toHaveLength(1);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('removes the visibility listener when vision stops', async () => {
+    const visibility = visibilitySource();
+    const base = harness({ visibility: visibility.source });
+    await base.runtime.startDevices({ microphone: false });
+    expect(visibility.listenerCount).toBe(1);
+
+    await base.runtime.endParticipation();
+
+    expect(visibility.listenerCount).toBe(0);
+  });
+});
 
 describe('createInteractionRuntime', () => {
   it('preserves the calibration failure while subsequent missing faces switch input to keyboard', async () => {
