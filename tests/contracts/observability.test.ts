@@ -325,6 +325,7 @@ describe('alert policy', () => {
     [180, 162],
     [181, 163],
     [900, 810],
+    [9_000, 8_100],
   ])('warns at 90 percent of the configured %i-call ceiling', (limit, threshold) => {
     const events: StructuredEvent[] = [];
     const policy = createAlertPolicy({
@@ -350,7 +351,7 @@ describe('alert policy', () => {
     expect(events.map((event) => event.event)).toEqual(['alert.raised', 'alert.cleared']);
   });
 
-  it.each([0, -1, 1.5, 901, NaN, Infinity])('rejects an invalid API ceiling %s', (limit) => {
+  it.each([0, -1, 1.5, 9_001, NaN, Infinity])('rejects an invalid API ceiling %s', (limit) => {
     expect(() => createAlertPolicy({ now: () => 1, mediaApiTotalLimit: limit })).toThrow(
       'INVALID_ALERT_API_BUDGET',
     );

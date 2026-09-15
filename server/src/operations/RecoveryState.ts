@@ -1,5 +1,6 @@
 import type { Readiness } from '../media/types.js';
 import { checksum, strictObject } from './CheckpointStore.js';
+import { freezeSnapshot } from './ImmutableSnapshot.js';
 import {
   validateJournalRecord,
   type JournalEntry,
@@ -147,6 +148,7 @@ export class RecoveryState {
   };
   private readonly localReasons = new Set<string>();
   private cleanup: CleanupReport | null = null;
+  private frozen: { source: RecoverySnapshot; value: RecoverySnapshot } | null = null;
   private restored = false;
 
   restore(
@@ -216,6 +218,8 @@ export class RecoveryState {
   }
 
   refreshBudget(confirmed: boolean): void {
+    // Readiness refreshes on every observation; an unchanged budget must not replace the state.
+    if (this.state.budgetConfirmed === (confirmed === true)) return;
     this.state = { ...this.state, budgetConfirmed: confirmed === true };
     this.recompute();
   }
@@ -226,8 +230,11 @@ export class RecoveryState {
     this.recompute();
   }
 
+  /** State objects are replaced, never mutated, so one frozen copy serves until the next change. */
   snapshot(): RecoverySnapshot {
-    return structuredClone(this.state);
+    if (this.frozen?.source !== this.state)
+      this.frozen = { source: this.state, value: freezeSnapshot(structuredClone(this.state)) };
+    return this.frozen.value;
   }
 
   readiness(): Readiness {

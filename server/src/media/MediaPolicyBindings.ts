@@ -287,10 +287,12 @@ export class MediaPolicyBindings {
     const audible = this.frames.get(scopeKey(matchId, mediaInstanceId));
     for (const generation of this.registered.keys()) {
       if (this.publishVersions.get(scope) !== version) return;
+      // Scope first: every room's generations are registered here, and allowed() evaluates the
+      // whole readiness gate. Checking it first made one room's publish scale with all rooms.
       if (
-        !this.allowed(generation) ||
         generation.request.matchId !== matchId ||
-        generation.request.mediaInstanceId !== mediaInstanceId
+        generation.request.mediaInstanceId !== mediaInstanceId ||
+        !this.allowed(generation)
       )
         continue;
       const fingerprint = JSON.stringify(participants);
@@ -355,8 +357,7 @@ export class MediaPolicyBindings {
 
   private trackAllowed(key: SubscriptionKey, sid: string): boolean {
     if (!this.tracks.validateTrack(key, sid)) return false;
-    return this.tracks.listBindings(key.matchId, key.mediaInstanceId).some((binding) => {
-      if (binding.faceTrackSid !== sid && binding.audioTrackSid !== sid) return false;
+    return this.tracks.bindingsForTrack(key.matchId, key.mediaInstanceId, sid).some((binding) => {
       const generation = this.options.registry.get(key.matchId, binding.playerId);
       return (
         !!generation &&

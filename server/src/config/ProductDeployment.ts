@@ -24,12 +24,13 @@ export async function checkProductDeployment(input: {
       TRUST_PROXY_HOPS: '1',
       ALLOWED_ORIGINS: input.baseUrl,
       SERVICE_NAMESPACE: input.env.SERVICE_NAMESPACE || 'kkakkung-ec2',
-      MAX_ROOMS: '1',
-      MAX_SLOTS: '6',
     });
   } catch {
     return { status: 'BLOCKED' as const, failures: ['PRODUCT_ENV_INVALID'] };
   }
+  // The release runner copies the deployed Compose capacity; never check a smaller stand-in.
+  if (!input.env.MAX_ROOMS || !input.env.MAX_SLOTS)
+    return { status: 'BLOCKED' as const, failures: ['PRODUCT_CAPACITY_MISSING'] };
   if (
     !config.livekit?.projectAlias ||
     (config.operatingMode !== 'continuous' && !config.officialBudgetMaxAgeMs) ||

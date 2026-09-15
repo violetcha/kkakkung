@@ -65,6 +65,19 @@ describe('verified current track registry', () => {
     expect(s.registry.validateTrack(owner, 'AUDIO')).toBe(true);
     expect(s.registry.validateTrack({ ...owner, mediaInstanceId: 'other' }, 'AUDIO')).toBe(false);
   });
+  it('finds the verified binding carrying a track only inside its own scope', async () => {
+    const s = setup();
+    expect(s.registry.bindingsForTrack('m', 'i', 'FACE')).toEqual([]);
+    await s.registry.reconcileDue();
+    const [binding] = s.registry.listBindings('m', 'i');
+    expect(s.registry.bindingsForTrack('m', 'i', 'FACE')).toEqual([binding]);
+    expect(s.registry.bindingsForTrack('m', 'i', 'AUDIO')).toEqual([binding]);
+    expect(s.registry.bindingsForTrack('m', 'other', 'FACE')).toEqual([]);
+    expect(s.registry.bindingsForTrack('m', 'i', 'UNKNOWN')).toEqual([]);
+    s.registry.retire(owner);
+    expect(s.registry.bindingsForTrack('m', 'i', 'FACE')).toEqual([]);
+    expect(s.registry.listBindings('m', 'i')).toEqual([]);
+  });
   it('merges dirty events, limits each participant to 5s and checks active stale state after 30s', async () => {
     const s = setup();
     await s.registry.reconcileDue();

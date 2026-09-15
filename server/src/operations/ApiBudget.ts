@@ -1,3 +1,10 @@
+/**
+ * Upper bounds for a configured media API budget. The LiveKit Cloud project allows 10,000 server
+ * API requests per minute (Build plan dashboard, 2026-09-15). The total ceiling keeps a 10% margin
+ * and the normal ceiling keeps the original 600/900 share so cleanup always has reserved room.
+ */
+export const MEDIA_API_CEILINGS = Object.freeze({ normalPer60s: 6_000, totalPer60s: 9_000 });
+
 export type ApiPriority = 'normal' | 'cleanup';
 export type ApiKind = 'grant' | 'revoke' | 'query' | 'room';
 
@@ -78,9 +85,9 @@ export class ApiBudget {
       !Number.isSafeInteger(normal) ||
       !Number.isSafeInteger(total) ||
       normal <= 0 ||
-      normal > 600 ||
+      normal > MEDIA_API_CEILINGS.normalPer60s ||
       total < normal ||
-      total > 900 ||
+      total > MEDIA_API_CEILINGS.totalPer60s ||
       Boolean(options.setTimer) !== Boolean(options.clearTimer)
     ) {
       throw new Error('INVALID_API_BUDGET_CONFIG');

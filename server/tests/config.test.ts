@@ -180,6 +180,20 @@ describe('skeleton readiness configuration', () => {
     expect(config.maxRooms).toBe(3);
     expect(config.maxSlots).toBe(18);
   });
+  it.each(['server-controlled', 'publisher-permissions'])(
+    'allows up to ten rooms with %s media subscriptions',
+    (mode) => {
+      const config = parseConfig({
+        MEDIA_SUBSCRIPTION_MODE: mode,
+        MAX_ROOMS: '10',
+        MAX_SLOTS: '60',
+      });
+      expect(config).toMatchObject({ maxRooms: 10, maxSlots: 60, subscriptionMode: mode });
+      expect(() =>
+        parseConfig({ MEDIA_SUBSCRIPTION_MODE: mode, MAX_ROOMS: '10', MAX_SLOTS: '54' }),
+      ).toThrow('MAX_SLOTS must equal MAX_ROOMS * 6');
+    },
+  );
 });
 
 describe('operations and media configuration groups (F-01)', () => {
@@ -236,13 +250,25 @@ describe('operations and media configuration groups (F-01)', () => {
       }).publicWindow,
     ).toEqual({ opensAtEpochMs: 1000, closesAtEpochMs: 2000 });
   });
-  it('bounds media API limits to 600 normal / 900 total and normal <= total', () => {
+  it('bounds media API limits to 6,000 normal / 9,000 total and normal <= total', () => {
     expect(() =>
       parseConfig({
-        MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '601',
-        MEDIA_MAX_TOTAL_API_CALLS_PER_60S: '900',
+        MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '6001',
+        MEDIA_MAX_TOTAL_API_CALLS_PER_60S: '9000',
       }),
     ).toThrow();
+    expect(() =>
+      parseConfig({
+        MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '6000',
+        MEDIA_MAX_TOTAL_API_CALLS_PER_60S: '9001',
+      }),
+    ).toThrow();
+    expect(
+      parseConfig({
+        MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '6000',
+        MEDIA_MAX_TOTAL_API_CALLS_PER_60S: '9000',
+      }).mediaApiLimits,
+    ).toEqual({ maxNormalApiCallsPer60s: 6000, maxTotalApiCallsPer60s: 9000 });
     expect(() =>
       parseConfig({
         MEDIA_MAX_NORMAL_API_CALLS_PER_60S: '500',

@@ -10,7 +10,11 @@ import {
   createReadinessRuntime,
   type ReadinessRuntime,
 } from '../../src/health/ReadinessRuntime.js';
-import type { CapabilityReport } from '../../src/media/CloudCapabilityProbe.js';
+import {
+  isParsedCapabilityReport,
+  parseCapabilityReport,
+  type CapabilityReport,
+} from '../../src/media/CloudCapabilityProbe.js';
 import { MediaGenerationRegistry } from '../../src/media/MediaGenerationRegistry.js';
 import type { MediaConfiguration, OfficialBudgetCheckpoint } from '../../src/media/types.js';
 import { CheckpointStore } from '../../src/operations/CheckpointStore.js';
@@ -472,6 +476,25 @@ describe('E-15 actual local recovery, operations and consumers; synthetic extern
       expect.arrayContaining(['PRODUCT_SECURITY_UNCONFIRMED', 'CLOUD_CAPABILITY_UNCONFIRMED']),
     );
     expect(f.runtime.canIssue()).toBe(false);
+  });
+
+  it('reuses a parsed capability report but rechecks its scope and clock on every observation', async () => {
+    const f = await fixture();
+    await ready(f);
+    const parsed = parseCapabilityReport(structuredClone(localCapability));
+    expect(isParsedCapabilityReport(parsed)).toBe(true);
+    f.evidence.capability = parsed;
+    expect(f.runtime.getReadiness().reasonCodes).not.toContain('CLOUD_CAPABILITY_UNCONFIRMED');
+    f.clock.now = parsed.testedAtEpochMs - 1;
+    expect(f.runtime.getReadiness().reasonCodes).toContain('CLOUD_CAPABILITY_UNCONFIRMED');
+    f.clock.now = EPOCH;
+    expect(f.runtime.getReadiness().reasonCodes).not.toContain('CLOUD_CAPABILITY_UNCONFIRMED');
+    const lookalike = Object.freeze({ ...parsed, namespace: 'foreign-namespace' });
+    expect(isParsedCapabilityReport(lookalike)).toBe(false);
+    f.evidence.capability = lookalike;
+    expect(f.runtime.getReadiness().reasonCodes).toContain('CLOUD_CAPABILITY_UNCONFIRMED');
+    f.evidence.capability = Object.freeze({ ...parsed, status: 'BROKEN' } as never);
+    expect(f.runtime.getReadiness().reasonCodes).toContain('CLOUD_CAPABILITY_UNCONFIRMED');
   });
 
   it('does not accept an empty local directory as complete history without provisioning proof', async () => {

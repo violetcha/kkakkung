@@ -1,5 +1,24 @@
 # E 공개 인계 기록
 
+## 2026-09-15 최대 10방 해제와 다중 방 readiness 비용 — S15P21C204-251
+
+- localStage: LOCAL_VERIFIED. D-2026-09-15-01에 따라 `publisher-permissions`의 1방 강제를 풀고
+  제품 Compose overlay의 `MAX_ROOMS`/`MAX_SLOTS`(초기 1/6)를 배포 사전 검사에 그대로 넘긴다.
+  미디어 API 설정 상한은 `MEDIA_API_CEILINGS`(60초 정상 6,000/전체 9,000)로 한곳에서 관리한다.
+- 다중 방 제품 통합 시험(`KKAKKUNG_TEST_ROOMS=N`, 실제 A/B/E/F 서버와 방당 C 런타임 6개, 장치·Cloud
+  합성)에서 10방이 연습 종료 직후 모두 `SERVER_TICK_OVERLOAD`(256–579ms)로 무효됐다. 원인은 방 수에
+  제곱으로 늘어난 readiness 재평가였다.
+  - `MediaPolicyBindings.publish`가 모든 방의 세대에 대해 범위 확인 전에 권한(readiness)을 평가했다.
+  - 트랙 권한 검사마다 `TrackRegistry.listBindings`가 모든 방 항목의 키를 다시 만들었다.
+  - readiness마다 `RecoveryState.snapshot` 복제, 능력 보고서 재파싱을 반복했다.
+- 수정: 범위 먼저 비교, 트랙을 가진 바인딩만 조회, 바뀌지 않은 복구 상태 재사용(얼린 스냅샷),
+  파싱된 능력 보고서 재검증 생략. 판정 조건과 매 호출 범위·시각 확인은 그대로다.
+- 결과(Windows 로컬, 22 논리 CPU, 합성 장치·Cloud, 이동 없음): 3방 lag 60ms·API 184회, 5방 84ms·304회,
+  10방 3회 연속 통과·event-loop lag 73–88ms·tick 최대 11.5ms·API 626–628회/60초(시작·발급·로딩 포함).
+  G2의 정상 구간 API·실제 WebRTC·이동 부하 인수가 아니다.
+- blockedOn: 게임 단독 60클라이언트 30분(1-5), 실제 Cloud 1→3→5→10방(1-7), 운영 방 수 상향 배포(1-8).
+  남은 비용은 readiness 누적 대조(`matchCachedInput`/발급 중 캐시 miss)와 개발 변환(tsx) 오버헤드다.
+
 ## 2026-09-15 준비 상태 예약 대조 재사용 비용 — S15P21C204-249
 
 - localStage: LOCAL_VERIFIED. F-REQ-17 재측정이 서버 CPU 약 27%로 지목한

@@ -45,6 +45,8 @@ describe('read-only product deployment preparation (synthetic evidence)', () => 
           SESSION_ATTEMPTS_PER_INVITE: '20',
           SESSION_ATTEMPTS_PER_IP: '20',
           ROOM_IDLE_TTL_MS: '600000',
+          MAX_ROOMS: '10',
+          MAX_SLOTS: '60',
         };
         const input = {
           env,
@@ -70,6 +72,22 @@ describe('read-only product deployment preparation (synthetic evidence)', () => 
           (await checkProductDeployment({ ...input, env: { ...env, SERVICE_NAMESPACE: 'other' } }))
             .status,
         ).toBe('BLOCKED');
+        const withoutCapacity = Object.fromEntries(
+          Object.entries(env).filter(([key]) => key !== 'MAX_ROOMS' && key !== 'MAX_SLOTS'),
+        );
+        expect(await checkProductDeployment({ ...input, env: withoutCapacity })).toEqual({
+          status: 'BLOCKED',
+          failures: ['PRODUCT_CAPACITY_MISSING'],
+        });
+        expect(
+          await checkProductDeployment({ ...input, env: { ...env, MAX_SLOTS: '54' } }),
+        ).toEqual({ status: 'BLOCKED', failures: ['PRODUCT_ENV_INVALID'] });
+        expect(
+          await checkProductDeployment({
+            ...input,
+            env: { ...env, MAX_ROOMS: '11', MAX_SLOTS: '66' },
+          }),
+        ).toEqual({ status: 'BLOCKED', failures: ['PRODUCT_ENV_INVALID'] });
         await writeFile(join(c.opsDataDir, 'official-usage-input.json'), '{}');
         if (operatingMode === 'attested')
           expect((await checkProductDeployment(input)).failures).toContain(

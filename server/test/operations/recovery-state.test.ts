@@ -190,11 +190,29 @@ describe('recovery state integrity and process lifetime', () => {
     state.lock('SDK error with sensitive-example-value');
     state.lock('UPPERCASE_SECRET_VALUE');
     const snapshot = state.snapshot();
-    (snapshot.reasonCodes as string[]).push('injected');
+    // Snapshots are shared frozen copies: a caller cannot write through them into the state.
+    expect(() => (snapshot.reasonCodes as string[]).push('injected')).toThrow(TypeError);
+    expect(state.snapshot()).toBe(snapshot);
     const readiness = state.readiness();
     (readiness.reasonCodes as string[]).push('injected');
     expect(state.snapshot().reasonCodes).toEqual(['RECOVERY_LOCKED', 'CLEANUP_PENDING']);
     expect(JSON.stringify(state.readiness())).not.toContain('sensitive-example-value');
+  });
+
+  it('keeps one snapshot until the state changes and refreshes it on every change', () => {
+    const state = new RecoveryState();
+    state.restore(journal(), { ...usage, budgetConfirmed: false });
+    const locked = state.snapshot();
+    state.refreshBudget(false);
+    expect(state.snapshot()).toBe(locked);
+    state.refreshBudget(true);
+    const confirmed = state.snapshot();
+    expect(confirmed).not.toBe(locked);
+    expect(confirmed.budgetConfirmed).toBe(true);
+    expect(confirmed.reasonCodes).not.toContain('BUDGET_UNCONFIRMED');
+    state.lock('WRITER_CONFLICT');
+    expect(state.snapshot()).toMatchObject({ phase: 'LOCKED' });
+    expect(state.snapshot().reasonCodes).toContain('WRITER_CONFLICT');
   });
 });
 

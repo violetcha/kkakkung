@@ -156,8 +156,10 @@ describe('project API sliding budget', () => {
   });
 
   it('rejects invalid limits and a reversed monotonic clock', async () => {
-    expect(() => setup(601, 900)).toThrow('INVALID_API_BUDGET_CONFIG');
-    expect(() => setup(600, 901)).toThrow('INVALID_API_BUDGET_CONFIG');
+    expect(() => setup(6_001, 9_000)).toThrow('INVALID_API_BUDGET_CONFIG');
+    expect(() => setup(6_000, 9_001)).toThrow('INVALID_API_BUDGET_CONFIG');
+    expect(() => setup(901, 900)).toThrow('INVALID_API_BUDGET_CONFIG');
+    setup(6_000, 9_000).budget.close();
     const { dispatch, setNow, budget } = setup();
     setNow(100);
     await dispatch();

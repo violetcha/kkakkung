@@ -16,7 +16,12 @@ const childEntry = fileURLToPath(new URL('./product-server-child.ts', import.met
 /** Actual server process isolated from Vitest's six C/SDK clients; no public debug endpoints. */
 export async function startProductServerProcess(
   opsToken: string,
-  options: { cpuProfile?: boolean; operatingMode?: 'attested' | 'continuous' } = {},
+  options: {
+    cpuProfile?: boolean;
+    operatingMode?: 'attested' | 'continuous';
+    rooms?: number;
+    subscriptionMode?: 'publisher-permissions';
+  } = {},
 ) {
   const child = spawn(process.execPath, ['--import', 'tsx', childEntry], {
     cwd: root,
@@ -133,6 +138,8 @@ export async function startProductServerProcess(
         opsToken,
         operatingMode: options.operatingMode,
         ...(options.cpuProfile ? { cpuProfile: true } : {}),
+        ...(options.rooms ? { rooms: options.rooms } : {}),
+        ...(options.subscriptionMode ? { subscriptionMode: options.subscriptionMode } : {}),
       },
       30000,
     );
