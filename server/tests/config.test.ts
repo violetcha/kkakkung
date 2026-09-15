@@ -64,16 +64,29 @@ describe('explicit local product configuration', () => {
     ).toThrow('product profile');
     expect(() => parseConfig({ ...base, SERVICE_AUDIENCE: 'unknown' })).toThrow('SERVICE_AUDIENCE');
   });
-  it('refuses public Cloud in both legacy media modes without weakening the team profile', () => {
-    for (const mode of ['server-controlled', 'publisher-permissions']) {
-      const base = { ...productMedia, TRUST_PROXY_HOPS: '1', MEDIA_SUBSCRIPTION_MODE: mode };
-      expect(() => parseConfig({ ...base, SERVICE_AUDIENCE: 'public' })).toThrow(
-        'PUBLIC_MEDIA_AUTHORITY_NOT_IMPLEMENTED',
+  it('accepts public Cloud only with publisher permissions and keeps the team profile', () => {
+    const base = { ...productMedia, TRUST_PROXY_HOPS: '1' };
+    expect(
+      parseConfig({
+        ...base,
+        SERVICE_AUDIENCE: 'public',
+        MEDIA_SUBSCRIPTION_MODE: 'publisher-permissions',
+      }),
+    ).toMatchObject({
+      serviceAudience: 'public',
+      sessionAdmissionMode: 'guest',
+      mediaMode: 'livekit',
+      subscriptionMode: 'publisher-permissions',
+    });
+    for (const mode of [{}, { MEDIA_SUBSCRIPTION_MODE: 'server-controlled' }])
+      expect(() => parseConfig({ ...base, ...mode, SERVICE_AUDIENCE: 'public' })).toThrow(
+        'PUBLIC_MEDIA_REQUIRES_PUBLISHER_PERMISSIONS',
       );
-      expect(parseConfig({ ...base, SERVICE_AUDIENCE: 'team' }).sessionAdmissionMode).toBe(
-        'gitlab-sso',
-      );
-    }
+    for (const mode of ['server-controlled', 'publisher-permissions'])
+      expect(
+        parseConfig({ ...base, MEDIA_SUBSCRIPTION_MODE: mode, SERVICE_AUDIENCE: 'team' })
+          .sessionAdmissionMode,
+      ).toBe('gitlab-sso');
   });
   it('requires an explicit product ingress before accepting GitLab identity headers', () => {
     expect(parseConfig({}).sessionAdmissionMode).toBe('invitation');

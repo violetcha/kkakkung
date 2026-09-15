@@ -31,6 +31,7 @@ export const productServerRequestSchema = z.discriminatedUnion('action', [
     operatingMode: z.enum(['attested', 'continuous']).optional(),
     rooms: z.number().int().min(1).max(10).optional(),
     subscriptionMode: z.literal('publisher-permissions').optional(),
+    audience: z.literal('public').optional(),
   }),
   z.strictObject({
     ...envelope,
