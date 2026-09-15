@@ -1,6 +1,7 @@
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { visibleExitModel } from './visible-exit-model';
 import { wallModel } from './scene-model';
+import { EQUIPMENT_COLORS } from './facility-theme';
 import { ExitOwnerLabel, exitOwnerLabel, type OwnerNames } from './ExitOwnerLabel';
 export function VisibleExits({
   view,
@@ -34,7 +35,11 @@ export function VisibleExits({
                 <boxGeometry args={[0.026, 0.94, 0.035]} />
                 <meshStandardMaterial
                   color="#61756d"
-                  emissive={exit.ownerId === view.self?.playerId ? '#39765d' : '#705c30'}
+                  emissive={
+                    exit.ownerId === view.self?.playerId
+                      ? EQUIPMENT_COLORS.ownExitGlow
+                      : EQUIPMENT_COLORS.otherExitGlow
+                  }
                   emissiveIntensity={0.55}
                   roughness={0.5}
                   metalness={0.5}
@@ -48,7 +53,11 @@ export function VisibleExits({
             <mesh position={[0, 0.22, 0.012]}>
               <boxGeometry args={[0.14, 0.016, 0.01]} />
               <meshBasicMaterial
-                color={exit.ownerId === view.self?.playerId ? '#b8ebca' : '#dfbb79'}
+                color={
+                  exit.ownerId === view.self?.playerId
+                    ? EQUIPMENT_COLORS.ownExit
+                    : EQUIPMENT_COLORS.otherExit
+                }
                 toneMapped={false}
               />
             </mesh>

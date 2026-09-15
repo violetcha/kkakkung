@@ -29,3 +29,23 @@ it('keeps role, win condition, authoritative time and expired restraints readabl
   expect(practice).toContain('도망자 2명을 포획하거나 시간을 버티면 승리');
   expect(practice).toContain('구속 중');
 });
+
+it('marks escape, capture and the self state with shape and data attributes, not colour alone', () => {
+  const self = viewFixture().self!;
+  if (self.status !== 'ACTIVE') throw Error('active self required');
+  const render = (restraintUntilTick: number | null) =>
+    renderToStaticMarkup(
+      createElement(GameHud, {
+        round: roundFixture({ serverTick: 100, counts: { escaped: 1, captured: 2 } }),
+        self: { ...self, restraintUntilTick },
+        mode: 'keyboard',
+      }),
+    );
+  const ready = render(null);
+  expect(ready).toMatch(/data-outcome="escape"[^>]*>[^<]*◇[^<]*탈출 1\/2/);
+  expect(ready).toMatch(/data-outcome="capture"[^>]*>[^<]*◆[^<]*포획 2\/2/);
+  expect(ready).toContain('data-state="ready"');
+  const restrained = render(200);
+  expect(restrained).toContain('data-state="restrained"');
+  expect(restrained).toContain('구속 중');
+});

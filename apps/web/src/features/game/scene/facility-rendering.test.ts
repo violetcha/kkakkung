@@ -2,7 +2,9 @@ import { expect, it } from 'vitest';
 import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { privateViewSchema } from '@kkakkung/protocol/game-messages';
 import { createFacilityResources } from './facility-theme';
-import { RENDER_SCENES, renderFixture } from './render-fixture';
+import { RENDER_SCENES, SELF_MOTIONS, renderFixture } from './render-fixture';
+import { sampleSelf } from './action-interpolation';
+import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
 import { wallModel } from './scene-model';
 import { visibleExitModel } from './visible-exit-model';
 import { visibilityMask } from './visibility-mask';
@@ -69,4 +71,27 @@ it('each scene releases every shared GPU resource exactly once on repeated clean
   resources.dispose();
   resources.dispose();
   expect(counts.every((count) => count === 1)).toBe(true);
+});
+
+it('self motion fixtures stay valid and interpolate a turn in place and a move forward', () => {
+  for (const motion of SELF_MOTIONS)
+    for (const scene of RENDER_SCENES)
+      for (const facing of [0, 1, 2, 3] as const)
+        expect(privateViewSchema.safeParse(renderFixture(scene, facing, motion)).success).toBe(
+          true,
+        );
+  const self = (motion: (typeof SELF_MOTIONS)[number]) =>
+    renderFixture('코너', 1, motion).self as ActiveSelf;
+  const still = sampleSelf(self('still'), 10);
+  const turn = [0, 10, 20].map((tick) => sampleSelf(self('turn'), tick));
+  expect(turn.map((sample) => [sample.x, sample.z])).toEqual(turn.map(() => [still.x, still.z]));
+  expect(turn[0]!.yaw).toBe(still.yaw);
+  expect(turn[2]!.yaw).not.toBe(turn[0]!.yaw);
+  expect(turn[1]!.yaw).toBeCloseTo((turn[0]!.yaw + turn[2]!.yaw) / 2);
+  const move = [0, 10, 20].map((tick) => sampleSelf(self('move'), tick));
+  expect(move.map((sample) => sample.yaw)).toEqual(move.map(() => still.yaw));
+  expect([move[0]!.x, move[0]!.z]).toEqual([still.x, still.z]);
+  expect(Math.hypot(move[2]!.x - move[0]!.x, move[2]!.z - move[0]!.z)).toBeCloseTo(1);
+  expect(move[1]!.x).toBeCloseTo((move[0]!.x + move[2]!.x) / 2);
+  expect(move[1]!.z).toBeCloseTo((move[0]!.z + move[2]!.z) / 2);
 });

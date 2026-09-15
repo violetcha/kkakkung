@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import {
   RENDER_SCENES,
+  SELF_MOTIONS,
   renderFixture,
   type RenderScene,
+  type SelfMotion,
 } from '../features/game/scene/render-fixture';
 import type { Dir } from '@kkakkung/protocol/game-schema';
 import type { FrameMetrics } from '../features/game/scene/FrameMetrics';
@@ -13,6 +15,7 @@ export function RenderPreview({ quality }: { quality: QualityPreset }) {
   const [scene, setScene] = useState<RenderScene>('복도');
   const [facing, setFacing] = useState<Dir>(0);
   const [tick, setTick] = useState(10);
+  const [selfMotion, setSelfMotion] = useState<SelfMotion>('still');
   const [mounted, setMounted] = useState(true);
   const [metrics, setMetrics] = useState<FrameMetrics | null>(null);
   return (
@@ -43,6 +46,20 @@ export function RenderPreview({ quality }: { quality: QualityPreset }) {
           </select>
         </label>
         <label>
+          내 동작
+          <select
+            aria-label="내 동작"
+            value={selfMotion}
+            onChange={(event) => setSelfMotion(event.target.value as SelfMotion)}
+          >
+            {SELF_MOTIONS.map((motion) => (
+              <option key={motion} value={motion}>
+                {{ still: '없음', turn: '회전', move: '이동' }[motion]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           이동 시점 {tick}/20
           <input
             aria-label="이동 시점"
@@ -65,7 +82,7 @@ export function RenderPreview({ quality }: { quality: QualityPreset }) {
       {mounted && (
         <div className="product-canvas">
           <WorldCanvas
-            view={renderFixture(scene, facing)}
+            view={renderFixture(scene, facing, selfMotion)}
             quality={quality}
             renderTick={() => tick}
             onMetrics={setMetrics}
