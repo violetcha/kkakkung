@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   inspectReservationReadiness,
   ReservationReadinessInspector,
+  REUSED_GENERATION_FIELDS,
+  REUSED_REQUEST_FIELDS,
   type ReservationReadinessInput,
 } from '../../src/health/ReservationReadiness.js';
 import {
@@ -128,6 +130,152 @@ describe('exact accounting reuse', () => {
     const invalidEntry = { ...input.records[0]!, unexpected: undefined };
     expect(inspector.inspect({ ...input, records: [invalidEntry] }).consistent).toBe(false);
   });
+
+  it.each(REUSED_GENERATION_FIELDS)(
+    'does not reuse accounting after an in-place %s change',
+    (field) => {
+      const { generation, input } = setup();
+      const changes: Record<keyof Generation, (g: Generation) => unknown> = {
+        request: (g) => ({ ...g.request, requestId: 'replaced' }),
+        generation: (g) => g.generation + 1,
+        roomName: (g) => `${g.roomName}0`,
+        identity: (g) => `${g.identity}0`,
+        serverEpoch: () => randomUUID(),
+        reservationId: (g) => `${g.reservationId}:1`,
+        issuedAtEpochMs: (g) => g.issuedAtEpochMs - 1,
+        expiresAtEpochMs: (g) => g.expiresAtEpochMs + 1,
+        splitOwnership: (g) => ({
+          faceRoomName: g.roomName,
+          faceIdentity: 'face',
+          receiverRoomNames: [],
+        }),
+        terminal: (g) => !g.terminal,
+        state: () => 'REVOKING',
+      };
+      const inspector = new ReservationReadinessInspector();
+      const reused = inspector.inspect(input);
+      expect(inspector.inspect(input)).toBe(reused);
+      (generation as Record<string, unknown>)[field] = changes[field](generation);
+      const inspected = inspector.inspect(input);
+      expect(inspected).not.toBe(reused);
+      expect(inspected).toEqual(inspectReservationReadiness(input));
+    },
+  );
+
+  it.each(REUSED_REQUEST_FIELDS)(
+    'does not reuse accounting after an in-place request %s change',
+    (field) => {
+      const { generation, input } = setup();
+      const changes: Record<keyof Generation['request'], unknown> = {
+        requestId: 'changed',
+        matchId: 'changed',
+        playerId: 'changed',
+        mediaInstanceId: 'changed',
+        purpose: 'game',
+        expectedPreviousGeneration: 7,
+      };
+      const inspector = new ReservationReadinessInspector();
+      const reused = inspector.inspect(input);
+      (generation.request as Record<string, unknown>)[field] = changes[field];
+      const inspected = inspector.inspect(input);
+      expect(inspected).not.toBe(reused);
+      expect(inspected).toEqual(inspectReservationReadiness(input));
+    },
+  );
+
+  it('reuses frozen split ownership by reference and compares a replacement by value', () => {
+    const registry = new MediaGenerationRegistry('e-fixture', false, 'split');
+    registry.observe({
+      ...practiceFrame,
+      participants: [
+        practiceFrame.participants[0]!,
+        { ...practiceFrame.participants[0]!, playerId: 'q' },
+      ],
+    });
+    const generation = registry.allocate(prepareRequest, NOW);
+    const input: ReservationReadinessInput = {
+      namespace: registry.namespace,
+      serverEpoch: registry.serverEpoch,
+      records: freezeSnapshot([entry(generation)]),
+      reservations: freezeSnapshot([reservation(generation.reservationId)]),
+      generations: registry.all(),
+      pendingPreparations: [],
+    };
+    const inspector = new ReservationReadinessInspector();
+    const reused = inspector.inspect(input);
+    expect(reused).toEqual({ consistent: true, unresolvedCount: 0 });
+    expect(inspector.inspect(input)).toBe(reused);
+    const unfrozen = structuredClone(generation.splitOwnership)!;
+    generation.splitOwnership = unfrozen;
+    expect(inspector.inspect(input)).toBe(reused);
+    // Cache the mutable replacement itself, then change it behind the same reference.
+    generation.terminal = true;
+    expect(inspector.inspect(input)).not.toBe(reused);
+    generation.terminal = false;
+    const recached = inspector.inspect(input);
+    expect(recached).toEqual(reused);
+    expect(inspector.inspect(input)).toBe(recached);
+    (unfrozen.receiverRoomNames as string[]).pop();
+    const inspected = inspector.inspect(input);
+    expect(inspected).not.toBe(recached);
+    expect(inspected).toEqual(inspectReservationReadiness(input));
+    expect(inspected.consistent).toBe(false);
+  });
+
+  it('rechecks exact membership when equal values arrive in different objects', () => {
+    const { generation, input } = setup();
+    const preparing = { ...input, records: [], pendingPreparations: [generation] };
+    const inspector = new ReservationReadinessInspector();
+    expect(inspector.inspect(preparing).consistent).toBe(true);
+    expect(inspector.inspect({ ...preparing, generations: [structuredClone(generation)] })).toEqual(
+      { consistent: false, unresolvedCount: 1 },
+    );
+    expect(inspector.inspect(preparing).consistent).toBe(true);
+  });
+
+  it('matches uncached inspection through a sequence of in-place changes and restorations', () => {
+    const { registry, generation, input } = setup();
+    const second = registry.allocate(
+      { ...prepareRequest, requestId: 'second', playerId: 'q' },
+      NOW,
+    );
+    const objects = [generation, second];
+    const originals = structuredClone(objects);
+    const base = {
+      ...input,
+      records: freezeSnapshot([entry(generation), entry(second, 2)]),
+      reservations: freezeSnapshot([
+        reservation(generation.reservationId),
+        reservation(second.reservationId),
+      ]),
+    };
+    const changes: ((g: Generation) => void)[] = [
+      (g) => (g.terminal = !g.terminal),
+      (g) => (g.state = g.state === 'PREPARED' ? 'REVOKING' : 'REVOKED'),
+      (g) => (g.reservationId = `${generation.reservationId}:1`),
+      (g) => (g.expiresAtEpochMs += 1),
+      (g) => ((g.request as { playerId: string }).playerId = 'moved'),
+      (g) => (g.request = { ...g.request }),
+    ];
+    let seed = 20260915;
+    const next = (limit: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed % limit;
+    };
+    const inspector = new ReservationReadinessInspector();
+    for (let step = 0; step < 300; step++) {
+      const index = next(objects.length);
+      const target = objects[index]!;
+      if (next(4) === 0) Object.assign(target, structuredClone(originals[index]!));
+      else changes[next(changes.length)]!(target);
+      const current = {
+        ...base,
+        generations: registry.all(),
+        pendingPreparations: next(5) === 0 ? [target] : [],
+      };
+      expect(inspector.inspect(current)).toEqual(inspectReservationReadiness(current));
+    }
+  });
 });
 
 function reservation(root: string, overrides: Partial<UsageReservation> = {}): UsageReservation {
@@ -171,6 +319,7 @@ function entry(
     issuedAtEpochMs: generation.issuedAtEpochMs,
     expiresAtEpochMs: generation.expiresAtEpochMs,
     state: generation.state,
+    ...(generation.splitOwnership ? { splitOwnership: generation.splitOwnership } : {}),
     ...changes,
   };
   const payload = { version: 1 as const, seq, record };

@@ -1,5 +1,22 @@
 # E 공개 인계 기록
 
+## 2026-09-15 준비 상태 예약 대조 재사용 비용 — S15P21C204-249
+
+- localStage: LOCAL_VERIFIED. F-REQ-17 재측정이 서버 CPU 약 27%로 지목한
+  `ReservationReadinessInspector`의 재사용 경로를 고쳤다. 캐시된 것과 같은 registry 객체는
+  Generation·요청의 타입 필드를 직접 비교하고, 다른 객체와 가변 호출자 입력은 기존 값 비교를
+  유지한다. 분리 미디어 소유 정보는 소유 불변 스냅샷으로 만들어 같은 참조면 비교를 생략한다.
+- 유지한 경계: 시간·seq 기반 READY 캐시 없음, 제자리 변경과 pending 준비·회수 객체의 정확한
+  동일성 매 호출 반영, 공식 예산·자격·쓰기 가능 여부 매 조회 검사, 과부하 기준 250ms.
+  비교 필드 목록은 타입으로 강제하며 필드별 제자리 변경 회귀가 목록 전체를 검사한다.
+- 로컬 6인 제품 통합 CPU 프로파일 2회: `inspect` 포함 CPU 12.4s/15.9s→1.3s/1.3s,
+  서버 비유휴 CPU 28.8s/36.5s→14.1s/14.2s, PLAYING 호출당 30.9/39.0µs→2.9µs(계측 포함).
+  Windows 로컬 수치이며 F-REQ-17의 CI 연속 3빌드 기준을 대신하지 않는다.
+- readiness 회귀 53개(신규 20개)가 비캐시 결과와의 일치를 확인하고 비교 조건 제거 변이 4종을
+  검출한다. 최종 pnpm verify: 267파일·2,817개·E2E 22개, 포맷·계약·lint·타입·빌드·자산 통과.
+- blockedOn: 푸시·원격 CI 프로브 창 확인·MR·병합. 공개 wire 변경은 없다. F가 함께 지목한
+  `MediaGenerationRegistry.observe`·`RecoveryState.snapshot` 복제 비용은 남아 있다.
+
 ## 2026-09-13 과거 방 조회 개선 — S15P21C204-209
 
 - localStage: INTEGRATED. writer 병합 `92fe505c`에 복구 조회 개선을 연결했다.

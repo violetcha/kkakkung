@@ -35,47 +35,171 @@ export type ReservationReadinessInput = Readonly<{
 const key = (value: { roomName: string; identity: string; generation: number }) =>
   JSON.stringify([value.roomName, value.identity, value.generation]);
 
+type ReadinessResult = Readonly<{ consistent: boolean; unresolvedCount: number }>;
+
+const fieldsOf = <T>(fields: { readonly [K in keyof T]-?: true }) =>
+  Object.freeze(Object.keys(fields)) as readonly (keyof T)[];
+/**
+ * Every field sameGenerationValues compares. The compiler rejects these lists when a field is
+ * added, and the reuse test mutates each listed field in place, so no comparison can be skipped.
+ */
+export const REUSED_GENERATION_FIELDS = fieldsOf<Generation>({
+  request: true,
+  generation: true,
+  roomName: true,
+  identity: true,
+  serverEpoch: true,
+  reservationId: true,
+  issuedAtEpochMs: true,
+  expiresAtEpochMs: true,
+  splitOwnership: true,
+  terminal: true,
+  state: true,
+});
+export const REUSED_REQUEST_FIELDS = fieldsOf<Generation['request']>({
+  requestId: true,
+  matchId: true,
+  playerId: true,
+  mediaInstanceId: true,
+  purpose: true,
+  expectedPreviousGeneration: true,
+});
+
+type CachedInspection = Readonly<
+  Required<ReservationReadinessInput> & {
+    /** Owned copies of the generation values, index-aligned with the exact cached objects. */
+    copies: readonly Generation[];
+    ownerships: readonly Generation['splitOwnership'][];
+    result: ReadinessResult;
+  }
+>;
+
 /** Reuse only identical accounting inputs, never a time-limited permission or READY result. */
 export class ReservationReadinessInspector {
-  private previous: ReservationReadinessInput | null = null;
-  private result: ReturnType<typeof inspectReservationReadiness> | null = null;
+  private cached: CachedInspection | null = null;
 
-  inspect(input: ReservationReadinessInput): ReturnType<typeof inspectReservationReadiness> {
+  inspect(input: ReservationReadinessInput): ReadinessResult {
     try {
-      // Deep value equality does not prove alias identity. Exemptions must still refer to the
+      const cached = this.cached;
+      const match = cached ? matchCachedInput(input, cached) : 'different';
+      // Value equality does not prove alias identity. Exemptions must still refer to the
       // exact current registry objects on EVERY call, including an otherwise identical input.
-      const objects = new Set(input.generations);
-      if (
-        objects.size !== input.generations.length ||
-        new Set(input.pendingPreparations).size !== input.pendingPreparations.length ||
-        input.pendingPreparations.some((g) => !objects.has(g)) ||
-        (input.pendingRetirements ?? []).some((g) => !objects.has(g))
-      )
-        return { consistent: false, unresolvedCount: 1 };
-      if (this.result && isDeepStrictEqual(input, this.previous)) return this.result;
-      const result = inspectReservationReadiness(input);
+      // Only the same objects in the same order carry the membership checked when cached.
+      if (cached && match === 'same-objects') return cached.result;
+      if (!exactMembers(input)) return { consistent: false, unresolvedCount: 1 };
+      if (cached && match === 'equal-values') return cached.result;
+      const result = Object.freeze(inspectReservationReadiness(input));
       // Own the previous values: registry state mutates in place and snapshots can be replaced
       // without advancing the journal sequence (for example, compaction or reservation changes).
       // Frozen journal/history arrays can retain identity; cloning them here would force a
       // full history comparison for every track permission check. Mutable registry objects
       // and untrusted caller arrays still get owned copies and value comparisons.
-      this.previous = {
-        ...structuredClone({ ...input, records: [], reservations: [] }),
+      this.cached = {
+        namespace: input.namespace,
+        serverEpoch: input.serverEpoch,
         records: isImmutableSnapshot(input.records)
           ? input.records
           : structuredClone(input.records),
         reservations: isImmutableSnapshot(input.reservations)
           ? input.reservations
           : structuredClone(input.reservations),
+        generations: [...input.generations],
+        pendingPreparations: [...input.pendingPreparations],
+        pendingRetirements: [...(input.pendingRetirements ?? [])],
+        copies: structuredClone(input.generations),
+        ownerships: input.generations.map((generation) => generation.splitOwnership),
+        result,
       };
-      this.result = Object.freeze(result);
-      return this.result;
+      return result;
     } catch {
-      this.previous = null;
-      this.result = null;
+      this.cached = null;
       return { consistent: false, unresolvedCount: 1 };
     }
   }
+}
+
+function exactMembers(input: ReservationReadinessInput): boolean {
+  const objects = new Set(input.generations);
+  return (
+    objects.size === input.generations.length &&
+    new Set(input.pendingPreparations).size === input.pendingPreparations.length &&
+    input.pendingPreparations.every((g) => objects.has(g)) &&
+    (input.pendingRetirements ?? []).every((g) => objects.has(g))
+  );
+}
+
+/**
+ * A track permission check calls this for unchanged registry objects thousands of times per
+ * second. Generic deep equality of every generation dominated server CPU, so the same object
+ * compares only its typed fields with the owned copy and the other inputs keep value equality.
+ */
+function matchCachedInput(
+  input: ReservationReadinessInput,
+  cached: CachedInspection,
+): 'same-objects' | 'equal-values' | 'different' {
+  if (
+    input.namespace !== cached.namespace ||
+    input.serverEpoch !== cached.serverEpoch ||
+    !sameObjects(input.pendingPreparations, cached.pendingPreparations) ||
+    !sameObjects(input.pendingRetirements ?? [], cached.pendingRetirements) ||
+    input.generations.length !== cached.generations.length ||
+    !isDeepStrictEqual(input.records, cached.records) ||
+    !isDeepStrictEqual(input.reservations, cached.reservations)
+  )
+    return 'different';
+  let sameObjectsOnly = true;
+  for (let i = 0; i < input.generations.length; i++) {
+    const current = input.generations[i]!;
+    if (current === cached.generations[i]) {
+      if (!sameGenerationValues(current, cached.copies[i]!, cached.ownerships[i]))
+        return 'different';
+    } else {
+      sameObjectsOnly = false;
+      if (!isDeepStrictEqual(current, cached.copies[i])) return 'different';
+    }
+  }
+  return sameObjectsOnly ? 'same-objects' : 'equal-values';
+}
+
+function sameObjects(current: readonly Generation[], cached: readonly Generation[]): boolean {
+  if (current.length !== cached.length) return false;
+  for (let i = 0; i < current.length; i++) if (current[i] !== cached[i]) return false;
+  return true;
+}
+
+/**
+ * The cached registry object may have been mutated in place since its values were copied.
+ * Direct property reads keep this path cheap; a keyed loop over the field lists was 6x slower.
+ */
+function sameGenerationValues(
+  current: Generation,
+  copy: Generation,
+  ownership: Generation['splitOwnership'],
+): boolean {
+  const request = current.request;
+  if (
+    current.generation !== copy.generation ||
+    current.roomName !== copy.roomName ||
+    current.identity !== copy.identity ||
+    current.serverEpoch !== copy.serverEpoch ||
+    current.reservationId !== copy.reservationId ||
+    current.issuedAtEpochMs !== copy.issuedAtEpochMs ||
+    current.expiresAtEpochMs !== copy.expiresAtEpochMs ||
+    current.terminal !== copy.terminal ||
+    current.state !== copy.state ||
+    request.requestId !== copy.request.requestId ||
+    request.matchId !== copy.request.matchId ||
+    request.playerId !== copy.request.playerId ||
+    request.mediaInstanceId !== copy.request.mediaInstanceId ||
+    request.purpose !== copy.request.purpose ||
+    request.expectedPreviousGeneration !== copy.request.expectedPreviousGeneration
+  )
+    return false;
+  // Only our recursively frozen snapshot cannot change behind the same reference.
+  return (
+    (current.splitOwnership === ownership && isImmutableSnapshot(ownership)) ||
+    isDeepStrictEqual(current.splitOwnership, copy.splitOwnership)
+  );
 }
 
 function belongsToRoot(id: string, root: string): boolean {
