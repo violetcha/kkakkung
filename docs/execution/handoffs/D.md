@@ -194,10 +194,27 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   Sample은 그대로 유지되며 세대 시작부터 실행하지 않았으면 null이다.
 - face/pose age>300ms, gesture age>400ms면 사용 불가다. 다른 센서 갱신이 유효 시간을
   연장하지 않는다. `quality==='uncertain'`은 유효 얼굴·자세로 인정하지 않는다.
-- 튜닝 버전: `sensorTuningVersion = 'D-input-1'`(입력 각도·유지시간·필터),
-  `safeFaceTuningVersion = 'D-safe-face-1'`(안전 프레임 유지 1200ms). 둘 다 기획서 확정
-  상수가 아니라 **명시적 초깃값**이며 대표 장치 검증 후 조정한다. 포즈 탈출 임계값
-  (`poseTuningVersion`)은 C가 소유한다.
+- 튜닝 버전. 전부 기획서 확정 상수가 아니라 **명시적 초깃값**이며 대표 장치 검증 후 조정한다.
+  값을 바꾸면 버전을 함께 올린다. 포즈 탈출 임계값(`poseTuningVersion`)은 C가 소유한다.
+
+  | 상수                                 | 버전                            | 덮는 것                         |
+  | ------------------------------------ | ------------------------------- | ------------------------------- |
+  | `input-tuning.SENSOR_TUNING_VERSION` | `D-input-4-shoulder-span`       | 입력 각도·유지시간·필터         |
+  | `safe-face.SAFE_FACE_TUNING_VERSION` | `D-safe-face-1`                 | 안전 프레임 유지 1200ms         |
+  | `face-condition.FACE_CONDITION_*`    | `D-face-condition-1`            | 얼굴 조건 판정 임계와 표시 지연 |
+  | `frame-pump.MODEL_TARGET_TUNING_*`   | `D-model-interval-1-unmeasured` | 모델별 목표 주기                |
+
+- **모델 목표 주기는 문서 세 곳이 서로 다르다** (2026-09-15 확인, S15P21C204-243).
+  `frame-pump.ts`와 `docs/spec/current.md`는 face 15 · pose 15 · gesture 10fps인데,
+  `d-vision-media.md` D-04·D-05와 `mvp-work-plan.md` IN-04·IN-05는 pose 10 · gesture 8fps다.
+  `docs/spec/current.md`는 이 차이를 알려진 이탈로 이미 표에 적어 두었다.
+  - 이 상수에는 원래 tuningVersion이 없어 **어떤 검사도 값 변경을 잡지 못했다.** 계획과 코드가
+    어긋난 채 남은 것도 그래서다. 이제 버전을 붙이고 시험으로 묶었다.
+  - 어느 값이 맞는지는 대표 장치에서 세 모델을 동시에 돌려 봐야 정해진다. **실측 전에는
+    계획값으로 되돌리는 것도 근거가 없으므로** 현재 코드 값을 유지한다.
+  - 버전 접미사 `-unmeasured`가 그 상태를 이고 있다. 측정으로 확정하면 접미사를 떼고
+    측정 근거를 함께 남긴다. 세 문서를 같은 값으로 맞추는 것도 그때다.
+    `mvp-work-plan.md`와 `docs/spec/current.md`는 F 소유라 D가 직접 고치지 않는다.
 - 가공 얼굴 출력은 160×160/10fps Canvas captureStream이며 branded handle로만 넘어간다.
   원본 track을 게시 경로에 주면 `RAW_TRACK_REJECTED`로 거절한다. 인코딩 bitrate는 D-14다.
 - `MediaScope`는 `PrivateView.gameScope`와 **독립**이다. D는 `gameInstanceId`를
