@@ -2,6 +2,9 @@ import type { RequestDisplay } from '../../room/command-lifecycle';
 
 export function commandFeedback(request: RequestDisplay | undefined | null): string | null {
   if (!request || request.status === 'applied' || request.status === 'pending') return null;
+  // 이동·회전은 매 입력마다 applied → waiting-view 를 오간다. 결과는 3D 화면이 곧바로 보여 주므로
+  // 문구를 띄우지 않는다. 띄우면 화면 아래 문구가 깜빡이며 페이지 높이가 바뀌어 화면이 위아래로 흔들린다.
+  if (request.type === 'MOVE_INTENT' || request.type === 'TURN') return null;
   if (request.status === 'waiting-view') return '처리가 끝나 갱신된 화면을 기다리고 있습니다.';
   if (request.status === 'unconfirmed')
     return '응답을 확인하지 못했습니다. 화면의 현재 상태를 확인한 뒤 다시 시도해 주세요.';

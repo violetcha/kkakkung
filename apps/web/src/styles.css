@@ -281,6 +281,15 @@
   gap: 5px;
   font-size: 0.8rem;
   color: #b8cbc3;
+  /* "행동 가능" ↔ "이동 중" 처럼 문구 길이가 바뀌어도 HUD 줄바꿈이 달라지지 않게 폭을 고정 */
+  min-width: min(21rem, 100%);
+}
+.product-shell .command-feedback {
+  min-height: 1.5em;
+  margin: 12px 0 0;
+}
+.product-shell .command-feedback:empty::before {
+  content: '\200b';
 }
 .product-shell:has(.render-preview) {
   width: calc(100% - 32px);
