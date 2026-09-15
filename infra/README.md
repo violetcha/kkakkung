@@ -20,19 +20,19 @@
 
 파이프라인은 각 패키지 내부를 모릅니다. 아래 항목에만 의존하니 **바꿀 땐 인프라에 미리 알려주세요.**
 
-| 항목                | 현재 값                                                                                                 | 어디서 쓰나                                      |
-| ------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                                      | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile |
-| 검증                | `node scripts/ci-verify.mjs` → `pnpm verify` 1회 (format·check:execution·lint·typecheck·test·build·e2e) | Jenkins Verify                                   |
-| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                                | Jenkins Build                                    |
-| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                            | Dockerfile                                       |
-| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                                     | compose healthcheck, Jenkins 배포 확인           |
-| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                                | `compose.production.yaml` environment            |
-| **NODE_ENV**        | `development` \| `test`만 허용. production은 부팅 거절                                                  | 제품 선택은 별도 `SERVER_PROFILE=product`        |
-| **ALLOWED_ORIGINS** | 허용 목록 밖 Origin은 HTTP 403 / WS 거절. Origin 없는 운영·CLI 요청은 별도 인증 유지                    | 정확한 배포 출처와 HTTP/WS 경계 검사             |
-| 웹 빌드             | `apps/web/dist` (Vite)                                                                                  | Dockerfile.web → nginx 컨테이너                  |
-| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                                         | 배포 빌드에 .env 를 넣지 않음                    |
-| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                                     | `nginx/default.conf` 가 처리. 프리픽스 없음      |
+| 항목                | 현재 값                                                                                      | 어디서 쓰나                                      |
+| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                           | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile |
+| 검증                | `node scripts/ci-verify.mjs` → `pnpm verify` 1회 (format·lint·typecheck·test·build·자산·e2e) | Jenkins Verify                                   |
+| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                     | Jenkins Build                                    |
+| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                 | Dockerfile                                       |
+| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                          | compose healthcheck, Jenkins 배포 확인           |
+| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                     | `compose.production.yaml` environment            |
+| **NODE_ENV**        | `development` \| `test`만 허용. production은 부팅 거절                                       | 제품 선택은 별도 `SERVER_PROFILE=product`        |
+| **ALLOWED_ORIGINS** | 허용 목록 밖 Origin은 HTTP 403 / WS 거절. Origin 없는 운영·CLI 요청은 별도 인증 유지         | 정확한 배포 출처와 HTTP/WS 경계 검사             |
+| 웹 빌드             | `apps/web/dist` (Vite)                                                                       | Dockerfile.web → nginx 컨테이너                  |
+| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                              | 배포 빌드에 .env 를 넣지 않음                    |
+| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                          | `nginx/default.conf` 가 처리. 프리픽스 없음      |
 
 제품 프로필은 `LIVEKIT_*` 설정과 운영 증거를 읽는다. 실제 값은 Jenkins Secret file과 제품 Compose overlay로 주입하며 예시·이미지·소스에는 넣지 않는다. `NODE_ENV`와 `SERVER_PROFILE`은 별개다. 현재 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`를 사용한다.
 
@@ -61,7 +61,7 @@ continuous/attested 제품 Compose overlay가 `ROOM_IDLE_TTL_MS=600000`을 적�
 
 continuous 제품 배포는 `SESSION_ADMISSION_MODE=gitlab-sso`로 팀원 직접 입장을 연결한다.
 같은 overlay의 `SERVICE_AUDIENCE=team`과 일치해야 한다. 서버의 public/guest 준비 코드는
-별도 [게스트 입장](../docs/guest-admission.md)을 따르며 현재 운영 ingress와 릴리스는 팀 제한을
+[프로토콜](../docs/protocol.md)의 게스트 입장을 따르며 현재 운영 ingress와 릴리스는 팀 제한을
 유지한다. public+livekit은 W02 제품 통합 전 부팅을 거절한다.
 사이트의 GitLab 프로젝트 멤버 검사를 통과하면 별도 초대 없이 방 생성·방 코드 참가가 가능하다.
 SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested 입장 방식은 invitation이다.
@@ -84,7 +84,7 @@ push → Jenkins
 
 ## 배포 장벽 (DP-06, `scripts/deploy-release.mjs`)
 
-제품 배포 기본 운영 모드는 `continuous`다. `compose.continuous.yaml`로 고정 서비스 설정과 capability를 마운트하고 각 배포 SHA/lockfile별 DP-06 계획을 자동 생성한다. 공개 종료 날짜나 대시보드 확인 시각을 매일 갱신하지 않는다. 기존 `attested` 모드는 `compose.product.yaml`과 기간 한정 증거/예산을 사용한다. [상시 운영](../docs/continuous-operations.md)을 따른다.
+제품 배포 기본 운영 모드는 `continuous`다. `compose.continuous.yaml`로 고정 서비스 설정과 capability를 마운트하고 각 배포 SHA/lockfile별 DP-06 계획을 자동 생성한다. 공개 종료 날짜나 대시보드 확인 시각을 매일 갱신하지 않는다. 기존 `attested` 모드는 `compose.product.yaml`과 기간 한정 증거/예산을 사용한다. [운영](../docs/operations.md)을 따른다.
 
 Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 쪽도 `compose up` 을 직접 하지 않고, 현재 체크아웃을 임의 태그로 빌드하지 않는다.
 
@@ -101,7 +101,7 @@ Jenkins 와 수동 `infra/deploy.sh` 가 **같은 러너**를 부른다. 어느 
 실패(교체 이후): 운영 API 가 있으면 **새 requestId 로 다시 drain** 을 완료한 뒤에만, 이전 태그의 이미지 id 가 last-good-digest 와 같을 때만 복귀하고, 복귀 이미지도 4~8 을 다시 통과해야 한다. 이전 기록 없음·digest 불일치·drain 실패·복귀 이미지 ready 실패는 **ROLLBACK_BLOCKED** 로 남기고 강제 교체하지 않는다.
 
 이전 drain 이후 새 서버가 한 번도 입장을 열지 못한 최초 기동 실패는
-[제한된 복구 절차](../docs/failed-startup-recovery.md)를 따른다. 명시적 옵션과 실행 이미지·
+[운영의 장애 대응](../docs/operations.md#6-장애-대응)을 따른다. 명시적 옵션과 실행 이미지·
 신규 발급 없음·기록 불변·정상 종료·writer 해제·백업 검사를 모두 요구하고,
 수정 이미지의 4~8을 다시 통과한다. 이 경로는 일반 rollback의 drain 검사를 없애지 않는다.
 

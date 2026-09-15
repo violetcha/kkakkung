@@ -136,16 +136,16 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 
 | 항목         | 값                                                                                                                                                                                                              |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 프로파일     | Build with Parameters의 `RELEASE_PROFILE`: product(기본) 또는 skeleton. [6인 시험 절차](../../docs/six-player-test.md)를 따른다.                                                                                |
+| 프로파일     | Build with Parameters의 `RELEASE_PROFILE`: product(기본) 또는 skeleton. [테스트](../../docs/testing.md)를 따른다.                                                                                               |
 | 운영 토큰    | Secret file `kkakkung-production-env`의 `OPS_TOKEN`을 서버와 제품 배포 러너가 함께 읽는다. 내부 시험 키 `SMOKE_INTERNAL_TOKEN`과 `SMOKE_INTERNAL_BASE_URL`도 같은 파일에 둔다. 개인 SSO 쿠키는 사용하지 않는다. |
 | preflight    | continuous는 검증된 SHA/lock별 유계 DP-06 계획을 자동 생성한다. attested는 `/opt/kkakkung/cloud-preflight.json`이 필요하다.                                                                                     |
-| 운영 정책    | 기본 continuous는 service-operations.json과 capability를 검사한다. attested는 기존 공식 잔량·유효기간을 검사한다. [상시 운영](../../docs/continuous-operations.md)을 따른다.                                    |
+| 운영 정책    | 기본 continuous는 service-operations.json과 capability를 검사한다. attested는 기존 공식 잔량·유효기간을 검사한다. [운영](../../docs/operations.md)을 따른다.                                                    |
 | smoke origin | SMOKE_INTERNAL_BASE_URL의 loopback listener와 SMOKE_INTERNAL_TOKEN을 사용한다. 공개 HTTPS의 SSO 차단은 따로 검사한다.                                                                                           |
 | 기록         | `/opt/kkakkung/releases/<tag>.json`(매니페스트), `/opt/kkakkung/releases/<tag>/release.json`(단계·결과), `last-good-tag`·`last-good-digest`(통과 시에만)                                                        |
 | 실패         | 러너가 이전 이미지로 복귀를 시도한다. `ROLLBACK_BLOCKED` 면 사람이 확인: `release.json` 의 reason(NO_PREVIOUS_RELEASE, PREVIOUS_DIGEST_MISMATCH, ROLLBACK_DRAIN_TIMEOUT, ROLLBACK_READY_TIMEOUT …)              |
 | 수동         | `DEPLOY_PROFILE=product ./infra/deploy.sh <SHA>`는 같은 product-release 러너를 호출한다. 내부 시험 키는 제품 환경 파일에서 읽는다.                                                                              |
 
-초기 F-16 실행 이력은 docs/verification.md에 보존한다. 최신 확인은 #96 `dab788ac` 정상 배포이며 [재검토](../../docs/mvp-plan-review-2026-09-13.md)에 SHA·장벽·이전 실패를 구분해 기록했다.
+배포별 결과는 해당 Jenkins 실행과 `release.json`으로 확인한다.
 
 ### 제품 배포 재실행과 이미지 보존
 

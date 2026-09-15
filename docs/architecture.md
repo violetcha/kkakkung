@@ -14,7 +14,7 @@ game-core는 protocol에도 의존하지 않는다. 서버 adapter가 검증된 
 
 `SERVER_PROFILE=product`가 실제 kkakkung 0.2 Room과 A/B/E/F 조립을 선택한다. 서버는 명령·미디어 응답을 20Hz 권위 Tick에 반영하고, 코어가 맵·이동·장비·구속·포획·포즈·승패를 판정한다. 공개 라운드/로스터와 수신자별 private view·사건을 분리하며 웹에는 관찰 가능한 상태만 전달한다.
 
-초대 또는 GitLab 프로젝트 멤버 인증 → 세션 발급 → RESERVED 좌석 → 인증된 Colyseus 연결 → 6인 DEVICE_CHECK → TEAM_PRACTICE → MAP_FINALIZING → GAME_LOADING → COUNTDOWN → PLAYING → RESULT/ABORTED 순서다. 방장이 재경기를 선택하면 새 matchId로 준비를 시작한다. 미디어 회수를 확인하기 전에는 발급 장벽이나 RETIRING 좌석을 임의로 해제하지 않는다.
+초대·GitLab 프로젝트 멤버·게스트 인증 → 세션 발급 → RESERVED 좌석 → 인증된 Colyseus 연결 → 6인 DEVICE_CHECK → TEAM_PRACTICE → MAP_FINALIZING → GAME_LOADING → COUNTDOWN → PLAYING → RESULT/ABORTED 순서다. 방장이 재경기를 선택하면 새 matchId로 준비를 시작한다. 미디어 회수를 확인하기 전에는 발급 장벽이나 RETIRING 좌석을 임의로 해제하지 않는다.
 
 입장 예약은 연결되지 않으면 60초에 만료된다. 소유 세션의 취소도 예약을 반환하며 이미 연결된 참가자나 회수 중 좌석은 이 경로로 퇴장시키지 않는다. 입장 후 세션 수명과 예약 만료는 별개다. 전송 규약은 [protocol](protocol.md)을 따른다.
 
@@ -34,13 +34,15 @@ game-core는 protocol에도 의존하지 않는다. 서버 adapter가 검증된 
 | 가공 Canvas·출력 안전 감시                  | 참가 수명 동안 유지, 참가 종료 시 정리            |
 | 음성 그래프                                 | 세대 종료 시 노드 정리, 참가 종료 시 Context 종료 |
 
-이 세대 값들은 서로 대체하지 않는다. 미디어 전용 재연결은 논리 참가를 보존하지만 게임 소켓 종료는 현재 참가 복귀를 보장하지 않는다. [미디어 수명](media-lifecycle.md)과 [6인 시험 안내](six-player-test.md)를 함께 확인한다.
+이 세대 값들은 서로 대체하지 않는다. 미디어 전용 재연결은 논리 참가를 보존하지만 게임 소켓 종료는 현재 참가 복귀를 보장하지 않는다. 세부 수명은 [미디어](media.md)를 따른다.
 
 ## 미디어와 운영
 
-`server/src/media`는 바인딩·발급·회수·권한을, `server/src/operations`는 지속 저널·사용량·명령·복구 장벽을 소유한다. F의 runtime evidence 공급기가 검토된 운영 자료를 연결한다. `MEDIA_MODE=livekit` 설정만으로 READY를 만들지 않으며 유효한 증거·예산·복구가 필요하다.
+`server/src/media`는 바인딩·발급·회수·권한을, `server/src/operations`는 지속 저널·사용량·명령·복구 장벽을, `server/src/health`는 준비 상태 판정을 소유한다. `server/src/config/RuntimeEvidence.ts`가 운영 설정 파일을 연결한다. `MEDIA_MODE=livekit` 설정만으로 READY를 만들지 않으며 유효한 capability·예산·복구가 필요하다.
 
-내부 `publisher-permissions` 모드는 정상 팀 6명·1방만 승인되어 있다. 게시 전 기본 차단, 확인된 바인딩, 허용 목록 만료·회수, SSO 또는 초대 인증·예산을 유지한다. 기본 `server-controlled` 모드와 Cloud 증거를 혼용하지 않는다.
+운영 미디어 방식은 `publisher-permissions`다(D-2026-09-15-01, 최대 10방). 게시 전 기본 차단, 확인된 바인딩, 허용 목록 만료·회수, SSO 또는 초대 인증·예산을 유지한다. 변조 송신 앱의 허용 목록 확대 위험은 수용한 상태이며 서버 단독 통제 후보(`server-forwarding`)는 보류했다. 모드별 Cloud capability 보고서는 섞지 않는다. 운영 정책은 [운영](operations.md)을 따른다.
+
+한 프로세스가 모든 방의 tick을 50ms 주기로 돌린다. 한 방의 tick 예외는 그 방만 `SERVER_TICK_OVERLOAD`로 끝내고 다른 방은 계속 진행한다. 예정 시각보다 250ms 넘게 밀리면 해당 경기를 무효로 한다. 방마다 반복되는 권한·readiness 평가가 방 수에 비례해 누적되지 않도록 캐시와 방 범위 조회를 유지한다.
 
 ## 진단과 배포 경계
 

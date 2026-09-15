@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MEDIA_API_CEILINGS } from '../operations/ApiBudget.js';
 
-// Owned by F (docs/execution/f-infra-qa.md, F-01/DP-01). B maps the parsed values into
+// Owned by F (F-01/DP-01). B maps the parsed values into
 // MediaConfiguration / admission policy; E never reads process.env directly.
 //
 // NODE_ENV production stays blocked until the deployment gate is accepted. The explicit

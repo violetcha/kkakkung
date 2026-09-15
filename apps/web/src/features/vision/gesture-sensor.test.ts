@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { gestureCases } from '../../../../../docs/execution/contracts/fixtures';
+import { gestureCases } from '../../../../../tests/contracts/shared/fixtures';
 import {
   combineHands,
   GESTURE_CATEGORY_MAP,

@@ -4,9 +4,10 @@
 // PASS whose evidence file is missing, empty or from another commit becomes UNVERIFIED; BLOCKED,
 // NOT_RUN and PRODUCT_DECISION_PENDING are never added to PASS; publication conditions
 // (isolation, unresolved retirements, official budget, smoke cleanup) are judged apart from the
-// gates. The report section is written into docs/verification.md between fixed markers.
+// gates. The report section is written between fixed markers into the --report file
+// (default .local/qa/mvp-gate-report.md).
 //
-//   node scripts/verify-mvp-evidence.mjs --gates .local/qa/mvp-gates.json --input .local/qa --report docs/verification.md
+//   node scripts/verify-mvp-evidence.mjs --gates .local/qa/mvp-gates.json --input .local/qa --report .local/qa/mvp-gate-report.md
 //
 // Exit 0 when every required gate PASSes and publication conditions hold, 1 otherwise, 3 when the
 // manifest is missing. The report is written in both cases so the honest state is always visible.
@@ -204,7 +205,7 @@ if (basename(process.argv[1] ?? '') === 'verify-mvp-evidence.mjs') {
   };
   const gatesPath = resolve(arg('--gates', '.local/qa/mvp-gates.json'));
   const input = resolve(arg('--input', '.local/qa'));
-  const report = resolve(arg('--report', 'docs/verification.md'));
+  const report = resolve(arg('--report', '.local/qa/mvp-gate-report.md'));
   if (!existsSync(gatesPath)) {
     console.error(`BLOCKED: gate manifest not found ${gatesPath}`);
     process.exitCode = 3;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { audioArrivalOrders } from '../../../../../docs/execution/contracts/fixtures';
+import { audioArrivalOrders } from '../../../../../tests/contracts/shared/fixtures';
 import {
   createAudioGraph,
   type AudioGraphEnvironment,

@@ -88,7 +88,7 @@ pipeline {
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // 단일 진입점 scripts/ci-verify.mjs: 도구체인 확인 → EXPECTED_SOURCE_SHA 대조 → frozen install
-        // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·check:execution·lint·typecheck·test·build·e2e).
+        // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·lint·typecheck·test·build·e2e).
         // 개별 pnpm 검사 목록을 여기 다시 나열하지 않습니다 (DP-04).
         // jenkins uid 로 돌려 root 소유 파일이 안 남게 하고, pnpm store 는 호스트 jenkins 홈에 캐시합니다.
         //

@@ -1,9 +1,6 @@
 # 까꿍 게임 서버
 
-운영 중 과거 미디어 회수는 끝났지만 Cloud 조회가 실패한 경우
-[조회 재검증](../docs/recovery-observation.md)의 기존 운영 checkpoint 경로를 따른다.
-
-Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프로토콜 문서](../docs/protocol.md), [최신 결정 정정표](../docs/spec/decisions.md), [공통 실행 계약](../docs/execution/common.md), [B 실행 문서](../docs/execution/b-game-server.md), [B 인계 기록](../docs/execution/handoffs/B.md)을 따른다. [기존 개발 프로토콜](docs/protocol.md)은 개발 `kkakkung` Room의 0.1 호환 동작만 설명한다.
+Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프로토콜 문서](../docs/protocol.md), [MVP 기획서](../docs/spec/current.md), [B 인계 기록](../docs/handoffs/B.md)을 따른다. 미디어·운영 모듈은 [E 인계 기록](../docs/handoffs/E.md)과 [운영](../docs/operations.md)을 본다. [기존 개발 프로토콜](docs/protocol.md)은 개발 `kkakkung` Room의 0.1 호환 동작만 설명한다.
 
 ## 실행
 
@@ -13,7 +10,7 @@ Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프�
 기본 invitation 모드와 내부 smoke의 초대 검사는 유지한다. HTTP 계약은 [프로토콜](../docs/protocol.md)을 따른다.
 
 `SERVICE_AUDIENCE=team`도 같은 SSO 모드를 선택하며 continuous Compose가 이를 고정한다.
-`public`은 [게스트 입장](../docs/guest-admission.md)을 선택하지만 현재 public+livekit은
+`public`은 게스트 입장(닉네임 방 생성 + 방장 초대)을 선택하지만 현재 public+livekit은
 공개 미디어 제품 권한 통합 미완료로 부팅을 거절한다. 기존 입장 모드와 충돌하는 설정도 거절한다.
 미디어가 비활성인 실제 제품은 게스트 경로가 있어도 readiness/admission을 열지 않는다.
 
@@ -48,7 +45,7 @@ pnpm dev:server
 
 미디어 발급은 인증된 `POST /api/media/grants`가 서버 requestId를 생성·재사용한다. 새 인스턴스의 첫 실제 프레임을 E가 관측할 때까지 발급을 대기시키며, 재시도도 E의 현재 권한·예산·토큰 만료 검사에 들어간다. B는 E의 control/bindings/audio 결과를 다음 tick에서 현재 인스턴스에만 적용하고, `/api/media/report`는 현재 인스턴스 및 정확한 발급 세대를 E lifecycle에 확인한다. 이전 인스턴스의 `closed` 보고와 원격 회수 확인은 단계 전환·재경기 장벽에 연결한다. 연습→경기 발급에는 이전 receiverGeneration이 필요하다. 모든 현재 연습 세대의 준비 결과를 tick에 적용하고 진행 중 발급이 끝나야 연습을 종료한다. 발급 결과가 불명인 상태로 기존 60초 기한을 넘거나 미디어 준비가 실패하면 `ABORTED/MEDIA_UNAVAILABLE`로 종료하며 같은 match의 세대를 추측해 재발급하지 않는다. 일반 장치 미준비·맵 준비 실패로 DEVICE_CHECK에 돌아가면 기존 READY를 지우고 다시 신고받는다.
 
-운영 설정은 F의 `RuntimeEvidence`가 검증해 E에 공급한다. 상시 서비스는 명시적 `OPS_OPERATING_MODE=continuous`와 `service-operations.json`을 사용하며 날짜 경과로 잠그지 않는다. 기존 attested 모드는 `runtime-evidence.json`의 유효기간·공식 잔량 확인을 유지한다. 두 모드 모두 파일 없음·변경·scope 불일치, 기록 손상과 미확인 회수는 차단한다. 앱 종료나 기동 실패 시 감시 자원도 종료한다. 준비·예산·감사 파일에 값을 임의로 채워 성공으로 만들지 않는다. [상시 운영 절차](../docs/continuous-operations.md)를 따른다.
+운영 설정은 F의 `RuntimeEvidence`가 검증해 E에 공급한다. 상시 서비스는 명시적 `OPS_OPERATING_MODE=continuous`와 `service-operations.json`을 사용하며 날짜 경과로 잠그지 않는다. 기존 attested 모드는 `runtime-evidence.json`의 유효기간·공식 잔량 확인을 유지한다. 두 모드 모두 파일 없음·변경·scope 불일치, 기록 손상과 미확인 회수는 차단한다. 앱 종료나 기동 실패 시 감시 자원도 종료한다. 준비·예산·감사 파일에 값을 임의로 채워 성공으로 만들지 않는다. [운영](../docs/operations.md)을 따른다. 회수는 끝났지만 Cloud 조회만 실패해 잠긴 경우의 checkpoint 재검증도 같은 문서에 있다.
 
 ## 구조
 
@@ -74,8 +71,7 @@ src/
 
 운영·미디어 API는 본문 파싱 전 인증 종류별 빈도/동시 HTTP 제한을 적용한다. 연결이 끊겨도
 내부 감사·발급 작업이 끝나야 작업 용량을 반환한다. API·매치메이킹 본문의 대기 상한은 5초이며
-기존 2KB·Origin·서명 raw body 경계를 유지한다. 수치·예외·실제 검사 범위는
-[HTTP 자원 상한](../docs/http-resource-limits.md)을 따른다.
+기존 2KB·Origin·서명 raw body 경계를 유지한다. 수치는 [운영](../docs/operations.md#4-요청과-기록의-상한)을 따른다.
 
 `MAP_FINALIZING`은 진입 후 30초를 상한으로 미디어 회수와 맵 준비를 기다린다. 기한 초과는
 `ABORTED`로 전환하고 맵 로더의 늦은 결과를 무효화한다. 분리된 연습 인스턴스라도 현재 match의
@@ -88,7 +84,7 @@ src/
 - [x] A core/맵·튜닝, E coordinator·lifecycle·운영/health, F 설정·관측의 제품 조립 경로
 - [x] 실제 A 8개 fallback 변형·양팀 연습 맵과 strict 제품 HTTP 잠금 검증 (`product-profile.test.ts`)
 - [x] 실제 A/B/C/E 6인 연습→경기→한 명 세대 교체→종료/회수→재경기 검증 (`product-integration.test.ts`, D 장치·Cloud 경계는 synthetic)
-- [ ] 공식 Cloud 자격·예산·namespace/최초 감사 증거를 갖춘 실제 운영 검증 ([B 인계](../docs/execution/handoffs/B.md))
-- [ ] G4 정보 은폐·G5 6대·10방 부하의 실제 검증
+- [x] 제품 배포와 실제 Cloud 합성 6인 DP-06 (매 develop 배포)
+- [ ] G4 Cloud metadata·G5 6대·1→3→5→10방 부하의 실제 검증 ([기획서 18장](../docs/spec/current.md#18-mvp-완성-순서와-공개-전-조건))
 
 기본 loopback 설정을 유지하고 인증 없는 개발 관리 화면을 외부에 공개하지 않는다.

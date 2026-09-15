@@ -1,5 +1,5 @@
 // D-01 / IN-01. DeviceStatus의 제품 구현과 순수 전이 규칙.
-// EXEC-CONTRACT-3 contracts/types.ts의 DeviceStatus와 같은 모양을 소유 모듈에 구현한다.
+// EXEC-CONTRACT-3 tests/contracts/shared/types.ts의 DeviceStatus와 같은 모양을 소유 모듈에 구현한다.
 // 문서용 타입을 런타임 의존성으로 import하지 않는다.
 
 export type DeviceStatus = Readonly<{

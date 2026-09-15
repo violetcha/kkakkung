@@ -1,5 +1,5 @@
 // D-03/04/05 공용 센서 타입. D-01 facade가 onSensors 계약에 필요해 먼저 만든다.
-// EXEC-CONTRACT-3 contracts/types.ts의 Sample/SensorSnapshot과 같은 모양을 소유 모듈에 구현한다.
+// EXEC-CONTRACT-3 tests/contracts/shared/types.ts의 Sample/SensorSnapshot과 같은 모양을 소유 모듈에 구현한다.
 
 export type NormalizedLandmark = Readonly<{ x: number; y: number; z: number }>;
 

@@ -3,8 +3,8 @@
  * port in `@kkakkung/game-core/match`, E implements the media coordinator and operator auth,
  * F provides the metric registry. Wire shapes shared with the browser come from protocol.
  *
- * The planning copy in docs/execution/contracts/types.ts is documentation; product code
- * imports these declarations instead.
+ * The shared test copy in tests/contracts/shared/types.ts only backs contract fixtures; product
+ * code imports these declarations instead.
  */
 import type {
   AudioPolicy,

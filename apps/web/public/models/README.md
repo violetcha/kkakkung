@@ -45,8 +45,6 @@ SDK의 Apache-2.0을 모델에 자동 적용하지 않는다. 별도 모델 카�
 엄격한 검토 조건은 `node scripts/check-product-assets.mjs --require-reviewed-rights`로 검사한다.
 현재 gesture·SDK 번들 고지가 미확인이므로 이 명령은 의도적으로 실패한다. W20 공개 승격 연결은 후속이다.
 
-## F에게 요청한 작업
+## 관련 문서
 
-`docs/third-party-assets.md`는 F 소유다. 위 표와 manifest.json의 실제 sha256·bytes·출처를
-그 문서의 기록 항목으로 옮기고, 정적 `.task`/`.wasm` MIME과 Worker CSP를 배포에 반영한다.
-상세 요청은 [D 인계 기록](../../../../docs/execution/handoffs/D.md)에 있다.
+권리 확인 현황은 [제3자 자산](../../../../docs/third-party-assets.md), 남은 요청은 [D 인계 기록](../../../../docs/handoffs/D.md)에 있다.
