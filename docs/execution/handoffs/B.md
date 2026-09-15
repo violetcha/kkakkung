@@ -6,6 +6,33 @@
 
 이 파일은 팀원 AI가 B의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. **현재 상태는 바로 아래 2026-09-10 통합 갱신을 기준으로 읽는다.** 이후 스토리별 브랜치·요약 표·항목별 `blockedOn`·재개 절차는 2026-09-08~09 당시 기록이다. 당시의 LOCAL_VERIFIED·FakeCore/E test double·생산자 미연결·미푸시 설명은 현재 통합 상태나 이후 MR 병합 상태를 뜻하지 않는다.
 
+## 2026-09-15 재경기 뒤 입장 503 재현 — S15P21C204-236
+
+- 상태: `LOCAL_NOT_REPRODUCED`. 최신 `develop` `a384077`에서 실제 제품 서버·Colyseus·웹
+  product runtime으로 6명 경기 종료 → 재경기 → 기존 참가자 퇴장 → 새 세션 발급·대체 참가자
+  입장 → 다음 경기 완료 흐름을 attested/continuous 두 운영 모드에서 각각 실행했으며 두 시험 모두
+  통과했다. 각 실행의 종료 상태는 closed 보고 72건·실패 보고 0건·참가자 0명·readiness
+  `READY`였다.
+- 보조 경계 검증: `product-payload.test.ts`와 `media-retirement-lifecycle.test.ts`의 19개 시험이
+  모두 통과했다. 새 라운드의 matchId·준비 상태 초기화, 이전 match 회수, 확정 회수 뒤 좌석 해제,
+  재경기 중 1명 교체와 새 참가자의 `DEVICE_CHECK` 진입이 정상이다. 따라서 현재 근거로는
+  `startNewRound` 또는 좌석 수명 결함을 재현하지 못했다.
+- 503 구분: `POST /api/sessions`가 503이면 `SessionRoutes`의 운영 admission 검사에서
+  `ADMISSION_CLOSED`이거나 좌석/서비스 용량의 `CAPACITY`다. 세션 발급은 201이었지만 Colyseus
+  matchmake가 503이면 `KkakkungRoom.onAuth` 또는 `onJoin` 시점에 전역 `operationsReady()`가
+  false인 `NOT_READY` 경로다. 후자는 발급과 소켓 입장 사이 readiness/admission/canIssue 상태가
+  바뀌어도 발생할 수 있으나, 이번 정상 재경기 실행에서는 관측되지 않아 원인으로 확정하지 않는다.
+- 제품 코드와 공개 계약은 변경하지 않는다. 재발 시 같은 시각의 ① `/api/sessions` HTTP 상태와
+  오류 JSON, ② Colyseus matchmake 상태와 오류 코드, ③ 인증된 `/api/operations/status`의
+  readiness·admission, ④ room phase·blockedReason을 함께 보존해야 두 503 경계를 판별할 수 있다.
+- 검증 명령: `pnpm exec vitest run server/test/media/product-integration.test.ts
+--reporter=verbose`(1파일·2시험 통과, 130.27초), `pnpm exec vitest run
+server/test/room/product-payload.test.ts server/test/room/media-retirement-lifecycle.test.ts
+--reporter=verbose`(2파일·19시험 통과, 7.16초).
+- `blockedOn`: 실제 6인 환경의 원 503 응답·동시 운영 상태가 없어 특정 원인을 확정하거나 수정할
+  근거가 없다. 재현 실패 기록으로 이 이슈의 B 범위를 종료하며, Jira 완료 전환과 MR 병합은
+  사용자가 수행한다.
+
 ## 2026-09-15 GAME_LOADING tick 재측정 — S15P21C204-234
 
 - 상태: `REMOTE_VERIFIED`. E의 S15P21C204-249 구현 `4b3c0b2`와 병합 `8785ef2` 이후 동일 MR의 연속 세 빌드에서 F 종료 기준을 통과했다. F가 [원 측정을 재검토](f-req-17-measurement.md)한 결과 기존 "tick CPU 160ms" 해석과 `EventDispatcher` 지목은 철회됐으며, B 제품 코드 변경 근거는 없다.
