@@ -6,6 +6,14 @@
 
 이 파일은 팀원 AI가 B의 전체 계획을 다시 읽지 않고 공개 산출물과 요청을 확인하는 장소다. **현재 상태는 바로 아래 2026-09-10 통합 갱신을 기준으로 읽는다.** 이후 스토리별 브랜치·요약 표·항목별 `blockedOn`·재개 절차는 2026-09-08~09 당시 기록이다. 당시의 LOCAL_VERIFIED·FakeCore/E test double·생산자 미연결·미푸시 설명은 현재 통합 상태나 이후 MR 병합 상태를 뜻하지 않는다.
 
+## 2026-09-15 GAME_LOADING tick 재측정 — S15P21C204-234
+
+- 상태: `MEASUREMENT_IN_PROGRESS`. 기준 `origin/develop` `01db860`은 E의 S15P21C204-249 구현 `4b3c0b2`와 병합 `8785ef2`를 포함한다. F가 [원 측정을 재검토](f-req-17-measurement.md)한 결과 기존 "tick CPU 160ms" 해석과 `EventDispatcher` 지목은 철회됐으며, B 제품 코드 변경 근거는 없다.
+- 로컬 보조 검증: `KKAKKUNG_TEST_CPU_PROFILE=1 pnpm exec vitest run server/test/media/product-integration.test.ts`는 1파일·2시험 통과(158.46초). 두 제품 서버 실행의 `GAME_LOADING→GAME_LOADING` 최대 lag/cpuUserMs는 각각 39.08/0ms, 36.56/63ms였다. 보존된 상위 8개 창에서 같은 phase의 cpuUserMs 최대는 각각 46ms, 63ms였다. `GAME_LOADING/driver` 최대는 7.77ms, 8.34ms였다.
+- 프로파일 근거: `ReservationReadiness`에 귀속된 deep-equal/structuredClone 표본은 `inspect` 62ms·50ms, `matchCachedInput` 11ms·1ms였다. 249 이전 F 원 측정의 `inspect` 귀속 36.7초와 비교하면 로컬에서는 주 병목이 제거된 방향과 일치한다. 남은 큰 복제 비용은 E 소유 `MediaGenerationRegistry.observe` 1.36s·1.58s와 `RecoveryState.snapshot` 1.31s·1.21s다.
+- 공개 계약과 제품 코드 변경 없음. 제품 `overloadMs=250`도 유지한다. `.local/integration/product-child-{15572,31768}.{cpu-metadata.json,cpuprofile}`은 개인 재개용 원자료이며 커밋하지 않는다.
+- `blockedOn`: F 종료 기준인 Jenkins `kkakkung-mr` 연속 3개 빌드의 콘솔 로그. 각 로그에서 `scripts/probe-extract.mjs`로 `GAME_LOADING→GAME_LOADING` 최대 lag <100ms·cpuUserMs <80ms, `MAP_FINALIZING→GAME_LOADING` 최대 lag <150ms를 확인해야 종료할 수 있다. 2026-09-15 현재 Jenkins 익명 API는 403이고 로컬 Git 자격 증명은 GitLab API에 401이라 원격 로그를 읽지 못했다. 로컬 수치만으로 완료 처리하지 않는다.
+
 ## 2026-09-10 전체 연결 검증 — B 조립 갱신
 
 - 기준: 최초 `origin/develop` `d5816f6`에서 시작한 뒤 F-16 `baffe7a`와 F QA `4c84d20`을 반영했다. 현재 상태는 `codex/integration-20260910`의 **`4c84d20` + 미커밋 통합 변경**이다. 사용자 승인 범위는 전체 연결·통합 검증이며 새 Jira는 생성하지 않았다. 아래 기존 스토리·Jira·MR 기록은 당시 이력으로 보존한다.
