@@ -405,6 +405,76 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
 - 완료 확인: 30초를 넘긴 준비 실패에서 막힌 단계와 원인이 화면에 남고, 같은 값이 증거에도
   들어간다. 증거 쪽 연결은 S15P21C204-246 범위다.
 
+### REQ-D-13 · F · G1/G5/G6 증거를 제품 클라이언트에서 받기 (Jira [S15P21C204-246](https://ssafy.atlassian.net/browse/S15P21C204-246))
+
+- 현재 상태: `tests/cloud/probe.ts`는 **자체 LiveKit 클라이언트**를 만들어
+  `window.kkakkungProbe`로 노출한다(`connect`·`setSubscribed`·`snapshot`). 제품 앱은
+  probe 훅을 전혀 노출하지 않는다(`apps/web/src`에 `window.__*` 0건). 즉 지금 runner가 보는
+  것은 합성 클라이언트이지 D의 제품 경로가 아니다. 관문이 요구하는 "실제 트랙·음성"은
+  이 경로로 나오지 않는다.
+- D가 만든 것: `runtime.getMediaEvidence?.()`가 `MediaEvidence`를 돌려준다
+  (`apps/web/src/features/media/media-evidence.ts`). 판정하지 않고 사실만 모은다.
+- 필요한 것: 제품 runtime의 이 값을 runner가 읽을 수 있게 노출하는 지점이다. 노출 위치는
+  D 소유가 아니다. 앱 진입점은 C, probe 페이지·harness는 F다. 둘 중 어디에 붙일지는
+  F가 정한다.
+
+**증거 모양** (`MediaEvidence`)
+
+```ts
+type MediaEvidenceShape = {
+  scope: MediaScope | null;
+  generationState: 'live' | 'terminal' | 'closed';
+  published: { source: 'face' | 'microphone'; trackSid: string; serverConfirmed: boolean }[];
+  received: {
+    trackSid: string;
+    kind: 'video' | 'audio';
+    playerId: string | null;
+    subscribed: boolean;
+    attached: boolean;
+    pending: boolean;
+    authorized: boolean;
+  }[];
+  voices: {
+    playerId: string;
+    trackSid: string;
+    routed: boolean;
+    policyGain: number;
+    effectiveGain: number;
+    mutedByUser: boolean;
+  }[];
+  integrity: {
+    forbiddenButSubscribed: string[];
+    mutedButSubscribed: string[];
+    authorizedButUnsubscribed: string[];
+  };
+  remoteFaceLimit: number;
+  attachedFaceCount: number;
+};
+```
+
+**판정기가 반드시 지켜야 할 구분**
+
+- `received[].subscribed`는 **SDK가 말하는 실제 구독 상태**다. D가 `setSubscribed(false)`를
+  불렀다는 사실이 아니다. SDK가 상태를 말해 주지 않으면 구독 중으로 적는다. 모른다는 이유로
+  "해제됨"이라고 적으면 위반을 숨기는 쪽으로 틀리기 때문이다.
+- `integrity.forbiddenButSubscribed`가 **위반**이다. 서버 바인딩이 허용하지 않은 SID인데
+  구독이 열려 있다.
+- `integrity.mutedButSubscribed`는 **위반이 아니다.** 사용자가 소리를 껐을 뿐 구독은 열려
+  있다. **이 둘을 합치면 안 된다.** 합치는 순간 클라이언트 mute가 정책 위반을 가린다.
+  D3-4가 막으려던 것이 정확히 이것이다.
+- `voices[].effectiveGain === 0`을 수신 차단으로 읽지 않는다. 사용자가 끈 것일 수 있고
+  그때도 `policyGain`은 그대로 남는다.
+- `published[].serverConfirmed`는 B가 확인한 자기 바인딩이 도착했다는 뜻이다. SDK 게시
+  성공만으로 true가 되지 않는다.
+
+`evidenceViolations(evidence)`가 위 규칙으로 만든 위반 문자열 목록을 돌려준다. 다만 **증거가
+스스로 관문 통과를 선언하지 않는다.** 최종 판정은 runner 몫이다.
+
+- 완료 확인: G1·G5·G6가 요구하는 트랙·음성 항목이 runner 증거에 나타나고, 합성 probe가 아닌
+  제품 경로에서 나온 값임이 기록으로 구분된다.
+- **증거를 연결한 것만으로 관문을 통과한 것으로 처리하지 않는다.** 실제 장치·Cloud 결과와
+  로컬 합성 시험을 구분해 적는다.
+
 ## 손동작 2모델·SDK 번들 권리 — 2026-09-15 조사 (S15P21C204-241)
 
 S15P21C204-214가 7개 구성요소를 Apache-2.0으로 확정하고 두 건을 남겼다. 이번에 그 두 건을
@@ -499,6 +569,7 @@ Facebook, Inc. and its affiliates" · "Copyright 2019 Google LLC")로 **바이�
 | C의 번들 고지 (REQ-D-11)            | W13 공개             | XNNPACK BSD-3-Clause 고지가 실리지 않았다 |
 | F의 대장·검사 (REQ-D-12)            | S15P21C204-241 완료  | 고지 없이 verified 로 바꿔도 검사가 통과  |
 | 손동작 2모델 권리 회신              | S15P21C204-241 완료  | Google 문의 전에는 확정 불가              |
+| runner 노출 지점 (REQ-D-13)         | S15P21C204-246 완료  | probe 는 아직 합성 클라이언트를 본다      |
 
 ## 다음 단계
 

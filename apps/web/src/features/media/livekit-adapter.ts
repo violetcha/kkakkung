@@ -62,8 +62,22 @@ export interface SdkRemoteTrack {
 
 export interface SdkRemoteTrackPublication {
   readonly trackSid: string;
+  /**
+   * S15P21C204-246. SDK가 말하는 실제 구독 상태. D의 의도가 아니다.
+   * 증거는 `setSubscribed(false)`를 불렀다는 사실이 아니라 이 값을 남겨야 한다.
+   * 구형 SDK 대비로 선택 필드다.
+   */
+  readonly isSubscribed?: boolean;
+  readonly kind?: string;
   setSubscribed(subscribed: boolean): void;
 }
+
+/** S15P21C204-246. 증거에 싣는 실제 구독 상태. */
+export type SubscriptionState = Readonly<{
+  trackSid: string;
+  kind: 'video' | 'audio';
+  subscribed: boolean;
+}>;
 
 export interface SdkRemoteParticipant {
   readonly sid: string;
@@ -100,6 +114,8 @@ export interface LiveKitAdapter {
   unsubscribeTrack(track: RemoteTrack): void;
   /** 구독 중인 오디오 트랙의 원본 MediaStreamTrack. */
   getAudioTrack(trackSid: string): MediaStreamTrack | null;
+  /** S15P21C204-246. 현재 Room이 알고 있는 실제 구독 상태. 증거 전용이다. */
+  getSubscriptions(): readonly SubscriptionState[];
 }
 
 export const PUBLISHER_PERMISSION_LEASE_MS = 1500;
@@ -346,6 +362,23 @@ export function createLiveKitAdapter(
       const track = current?.remoteTracks.get(trackSid);
       if (!track || track.kind !== 'audio') return null;
       return track.mediaStreamTrack;
+    },
+
+    getSubscriptions() {
+      if (split) return split.getSubscriptions();
+      if (!current) return [];
+      const states: SubscriptionState[] = [];
+      for (const [trackSid, publication] of current.remotePublications) {
+        // SDK가 상태를 말해 주지 않으면 구독 중으로 적는다. 구독 사건을 받아 이 지도에 들어온
+        // SID이므로, 모른다는 이유로 "해제됨"이라고 적으면 위반을 숨기는 쪽으로 틀린다.
+        const kind = current.remoteTracks.get(trackSid)?.kind ?? publication.kind;
+        states.push({
+          trackSid,
+          kind: kind === 'audio' ? 'audio' : 'video',
+          subscribed: publication.isSubscribed ?? true,
+        });
+      }
+      return states;
     },
   };
 }

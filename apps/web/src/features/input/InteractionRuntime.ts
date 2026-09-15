@@ -55,6 +55,7 @@ import {
   type LuminanceSampler,
 } from '../media/face-luminance';
 import { buildFaceMask } from '../media/face-mask';
+import { composeMediaEvidence, type MediaEvidence } from '../media/media-evidence';
 import {
   createReadinessRecorder,
   describeClientEnvironment,
@@ -101,6 +102,7 @@ import {
 } from '../media/pending-tracks';
 import {
   createRemoteFaces,
+  remoteFaceLimit,
   type InstancePurpose,
   type RemoteFaces,
   type RemoteTrack,
@@ -285,6 +287,12 @@ export interface InteractionRuntime {
    * 부분 구현하고 있어서이며, 호출 측은 `runtime.getReadinessTrace?.()` 로 읽는다.
    */
   getReadinessTrace?(): ReadinessTrace;
+  /**
+   * S15P21C204-246. G1·G5·G6가 요구하는 실제 트랙·음성 증거.
+   * 판정하지 않고 사실만 모은다. 관문 판정은 F runner가 한다.
+   * `getReadinessTrace`와 같은 이유로 선택 메서드다.
+   */
+  getMediaEvidence?(): MediaEvidence;
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
@@ -1592,6 +1600,38 @@ export const createInteractionRuntime = (
 
     getReadinessTrace() {
       return readiness.snapshot(vision.now());
+    },
+
+    /**
+     * S15P21C204-246. 구독 상태는 **SDK가 말하는 값**을 싣는다. D가 unsubscribe를
+     * 불렀다는 사실이 아니다. 사용자 mute는 voices 쪽에만 반영해 정책 위반을 가리지 않는다.
+     */
+    getMediaEvidence() {
+      const authorized = bindingStore.getRemote().flatMap((binding) => {
+        const entries: { trackSid: string; playerId: string }[] = [];
+        if (binding.faceTrackSid)
+          entries.push({ trackSid: binding.faceTrackSid, playerId: binding.playerId });
+        if (binding.audioTrackSid)
+          entries.push({ trackSid: binding.audioTrackSid, playerId: binding.playerId });
+        return entries;
+      });
+      return composeMediaEvidence({
+        scope: media.getScope(),
+        generationState: lifecycle.state,
+        published: (publisher?.getPublications() ?? []).map((record) => ({
+          source: record.source === 'microphone' ? 'microphone' : 'face',
+          trackSid: record.trackSid,
+          serverConfirmed: record.serverConfirmed,
+        })),
+        subscriptions: liveKit?.getSubscriptions() ?? [],
+        authorized,
+        attachedFaces: remoteFaces.getAttached(),
+        pendingSids: pendingTracks.list().map((entry) => entry.trackSid),
+        policyVoices: policyStore.resolveVoices(),
+        routedSids: (audioGraph?.getVoices() ?? []).map((voice) => voice.trackSid),
+        preferences: audioPreferences,
+        remoteFaceLimit: remoteFaceLimit(currentPurpose()),
+      });
     },
 
     getPublications() {
