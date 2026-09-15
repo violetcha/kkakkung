@@ -1,7 +1,7 @@
 # 까꿍 0.1 개발 Room 호환 프로토콜
 
 > 버전: 0.1 (0단계 뼈대) · 관리: 정유림
-> 이 문서는 기존 개발 `kkakkung`의 현재 동작과 rooms/domain 호환 경계만 설명한다. 제품 0.2.0의 구현 지시는 [최신 결정 정정표](../../docs/spec/decisions.md), [공통 실행 계약](../../docs/execution/common.md), [B 실행 문서](../../docs/execution/b-game-server.md)를 따른다.
+> 이 문서는 기존 개발 `kkakkung`의 현재 동작과 rooms/domain 호환 경계만 설명한다. 제품 0.2.0의 구현 지시는 [프로토콜](../../docs/protocol.md)과 [결정 정정표](../../docs/spec/decisions.md)를 따른다.
 > 공유 입력은 strict 스키마로 검사한다. 필드 추가·변경도 생산자와 소비자의 스키마·버전·회귀 시험을 함께 검토하며 임의 추가 필드는 거절한다.
 
 ---

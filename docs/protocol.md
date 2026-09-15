@@ -23,7 +23,15 @@ SSO 회원의 해시를 기존 inviteId 제한 버킷에 사용하고 IP·인원
 모드가 다르면 부팅을 거절한다. guest는 전달된 SSO 신원을 사용하지 않고 생성 IP를 해시한
 시도 버킷과 임의 세션 신원을 분리한다. 공개 미디어 제품 통합 전에는 public+livekit을 거절한다.
 팀·기본 invitation 동작은 호환되며 이전 웹이 알 수 없는 guest 응답을 받으면 닫힌 상태를 유지한다.
-관련 검증·운영 한계는 [게스트 입장](guest-admission.md)을 따른다.
+게스트는 닉네임으로 방을 만들 수 있지만 방 코드만으로는 참가하지 못하고 방장이 만든 초대가 필요하다.
+운영은 `team`이며 공개 대상 전환(ingress·배포 manifest 연동)은 후속이다.
+
+### 방장 친구 초대와 방 제어
+
+- `POST /api/sessions/current/invitation`(빈 본문, 현재 게임 세션 Bearer) → 201 `{inviteToken, roomCode, expiresAt}`. 현재 접속한 방장만, LOBBY·DEVICE_CHECK에서, admission OPEN일 때 발급한다. 현 방 참가 전용이며 최대 10분, 서버는 digest만 저장하고 방마다 최신 초대 하나만 추적한다.
+- `DELETE /api/sessions/current/invitation` → 204. 반복 회수 가능, DRAINING에서도 허용. 회수·재발급은 이전 초대와 그 초대로 예약만 한 세션을 함께 무효화하며, 이미 참가한 사람의 좌석은 보존한다.
+- 공유 URL은 `/#invite=…&room=…`이며 세션 토큰을 담지 않는다. 웹은 fragment를 읽은 즉시 주소에서 지운다.
+- 방장은 `ROOM_LOCK`으로 대기방 새 입장을 잠그고 `ROOM_KICK`으로 로비 참가자를 내보낸다. 초대 회수는 강퇴나 팀원 권한 취소를 대신하지 않는다. 방장이 나가면 연결된 참가자 중 먼저 들어온 사람에게 위임한다.
 
 HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. 이 미가입 기한은 세션의 활동 기반 30분 lease와 별도이며, 연결을 점유하면 해제된다. 응답을 받지 못했거나 탭이 닫힌 예약은 서버의 1초 정리 주기 또는 다음 입장 요청에서 반환된다. 이미 JOINED/RETIRING인 좌석은 미가입 정리로 반환하지 않는다.
 
@@ -40,20 +48,20 @@ HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. �
 
 ### 채널
 
-| 방향      | 채널                                       | 본문                                                                                                                         |
-| --------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| C→S       | `command`                                  | `CommandEnvelope {matchId, requestId(UUID), sequence, type, payload}` — 활성 14종만                                          |
-| S→C       | `command-result`                           | `CommandReceipt` accepted(code null) / rejected(CommandCode). 접수 단계 결과                                                 |
-| S→C       | `command-outcome`                          | `CommandOutcome {…, tick, stateVersion, result: applied\|rejected\|canceled, code}` — accepted마다 정확히 하나, 요청자에게만 |
-| C→S / S→C | `request-status` / `request-status-result` | 자기 원장의 pending / done(원래 outcome) / unknown                                                                           |
-| S→C       | `room-roster`                              | 대기 단계 목록. role/좌표/출구 없음                                                                                          |
-| S→C       | `private-view`                             | 수신자 전용 전체 교체 뷰. `gameScope`는 practice/game/none + revision                                                        |
-| S→C       | `private-event`                            | audience 사건. `gameScope`는 ActiveGameScope                                                                                 |
-| C→S       | `view-resync`                              | `{matchId, lastStateVersion}`, 수신자당 1초 1회                                                                              |
-| S→C / C→S | `game-heartbeat` / `game-heartbeat-ack`    | 2초 간격, 6초 무응답 또는 close → 연결 상실                                                                                  |
-| C→S / S→C | `clock-probe` / `clock-reply`              | 표시용 시각 추정. 서버 monotonic ms, 초당 5회                                                                                |
-| S→C       | `media-bindings`, `audio-policy`           | E가 만든 허용 목록. scope는 미디어 식별자                                                                                    |
-| C→S       | `media-bindings-refresh`                   | 현재 목록 재전송 요청, 1초 1회                                                                                               |
+| 방향      | 채널                                       | 본문                                                                                                                                                                                      |
+| --------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C→S       | `command`                                  | `CommandEnvelope {matchId, requestId(UUID), sequence, type, payload}` — 16종. 게임 코어 명령과 방 단계 명령(`READY`, `ROOM_LOCK`, `ROOM_KICK`, `PRACTICE_READY`, `LOAD_READY`, `REMATCH`) |
+| S→C       | `command-result`                           | `CommandReceipt` accepted(code null) / rejected(CommandCode). 접수 단계 결과                                                                                                              |
+| S→C       | `command-outcome`                          | `CommandOutcome {…, tick, stateVersion, result: applied\|rejected\|canceled, code}` — accepted마다 정확히 하나, 요청자에게만                                                              |
+| C→S / S→C | `request-status` / `request-status-result` | 자기 원장의 pending / done(원래 outcome) / unknown                                                                                                                                        |
+| S→C       | `room-roster`                              | 대기 단계 목록. role/좌표/출구 없음                                                                                                                                                       |
+| S→C       | `private-view`                             | 수신자 전용 전체 교체 뷰. `gameScope`는 practice/game/none + revision                                                                                                                     |
+| S→C       | `private-event`                            | audience 사건. `gameScope`는 ActiveGameScope                                                                                                                                              |
+| C→S       | `view-resync`                              | `{matchId, lastStateVersion}`, 수신자당 1초 1회                                                                                                                                           |
+| S→C / C→S | `game-heartbeat` / `game-heartbeat-ack`    | 2초 간격, 6초 무응답 또는 close → 연결 상실                                                                                                                                               |
+| C→S / S→C | `clock-probe` / `clock-reply`              | 표시용 시각 추정. 서버 monotonic ms, 초당 5회                                                                                                                                             |
+| S→C       | `media-bindings`, `audio-policy`           | E가 만든 허용 목록. scope는 미디어 식별자                                                                                                                                                 |
+| C→S       | `media-bindings-refresh`                   | 현재 목록 재전송 요청, 1초 1회                                                                                                                                                            |
 
 공개 Colyseus 상태 `PublicMatchState`는 `phase, matchId, stateVersion, serverTick, startTick, startAt, deadlineTick, counts, result, abortReason`과 선택 안내 필드만 가진다. null 필드는 Schema에서 **absent(undefined)** 로 전달되므로 소비자는 `readPublicRoundState(state)`로 정규화한다. 전체 맵·플레이어·출구·seed·튜닝은 공개 상태에 없다.
 
@@ -69,7 +77,7 @@ HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. �
 - HTTP `/matchmake/*`·`/api/*` JSON 본문은 2,048바이트 상한이며 Content-Length와 실제 수신 바이트 모두 검사한다. Origin이 있으면 ALLOWED_ORIGINS의 정확한 값만 허용하고 `null`·빈 값·복수·비허용은 403이다. 거절된 요청은 방·좌석·세션을 만들지 않는다.
 - 접수 거절 코드는 `INVALID_COMMAND, PROTOCOL_MISMATCH, WRONG_MATCH, RATE_LIMITED, INVALID_PHASE, NOT_ACTIVE, QUEUE_FULL, STALE_REQUEST`, 종결 코드는 위와 `NOT_ALLOWED, EXPIRED, NOT_READY, ROUND_ENDED, CANCELED`를 사용한다.
 
-계약을 변경할 때는 Zod 검증, Colyseus Schema, 문서 원본 `docs/execution/contracts/types.ts`, 웹·서버 소비자 시험을 함께 변경한다.
+계약을 변경할 때는 Zod 검증, Colyseus Schema, 시험용 공유 계약 `tests/contracts/shared/`, 웹·서버 소비자 시험을 함께 변경하고 생산자·소비자 담당이 함께 검토한다.
 
 ## 진단 0.1.0 (sandbox)
 

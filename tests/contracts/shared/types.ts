@@ -1,4 +1,5 @@
-// EXEC-CONTRACT-3. Planning contracts; product modules do not exist merely because these types do.
+// EXEC-CONTRACT-3. Shared test contracts: web/server tests import these fixtures to check both
+// sides agree. Product code implements its own types and never imports this file.
 export const CONTRACT_VERSION = 'EXEC-CONTRACT-3' as const;
 export const SCOPE_VERSION = 'D-2026-09-08-01' as const;
 export type Cell = Readonly<{ x: number; y: number }>;

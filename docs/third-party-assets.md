@@ -1,10 +1,8 @@
 # 제3자 자산
 
-2026-09-13 · S15P21C204-214, 시작 `efe358ee`, 선행 !137 병합 `f79726c4` 동기화.
-저장소의 고정 MediaPipe 모델3개·SDK WASM/로더6개와 실제 내부 구성 모델을 대조했다.
-파일 출처·sha256·bytes·취득일과 구성별 모델 카드의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json),
-취득 경위는 [비전 자산 README](../apps/web/public/models/README.md)를 따른다.
-제품 범위와 공개 전 확인 사항은 [현행 기획서](spec/current.md)에 연결한다.
+2026-09-15 기준. 파일 출처·sha256·bytes·취득일·구성별 모델 카드와 SDK 번들 구성요소 목록의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json), 취득 경위는 [비전 자산 README](../apps/web/public/models/README.md)다. 권리 확인이 끝나지 않은 항목은 공개 차단 요인이다.
+
+## 비전 모델과 SDK
 
 | 경로                                                     | 자산                        | 버전·크기                                                 | 현재 라이선스 기록                                 |
 | -------------------------------------------------------- | --------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
@@ -13,8 +11,7 @@
 | `apps/web/public/models/gesture/gesture_recognizer.task` | GestureRecognizer float16   | release 1 · 8,373,440 bytes                               | pending — 손 추적2종 확인, 임베더/분류기2종 미확인 |
 | `apps/web/public/models/mediapipe/1.0.1/wasm/`           | SDK의 WASM·로더 JS 6개      | `@mediapipe/tasks-vision` 1.0.1 · 파일별 bytes는 manifest | Apache-2.0 선언 확인, 번들 제3자 고지 검토 pending |
 
-pending은 실제 자산 부재가 아닌 권리 검토 미완료다. 이번 확인은 SDK 선언과 모델 카드의
-별도 근거를 사용한다. 공식 가이드의 배포표와 아래 카드의 라이선스 항목을 확인했다.
+pending은 실제 자산 부재가 아닌 권리 검토 미완료다. SDK 선언과 모델 카드의 별도 근거를 사용했다.
 
 - 얼굴: [공식 배포표](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models),
   [BlazeFace short range](<https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Short%20Range).pdf>),
@@ -39,7 +36,16 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 실패한다. W20 공개 승격 연결과 미확인 gesture/SDK 번들 고지, 다른 배포 의존성의 고지는 남는다.
 모델 갱신 시 버전·바이트·카드 연결을 다시 확인하며, 라이선스 기록의 날짜만으로 만료시키지 않는다.
 
-시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다.
+## 남은 권리 확인 (S15P21C204-241, 2026-09-15 조사)
+
+- **손동작 2모델**(gesture_embedder.tflite, canned_gesture_classifier.tflite): pending 유지. 분류 모델 카드에 추출 가능한 라이선스 문구가 없고, 저장소 LICENSE·Model Maker 소스 헤더는 배포된 학습 바이너리를 범위로 명시하지 않는다. 대안 영향: 기능 축소가 가장 싸다(손동작은 출구 시작·취소와 교환만 만들고 같은 명령의 키보드 경로가 있다). 재학습은 임베더 위에 분류기만 얹으므로 한 건만 해소된다. 런타임 다운로드는 고정 해시 검사·CSP와 충돌한다.
+- **SDK 번들 고지**: 배포하는 파일에서 구성요소를 뽑아 manifest sdk.bundledComponents에 적었다(JS: Google LLC·Closure Library Apache-2.0 헤더 확인. WASM: TensorFlow Lite·OpenCV·Abseil·XNNPACK·ruy·Eigen·protobuf·FlatBuffers·gemmlowp·Emscripten libc++abi). 배포 wasm 3개에는 저작권·라이선스 문자열이 없고, XNNPACK(BSD-3-Clause)은 바이너리 재배포 시 고지 재현을 요구한다. 현재 제품 고지는 Apache-2.0 원문뿐이므로 공개 전에 고지 화면을 보완해야 한다. undledNoticesReview는 pending이다.
+
+## 코드로 만든 자산
+
+시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 발소리·감지기·덫 효과음 3종도 코드로 생성한 PCM이다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 렌더 자산·음원·폰트 대장 정리는 S15P21C204-225에서 이어간다.
+
+## 자산 추가 기록
 
 자산을 추가할 때 다음을 기록한다.
 

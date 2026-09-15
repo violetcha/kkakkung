@@ -1,5 +1,5 @@
 // D-13 / ME-03. 미디어 계약의 소비자 사본과 SDK 주입 port.
-// EXEC-CONTRACT-3 contracts/types.ts의 MediaScope/MediaGrant/MediaStatus와 같은 모양이다.
+// EXEC-CONTRACT-3 tests/contracts/shared/types.ts의 MediaScope/MediaGrant/MediaStatus와 같은 모양이다.
 // MediaScope는 게임 지식의 PrivateView.gameScope와 독립이다.
 // gameInstanceId를 mediaInstanceId로 복사하거나 receiverGeneration에서 논리 revision을 만들지 않는다.
 

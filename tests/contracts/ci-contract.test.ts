@@ -30,15 +30,7 @@ describe('ci-verify plan', () => {
       (s) => s.command!.slice(1).join(' ') as string,
     );
     expect(commands.filter((c) => c === 'verify')).toHaveLength(1);
-    for (const inner of [
-      'format:check',
-      'check:execution',
-      'lint',
-      'typecheck',
-      'test',
-      'build',
-      'test:e2e',
-    ])
+    for (const inner of ['format:check', 'lint', 'typecheck', 'test', 'build', 'test:e2e'])
       expect(commands.some((c) => c.split(' ').includes(inner))).toBe(false);
     expect(commands[commands.length - 1]).toBe('verify');
   });
@@ -63,7 +55,7 @@ describe('ci-verify plan', () => {
     expect(dockerfileCi).toContain(`FROM node:${REQUIRED.node}-bookworm`);
     expect(dockerfileCi).toContain(`PNPM_VERSION=${REQUIRED.pnpm}`);
     expect(dockerfileCi).toMatch(/PLAYWRIGHT_VERSION=1\.63\.0/);
-    expect(pkg.scripts.verify).toMatch(/^pnpm format:check && pnpm check:execution && /);
+    expect(pkg.scripts.verify).toMatch(/^pnpm format:check && pnpm lint && /);
   });
   it('rejects a toolchain mismatch and a checkout that differs from the expected commit', () => {
     expect(checkToolchain('24.18.0', '11.19.0')).toHaveLength(1);
@@ -108,13 +100,7 @@ describe('Jenkinsfile uses the single entry point', () => {
       jenkinsfile.indexOf("stage('Verify')"),
       jenkinsfile.indexOf("stage('Build images')"),
     );
-    for (const inner of [
-      'pnpm format:check',
-      'pnpm lint',
-      'pnpm typecheck',
-      'pnpm test',
-      'pnpm check:execution',
-    ])
+    for (const inner of ['pnpm format:check', 'pnpm lint', 'pnpm typecheck', 'pnpm test'])
       expect(verifyStage).not.toContain(inner);
     expect(jenkinsfile).not.toContain('RUN_NODE');
   });

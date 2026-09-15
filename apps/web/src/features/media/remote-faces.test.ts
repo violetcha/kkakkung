@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { faceArrivalOrders } from '../../../../../docs/execution/contracts/fixtures';
+import { faceArrivalOrders } from '../../../../../tests/contracts/shared/fixtures';
 import { createBindingStore, type MediaBindings } from './media-bindings';
 import type { MediaScope } from './media-types';
 import { createPendingTrackStore, PENDING_TRACK_LIMIT } from './pending-tracks';

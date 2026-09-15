@@ -1,5 +1,5 @@
 // D의 유일한 공개 진입점. C는 이 factory만 소비하고 devices/vision/media 구현을 직접 만들지 않는다.
-// EXEC-CONTRACT-3 contracts/types.ts의 InteractionRuntime/InteractionDeps와 같은 모양이다.
+// EXEC-CONTRACT-3 tests/contracts/shared/types.ts의 InteractionRuntime/InteractionDeps와 같은 모양이다.
 //
 // 구현 단계: D-01 장치 수명까지 완성. 이후 번호에서 같은 facade를 채운다.
 // 미구현 메서드는 조용한 no-op이나 성공 Promise 대신 명확한 오류로 종결한다.

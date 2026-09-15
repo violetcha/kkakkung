@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import {
   INVITATION_ROUTES,
   ROOM_INVITATION_ROUTE,
@@ -467,7 +467,7 @@ test('view examples preserve match/state ordering while separating none, practic
     ['none', 'practice', 'none', 'game'],
   );
   for (let i = 1; i < scopeTransitionViews.length; i++)
-    assert.ok(scopeTransitionViews[i].stateVersion > scopeTransitionViews[i - 1].stateVersion);
+    assert.ok(scopeTransitionViews[i]!.stateVersion > scopeTransitionViews[i - 1]!.stateVersion);
   assert.equal(scopeTransitionViews[2].self, null);
   assert.deepEqual(scopeTransitionViews[2].knownTerrain, []);
   assert.notDeepEqual(scopeTransitionViews[1].knownTerrain, scopeTransitionViews[3].knownTerrain);

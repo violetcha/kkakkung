@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mediaGrantSchema, mediaBindingsSchema } from '@kkakkung/protocol/game-messages';
-import {
-  splitMediaGrantFixture,
-  splitMediaBindingsFixture,
-} from '../../docs/execution/contracts/fixtures';
+import { splitMediaGrantFixture, splitMediaBindingsFixture } from './shared/fixtures';
 import { createMediaSession } from '../../apps/web/src/features/media/media-session';
 import type { MediaGrant as WebGrant } from '../../apps/web/src/features/media/media-types';
 import type { MediaGrant as ServerGrant } from '../../server/src/media/types';

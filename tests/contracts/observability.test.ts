@@ -91,15 +91,11 @@ describe('metric registry allowlist', () => {
     expect({ ...collector.ALERT_THRESHOLDS }).toEqual({ ...ALERT_THRESHOLDS });
   });
 
-  it('is part of the server build (F owns server/src/observability)', () => {
+  it('is part of the server build', () => {
     const tsconfig = JSON.parse(readFileSync(resolve(root, 'server/tsconfig.json'), 'utf8')) as {
       include: string[];
     };
     expect(tsconfig.include).toContain('src/**/*.ts');
-    const ownership = JSON.parse(
-      readFileSync(resolve(root, 'docs/execution/ownership.json'), 'utf8'),
-    ) as { roles: Record<string, { paths: string[] }> };
-    expect(ownership.roles.F?.paths).toContain('server/src/observability/');
     for (const file of ['MetricRegistry.ts', 'StructuredEvents.ts', 'AlertPolicy.ts'])
       expect(existsSync(resolve(root, 'server/src/observability', file))).toBe(true);
   });

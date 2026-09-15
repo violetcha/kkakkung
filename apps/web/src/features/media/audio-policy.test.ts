@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { audioPolicy as sharedPolicy } from '../../../../../docs/execution/contracts/fixtures';
+import { audioPolicy as sharedPolicy } from '../../../../../tests/contracts/shared/fixtures';
 import { createPolicyStore, FUTURE_POLICY_HOLD_MS, type AudioPolicy } from './audio-policy';
 import { createBindingStore, type MediaBindings } from './media-bindings';
 

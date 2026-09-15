@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   firstBindings,
   onePublisherReconnected,
-} from '../../../../../docs/execution/contracts/fixtures';
+} from '../../../../../tests/contracts/shared/fixtures';
 import { createBindingStore, isSelfPublishConfirmed, type MediaBindings } from './media-bindings';
 
 const SELF = 'p1';
