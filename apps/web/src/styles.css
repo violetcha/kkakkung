@@ -501,6 +501,13 @@
   text-align: center;
   background: #141413;
 }
+.face-guidance {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #e0b25a;
+  background: rgba(224, 178, 90, 0.12);
+  color: #f1e3c4;
+}
 .loading-cover .countdown {
   font-size: 3.5rem;
   font-variant-numeric: tabular-nums;

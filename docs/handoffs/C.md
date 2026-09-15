@@ -44,7 +44,7 @@ C는 화면 조립과 서버 연결 수명을 소유한다. 장치·추론·미�
 
 ## 요청과 남은 일
 
-- D REQ-D-08/10/11: 얼굴 조건 안내(`onFaceGuidance`) 표시, 준비 대기 항목의 단계·원인 표시, SDK 번들 제3자 고지 화면 보완(XNNPACK BSD-3 등). 세부는 [D 인계](D.md).
+- D REQ-D-11: SDK 번들 제3자 고지 화면 보완(XNNPACK BSD-3 등). 세부는 [D 인계](D.md). 얼굴 조건 안내(`FaceGuidanceNotice`)와 로딩 대기 항목의 단계·원인 표시(`describePending`)는 S15P21C204-254에서 연결했다.
 - [S15P21C204-221](https://ssafy.atlassian.net/browse/S15P21C204-221) 제품 측정 수집 연결(진행 중).
 - [S15P21C204-222](https://ssafy.atlassian.net/browse/S15P21C204-222) 제품 6화면 실제 흐름의 Cloud 인수(`tests/cloud/mvp-flow.cloud.test.ts`).
 - [S15P21C204-223](https://ssafy.atlassian.net/browse/S15P21C204-223) 시설 렌더링 대표 장면 보완과 중간 45fps 측정.

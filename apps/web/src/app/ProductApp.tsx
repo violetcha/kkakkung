@@ -10,6 +10,7 @@ import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
+import { FaceGuidanceNotice } from '../features/game/flow/FaceGuidanceNotice';
 import { LocalControls } from '../features/game/flow/LocalControls';
 import { AudioControls } from '../features/game/flow/AudioControls';
 import type { AudioPreferences } from '../features/media/audio-preferences';
@@ -454,6 +455,7 @@ export function ProductApp({
                 await runtime.current?.startDevices(microphone);
               }}
               onReady={(value) => runtime.current?.ready(value)}
+              faceGuidance={snapshot.faceGuidance ?? null}
             />
           )}
           {round && inResult && (
@@ -483,6 +485,11 @@ export function ProductApp({
           <div className="game-workspace">
             <aside className="game-sidebar">
               {worldVisible && localControls}
+              {worldVisible &&
+                (round?.phase === 'TEAM_PRACTICE' || round?.phase === 'PLAYING') &&
+                view?.self?.status === 'ACTIVE' && (
+                  <FaceGuidanceNotice notice={snapshot.faceGuidance} />
+                )}
               {worldVisible && view && (
                 <MiniMap
                   view={view}

@@ -1228,3 +1228,25 @@ it('names device failures, keeps cleanup failures off the screen and clears noti
     warn.mockRestore();
   }
 });
+
+it('publishes the device runtime face guidance once per change and clears it', async () => {
+  const f = fixture();
+  const changed = () => f.runtime.getSnapshot().faceGuidance ?? null;
+  expect(changed()).toBeNull();
+  const glare = { condition: 'glare' as const, message: '안경 반사가 보여요.', isNew: true };
+  f.callbacks.onFaceGuidance!(glare);
+  const first = f.runtime.getSnapshot();
+  expect(changed()).toEqual(glare);
+  // The same notice again (isNew false) keeps the snapshot object, so screens do not re-render.
+  f.callbacks.onFaceGuidance!({ ...glare, isNew: false });
+  expect(f.runtime.getSnapshot()).toBe(first);
+  f.callbacks.onFaceGuidance!({
+    condition: 'backlit',
+    message: '조명을 등지지 마세요.',
+    isNew: true,
+  });
+  expect(changed()?.condition).toBe('backlit');
+  f.callbacks.onFaceGuidance!(null);
+  expect(changed()).toBeNull();
+  await f.runtime.leave();
+});
