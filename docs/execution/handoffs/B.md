@@ -249,6 +249,48 @@ A가 구현할 `CorePort<State>`(createMatch/createPractice/stepMatch/getPlayerK
 - 돌연변이 확인 3건이 전부 실패로 잡힌다: `onTickFailed` 배선 제거 → `TEAM_PRACTICE`에서 멈춤, `deps.coordinator.rearm` 제거 → 중단 뒤 `serverTick` 정지, `abortMatch`의 `cancelAllPending` 제거 → `ROUND_ENDED` outcome 없음.
 - 검증: develop `c683767` 위에서 `pnpm verify` 통과(269 파일 2831 case, e2e 22), `node scripts/check-role-scope.mjs --role B --base develop` PASS(3 경로, 위반 0). 같은 PC의 반복 실행에서 E 소유 무거운 시험(`operations-bindings`의 공식 체크포인트 시간 초과 경로, `product-integration`의 재경기 2건)이 동시 실행 부하에 따라 간헐 실패했고 단독 실행과 한산한 재실행에서는 통과한다. 이 브랜치 변경과 무관하며 소유자 확인 대상이다.
 
+### production 프로파일·운영 API 인계 · S15P21C204-239
+
+- 상태: `develop`의 `098cabb`에서 B 조립과 E 운영 인증·미디어 coordinator가 연결됐고,
+  `a97e060`에서 continuous 제품 배포 overlay가 추가됐다. 현재 Jenkins는 기본
+  `DEPLOY_PROFILE=product`로 `scripts/product-release.mjs`를 실행한다. 이 문서는 새 런타임
+  변경이 아니라 F-REQ-16의 B→F 인계 확정이다.
+- 프로파일 선택: 실제 제품 배포는 `NODE_ENV=development`, `SERVER_PROFILE=product`,
+  `MEDIA_MODE=livekit` 조합이다. `NODE_ENV=production`은 현재 `server/src/config/env.ts`에서
+  거절되므로 제품 프로파일과 같은 뜻으로 바꾸면 안 된다. Jenkins 제품 배포는 기본
+  `infra/compose.production.yaml` 위에 `infra/compose.product.yaml` 및 운영 모드별 overlay를
+  적용한다.
+- 운영 API 활성 시점: `ProductProfileLoader`가 `OPS_TOKEN`, E의 `createOperatorAuth`,
+  `createMediaCoordinator`와 전체 미디어 설정을 공급한 뒤 bootstrap이
+  `/api/operations/commands`, `/api/operations/commands/:requestId`,
+  `/api/operations/status`를 설치한다. 인증 조립이 없으면 `/api/operations/*`는 503이고,
+  토큰이 없거나 틀리면 인증 요청은 401이다. 운영 장벽은 인증된
+  `GET /api/operations/status` 200만으로 끝나지 않으며 READY·admission OPEN·미확인 회수 0을
+  함께 확인한다.
+- F가 유지할 비밀/정책 env 세트: `LIVEKIT_HTTP_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`,
+  `LIVEKIT_API_SECRET`, `LIVEKIT_PROJECT_ALIAS`, `SERVICE_NAMESPACE`, `OPS_TOKEN`,
+  `OPS_OPERATING_MODE`, `OPS_OPERATION_TIMEOUT_MS`,
+  `MEDIA_MAX_NORMAL_API_CALLS_PER_60S`, `MEDIA_MAX_TOTAL_API_CALLS_PER_60S`,
+  `INVITE_MAX_TTL_MS`, `SESSION_ATTEMPT_WINDOW_MS`, `SESSION_ATTEMPTS_PER_INVITE`,
+  `SESSION_ATTEMPTS_PER_IP`, `ROOM_IDLE_TTL_MS`. continuous에서는
+  `OPS_OPERATING_MODE=continuous`를 사용하고 공개창 두 시각과
+  `OPS_OFFICIAL_BUDGET_MAX_AGE_MS`는 요구하지 않는다. attested에서는 이 세 값을 모두
+  제공한다. 전체 이름과 주석의 원본은 `infra/production.env.example`이며 실제 값은
+  Jenkins Secret file `kkakkung-production-env`에만 둔다.
+- 팀 대상 continuous overlay: `TRUST_PROXY_HOPS=1`, `SERVICE_AUDIENCE=team`,
+  `SESSION_ADMISSION_MODE=gitlab-sso`, `OPS_OPERATING_MODE=continuous`를 고정한다.
+  `SERVICE_AUDIENCE`와 입장 모드는 서로 일치해야 하고, `MAX_SLOTS`는 항상
+  `MAX_ROOMS * 6`이어야 한다. 일반 공개 `public + livekit`은 아직 파서에서 차단되므로 팀
+  제품 배포 성공을 공개 준비 완료로 확대하지 않는다.
+- F 확인 지점: Jenkins Secret file의 변수명은 `infra/production.env.example`, 제품 overlay는
+  `infra/compose.product.yaml`·`infra/compose.continuous.yaml`, 사전 검사는
+  `server/src/config/ProductDeployment.ts`와 `scripts/product-release.mjs`를 따른다. 배포 후
+  `Authorization: Bearer $OPS_TOKEN`을 붙인 loopback
+  `GET http://127.0.0.1:8080/api/operations/status`가 200인지 확인하고 DP-06의
+  drain→교체→READY→resume/OPEN→smoke→정리 순서를 끝까지 통과시킨다.
+- 공개 계약·제품 코드·F 소유 설정 변경 없음. 실제 env 값, 토큰, Cloud 자격 자료는 이 문서에
+  기록하지 않는다.
+
 ## 2026-09-08 원격 확인과 develop 병합
 
 `origin/develop`(`48f7efa`)을 `a7a264f`로 병합했다. 겹치는 파일은 없고 병합 후 `pnpm exec vitest run` 59 파일 320 case, `pnpm typecheck` 통과.
