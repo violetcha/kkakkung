@@ -95,8 +95,9 @@ pipeline {
         // 시간 (2026-09-14): 이 단계가 빌드의 7~8분을 차지합니다.
         // - 같은 소스 트리를 MR 빌드가 이미 검증했으면 develop(배포) 빌드는 검증을 생략합니다.
         //   키는 git tree 해시라서, 사이에 다른 MR 이 머지돼 트리가 달라지면 다시 전부 검증합니다.
-        // - Verify 는 호스트 flock 으로 한 번에 하나만 돕니다. 두 빌드의 vitest 가 4 vCPU 를 나누면
-        //   tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70). 다른 단계는 겹쳐도 됩니다.
+        // - Verify·이미지 빌드·Trivy·배포는 같은 호스트 flock 을 잡아 한 번에 하나만 돕니다. 다른 빌드의
+        //   vitest 와 CPU 를 나누면 tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70, #139).
+        //   체크아웃·비밀 스캔 같은 가벼운 단계만 겹칩니다.
         script {
           env.TREE_SHA = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
           env.VERIFIED_BY = env.IS_DEPLOY == 'true'
@@ -120,6 +121,8 @@ pipeline {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // 컨텍스트는 저장소 루트 (workspace 패키지 의존). 루트 .dockerignore 가 node_modules/dist 를 걸러줍니다.
         sh '''
+          # 무거운 단계 잠금: 다른 빌드의 vitest(250ms tick 판정)와 CPU 를 나누지 않는다 (SETUP.md §6).
+          exec 9>/var/lib/jenkins/verify.lock; flock 9
           node scripts/build-release-images.mjs "$GIT_SHA"
         '''
       }
@@ -130,6 +133,8 @@ pipeline {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // HIGH/CRITICAL 이 있어도 중단하지 않고 기록만 합니다. 발표까지 시간이 짧아서요.
         sh '''
+          # 무거운 단계 잠금: 다른 빌드의 vitest(250ms tick 판정)와 CPU 를 나누지 않는다 (SETUP.md §6).
+          exec 9>/var/lib/jenkins/verify.lock; flock 9
           for img in "$IMG_GAME:$TAG" "$IMG_WEB:$TAG"; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ \
               aquasec/trivy:latest image --severity HIGH,CRITICAL --no-progress --exit-code 0 "$img"
@@ -148,6 +153,7 @@ pipeline {
           withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {
             if (env.DEPLOY_PROFILE == 'product') {
               sh '''
+                exec 9>/var/lib/jenkins/verify.lock; flock 9
                 set +x
                 node --import tsx scripts/product-release.mjs --check-only --env-file "$PROD_ENV_FILE" \
                   --evidence-dir "$STATE_DIR/runtime-evidence" --preflight "$STATE_DIR/cloud-preflight.json" \
@@ -159,6 +165,7 @@ pipeline {
               '''
             } else {
               sh '''
+                exec 9>/var/lib/jenkins/verify.lock; flock 9
                 install -m 600 "$PROD_ENV_FILE" "$STATE_DIR/production.env"
                 node scripts/verify-release.mjs --sha "$GIT_SHA" --tag "$TAG" --verified-sha "$GIT_SHA" \
                   --profile skeleton --state-dir "$STATE_DIR" --output "$STATE_DIR/releases/$TAG.json"
