@@ -326,15 +326,50 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   자리이며 타입은 `number | null`이다.
 - D가 `requestMediaGrant`를 직접 부르지 않는다. 이 변환은 D 소유가 아니라 B 소유다.
 
+### REQ-D-08 · C · 얼굴 조건 안내 표시 (Jira [S15P21C204-244](https://ssafy.atlassian.net/browse/S15P21C204-244))
+
+- 대상: C의 준비·경기 화면. D는 화면을 그리지 않는다.
+- 필요한 변경: `InteractionDeps`에 새로 생긴 **선택** callback `onFaceGuidance`를 붙이고
+  받은 문구를 그대로 보여 준다. 문구는 D가 만든다. C가 다시 쓰지 않는다.
+
+  ```ts
+  onFaceGuidance: (notice) => setFaceNotice(notice); // notice: { condition, message, isNew } | null
+  ```
+
+- 표시·해제·중복 억제 판단은 **D가 이미 끝냈다.** `null`이 오면 지우고, 값이 오면 띄운다.
+  C가 자체 debounce를 더 걸면 두 번 걸린다. `isNew`는 소리·강조 같은 1회성 연출에만 쓴다.
+- 생략해도 안전하다. callback을 붙이지 않으면 조건 판정과 휘도 표본 자체를 돌리지 않으며
+  안전 프레임 전환은 그대로 동작한다. 즉 이 요청은 성능 부담 없이 미뤄 둘 수 있다.
+- 조건은 다섯 가지이고 문구가 있는 것은 네 가지다: `turned-away`·`glare`·`backlit`·
+  `occluded`. `ok`/`unknown`은 `null`로 온다.
+- **가공 얼굴을 "익명화"라고 설명하는 문구를 옆에 붙이지 않는다.** 흑백 마스크 가공이지
+  익명화가 아니다. 이 규칙은 `face-condition.test.ts`가 D 쪽 문구에 대해 고정한다.
+- 완료 확인: 네 조건에서 서로 다른 문구가 화면에 뜨고, 조건이 풀리면 사라진다.
+
+### REQ-D-09 · F · `.prettierignore`에 `.claude/` 추가
+
+- 대상 파일: `.prettierignore`
+- 필요한 변경: 무시 목록에 `.claude/`를 추가한다.
+- 이유: `.claude/settings.local.json`은 사용자 전역 gitignore(`~/.config/git/ignore`)로만
+  무시되고 저장소 `.prettierignore`에는 없다. 그래서 이 저장소에서 Claude Code를 쓴 사람은
+  **develop에서도** `pnpm format:check`가 실패하고, `verify`가 첫 단계에서 멈춘다.
+  D 소유 소스의 format 위반은 0건이다.
+- 2026-09-15 실측: `pnpm format:check`의 유일한 위반이 `.claude/settings.local.json`이었다.
+  나머지 `verify` 단계(check:execution·lint·typecheck·269파일 2827시험·build·
+  check:product-assets·e2e 22건)는 모두 통과했다.
+- 완료 확인 명령: 해당 파일이 있는 작업 트리에서 `pnpm format:check`가 통과.
+
 ## blockedOn 요약
 
-| 항목                                | 막는 대상           | 영향                                      |
-| ----------------------------------- | ------------------- | ----------------------------------------- |
-| E-05 실제 grant (REQ-D-05)          | D-13 실제 연결      | E 구현·인계 도착(`7ea0151`), B 조립 대기  |
-| B의 `bootstrap` 미디어 조립         | D-13–D-17           | `bootstrap.ts`가 `mediaEnabled: false`    |
-| B의 grant 세대 정규화 (REQ-D-07)    | D-13 첫 연결        | 첫 요청이 `STALE_GENERATION`으로 거절     |
-| B-02 strict payload, A-10/A-11 규칙 | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                     |
-| 대표 장치·실제 브라우저             | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
+| 항목                                | 막는 대상            | 영향                                      |
+| ----------------------------------- | -------------------- | ----------------------------------------- |
+| E-05 실제 grant (REQ-D-05)          | D-13 실제 연결       | E 구현·인계 도착(`7ea0151`), B 조립 대기  |
+| B의 `bootstrap` 미디어 조립         | D-13–D-17            | `bootstrap.ts`가 `mediaEnabled: false`    |
+| B의 grant 세대 정규화 (REQ-D-07)    | D-13 첫 연결         | 첫 요청이 `STALE_GENERATION`으로 거절     |
+| B-02 strict payload, A-10/A-11 규칙 | D-09–D-11 실제 연결  | 명령 접수·거절 실동작                     |
+| 대표 장치·실제 브라우저             | D-01–D-13 전체       | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
+| C의 안내 표시 (REQ-D-08)            | S15P21C204-244 완료  | 문구는 나가지만 화면에 뜨지 않는다        |
+| F의 `.prettierignore` (REQ-D-09)    | 모든 D 티켓의 verify | `format:check`가 첫 단계에서 실패         |
 
 ## 다음 단계
 
