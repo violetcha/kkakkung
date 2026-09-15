@@ -32,6 +32,12 @@ export interface SafeFacePolicy {
     nowMs: number,
     runtimeGeneration: number,
   ): SafeFaceDecision;
+  /**
+   * hold 창을 건너뛰고 바로 기본 얼굴로 내린다.
+   * hold 는 짧은 추적 실패를 메우려는 것이므로, 새 프레임이 오지 않는다고 이미 아는 상황
+   * (탭 이탈 등)에서는 마지막 실사 프레임을 남길 이유가 없다.
+   */
+  forceDefault(): SafeFaceDecision;
   reset(): void;
   readonly mode: SafeFaceMode;
 }
@@ -72,6 +78,13 @@ export function createSafeFacePolicy(holdMs: number = SAFE_FACE_HOLD_MS): SafeFa
       }
       mode = 'default';
       lastUsableAtMs = null;
+      return { mode, frameId: null };
+    },
+
+    forceDefault() {
+      // 잔상의 근거가 되는 마지막 유효 시각을 버린다. 복귀하면 새 프레임부터 다시 센다.
+      lastUsableAtMs = null;
+      mode = 'default';
       return { mode, frameId: null };
     },
 

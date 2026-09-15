@@ -96,13 +96,35 @@ export function createFramePump(deps: FramePumpDeps): FramePump {
 }
 
 /**
- * 모델별 목표 주기 스케줄. face/pose 15fps, gesture 10fps를 목표로 한다.
- * 실측 fps는 별도 계측이며 이 값은 목표 상한이다.
+ * 모델별 목표 주기 스케줄. 실측 fps는 별도 계측이며 이 값은 목표 상한이다.
+ *
+ * **이 값은 아직 실측으로 확정되지 않았다.** 계획 문서(`d-vision-media.md` D-04·D-05,
+ * `mvp-work-plan.md` IN-04·IN-05)는 pose 10fps · gesture 8fps를 적고, 여기 코드와
+ * `docs/spec/current.md`는 pose 15fps · gesture 10fps다. 어느 쪽이 맞는지는 대표 장치에서
+ * 세 모델을 동시에 돌려 봐야 정해진다(S15P21C204-243).
+ *
+ * 그때까지는 현재 코드 값을 유지한다. 실측 없이 계획값으로 되돌리는 것도 근거가 없기
+ * 때문이다. 값을 바꿀 때는 반드시 아래 tuningVersion을 함께 올린다.
  */
+export const MODEL_TARGET_FPS: Readonly<Record<VisionModelKind, number>> = Object.freeze({
+  face: 15,
+  pose: 15,
+  gesture: 10,
+});
+
+/**
+ * 목표 주기의 튜닝 버전. `input-tuning.SENSOR_TUNING_VERSION`과 같은 방식으로
+ * 검사에 걸리게 한다. 이 상수는 원래 버전이 없어 어떤 검사도 값 변경을 잡지 못했다.
+ *
+ * 접미사 `-unmeasured`는 실측 근거가 아직 없다는 표시다. 대표 장치 측정으로 값을 확정하면
+ * `D-model-interval-2` 처럼 접미사 없는 버전으로 올리고 측정 근거를 함께 기록한다.
+ */
+export const MODEL_TARGET_TUNING_VERSION = 'D-model-interval-1-unmeasured';
+
 export const MODEL_TARGET_INTERVAL_MS: Readonly<Record<VisionModelKind, number>> = Object.freeze({
-  face: 1000 / 15,
-  pose: 1000 / 15,
-  gesture: 1000 / 10,
+  face: 1000 / MODEL_TARGET_FPS.face,
+  pose: 1000 / MODEL_TARGET_FPS.pose,
+  gesture: 1000 / MODEL_TARGET_FPS.gesture,
 });
 
 export type ModelSelector = Readonly<{

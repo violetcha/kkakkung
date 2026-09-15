@@ -9,6 +9,7 @@ import {
   type DeviceStatus,
   type DeviceStatusPatch,
 } from './device-status';
+import type { ReadinessRecorder } from './readiness-trace';
 
 /** 카메라 요청 제약. 640×480 ideal, 최대 30fps, audio는 별도 요청이다. */
 export const CAMERA_CONSTRAINTS: MediaStreamConstraints = Object.freeze({
@@ -51,6 +52,10 @@ export type DeviceManagerDeps = Readonly<{
   onCameraTrack?(track: MediaStreamTrack | null): void;
   /** 선택 마이크 소스 변경. null이면 해당 송출만 정리한다. */
   onMicrophoneTrack?(track: MediaStreamTrack | null): void;
+  /** S15P21C204-240. 권한·장치 열기 단계 기록. 생략하면 계측하지 않는다. */
+  readiness?: ReadinessRecorder;
+  /** 단계 기록용 시계. 생략하면 performance.now를 쓴다. */
+  now?(): number;
 }>;
 
 export interface DeviceManager {
@@ -74,6 +79,7 @@ type CameraHolding = {
 
 export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
   const environment = deps.environment;
+  const now = deps.now ?? (() => performance.now());
   let status = INITIAL_DEVICE_STATUS;
   let generation = 0;
   let disposed = false;
@@ -238,12 +244,17 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
 
   const acquireCameraOnce = async (request: number): Promise<void> => {
     publish({ camera: 'requesting' });
+    // S15P21C204-240. 권한 프롬프트 대기가 이 구간에 들어간다. 사용자가 늦게 누른 경우와
+    // 장치가 안 열리는 경우는 둘 다 길게 나오므로 종료 code 로만 구분한다.
+    deps.readiness?.begin('permission', now());
     let stream: MediaStream;
     try {
       stream = await environment.getUserMedia(CAMERA_CONSTRAINTS);
     } catch (error) {
       if (request !== generation || disposed) return;
-      publish({ camera: 'failed', errorCode: deviceErrorCode(error) });
+      const code = deviceErrorCode(error);
+      deps.readiness?.fail('permission', now(), code);
+      publish({ camera: 'failed', errorCode: code });
       return;
     }
     // 폐기된 요청의 늦은 성공은 트랙을 바로 정리하고 상태를 바꾸지 않는다.
@@ -251,9 +262,12 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
       stopStream(stream);
       return;
     }
+    deps.readiness?.succeed('permission', now());
+    deps.readiness?.begin('device-open', now());
     const track = stream.getVideoTracks()[0] ?? null;
     if (!track || track.readyState !== 'live') {
       stopStream(stream);
+      deps.readiness?.fail('device-open', now(), 'DEVICE_LOST');
       publish({ camera: 'failed', errorCode: 'DEVICE_LOST' });
       return;
     }
@@ -262,6 +276,8 @@ export function createDeviceManager(deps: DeviceManagerDeps): DeviceManager {
     camera = { stream, track, onEnded };
     attachPreview(stream);
     watchDeviceChange();
+    // 미리보기까지 붙어야 장치 열기가 끝난 것이다. 트랙 획득만으로 끝내지 않는다.
+    deps.readiness?.succeed('device-open', now());
     deps.onCameraTrack?.(track);
     publish({ camera: 'ready', errorCode: null });
   };

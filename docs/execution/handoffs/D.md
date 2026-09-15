@@ -194,10 +194,27 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   Sample은 그대로 유지되며 세대 시작부터 실행하지 않았으면 null이다.
 - face/pose age>300ms, gesture age>400ms면 사용 불가다. 다른 센서 갱신이 유효 시간을
   연장하지 않는다. `quality==='uncertain'`은 유효 얼굴·자세로 인정하지 않는다.
-- 튜닝 버전: `sensorTuningVersion = 'D-input-1'`(입력 각도·유지시간·필터),
-  `safeFaceTuningVersion = 'D-safe-face-1'`(안전 프레임 유지 1200ms). 둘 다 기획서 확정
-  상수가 아니라 **명시적 초깃값**이며 대표 장치 검증 후 조정한다. 포즈 탈출 임계값
-  (`poseTuningVersion`)은 C가 소유한다.
+- 튜닝 버전. 전부 기획서 확정 상수가 아니라 **명시적 초깃값**이며 대표 장치 검증 후 조정한다.
+  값을 바꾸면 버전을 함께 올린다. 포즈 탈출 임계값(`poseTuningVersion`)은 C가 소유한다.
+
+  | 상수                                 | 버전                            | 덮는 것                         |
+  | ------------------------------------ | ------------------------------- | ------------------------------- |
+  | `input-tuning.SENSOR_TUNING_VERSION` | `D-input-4-shoulder-span`       | 입력 각도·유지시간·필터         |
+  | `safe-face.SAFE_FACE_TUNING_VERSION` | `D-safe-face-1`                 | 안전 프레임 유지 1200ms         |
+  | `face-condition.FACE_CONDITION_*`    | `D-face-condition-1`            | 얼굴 조건 판정 임계와 표시 지연 |
+  | `frame-pump.MODEL_TARGET_TUNING_*`   | `D-model-interval-1-unmeasured` | 모델별 목표 주기                |
+
+- **모델 목표 주기는 문서 세 곳이 서로 다르다** (2026-09-15 확인, S15P21C204-243).
+  `frame-pump.ts`와 `docs/spec/current.md`는 face 15 · pose 15 · gesture 10fps인데,
+  `d-vision-media.md` D-04·D-05와 `mvp-work-plan.md` IN-04·IN-05는 pose 10 · gesture 8fps다.
+  `docs/spec/current.md`는 이 차이를 알려진 이탈로 이미 표에 적어 두었다.
+  - 이 상수에는 원래 tuningVersion이 없어 **어떤 검사도 값 변경을 잡지 못했다.** 계획과 코드가
+    어긋난 채 남은 것도 그래서다. 이제 버전을 붙이고 시험으로 묶었다.
+  - 어느 값이 맞는지는 대표 장치에서 세 모델을 동시에 돌려 봐야 정해진다. **실측 전에는
+    계획값으로 되돌리는 것도 근거가 없으므로** 현재 코드 값을 유지한다.
+  - 버전 접미사 `-unmeasured`가 그 상태를 이고 있다. 측정으로 확정하면 접미사를 떼고
+    측정 근거를 함께 남긴다. 세 문서를 같은 값으로 맞추는 것도 그때다.
+    `mvp-work-plan.md`와 `docs/spec/current.md`는 F 소유라 D가 직접 고치지 않는다.
 - 가공 얼굴 출력은 160×160/10fps Canvas captureStream이며 branded handle로만 넘어간다.
   원본 track을 게시 경로에 주면 `RAW_TRACK_REJECTED`로 거절한다. 인코딩 bitrate는 D-14다.
 - `MediaScope`는 `PrivateView.gameScope`와 **독립**이다. D는 `gameInstanceId`를
@@ -326,15 +343,80 @@ D-13~D-16의 네 port를 **하나의 Room 위에서** 만든다. C가 SDK를 조
   자리이며 타입은 `number | null`이다.
 - D가 `requestMediaGrant`를 직접 부르지 않는다. 이 변환은 D 소유가 아니라 B 소유다.
 
+### REQ-D-08 · C · 얼굴 조건 안내 표시 (Jira [S15P21C204-244](https://ssafy.atlassian.net/browse/S15P21C204-244))
+
+- 대상: C의 준비·경기 화면. D는 화면을 그리지 않는다.
+- 필요한 변경: `InteractionDeps`에 새로 생긴 **선택** callback `onFaceGuidance`를 붙이고
+  받은 문구를 그대로 보여 준다. 문구는 D가 만든다. C가 다시 쓰지 않는다.
+
+  ```ts
+  onFaceGuidance: (notice) => setFaceNotice(notice); // notice: { condition, message, isNew } | null
+  ```
+
+- 표시·해제·중복 억제 판단은 **D가 이미 끝냈다.** `null`이 오면 지우고, 값이 오면 띄운다.
+  C가 자체 debounce를 더 걸면 두 번 걸린다. `isNew`는 소리·강조 같은 1회성 연출에만 쓴다.
+- 생략해도 안전하다. callback을 붙이지 않으면 조건 판정과 휘도 표본 자체를 돌리지 않으며
+  안전 프레임 전환은 그대로 동작한다. 즉 이 요청은 성능 부담 없이 미뤄 둘 수 있다.
+- 조건은 다섯 가지이고 문구가 있는 것은 네 가지다: `turned-away`·`glare`·`backlit`·
+  `occluded`. `ok`/`unknown`은 `null`로 온다.
+- **가공 얼굴을 "익명화"라고 설명하는 문구를 옆에 붙이지 않는다.** 흑백 마스크 가공이지
+  익명화가 아니다. 이 규칙은 `face-condition.test.ts`가 D 쪽 문구에 대해 고정한다.
+- 완료 확인: 네 조건에서 서로 다른 문구가 화면에 뜨고, 조건이 풀리면 사라진다.
+
+### REQ-D-09 · F · `.prettierignore`에 `.claude/` 추가
+
+- 대상 파일: `.prettierignore`
+- 필요한 변경: 무시 목록에 `.claude/`를 추가한다.
+- 이유: `.claude/settings.local.json`은 사용자 전역 gitignore(`~/.config/git/ignore`)로만
+  무시되고 저장소 `.prettierignore`에는 없다. 그래서 이 저장소에서 Claude Code를 쓴 사람은
+  **develop에서도** `pnpm format:check`가 실패하고, `verify`가 첫 단계에서 멈춘다.
+  D 소유 소스의 format 위반은 0건이다.
+- 2026-09-15 실측: `pnpm format:check`의 유일한 위반이 `.claude/settings.local.json`이었다.
+  나머지 `verify` 단계(check:execution·lint·typecheck·269파일 2827시험·build·
+  check:product-assets·e2e 22건)는 모두 통과했다.
+- 완료 확인 명령: 해당 파일이 있는 작업 트리에서 `pnpm format:check`가 통과.
+
+### REQ-D-10 · C · 준비 대기 항목에 클라이언트 단계·원인 반영 (Jira [S15P21C204-240](https://ssafy.atlassian.net/browse/S15P21C204-240))
+
+- 대상: `apps/web/src/features/game/flow/loading-controller.ts`의 `pending()`과 준비 화면.
+- 현재 상태: `pending()`은 `'경기장 자산'`·`'초기 화면'`·`'카메라 연결'`·`'내 얼굴 게시 확인'`
+  네 문자열만 돌려준다. 어느 단계에서 얼마나 걸렸는지, 원인이 클라이언트인지 서버인지
+  화면에서 알 수 없다. S15P21C204-217이 붙인 서버 로그만으로는 장치·브라우저 쪽 원인을
+  가릴 수 없었다는 것이 이 작업의 출발점이다.
+- 필요한 변경: D가 내는 `ReadinessTrace`를 대기 항목 옆에 붙인다.
+
+  ```ts
+  const trace = runtime.getReadinessTrace?.(); // 또는 deps.onReadinessTrace 로 받는다
+  // trace.blockedStage: 'permission' | 'device-open' | 'model-load' | 'first-publish' | null
+  // trace.cause: 'permission-denied' | 'device-in-use' | 'device-missing'
+  //            | 'model-load' | 'publish-failed' | 'client-slow' | null
+  // trace.stages[].durationMs: 진행 중이면 지금까지 걸린 시간
+  ```
+
+- 대응 관계는 이렇다. `'카메라 연결'`은 `permission`·`device-open` 두 단계가 받치고,
+  `'내 얼굴 게시 확인'`은 `first-publish`가 받친다. `model-load`는 지금 어느 대기 항목에도
+  붙어 있지 않지만 30초 초과의 실제 원인인 경우가 있어 함께 보여야 한다.
+- **`cause`가 `null`인 것을 "문제 없음"으로 읽지 않는다.** 아직 원인을 말할 수 없다는 뜻이다.
+  예산(30초) 안에서 느린 것은 D가 일부러 원인을 붙이지 않는다.
+- **네 단계 합이 짧은데 대기 항목이 안 풀리면 서버 쪽이다.** D는 서버 응답 대기 구간을
+  어느 단계에도 넣지 않았다. 이 대비가 클라이언트/서버 원인 구분의 근거다.
+- `getReadinessTrace`는 선택 메서드다. C 소유 `product-integration-fixture.ts`가 facade를
+  부분 구현하고 있어 필수로 만들면 D 범위 밖 파일을 고쳐야 했다. `?.()`로 읽는다.
+- 완료 확인: 30초를 넘긴 준비 실패에서 막힌 단계와 원인이 화면에 남고, 같은 값이 증거에도
+  들어간다. 증거 쪽 연결은 S15P21C204-246 범위다.
+
 ## blockedOn 요약
 
-| 항목                                | 막는 대상           | 영향                                      |
-| ----------------------------------- | ------------------- | ----------------------------------------- |
-| E-05 실제 grant (REQ-D-05)          | D-13 실제 연결      | E 구현·인계 도착(`7ea0151`), B 조립 대기  |
-| B의 `bootstrap` 미디어 조립         | D-13–D-17           | `bootstrap.ts`가 `mediaEnabled: false`    |
-| B의 grant 세대 정규화 (REQ-D-07)    | D-13 첫 연결        | 첫 요청이 `STALE_GENERATION`으로 거절     |
-| B-02 strict payload, A-10/A-11 규칙 | D-09–D-11 실제 연결 | 명령 접수·거절 실동작                     |
-| 대표 장치·실제 브라우저             | D-01–D-13 전체      | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
+| 항목                                | 막는 대상            | 영향                                      |
+| ----------------------------------- | -------------------- | ----------------------------------------- |
+| E-05 실제 grant (REQ-D-05)          | D-13 실제 연결       | E 구현·인계 도착(`7ea0151`), B 조립 대기  |
+| B의 `bootstrap` 미디어 조립         | D-13–D-17            | `bootstrap.ts`가 `mediaEnabled: false`    |
+| B의 grant 세대 정규화 (REQ-D-07)    | D-13 첫 연결         | 첫 요청이 `STALE_GENERATION`으로 거절     |
+| B-02 strict payload, A-10/A-11 규칙 | D-09–D-11 실제 연결  | 명령 접수·거절 실동작                     |
+| 대표 장치·실제 브라우저             | D-01–D-13 전체       | 추론 fps, 각도 튜닝, 픽셀 검증, 권한 거부 |
+| C의 안내 표시 (REQ-D-08)            | S15P21C204-244 완료  | 문구는 나가지만 화면에 뜨지 않는다        |
+| F의 `.prettierignore` (REQ-D-09)    | 모든 D 티켓의 verify | `format:check`가 첫 단계에서 실패         |
+| C의 대기 항목 표시 (REQ-D-10)       | S15P21C204-240 완료  | 단계·원인은 나오지만 화면에 뜨지 않는다   |
 
 ## 다음 단계
 

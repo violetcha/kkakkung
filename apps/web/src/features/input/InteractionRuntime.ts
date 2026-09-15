@@ -42,6 +42,25 @@ import {
   type FaceCompositor,
 } from '../media/face-compositor';
 import { createSafeFacePolicy, type SafeFacePolicy } from '../media/safe-face';
+import {
+  classifyFaceCondition,
+  createFaceConditionNotifier,
+  ovalMissingRatio,
+  type FaceConditionNotice,
+  type FaceConditionNotifier,
+} from '../media/face-condition';
+import {
+  createLuminanceSampler,
+  type LuminanceCanvas,
+  type LuminanceSampler,
+} from '../media/face-luminance';
+import { buildFaceMask } from '../media/face-mask';
+import {
+  createReadinessRecorder,
+  describeClientEnvironment,
+  type ReadinessRecorder,
+  type ReadinessTrace,
+} from '../devices/readiness-trace';
 import { createMediaSession, type MediaSession } from '../media/media-session';
 import { createBindingStore, type BindingStore } from '../media/media-bindings';
 import {
@@ -235,6 +254,16 @@ export type InteractionDeps = Readonly<{
   onLocalPreview: (element: HTMLVideoElement | null) => void;
   /** 진단 오버레이용(features/debug). 판정과 무관하며 생략 가능. 제거 시 함께 지운다. */
   onMotionDebug?: (state: MotionDebugState) => void;
+  /**
+   * S15P21C204-244. 얼굴 조건 안내. 보여 줄 안내가 없으면 null로 부른다.
+   * 생략 가능하며 안내를 표시하지 않아도 안전 전환 자체는 그대로 동작한다.
+   */
+  onFaceGuidance?: (notice: FaceConditionNotice | null) => void;
+  /**
+   * S15P21C204-240. 준비 단계 기록이 바뀔 때마다 부른다. 생략 가능하다.
+   * 여기 담긴 시간은 전부 클라이언트 구간이며 서버 응답 대기는 들어 있지 않다.
+   */
+  onReadinessTrace?: (trace: ReadinessTrace) => void;
 }>;
 
 export interface InteractionRuntime {
@@ -250,6 +279,12 @@ export interface InteractionRuntime {
   /** D-17. 회수 확인 뒤 새 미디어 세대를 연다. */
   beginMediaGeneration(): void;
   getGenerationState(): 'live' | 'terminal' | 'closed';
+  /**
+   * S15P21C204-240. 지금까지의 준비 단계 기록. 증거 수집과 화면 표시가 같은 값을 읽는다.
+   * 제품 runtime 은 항상 구현한다. 선택으로 둔 것은 C 소유 시험 fixture 가 이 facade 를
+   * 부분 구현하고 있어서이며, 호출 측은 `runtime.getReadinessTrace?.()` 로 읽는다.
+   */
+  getReadinessTrace?(): ReadinessTrace;
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
@@ -310,7 +345,18 @@ export type InteractionRuntimeOptions = Readonly<{
   epochNowSeconds?: () => number;
   /** 키 listener를 붙일 대상. 생략하면 window다. */
   keyboardTarget?: KeyboardTarget;
+  /** S15P21C204-244. 탭 이탈 감지 주입점. 생략하면 document를 쓴다. */
+  visibility?: VisibilitySource;
+  /** S15P21C204-244. 휘도 표본용 Canvas 주입점. 생략하면 document로 만든다. */
+  createLuminanceCanvas?: (width: number, height: number) => LuminanceCanvas;
   tuning?: InputTuning;
+}>;
+
+/** 탭 이탈을 알려 주는 최소 인터페이스. document의 부분집합이다. */
+export type VisibilitySource = Readonly<{
+  isHidden(): boolean;
+  addEventListener(type: 'visibilitychange', listener: () => void): void;
+  removeEventListener(type: 'visibilitychange', listener: () => void): void;
 }>;
 
 /** 보정 수집 상한. 이 시간 안에 충분한 표본이 없으면 미보정으로 끝낸다. */
@@ -375,6 +421,46 @@ function browserCompositor(): CompositorEnvironment {
       };
     },
     now: () => performance.now(),
+  };
+}
+
+/**
+ * S15P21C204-244. 탭 이탈 감지의 기본 구현.
+ * document 가 없거나 listener를 갖추지 않은 환경(시험 stub 포함)에서는 "항상 보이는" 것으로
+ * 다룬다. 감지를 못 하는 것이 안전 전환 자체를 막지는 않는다.
+ */
+function browserVisibility(): VisibilitySource {
+  const source: Partial<Document> | null = typeof document === 'undefined' ? null : document;
+  const usable =
+    source !== null &&
+    typeof source.addEventListener === 'function' &&
+    typeof source.removeEventListener === 'function';
+  if (!usable)
+    return { isHidden: () => false, addEventListener: () => {}, removeEventListener: () => {} };
+  return {
+    isHidden: () => source.visibilityState === 'hidden',
+    addEventListener: (type, listener) => source.addEventListener!(type, listener),
+    removeEventListener: (type, listener) => source.removeEventListener!(type, listener),
+  };
+}
+
+/**
+ * S15P21C204-244. 휘도 표본 전용 Canvas. 게시 경로와 분리한다.
+ * captureStream을 부르지 않으므로 이 Canvas의 픽셀은 밖으로 나가지 않는다.
+ */
+function browserLuminanceCanvas(width: number, height: number): LuminanceCanvas {
+  // Canvas를 만들 수 없는 환경에서는 표본을 포기한다. 휘도 없이도 회전·가림은 판정된다.
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function')
+    return { getContext: () => null };
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  // 자주 읽으므로 willReadFrequently로 CPU 백업 버퍼를 쓰게 한다.
+  return {
+    getContext: (id) =>
+      canvas.getContext(id, { willReadFrequently: true }) as unknown as ReturnType<
+        LuminanceCanvas['getContext']
+      >,
   };
 }
 
@@ -561,6 +647,17 @@ export const createInteractionRuntime = (
   let lastSnapshot: SensorSnapshot | null = null;
   let compositor: FaceCompositor | null = null;
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
+  // S15P21C204-240. 준비 단계 기록.
+  const readiness: ReadinessRecorder = createReadinessRecorder();
+  const reportReadiness = () => {
+    if (disposed || !deps.onReadinessTrace) return;
+    deps.onReadinessTrace(readiness.snapshot(vision.now()));
+  };
+  // S15P21C204-244. 조건 안내와 탭 이탈 안전 전환.
+  const conditionNotifier: FaceConditionNotifier = createFaceConditionNotifier();
+  let luminance: LuminanceSampler | null = null;
+  let lastNotice: FaceConditionNotice | null = null;
+  const visibility: VisibilitySource = options.visibility ?? browserVisibility();
   const calibrator = createCalibrator(tuning);
   const context: ContextStore = createContextStore();
   let publisher: TrackPublisher | null = null;
@@ -819,6 +916,8 @@ export const createInteractionRuntime = (
         inputWatchdog = null;
         compositor?.dispose();
         compositor = null;
+        visibility.removeEventListener('visibilitychange', onVisibilityChange);
+        luminance = null;
         safeFace.reset();
         calibrator.reset();
       },
@@ -847,20 +946,75 @@ export const createInteractionRuntime = (
     modelsLoaded = false;
     lastSnapshot = null;
     calibrationObserver = null;
+    // 안내는 비전이 멈춘 뒤에도 남아 있으면 안 된다.
+    conditionNotifier.reset();
+    luminance?.reset();
+    emitGuidance(null);
   };
 
   const failVision = (code: string) => {
     fallback.report(code === 'INFERENCE_STALLED' ? 'INFERENCE_STALLED' : 'WORKER_ERROR');
+    // 모델을 이미 올린 뒤의 추론 정체는 model-load 실패가 아니다. 그 단계는 건드리지 않는다.
+    if (!modelsLoaded) {
+      readiness.fail('model-load', vision.now(), code);
+      reportReadiness();
+    }
     patch({ vision: 'failed', calibration: 'failed', errorCode: code });
     stopVision();
     calibrator.reset();
   };
 
+  const emitGuidance = (notice: FaceConditionNotice | null) => {
+    // 같은 안내를 반복해서 알리지 않는다. 사라질 때 한 번 null을 보낸다.
+    if (notice?.condition === lastNotice?.condition) return;
+    lastNotice = notice;
+    deps.onFaceGuidance?.(notice);
+  };
+
+  /**
+   * S15P21C204-244. 지금 얼굴이 왜 안 잡히는지 정한다.
+   * 표본이 없으면 휘도 없이 판정하며, 그때는 역광·반사를 주장하지 않는다.
+   */
+  const observeFaceCondition = (nowMs: number) => {
+    if (!deps.onFaceGuidance) return;
+    const face = lastSnapshot?.face ?? null;
+    const valid = face?.status === 'valid' ? face.data : null;
+    const fresh = isSampleFresh(face, 'face', nowMs);
+    const mask = valid ? buildFaceMask(valid.landmarks) : null;
+    const profile =
+      mask && valid && luminance ? luminance.sample(mask, valid.landmarks, nowMs) : null;
+
+    const condition = classifyFaceCondition({
+      faceMissing: !fresh || valid === null,
+      yawRad: valid?.yawRad ?? null,
+      ovalMissingRatio: valid ? ovalMissingRatio(valid.landmarks) : 0,
+      luminance: profile,
+    });
+    emitGuidance(conditionNotifier.observe(condition, nowMs));
+  };
+
   const drawSafeOutput = () => {
     if (!compositor) return;
-    const decision = safeFace.decide(lastSnapshot, vision.now(), runtimeGeneration);
+    const nowMs = vision.now();
+    // 탭이 숨으면 새 프레임이 오지 않는다. hold 창을 기다리지 않고 바로 기본 얼굴로 내려
+    // 직전 실사 프레임이 게시된 채 남지 않게 한다. 복귀하면 새 표본부터 다시 시작한다.
+    if (visibility.isHidden()) {
+      compositor.drawMode(safeFace.forceDefault().mode, null);
+      luminance?.reset();
+      conditionNotifier.reset();
+      emitGuidance(null);
+      return;
+    }
+    const decision = safeFace.decide(lastSnapshot, nowMs, runtimeGeneration);
     const face = lastSnapshot?.face;
     compositor.drawMode(decision.mode, face?.status === 'valid' ? face.data : null);
+    observeFaceCondition(nowMs);
+  };
+
+  const onVisibilityChange = () => {
+    if (disposed) return;
+    // 이탈 즉시 한 번 처리한다. 타이머가 배경 탭에서 늦게 깨어나도 잔상을 남기지 않는다.
+    drawSafeOutput();
   };
 
   const ensureProcessedOutput = () => {
@@ -876,6 +1030,16 @@ export const createInteractionRuntime = (
       },
     });
     compositor.draw(null);
+    luminance = createLuminanceSampler({
+      createCanvas: options.createLuminanceCanvas ?? browserLuminanceCanvas,
+      getSource: () => {
+        const video = devices?.getPreviewElement();
+        return video && video.videoWidth > 0
+          ? { source: video, width: video.videoWidth, height: video.videoHeight }
+          : null;
+      },
+    });
+    visibility.addEventListener('visibilitychange', onVisibilityChange);
     const checkInputAndOutput = () => {
       if (disposed || !compositor) return;
       const now = vision.now();
@@ -1051,6 +1215,8 @@ export const createInteractionRuntime = (
           }
           modelsLoaded = true;
           modelReadyAt = vision.now();
+          readiness.succeed('model-load', modelReadyAt);
+          reportReadiness();
           if (modelTimer !== null) vision.clearTimer(modelTimer);
           modelTimer = null;
           pump?.start();
@@ -1081,6 +1247,8 @@ export const createInteractionRuntime = (
     scheduler = created;
     pump = frames;
     patch({ vision: 'loading', errorCode: null });
+    readiness.begin('model-load', vision.now());
+    reportReadiness();
     modelTimer = vision.setTimer(() => {
       if (generation === runtimeGeneration && scheduler && !modelsLoaded)
         failVision('MODEL_LOAD_TIMEOUT');
@@ -1147,8 +1315,17 @@ export const createInteractionRuntime = (
         if (!disposed) deps.onDeviceStatus(status);
       },
       onLocalPreview: (element) => deps.onLocalPreview(element),
+      readiness,
+      now: () => vision.now(),
       onCameraTrack: (track) => {
-        if (track !== null) return;
+        if (track !== null) {
+          // 라벨은 권한을 받은 뒤에야 채워진다. 30초 초과 표본을 장치 조합으로 되찾는 데 쓴다.
+          readiness.setEnvironment(
+            describeClientEnvironment(typeof navigator === 'undefined' ? null : navigator, track),
+          );
+          reportReadiness();
+          return;
+        }
         // 원본이 사라지면 비전도 멈추고 보정을 버린다. 참가는 유지한다.
         stopVision();
         calibrator.reset();
@@ -1392,12 +1569,29 @@ export const createInteractionRuntime = (
       if (!scope || !target) return null;
       const handle = compositor?.getHandle() ?? null;
       if (!handle) return null;
-      const faceSid = await target.publishFace(handle, scope, qualityPreset);
+      // S15P21C204-240. 여기부터 SID 확보까지가 클라이언트 게시 구간이다. 서버가 바인딩을
+      // 확인해 주기를 기다리는 시간은 여기 들어오지 않는다.
+      readiness.begin('first-publish', vision.now());
+      reportReadiness();
+      let faceSid: string | null;
+      try {
+        faceSid = await target.publishFace(handle, scope, qualityPreset);
+      } catch (error) {
+        readiness.fail('first-publish', vision.now(), 'PUBLISH_FAILED');
+        reportReadiness();
+        throw error;
+      }
       if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
+      readiness.succeed('first-publish', vision.now());
+      reportReadiness();
       const microphone = devices?.getMicrophoneTrack() ?? null;
       if (microphone) await target.publishMicrophone(microphone, scope);
       if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
       return faceSid;
+    },
+
+    getReadinessTrace() {
+      return readiness.snapshot(vision.now());
     },
 
     getPublications() {
