@@ -55,6 +55,12 @@ import {
   type LuminanceSampler,
 } from '../media/face-luminance';
 import { buildFaceMask } from '../media/face-mask';
+import {
+  createReadinessRecorder,
+  describeClientEnvironment,
+  type ReadinessRecorder,
+  type ReadinessTrace,
+} from '../devices/readiness-trace';
 import { createMediaSession, type MediaSession } from '../media/media-session';
 import { createBindingStore, type BindingStore } from '../media/media-bindings';
 import {
@@ -253,6 +259,11 @@ export type InteractionDeps = Readonly<{
    * 생략 가능하며 안내를 표시하지 않아도 안전 전환 자체는 그대로 동작한다.
    */
   onFaceGuidance?: (notice: FaceConditionNotice | null) => void;
+  /**
+   * S15P21C204-240. 준비 단계 기록이 바뀔 때마다 부른다. 생략 가능하다.
+   * 여기 담긴 시간은 전부 클라이언트 구간이며 서버 응답 대기는 들어 있지 않다.
+   */
+  onReadinessTrace?: (trace: ReadinessTrace) => void;
 }>;
 
 export interface InteractionRuntime {
@@ -268,6 +279,12 @@ export interface InteractionRuntime {
   /** D-17. 회수 확인 뒤 새 미디어 세대를 연다. */
   beginMediaGeneration(): void;
   getGenerationState(): 'live' | 'terminal' | 'closed';
+  /**
+   * S15P21C204-240. 지금까지의 준비 단계 기록. 증거 수집과 화면 표시가 같은 값을 읽는다.
+   * 제품 runtime 은 항상 구현한다. 선택으로 둔 것은 C 소유 시험 fixture 가 이 facade 를
+   * 부분 구현하고 있어서이며, 호출 측은 `runtime.getReadinessTrace?.()` 로 읽는다.
+   */
+  getReadinessTrace?(): ReadinessTrace;
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
@@ -630,6 +647,12 @@ export const createInteractionRuntime = (
   let lastSnapshot: SensorSnapshot | null = null;
   let compositor: FaceCompositor | null = null;
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
+  // S15P21C204-240. 준비 단계 기록.
+  const readiness: ReadinessRecorder = createReadinessRecorder();
+  const reportReadiness = () => {
+    if (disposed || !deps.onReadinessTrace) return;
+    deps.onReadinessTrace(readiness.snapshot(vision.now()));
+  };
   // S15P21C204-244. 조건 안내와 탭 이탈 안전 전환.
   const conditionNotifier: FaceConditionNotifier = createFaceConditionNotifier();
   let luminance: LuminanceSampler | null = null;
@@ -931,6 +954,11 @@ export const createInteractionRuntime = (
 
   const failVision = (code: string) => {
     fallback.report(code === 'INFERENCE_STALLED' ? 'INFERENCE_STALLED' : 'WORKER_ERROR');
+    // 모델을 이미 올린 뒤의 추론 정체는 model-load 실패가 아니다. 그 단계는 건드리지 않는다.
+    if (!modelsLoaded) {
+      readiness.fail('model-load', vision.now(), code);
+      reportReadiness();
+    }
     patch({ vision: 'failed', calibration: 'failed', errorCode: code });
     stopVision();
     calibrator.reset();
@@ -1187,6 +1215,8 @@ export const createInteractionRuntime = (
           }
           modelsLoaded = true;
           modelReadyAt = vision.now();
+          readiness.succeed('model-load', modelReadyAt);
+          reportReadiness();
           if (modelTimer !== null) vision.clearTimer(modelTimer);
           modelTimer = null;
           pump?.start();
@@ -1217,6 +1247,8 @@ export const createInteractionRuntime = (
     scheduler = created;
     pump = frames;
     patch({ vision: 'loading', errorCode: null });
+    readiness.begin('model-load', vision.now());
+    reportReadiness();
     modelTimer = vision.setTimer(() => {
       if (generation === runtimeGeneration && scheduler && !modelsLoaded)
         failVision('MODEL_LOAD_TIMEOUT');
@@ -1283,8 +1315,17 @@ export const createInteractionRuntime = (
         if (!disposed) deps.onDeviceStatus(status);
       },
       onLocalPreview: (element) => deps.onLocalPreview(element),
+      readiness,
+      now: () => vision.now(),
       onCameraTrack: (track) => {
-        if (track !== null) return;
+        if (track !== null) {
+          // 라벨은 권한을 받은 뒤에야 채워진다. 30초 초과 표본을 장치 조합으로 되찾는 데 쓴다.
+          readiness.setEnvironment(
+            describeClientEnvironment(typeof navigator === 'undefined' ? null : navigator, track),
+          );
+          reportReadiness();
+          return;
+        }
         // 원본이 사라지면 비전도 멈추고 보정을 버린다. 참가는 유지한다.
         stopVision();
         calibrator.reset();
@@ -1528,12 +1569,29 @@ export const createInteractionRuntime = (
       if (!scope || !target) return null;
       const handle = compositor?.getHandle() ?? null;
       if (!handle) return null;
-      const faceSid = await target.publishFace(handle, scope, qualityPreset);
+      // S15P21C204-240. 여기부터 SID 확보까지가 클라이언트 게시 구간이다. 서버가 바인딩을
+      // 확인해 주기를 기다리는 시간은 여기 들어오지 않는다.
+      readiness.begin('first-publish', vision.now());
+      reportReadiness();
+      let faceSid: string | null;
+      try {
+        faceSid = await target.publishFace(handle, scope, qualityPreset);
+      } catch (error) {
+        readiness.fail('first-publish', vision.now(), 'PUBLISH_FAILED');
+        reportReadiness();
+        throw error;
+      }
       if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
+      readiness.succeed('first-publish', vision.now());
+      reportReadiness();
       const microphone = devices?.getMicrophoneTrack() ?? null;
       if (microphone) await target.publishMicrophone(microphone, scope);
       if (!lifecycle.canOperate() || !matchesAcceptedScope(scope)) return null;
       return faceSid;
+    },
+
+    getReadinessTrace() {
+      return readiness.snapshot(vision.now());
     },
 
     getPublications() {

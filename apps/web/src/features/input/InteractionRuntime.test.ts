@@ -7,11 +7,14 @@ import type { FrameSource } from '../vision/frame-pump';
 import type { CompositorContext, CompositorEnvironment } from '../media/face-compositor';
 import {
   createInteractionRuntime,
+  FIRST_INFERENCE_TIMEOUT_MS,
   isVisionReady,
+  MODEL_LOAD_TIMEOUT_MS,
   type InteractionDeps,
   type InteractionRuntimeOptions,
   type VisionEnvironment,
 } from './InteractionRuntime';
+import type { ReadinessStage, ReadinessTrace } from '../devices/readiness-trace';
 import { INPUT_TUNING } from './input-tuning';
 import { POSE_KEY_POINTS } from '../vision/pose-sensor';
 
@@ -271,6 +274,134 @@ function visibilitySource() {
     },
   };
 }
+
+describe('S15P21C204-240 준비 단계 기록', () => {
+  const stage = (trace: ReadinessTrace | undefined, name: ReadinessStage) =>
+    trace?.stages.find((record) => record.stage === name);
+
+  it('times permission and device opening separately on a successful start', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      const trace = base.runtime.getReadinessTrace?.();
+
+      expect(stage(trace, 'permission')?.state).toBe('done');
+      expect(stage(trace, 'device-open')?.state).toBe('done');
+      expect(stage(trace, 'permission')?.durationMs).not.toBeNull();
+      expect(trace?.blockedStage).toBe('model-load');
+      expect(trace?.cause).toBeNull();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('separates a denied permission from a camera held by another app', async () => {
+    const denied = harness({
+      environment: {
+        getUserMedia: () =>
+          Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })),
+        createPreviewElement: () => ({}) as unknown as HTMLVideoElement,
+      },
+    });
+    const busy = harness({
+      environment: {
+        getUserMedia: () =>
+          Promise.reject(Object.assign(new Error('busy'), { name: 'NotReadableError' })),
+        createPreviewElement: () => ({}) as unknown as HTMLVideoElement,
+      },
+    });
+    try {
+      await denied.runtime.startDevices({ microphone: false });
+      await busy.runtime.startDevices({ microphone: false });
+
+      expect(denied.runtime.getReadinessTrace?.().cause).toBe('permission-denied');
+      expect(busy.runtime.getReadinessTrace?.().cause).toBe('device-in-use');
+      // 권한에서 막혔으면 뒤 단계는 시작하지도 않았다는 것이 기록에 남아야 한다.
+      expect(stage(denied.runtime.getReadinessTrace?.(), 'device-open')?.state).toBe('pending');
+    } finally {
+      await denied.runtime.dispose();
+      await busy.runtime.dispose();
+    }
+  });
+
+  it('closes the model-load stage when the three models report ready', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      expect(stage(base.runtime.getReadinessTrace?.(), 'model-load')?.state).toBe('running');
+
+      base.advance(700);
+      base.ready();
+
+      const record = stage(base.runtime.getReadinessTrace?.(), 'model-load');
+      expect(record?.state).toBe('done');
+      expect(record?.durationMs).toBe(700);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('blames the model load when the worker never becomes ready', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.advance(MODEL_LOAD_TIMEOUT_MS + 100);
+      base.fireTimers();
+
+      const trace = base.runtime.getReadinessTrace?.();
+      expect(stage(trace, 'model-load')?.errorCode).toBe('MODEL_LOAD_TIMEOUT');
+      expect(trace?.cause).toBe('model-load');
+      expect(trace?.overBudget).toBe(true);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('does not reopen the model stage for a stall that happens after loading', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const loadedAt = stage(base.runtime.getReadinessTrace?.(), 'model-load')?.endedAtMs;
+
+      base.advance(FIRST_INFERENCE_TIMEOUT_MS + 100);
+      base.fireTimers();
+
+      const record = stage(base.runtime.getReadinessTrace?.(), 'model-load');
+      // 추론 정체는 모델 적재 실패가 아니다. 단계 기록을 덮어쓰지 않는다.
+      expect(record?.state).toBe('done');
+      expect(record?.endedAtMs).toBe(loadedAt);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('reports the trace through the callback as stages move', async () => {
+    const traces: ReadinessTrace[] = [];
+    const base = harness({}, { onReadinessTrace: (trace) => traces.push(trace) });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+
+      expect(traces.length).toBeGreaterThan(0);
+      expect(traces.at(-1)?.stages.filter((record) => record.state === 'done')).toHaveLength(3);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('records the camera combination once the track arrives', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+
+      // 실제 브라우저에서만 라벨이 채워진다. 여기서는 자리만 확인한다.
+      expect(base.runtime.getReadinessTrace?.().environment).not.toBeNull();
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+});
 
 describe('S15P21C204-244 얼굴 조건 안내와 탭 이탈 안전 전환', () => {
   /** 기본 얼굴은 arc로만 그린다. 실사 프레임 경로는 arc를 부르지 않는다. */
