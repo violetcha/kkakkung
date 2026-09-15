@@ -30,6 +30,12 @@ import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { SoloPracticeScreen } from '../features/game/solo/SoloPracticeScreen';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
+import {
+  createRuntimeMetrics,
+  metricsRequested,
+  publishRuntimeMetrics,
+  type RuntimeMetrics,
+} from './runtime-metrics';
 
 export function ProductApp({
   invitation,
@@ -55,6 +61,20 @@ export function ProductApp({
   const [sessionCredential, setSessionCredential] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<number | null>(null);
   const runtime = useRef<ReturnType<typeof bindProductRoom> | null>(null);
+  // Measurement is opt-in (?metrics=1). Without the flag nothing is created, so
+  // the normal product path neither collects nor exposes anything.
+  const metrics = useRef<RuntimeMetrics | null>(null);
+  if (metrics.current === null && metricsRequested(window.location.search))
+    metrics.current = createRuntimeMetrics({ now: () => performance.now() });
+  useEffect(() => {
+    const collector = metrics.current;
+    if (!collector) return;
+    const remove = publishRuntimeMetrics(window as unknown as Record<string, unknown>, collector);
+    return () => {
+      remove();
+      collector.dispose();
+    };
+  }, []);
   const readSensors = useCallback(() => runtime.current?.sensors ?? null, []);
   const readAudio = useCallback(() => runtime.current?.getLocalAudioStatus() ?? null, []);
   const changeAudio = useCallback(
@@ -185,6 +205,7 @@ export function ProductApp({
         changed: (value) => {
           if (run === generation.current) setSnapshot(value);
         },
+        ...(metrics.current ? { metrics: metrics.current } : {}),
       });
       runtime.current.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
       setSelfId(session.playerId);
@@ -562,6 +583,9 @@ export function ProductApp({
                     )}
                     quality={snapshot.quality}
                     renderTick={() => runtime.current?.renderTick() ?? null}
+                    {...(metrics.current
+                      ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
+                      : {})}
                   />
                 </div>
               </section>

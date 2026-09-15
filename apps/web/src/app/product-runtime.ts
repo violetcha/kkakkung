@@ -37,6 +37,7 @@ import {
 import { createClockSync } from '../features/room/clock-sync';
 import { createProductView } from '../features/room/product-view';
 import { createInteractionBridge } from './interaction-bridge';
+import type { RuntimeMetrics } from './runtime-metrics';
 import {
   DEFAULT_AUDIO_PREFERENCES,
   normalizeAudioPreferences,
@@ -109,6 +110,8 @@ export function bindProductRoom(
     changed(snapshot: ProductSnapshot): void;
     fetcher?: typeof fetch;
     interactionFactory?: (deps: InteractionDeps) => InteractionRuntime;
+    /** Present only when the run collects its own measurements (W06). */
+    metrics?: RuntimeMetrics;
   },
 ) {
   let active = true;
@@ -374,6 +377,7 @@ export function bindProductRoom(
         },
         onMediaStatus: (media) => {
           if (!live()) return;
+          deps.metrics?.recordMedia(media);
           if (
             media.matchId !== null &&
             media.mediaInstanceId !== null &&
@@ -423,11 +427,13 @@ export function bindProductRoom(
         },
         onLocalPreview: () => {},
         onSensors: (value) => {
+          if (live()) deps.metrics?.recordSensors(value);
           if (!live() || !participating || value.runtimeGeneration < sensorGeneration) return;
           sensorGeneration = value.runtimeGeneration;
           updateChallenge();
         },
         onFaceTrack: (event) => {
+          if (live()) deps.metrics?.recordFaceTrack(event.element !== null);
           if (live() && participating && faces.receive(event))
             publish({ faceRevision: snapshot.faceRevision + 1 });
         },
@@ -884,6 +890,10 @@ export function bindProductRoom(
       commands.clear();
     }
     publish({ round });
+    // One measurement bucket per match: a rematch opens a new one and a decided
+    // round closes it, so repeated matches stay comparable.
+    deps.metrics?.startMatch(round.matchId);
+    if (round.phase === 'RESULT' || round.phase === 'ABORTED') deps.metrics?.endMatch();
     if (!currentMediaContext()) mediaViewContext = null;
     commands.setMatch(round.matchId);
     heartbeat.setMatch(round.matchId);
