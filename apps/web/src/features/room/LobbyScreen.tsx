@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RoomAccessMessage, RoomRosterMessage } from '@kkakkung/protocol/game-messages';
 import type { RequestDisplay } from './command-lifecycle';
 import { commandFeedback } from '../game/flow/command-feedback';
+import { PRIVACY_NOTICE } from './privacy-notice';
 export function LobbyScreen({
   roster,
   selfId,
@@ -99,10 +100,11 @@ export function LobbyScreen({
           </p>
         ) : null,
       )}
-      <p className="notice">
-        게임 중 얼굴 영상이 화면에 나타나기 전에 기기로 수신될 수 있습니다. 서비스는 녹화 기능을
-        제공하지 않습니다.
-      </p>
+      <ul className="notice" aria-label="개인정보 처리 안내">
+        {PRIVACY_NOTICE.map((sentence) => (
+          <li key={sentence.text}>{sentence.text}</li>
+        ))}
+      </ul>
     </section>
   );
 }
