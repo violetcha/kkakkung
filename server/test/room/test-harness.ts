@@ -118,6 +118,11 @@ export type FakeCoreOptions = {
   emitEvents?: boolean;
   /** Ends the match with the given result when a player escapes twice. */
   endOnEscapes?: boolean;
+  /**
+   * Throws from `getFrame` while this returns true, so the owning room's tick fails the way A's
+   * core did in QA-10 (a thrown read reached the interval callback and killed the process).
+   */
+  failGetFrame?: () => boolean;
 };
 
 export class FakeCore implements CorePort<FakeState> {
@@ -397,6 +402,7 @@ export class FakeCore implements CorePort<FakeState> {
   }
 
   getFrame(state: FakeState): CoreReadFrame {
+    if (this.options.failGetFrame?.()) throw new Error('FAKE_CORE_TICK_FAULT');
     const players = [...state.players.values()];
     return {
       matchId: state.matchId,

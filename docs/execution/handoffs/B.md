@@ -225,8 +225,18 @@ A가 구현할 `CorePort<State>`(createMatch/createPractice/stepMatch/getPlayerK
 - Room `onTickFailed`: `ABORTABLE_PHASES`(TEAM_PRACTICE·MAP_FINALIZING·GAME_LOADING·COUNTDOWN·PLAYING)에서 `SERVER_TICK_OVERLOAD`로 abort하고 `deps.coordinator.rearm`으로 새 라운드를 받는다. 원인은 `blockedReason`의 `TICK_FAILED:<message>`. `bootstrap`이 `onTickError`로 pino error(`roomRef`, `err`)를 남기고 코디네이터는 IO를 하지 않는다.
 - 공개 계약 무변경: 프로토콜 `AbortReason` 값을 늘리지 않았다(F-REQ-15가 예시로 든 `SERVER_ERROR` 계열 사유는 별도 프로토콜 변경으로 분리해야 한다). F `MetricRegistry` 등록명·단위도 추가하지 않고 기존 `tick.overload`를 재사용했다.
 - 검증: `pnpm verify` 통과(212 파일 2064 case, e2e 2), `node scripts/check-role-scope.mjs --role B --base develop` PASS(4 경로, 위반 0), `server/test/room/tick-coordinator.test.ts` +2 case(예외 격리와 재무장, 실패 처리기 예외 생존).
-- blockedOn: Room 레벨 "그 방만 ABORTED" 회귀 시험이 없다(현재는 배선·타입으로만 보장). 실제 10방 재현은 QA-10 재실행이 필요하고, F-07 알림 EVENT 연결은 F 몫이다.
+- blockedOn: Room 레벨 "그 방만 ABORTED" 회귀 시험은 S15P21C204-235에서 채웠다(아래 절). 실제 10방 재현은 QA-10 재실행이 필요하고, F-07 알림 EVENT 연결은 F 몫이다.
 - F-REQ-14(같은 사건의 stale layout 재사용)는 S15P21C204-171 조립 커밋 `098cabb`의 `layoutRevision`·`invalidateLayout()`이 이미 해결했다. B 추가 작업 없음.
+
+### F-REQ-15 Room 회귀 · S15P21C204-235 — 브랜치 `test/S15P21C204-235-room-tick-isolation`(병합 SHA는 MR 병합 뒤 채운다)
+
+- 목적: `KkakkungRoom`의 `onTickFailed` 배선이 실제로 그 방만 끝내는지 Room 레벨에서 고정한다. 코디네이터 자체 격리와 "재무장 전까지 재생 없음"은 `tick-coordinator.test.ts`가 이미 덮는다.
+- `server/test/room/tick-isolation.test.ts`: 한 프로세스에 실제 Room 2개(6인 방·1인 방)를 띄우고 6인 방의 `core.getFrame`만 던지게 한다. 던지는 시점을 특정 requestId를 `stepMatch`가 소비한 직후로 고정해서, 중단되는 Tick이 항상 얼어붙은 미완료 명령을 하나 쥐게 만든다. `stepMatch` throw는 driver가 이미 잡으므로 실제로 `setInterval` 콜백까지 샜던 읽기 경로를 그대로 쓴다.
+- 고정한 것: ① 그 방만 `ABORTED`·`abortReason=SERVER_TICK_OVERLOAD` ② 얼어붙은 명령이 `canceled`·`ROUND_ENDED`로 정리 ③ 참가자 6명의 마지막 private view가 `gameScope.kind='none'`(부착 인스턴스 detach) ④ 다른 방의 `serverTick`이 그대로 전진(프로세스·interval 생존). 재무장은 중단 뒤 그 방의 `serverTick`이 다시 오르는 것으로 잡는다 — `rearm`이 빠지면 코디네이터가 `overloaded`로 남겨 발행 Tick이 영구 정지한다.
+- 미디어 세대 회수는 이 시험 범위 밖이다. 이 프로파일은 `mediaConfig: null`로 부팅해 라운드에 미디어 인스턴스가 붙지 않고 `retireGeneration`이 도달 불가다. abort 회수 경로는 `media-transition-barrier.test.ts`가 덮는다.
+- 제품 코드 무변경: `server/src/**` diff 0. 시험 하네스 `FakeCore`에 `failGetFrame` 옵션만 늘렸다.
+- 돌연변이 확인 3건이 전부 실패로 잡힌다: `onTickFailed` 배선 제거 → `TEAM_PRACTICE`에서 멈춤, `deps.coordinator.rearm` 제거 → 중단 뒤 `serverTick` 정지, `abortMatch`의 `cancelAllPending` 제거 → `ROUND_ENDED` outcome 없음.
+- 검증: develop `c683767` 위에서 `pnpm verify` 통과(269 파일 2831 case, e2e 22), `node scripts/check-role-scope.mjs --role B --base develop` PASS(3 경로, 위반 0). 같은 PC의 반복 실행에서 E 소유 무거운 시험(`operations-bindings`의 공식 체크포인트 시간 초과 경로, `product-integration`의 재경기 2건)이 동시 실행 부하에 따라 간헐 실패했고 단독 실행과 한산한 재실행에서는 통과한다. 이 브랜치 변경과 무관하며 소유자 확인 대상이다.
 
 ## 2026-09-08 원격 확인과 develop 병합
 
