@@ -29,6 +29,8 @@ export const productServerRequestSchema = z.discriminatedUnion('action', [
     opsToken: z.string().uuid(),
     cpuProfile: z.literal(true).optional(),
     operatingMode: z.enum(['attested', 'continuous']).optional(),
+    rooms: z.number().int().min(1).max(10).optional(),
+    subscriptionMode: z.literal('publisher-permissions').optional(),
   }),
   z.strictObject({
     ...envelope,
@@ -65,6 +67,10 @@ export type ProductServerInspection = Readonly<{
   readiness: Readiness | null;
   blockedReason: string | null;
   maxTickMs: number;
+  maxEventLoopLagMs: number;
+  /** Phases of every live room; codes stay inside the test process boundary. */
+  rooms: readonly Readonly<{ phase: string; blockedReason: string | null }>[];
+  apiUsage: Readonly<{ calls: number; peak60s: number }>;
   participantCount: number;
   runtimeEvidence: RuntimeEvidenceDiagnostic | null;
   removedIdentityHashes: readonly string[];
@@ -109,6 +115,19 @@ export const productServerReplySchema = z.discriminatedUnion('ok', [
           .nullable(),
         blockedReason: z.string().max(512).nullable(),
         maxTickMs: z.number().nonnegative(),
+        maxEventLoopLagMs: z.number().nonnegative(),
+        rooms: z
+          .array(
+            z.strictObject({
+              phase: z.enum([...PHASES, 'UNKNOWN']),
+              blockedReason: z.string().max(512).nullable(),
+            }),
+          )
+          .max(10),
+        apiUsage: z.strictObject({
+          calls: z.number().int().nonnegative(),
+          peak60s: z.number().int().nonnegative(),
+        }),
         participantCount: z.number().int().nonnegative(),
         runtimeEvidence: z
           .strictObject({

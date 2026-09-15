@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEDIA_API_CEILINGS } from '../operations/ApiBudget.js';
 
 // Owned by F (docs/execution/f-infra-qa.md, F-01/DP-01). B maps the parsed values into
 // MediaConfiguration / admission policy; E never reads process.env directly.
@@ -83,8 +84,18 @@ const environment = z.object({
   OPS_PUBLIC_WINDOW_CLOSES_AT_EPOCH_MS: positiveSafeInt,
   OPS_OFFICIAL_BUDGET_MAX_AGE_MS: positiveSafeInt,
   OPS_OPERATION_TIMEOUT_MS: positiveSafeInt,
-  MEDIA_MAX_NORMAL_API_CALLS_PER_60S: z.coerce.number().int().positive().max(600).optional(),
-  MEDIA_MAX_TOTAL_API_CALLS_PER_60S: z.coerce.number().int().positive().max(900).optional(),
+  MEDIA_MAX_NORMAL_API_CALLS_PER_60S: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MEDIA_API_CEILINGS.normalPer60s)
+    .optional(),
+  MEDIA_MAX_TOTAL_API_CALLS_PER_60S: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MEDIA_API_CEILINGS.totalPer60s)
+    .optional(),
 
   // Invite and admission policy (B AC-01/AC-02). No implicit defaults: unset means LOCKED.
   INVITE_MAX_TTL_MS: positiveSafeInt,
@@ -156,8 +167,6 @@ export function parseConfig(input: Record<string, string | undefined>) {
     throw new Error('ALLOWED_ORIGINS must contain exact HTTP origins');
   if (raw.MAX_SLOTS !== raw.MAX_ROOMS * 6)
     throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
-  if (raw.MEDIA_SUBSCRIPTION_MODE === 'publisher-permissions' && raw.MAX_ROOMS !== 1)
-    throw new Error('Publisher permissions are limited to one internal six-person test room');
 
   const livekit = group(
     raw,

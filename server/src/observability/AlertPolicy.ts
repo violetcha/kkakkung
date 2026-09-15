@@ -11,6 +11,7 @@
 // - `isLocked()` is true while any alert that locks operations is active. Deploy and resume
 //   must consult it; they must not treat HTTP ready 200 as "no alerts".
 
+import { MEDIA_API_CEILINGS } from '../operations/ApiBudget.js';
 import type { MetricSample } from './MetricRegistry.js';
 import type { StructuredEvent } from './StructuredEvents.js';
 
@@ -150,7 +151,7 @@ export class AlertPolicy {
     if (
       !Number.isSafeInteger(this.mediaApiTotalLimit) ||
       this.mediaApiTotalLimit < 1 ||
-      this.mediaApiTotalLimit > 900
+      this.mediaApiTotalLimit > MEDIA_API_CEILINGS.totalPer60s
     )
       throw new Error('INVALID_ALERT_API_BUDGET');
     this.mediaApiNearLimit = Math.ceil((this.mediaApiTotalLimit * 9) / 10);

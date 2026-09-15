@@ -215,6 +215,36 @@ describe('actual E policy and track bindings composition with synthetic Cloud tr
     expect(s.onFailure).toHaveBeenCalledTimes(2);
   });
 
+  it("does not evaluate other rooms' generation permissions while publishing one room", () => {
+    const isPermissionsAllowed = vi.fn((_generation: Generation) => true);
+    const s = setup(2, { isPermissionsAllowed });
+    const otherFrame = frame(2, { matchId: 'other' });
+    s.registry.observe(otherFrame);
+    const others = otherFrame.participants.map((player) =>
+      s.registry.allocate(
+        {
+          requestId: `other-${player.playerId}`,
+          matchId: 'other',
+          mediaInstanceId: 'game',
+          purpose: 'game',
+          playerId: player.playerId,
+          expectedPreviousGeneration: null,
+        },
+        1_000_000,
+      ),
+    );
+    s.binding.observeFrame(otherFrame);
+    for (const generation of others) s.binding.register(generation);
+    isPermissionsAllowed.mockClear();
+    s.binding.observeFrame(frame(2, { frameRevision: 2 }));
+    expect(isPermissionsAllowed).toHaveBeenCalled();
+    expect(
+      isPermissionsAllowed.mock.calls.every(
+        ([generation]) => generation.request.matchId === 'match',
+      ),
+    ).toBe(true);
+  });
+
   it('publishes only verified self and peer bindings, no internal positions, using one API budget', async () => {
     const s = setup();
     expect(s.updateSubscriptions).not.toHaveBeenCalled();

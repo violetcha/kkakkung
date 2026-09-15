@@ -1,4 +1,8 @@
-import { parseCapabilityReport, type CapabilityReport } from '../media/CloudCapabilityProbe.js';
+import {
+  isParsedCapabilityReport,
+  parseCapabilityReport,
+  type CapabilityReport,
+} from '../media/CloudCapabilityProbe.js';
 import { LIVEKIT_SDK_VERSION } from '../media/LiveKitGateway.js';
 import type { Generation, MediaGenerationRegistry } from '../media/MediaGenerationRegistry.js';
 import type { MediaConfiguration, Readiness } from '../media/types.js';
@@ -154,6 +158,15 @@ export class ReadinessGate {
     this.locked.add(reasonCodes.has(reason) ? reason : 'READINESS_UNCONFIRMED');
   }
 
+  /**
+   * Readiness is observed for every track permission check. A report returned by
+   * parseCapabilityReport is deeply frozen and needs no second structural validation; any other
+   * input is parsed every time. Scope and clock checks below still run on every observation.
+   */
+  private parsedCapability(input: CapabilityReport | null): CapabilityReport {
+    return input && isParsedCapabilityReport(input) ? input : parseCapabilityReport(input);
+  }
+
   getReadiness(): Readiness {
     try {
       return this.observe();
@@ -204,7 +217,7 @@ export class ReadinessGate {
     if (o.namespaceOwnershipConfirmed() !== true) codes.add('NAMESPACE_OWNERSHIP_UNCONFIRMED');
     const now = o.nowEpochMs();
     try {
-      const report = parseCapabilityReport(o.capability());
+      const report = this.parsedCapability(o.capability());
       if (
         report.status !== 'SUPPORTED' ||
         (report.subscriptionMode ?? 'server-controlled') !==

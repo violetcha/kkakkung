@@ -7,6 +7,7 @@ import { createApplication } from '../../src/bootstrap.js';
 import { parseConfig } from '../../src/config/env.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
 import { createMediaCoordinator } from '../../src/media/MediaCoordinator.js';
+import { MEDIA_API_CEILINGS } from '../../src/operations/ApiBudget.js';
 import { productCloudFixture } from './product-cloud-fixture.js';
 import { createProductServerProbe } from './product-server-probe.js';
 import { startProductCpuProfile } from './product-server-profile.js';
@@ -30,6 +31,7 @@ let cloud: Awaited<ReturnType<typeof productCloudFixture>> | undefined;
 let application: ReturnType<typeof createApplication<ProductState>> | undefined;
 let endpoint: string | undefined;
 let maxTickMs = 0;
+let maxEventLoopLagMs = 0;
 let closing: Promise<void> | undefined;
 let booting = false;
 let advancing = false;
@@ -57,6 +59,16 @@ function inspect(roomCode?: string): ProductServerInspection {
       : null,
     blockedReason: typeof diagnostic === 'string' ? diagnostic.slice(0, 512) : null,
     maxTickMs,
+    maxEventLoopLagMs,
+    rooms: [...(application?.slots?.roomCodes() ?? [])].map((code) => {
+      const room = application?.directory.get(code);
+      const reason = room && 'blockedReason' in room ? room.blockedReason : null;
+      return {
+        phase: room && 'phase' in room && typeof room.phase === 'string' ? room.phase : 'UNKNOWN',
+        blockedReason: typeof reason === 'string' ? reason.slice(0, 512) : null,
+      };
+    }),
+    apiUsage: cloud?.apiUsage() ?? { calls: 0, peak60s: 0 },
     participantCount: cloud?.participants.size ?? 0,
     runtimeEvidence: cloud?.runtimeEvidenceDiagnostic() ?? null,
     removedIdentityHashes: (cloud?.removed ?? []).map((identity) =>
@@ -88,7 +100,13 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
     booting = true;
     if (request.cpuProfile)
       stopProfile = await startProductCpuProfile(() => probe.snapshot(), currentPhase);
-    cloud = await productCloudFixture(request.operatingMode);
+    const rooms = request.rooms ?? 1;
+    cloud = await productCloudFixture(request.operatingMode, {
+      rooms,
+      ...(request.subscriptionMode ? { subscriptionMode: request.subscriptionMode } : {}),
+      // Multi-room runs record the demand; the production ceiling stays configurable.
+      ...(rooms > 1 ? { apiLimits: MEDIA_API_CEILINGS } : {}),
+    });
     const window = cloud.config.publicWindow;
     const config = {
       ...parseConfig({
@@ -96,10 +114,12 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
         SERVER_PROFILE: 'product',
         LOG_LEVEL: 'silent',
         OPS_TOKEN: request.opsToken,
+        MAX_ROOMS: String(rooms),
+        MAX_SLOTS: String(rooms * 6),
         INVITE_MAX_TTL_MS: '600000',
         SESSION_ATTEMPT_WINDOW_MS: '60000',
         SESSION_ATTEMPTS_PER_INVITE: '30',
-        SESSION_ATTEMPTS_PER_IP: '60',
+        SESSION_ATTEMPTS_PER_IP: String(Math.max(60, rooms * 6 * 3)),
         ROOM_IDLE_TTL_MS: '600000',
         OPS_OPERATING_MODE: request.operatingMode,
         ...(window && !('mode' in window)
@@ -117,6 +137,8 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
       ...profile,
       emitMetric: (sample) => {
         if (sample.name === 'tick.duration') maxTickMs = Math.max(maxTickMs, sample.value);
+        if (sample.name === 'eventLoop.lag')
+          maxEventLoopLagMs = Math.max(maxEventLoopLagMs, sample.value);
       },
       mediaConfig: fixture.config,
       createMediaCoordinator: (deps) =>

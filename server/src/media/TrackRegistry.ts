@@ -129,29 +129,43 @@ export class TrackRegistry {
 
   bindingFor(owner: TrackOwner): MediaBinding | null {
     const entry = this.entries.get(this.key(owner));
-    if (!entry || entry.terminal || !entry.participantSid || !entry.bindings.length) return null;
+    return entry ? this.bindingOf(entry) : null;
+  }
+  listBindings(matchId: string, mediaInstanceId: string): MediaBinding[] {
+    const bindings: MediaBinding[] = [];
+    for (const entry of this.entries.values()) {
+      if (entry.owner.matchId !== matchId || entry.owner.mediaInstanceId !== mediaInstanceId)
+        continue;
+      const binding = this.bindingOf(entry);
+      if (binding) bindings.push(binding);
+    }
+    return bindings.sort((a, b) => a.playerId.localeCompare(b.playerId));
+  }
+  /** Verified bindings in this scope that currently carry the track (normally exactly one). */
+  bindingsForTrack(matchId: string, mediaInstanceId: string, trackSid: string): MediaBinding[] {
+    const bindings: MediaBinding[] = [];
+    for (const entry of this.entries.values()) {
+      if (entry.owner.matchId !== matchId || entry.owner.mediaInstanceId !== mediaInstanceId)
+        continue;
+      if (!entry.bindings.some((track) => track.trackSid === trackSid)) continue;
+      const binding = this.bindingOf(entry);
+      if (binding && (binding.faceTrackSid === trackSid || binding.audioTrackSid === trackSid))
+        bindings.push(binding);
+    }
+    return bindings;
+  }
+  private bindingOf(entry: RegistryEntry): MediaBinding | null {
+    if (entry.terminal || !entry.participantSid || !entry.bindings.length) return null;
     const face = entry.bindings.find((track) => track.source === 'camera');
     const audio = entry.bindings.find((track) => track.source === 'microphone');
     return {
-      playerId: owner.playerId,
-      publisherGeneration: owner.publisherGeneration,
-      mediaIdentity: owner.mediaIdentity,
+      playerId: entry.owner.playerId,
+      publisherGeneration: entry.owner.publisherGeneration,
+      mediaIdentity: entry.owner.mediaIdentity,
       participantSid: entry.participantSid,
       ...(face ? { faceTrackSid: face.trackSid } : {}),
       ...(audio ? { audioTrackSid: audio.trackSid } : {}),
     };
-  }
-  listBindings(matchId: string, mediaInstanceId: string): MediaBinding[] {
-    return [...this.entries.values()]
-      .filter(
-        (entry) =>
-          entry.owner.matchId === matchId && entry.owner.mediaInstanceId === mediaInstanceId,
-      )
-      .flatMap((entry) => {
-        const binding = this.bindingFor(entry.owner);
-        return binding ? [binding] : [];
-      })
-      .sort((a, b) => a.playerId.localeCompare(b.playerId));
   }
   validateTrack(
     receiver: { matchId: string; mediaInstanceId: string; mediaRoomName: string },

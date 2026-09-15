@@ -8,6 +8,9 @@ services:
       TRUST_PROXY_HOPS: 1
       # D-2026-09-13-01: overrides legacy private env files on every product release.
       ROOM_IDLE_TTL_MS: '600000'
+      # S15P21C204-251: deployed capacity, raised only to the stage that passed load (six seats per room).
+      MAX_ROOMS: '1'
+      MAX_SLOTS: '6'
       # Requires the loopback-only web proxy and host GitLab auth_request boundary.
       SERVICE_AUDIENCE: team
       SESSION_ADMISSION_MODE: gitlab-sso

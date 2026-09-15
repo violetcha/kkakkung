@@ -232,7 +232,7 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
   ) {
     throw new InvalidCapabilityReport('supportedEvidence');
   }
-  return Object.freeze({
+  const report: CapabilityReport = Object.freeze({
     status: data.status,
     ...(publisherMode ? { subscriptionMode: 'publisher-permissions' as const } : {}),
     ...(forwardingMode
@@ -249,6 +249,14 @@ export function parseCapabilityReport(input: unknown): CapabilityReport {
     revocationVerified: data.revocationVerified as boolean,
     evidenceRefs: Object.freeze(evidenceRefs),
   });
+  parsedReports.add(report);
+  return report;
+}
+
+/** Every nested value of a parse result is frozen, so it needs no second structural check. */
+const parsedReports = new WeakSet<object>();
+export function isParsedCapabilityReport(value: unknown): value is CapabilityReport {
+  return typeof value === 'object' && value !== null && parsedReports.has(value);
 }
 
 export type CapabilityLoadResult =

@@ -20,20 +20,44 @@ import { loadRuntimeEvidence, officialCheckpointDigest } from '../../src/config/
 
 type PublicationTarget = Pick<MediaGrant, 'roomName' | 'mediaIdentity'>;
 
-export async function productCloudFixture(operatingMode: 'attested' | 'continuous' = 'attested') {
+export async function productCloudFixture(
+  operatingMode: 'attested' | 'continuous' = 'attested',
+  options: Readonly<{
+    rooms?: number;
+    subscriptionMode?: 'publisher-permissions';
+    apiLimits?: Readonly<{ normalPer60s: number; totalPer60s: number }>;
+  }> = {},
+) {
   const epoch = Date.now();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-product-integration-'));
   const config: MediaConfiguration = {
     ...localConfiguration(epoch),
     opsDataDir: directory,
     operatingMode,
+    maxConcurrentParticipants: (options.rooms ?? 1) * 6,
+    ...(options.apiLimits
+      ? {
+          maxNormalApiCallsPer60s: options.apiLimits.normalPer60s,
+          maxTotalApiCallsPer60s: options.apiLimits.totalPer60s,
+        }
+      : {}),
+    ...(options.subscriptionMode ? { subscriptionMode: options.subscriptionMode } : {}),
     ...(operatingMode === 'continuous'
       ? { publicWindow: { mode: 'continuous' as const }, officialBudgetMaxAgeMs: 0 }
       : {}),
   };
   await fs.writeFile(
     path.join(directory, 'capability-report.json'),
-    JSON.stringify({ ...localCapability, testedAtEpochMs: epoch }),
+    JSON.stringify({
+      ...localCapability,
+      testedAtEpochMs: epoch,
+      ...(options.subscriptionMode
+        ? {
+            subscriptionMode: options.subscriptionMode,
+            grantProfile: { ...localCapability.grantProfile, canSubscribe: true },
+          }
+        : {}),
+    }),
   );
   const checkpoint = {
     projectAlias: config.projectAlias,
@@ -107,34 +131,52 @@ export async function productCloudFixture(operatingMode: 'attested' | 'continuou
   const participants = new Map<string, { room: string; participant: ParticipantInfo }>();
   const removed: string[] = [];
   const subscriptions: unknown[] = [];
+  /** Monotonic dispatch times of every provider API call that passed E's real budget. */
+  const apiCallTimes: number[] = [];
+  const call = () => {
+    apiCallTimes.push(performance.now());
+  };
   const client: GatewayClient = {
     forwardParticipant: async () => {
       throw new Error('UNEXPECTED_FORWARD_IN_LEGACY_FIXTURE');
     },
-    listRooms: async () => [...rooms.values()],
+    listRooms: async () => {
+      call();
+      return [...rooms.values()];
+    },
     createRoom: async (input) => {
+      call();
       const room = new Room({ name: input.name });
       rooms.set(room.name, room);
       return room;
     },
     deleteRoom: async (room) => {
+      call();
       rooms.delete(room);
     },
-    listParticipants: async (room) =>
-      [...participants.values()]
+    listParticipants: async (room) => {
+      call();
+      return [...participants.values()]
         .filter((value) => value.room === room)
-        .map((value) => value.participant),
+        .map((value) => value.participant);
+    },
     getParticipant: async (room, identity) => {
+      call();
       const current = participants.get(identity);
       if (!current || current.room !== room) throw { code: 'not_found', status: 404 };
       return current.participant;
     },
     removeParticipant: async (_room, identity) => {
+      call();
       removed.push(identity);
       participants.delete(identity);
     },
-    updateParticipant: async () => new ParticipantInfo(),
+    updateParticipant: async () => {
+      call();
+      return new ParticipantInfo();
+    },
     updateSubscriptions: async (...input) => {
+      call();
       subscriptions.push(input);
     },
   };
@@ -150,6 +192,15 @@ export async function productCloudFixture(operatingMode: 'attested' | 'continuou
     participants,
     removed,
     subscriptions,
+    /** Calls and the highest count inside any rolling 60 second window. */
+    apiUsage() {
+      let peak60s = 0;
+      for (let end = 0, start = 0; end < apiCallTimes.length; end++) {
+        while (apiCallTimes[end]! - apiCallTimes[start]! >= 60_000) start++;
+        peak60s = Math.max(peak60s, end - start + 1);
+      }
+      return { calls: apiCallTimes.length, peak60s };
+    },
     runtimeEvidenceDiagnostic: () => evidence.getDiagnostic(),
     publish(grant: PublicationTarget) {
       const participant = new ParticipantInfo({

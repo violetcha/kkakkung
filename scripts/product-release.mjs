@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { checkProductDeployment } from '../server/src/config/ProductDeployment.ts';
 import { deriveDeploymentPreflight } from './lib/deployment-smoke-preflight.mjs';
+import { readProductCapacity } from './lib/product-capacity.mjs';
 
 const args = process.argv.slice(2);
 const opt = { baseUrl: 'https://j15c204.p.ssafy.io', stateDir: '/opt/kkakkung' };
@@ -53,6 +54,8 @@ try {
   env.OPS_OPERATING_MODE = opt.operatingMode ?? privateEnv.OPS_OPERATING_MODE ?? 'continuous';
   if (!['attested', 'continuous'].includes(env.OPS_OPERATING_MODE))
     throw new Error('OPERATING_MODE_INVALID');
+  // Check the same room capacity the selected product Compose overlay will run.
+  Object.assign(env, readProductCapacity(process.cwd(), env.OPS_OPERATING_MODE));
   env.OPS_EVIDENCE_DIR = resolve(opt.evidenceDir);
   env.SMOKE_PUBLIC_BASE_URL = opt.baseUrl;
   stage = 'PRODUCT_EVIDENCE';
