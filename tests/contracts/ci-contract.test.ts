@@ -115,6 +115,14 @@ describe('Jenkinsfile uses the single entry point', () => {
     for (const state of ['running', 'failed', 'success'])
       expect(jenkinsfile).toContain(`updateGitlabCommitStatus name: 'jenkins', state: '${state}'`);
   });
+  it('prunes release images only through the age-guarded script under the host lock', () => {
+    const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
+    expect(post).toMatch(
+      /flock \/var\/lib\/jenkins\/verify\.lock node scripts\/prune-release-images\.mjs[\s\S]*--min-age-minutes 60[\s\S]*--protect "\$TAG"[\s\S]*last-good-tag/,
+    );
+    expect(post).not.toMatch(/docker rmi/);
+    expect(post).not.toMatch(/tail -n \+6/);
+  });
   it('never turns a failure into success in post actions', () => {
     const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
     expect(post).toMatch(/failure \{/);
