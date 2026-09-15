@@ -9,8 +9,15 @@ import { viewFixture } from '../../room/product-fixture';
 
 export const RENDER_SCENES = ['복도', '코너', '출구·장비', '상대 5명'] as const;
 export type RenderScene = (typeof RENDER_SCENES)[number];
+/** 자기 동작. 회전 중 벽 관통·잘림과 전진 중 셀 등장을 이동 시점 0–20으로 검수한다. */
+export const SELF_MOTIONS = ['still', 'turn', 'move'] as const;
+export type SelfMotion = (typeof SELF_MOTIONS)[number];
 /** Development-only invented recipient views. No master map or production layout is imported. */
-export function renderFixture(scene: RenderScene, facing: Dir = 0): PrivateView {
+export function renderFixture(
+  scene: RenderScene,
+  facing: Dir = 0,
+  selfMotion: SelfMotion = 'still',
+): PrivateView {
   const cells: Cell[] = [
     { x: 0, y: 0 },
     { x: 0, y: -1 },
@@ -83,9 +90,21 @@ export function renderFixture(scene: RenderScene, facing: Dir = 0): PrivateView 
     ...rotate(wall),
     side: ((wall.side + facing) % 4) as Dir,
   });
+  const origin = { ...rotate({ x: 0, y: 0 }), dir: facing };
+  const selfAction =
+    selfMotion === 'turn'
+      ? { kind: 'turn' as const, from: origin, to: { ...origin, dir: ((facing + 1) % 4) as Dir } }
+      : selfMotion === 'move'
+        ? { kind: 'move' as const, from: origin, to: { ...rotate({ x: 0, y: -1 }), dir: facing } }
+        : null;
   return {
     ...base,
-    self: { ...base.self, cell: rotate({ x: 0, y: 0 }), dir: facing },
+    self: {
+      ...base.self,
+      cell: rotate({ x: 0, y: 0 }),
+      dir: facing,
+      action: selfAction && { ...selfAction, startTick: 0, endTick: 20 },
+    },
     visibleCells: cells.map(rotate),
     visibleWallFaces: walls.map(rotateWall),
     knownTerrain: cells.map((cell) => ({ ...rotate(cell), kind: 'floor' })),
