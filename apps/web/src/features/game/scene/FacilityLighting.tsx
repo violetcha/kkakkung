@@ -4,7 +4,7 @@ import { Group, Object3D } from 'three';
 import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
 import { sampleSelf } from './action-interpolation';
 import type { QualityPreset } from './quality-presets';
-import { FACILITY } from './facility-theme';
+import { FACILITY, LIGHTING } from './facility-theme';
 
 export function FacilityLighting({
   self,
@@ -28,27 +28,29 @@ export function FacilityLighting({
   });
   return (
     <>
-      <ambientLight intensity={FACILITY.ambient} color="#99b6bc" />
-      <hemisphereLight args={['#b2c4c5', '#1c292c', 0.48]} />
+      <ambientLight intensity={FACILITY.ambient} color={LIGHTING.ambientColor} />
+      <hemisphereLight
+        args={[LIGHTING.hemisphere.sky, LIGHTING.hemisphere.ground, LIGHTING.hemisphere.intensity]}
+      />
       <group ref={light}>
         <primitive object={target} />
         <spotLight
           position={[0, 0.98, 0.05]}
           target={target}
-          color="#e5dcbb"
-          intensity={8}
-          distance={3.4}
-          angle={0.75}
-          penumbra={0.8}
-          decay={2}
+          color={LIGHTING.spot.color}
+          intensity={LIGHTING.spot.intensity}
+          distance={LIGHTING.spot.distance}
+          angle={LIGHTING.spot.angle}
+          penumbra={LIGHTING.spot.penumbra}
+          decay={LIGHTING.spot.decay}
         />
         {quality === 'medium' && (
           <pointLight
             position={[0, 1.05, 0.25]}
-            color="#8bb8bd"
-            intensity={0.5}
-            distance={1.8}
-            decay={2}
+            color={LIGHTING.fill.color}
+            intensity={LIGHTING.fill.intensity}
+            distance={LIGHTING.fill.distance}
+            decay={LIGHTING.fill.decay}
           />
         )}
       </group>

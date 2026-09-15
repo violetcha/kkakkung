@@ -15,7 +15,15 @@ export const FACILITY = Object.freeze({
   background: '#080d10',
   fogNear: 1.85,
   fogFar: 3,
-  ambient: 0.23,
+  ambient: 0.28,
+});
+
+/** 시선 방향 국소 조명과 바닥광. 근접 벽 과다 노출과 원거리 가독성의 균형은 facility-lighting.test가 고정한다. */
+export const LIGHTING = Object.freeze({
+  ambientColor: '#99b6bc',
+  hemisphere: { sky: '#b2c4c5', ground: '#2c3d41', intensity: 0.62 },
+  spot: { color: '#e5dcbb', intensity: 5.5, distance: 3.4, angle: 0.85, penumbra: 0.8, decay: 2 },
+  fill: { color: '#8bb8bd', intensity: 0.5, distance: 1.8, decay: 2 },
 });
 
 /** 장비·출구 표식 색. 상태는 형상으로도 구분하며 색은 HUD와 같은 규칙을 쓴다. */
@@ -45,8 +53,8 @@ function surfaceTexture(floor: boolean) {
       random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
       const noise = (random >>> 24) / 255;
       const seam = floor && (x < 2 || y < 2 || x > 125 || y > 125);
-      const streak = !floor && x % 31 < 2 ? -10 : 0;
-      const shade = seam ? 20 : (floor ? 74 : 137) + noise * 19 + streak;
+      const streak = !floor && x % 31 < 2 ? -14 : !floor && y % 43 < 1 ? -8 : 0;
+      const shade = seam ? 20 : (floor ? 84 : 137) + noise * (floor ? 24 : 34) + streak;
       const offset = (y * size + x) * 4;
       pixels[offset] = shade * 0.9;
       pixels[offset + 1] = shade;
@@ -78,7 +86,7 @@ export function createFacilityResources() {
     floor: new MeshStandardMaterial({ map: floorTexture, roughness: 0.7, metalness: 0.1 }),
     panel: new MeshStandardMaterial({ color: '#35514e', roughness: 0.82, metalness: 0.16 }),
     trim: new MeshStandardMaterial({ color: '#566363', roughness: 0.62, metalness: 0.42 }),
-    ceiling: new MeshStandardMaterial({ color: '#263235', roughness: 0.95 }),
+    ceiling: new MeshStandardMaterial({ color: '#33434a', roughness: 0.95 }),
     housing: new MeshStandardMaterial({ color: '#142325', roughness: 0.7 }),
     tube: new MeshBasicMaterial({ color: '#e8d39a', toneMapped: false }),
   };
