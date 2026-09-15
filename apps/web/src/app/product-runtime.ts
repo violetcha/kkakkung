@@ -237,8 +237,23 @@ export function bindProductRoom(
   const loading = createLoadingController((payload) =>
     commands.send({ type: 'LOAD_READY', payload }),
   );
-  const error = () =>
-    publish({ error: '연결 상태를 확인해 주세요. 준비되지 않은 기능은 실행하지 않습니다.' });
+  // 실패 원인은 항상 콘솔에 남긴다(6인 시험에서 어느 경로가 실패했는지 알 수 있게). 화면에는
+  // 사용자가 조치할 수 있는 실패만 그 상황에 맞는 문구로 알리고, 뒷정리 실패(경기 종료 뒤 미디어
+  // 정리, 방 나가기)는 알리지 않는다. 문구는 경기 단계가 바뀌면 지운다.
+  const describeFailure = (cause: unknown) => {
+    if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
+    if (typeof cause === 'object' && cause !== null && 'code' in cause)
+      return String((cause as { code: unknown }).code);
+    return String(cause);
+  };
+  const failed = (context: string, notice: string | null) => (cause: unknown) => {
+    console.warn(`[kkakkung] ${context} 실패: ${describeFailure(cause)}`);
+    if (notice) publish({ error: notice });
+  };
+  const CONNECTION_NOTICE = '연결 상태를 확인해 주세요. 준비되지 않은 기능은 실행하지 않습니다.';
+  const MEDIA_REPORT_NOTICE = '미디어 상태를 서버에 알리지 못했습니다. 연결 상태를 확인해 주세요.';
+  const DEVICE_NOTICE =
+    '카메라·마이크를 시작하지 못했습니다. 브라우저의 장치 권한과 다른 앱의 카메라 사용을 확인해 주세요.';
   const lose = (code?: number) => {
     if (!active || snapshot.lost) return;
     audioPreferences = DEFAULT_AUDIO_PREFERENCES;
@@ -249,7 +264,7 @@ export function bindProductRoom(
     });
     clock.clear();
     heartbeat.dispose();
-    void participation.leave().catch(error);
+    void participation.leave().catch(failed('방 나가기', null));
   };
   const heartbeat = createGameHeartbeat({
     now: deps.now,
@@ -315,7 +330,7 @@ export function bindProductRoom(
       updateChallenge();
       if (view?.self && view.self.status !== 'ACTIVE') {
         publish({ endedSelf: view.self });
-        void participation.end().catch(error);
+        void participation.end().catch(failed('참가 종료 뒤 미디어 정리', null));
       }
       updateContext();
       updateLoading();
@@ -399,7 +414,8 @@ export function bindProductRoom(
                 ...scope,
                 status: media.state === 'recovering' ? 'recovering' : 'failed',
               });
-              if (media.state === 'recovering') void reported.catch(error);
+              if (media.state === 'recovering')
+                void reported.catch(failed('미디어 복구 상태 보고', MEDIA_REPORT_NOTICE));
               else queueRecovery(scope, reported);
             }
           }
@@ -687,7 +703,7 @@ export function bindProductRoom(
   function queueRecovery(scope: MediaScope, reported: Promise<unknown>) {
     const key = JSON.stringify(scope);
     if (recoveryQueued || recoveryAttempts.has(key)) {
-      void reported.catch(error);
+      void reported.catch(failed('미디어 실패 상태 보고', MEDIA_REPORT_NOTICE));
       return;
     }
     recoveryAttempts.add(key);
@@ -709,7 +725,8 @@ export function bindProductRoom(
       !allowedPhases.includes(round.phase) ||
       view.gameScope.kind === 'none'
     ) {
-      if (recovery) void recovery.reported.catch(error);
+      if (recovery)
+        void recovery.reported.catch(failed('미디어 실패 상태 보고', MEDIA_REPORT_NOTICE));
       return;
     }
     const key = `${round.matchId}:${view.gameScope.revision}:${view.gameScope.gameInstanceId}`;
@@ -878,11 +895,11 @@ export function bindProductRoom(
           updateContext();
           void connectForView();
         })
-        .catch(error);
+        .catch(failed('경기 단계 전환 뒤 미디어 정리·재연결', CONNECTION_NOTICE));
     }
     if (phaseChanged) {
       practiceReadyReported = false;
-      publish({ practiceReady: false });
+      publish({ practiceReady: false, error: null });
       challenge.clear();
       startPending = null;
       publish({ poseProgress: 0, exitStarting: false });
@@ -899,7 +916,7 @@ export function bindProductRoom(
     heartbeat.setMatch(round.matchId);
     views.round(round);
     if (round.phase === 'RESULT' || round.phase === 'ABORTED')
-      void participation.end().catch(error);
+      void participation.end().catch(failed('경기 종료 뒤 미디어 정리', null));
     updateContext();
     updateLoading();
     void connectForView();
@@ -1032,17 +1049,24 @@ export function bindProductRoom(
     },
     startDevices: (microphone: boolean) => {
       microphoneWanted = microphone;
-      return bridge.startDevices(microphone).catch(error);
+      return bridge.startDevices(microphone).catch(failed('장치 시작', DEVICE_NOTICE));
     },
     async recoverDevices() {
       if (!canRecoverDevices()) return;
       deviceAction++;
-      await bridge.startDevices(microphoneWanted).catch(error);
+      await bridge.startDevices(microphoneWanted).catch(failed('장치 복구', DEVICE_NOTICE));
     },
     async setMicrophone(enabled: boolean) {
       if (!canRecoverDevices()) return;
       microphoneWanted = enabled;
-      await bridge.updateMicrophone(enabled).catch(error);
+      await bridge
+        .updateMicrophone(enabled)
+        .catch(
+          failed(
+            '마이크 설정',
+            '마이크 설정을 바꾸지 못했습니다. 브라우저의 마이크 권한을 확인해 주세요.',
+          ),
+        );
     },
     selectInputMode(mode: InteractionState['mode']) {
       if (!active || !participating || snapshot.lost) return;
@@ -1070,12 +1094,15 @@ export function bindProductRoom(
         };
         publish({ interaction });
         updateContext();
-      } catch {
+      } catch (cause) {
         if (!canRecoverDevices() || owner !== bridge || run !== deviceAction) return;
         interaction = { ...interaction, mode: 'keyboard' };
         publish({ interaction });
         updateContext();
-        error();
+        failed(
+          '동작 보정',
+          '보정을 마치지 못해 키보드 조작으로 바꿨습니다. 카메라에 얼굴과 어깨가 보이는지 확인한 뒤 다시 보정해 주세요.',
+        )(cause);
       }
     },
     ready: (value: boolean) => bridge.ready(value),
