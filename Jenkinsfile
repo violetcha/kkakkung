@@ -209,14 +209,14 @@ pipeline {
     }
     success {
       updateGitlabCommitStatus name: 'jenkins', state: 'success'
-      // 최근 5개만 남기고 정리. 지금 태그와 직전 정상 태그는 절대 지우지 않습니다.
+      // 최근 5개만 남기고 정리. 지금 태그·직전 정상 태그·실행 중 컨테이너의 태그, 그리고 마지막으로 태그가
+      // 붙은 지 1시간이 안 된 태그는 지우지 않습니다. 다른 빌드가 막 만든 태그를 지우면 그 빌드의 Trivy 가
+      // 깨집니다 (kkakkung #140 ↔ kkakkung-mr #167). 정리도 같은 호스트 flock 아래에서 돕니다 (SETUP.md §6).
       sh '''
-        keep1="$TAG"; keep2="$(cat "$STATE_DIR/last-good-tag" 2>/dev/null || true)"
-        for img in "$IMG_GAME" "$IMG_WEB"; do
-          docker images "$img" --format '{{.Tag}}' | grep -v '^<none>$' | tail -n +6 \
-            | grep -vx -e "$keep1" -e "${keep2:-__none__}" \
-            | xargs -r -I{} docker rmi "$img:{}" || true
-        done
+        flock /var/lib/jenkins/verify.lock node scripts/prune-release-images.mjs \
+          --keep 5 --min-age-minutes 60 \
+          --protect "$TAG" --protect "$(cat "$STATE_DIR/last-good-tag" 2>/dev/null || true)" \
+          "$IMG_GAME" "$IMG_WEB" || true
       '''
     }
     always {
