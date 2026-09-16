@@ -28,6 +28,77 @@ const lastAudio = (f: Awaited<ReturnType<typeof setup>>, player: string) =>
     .mock.calls.filter(([id]) => id === player)
     .at(-1)?.[1] as AudioPolicy | undefined;
 
+type JournalObservation = {
+  found: boolean;
+  completeLines: number;
+  partialTail: boolean;
+  anchors: number;
+  parseErrors: string[];
+  readError?: string;
+};
+/**
+ * Reads the durable journal the way a crash-recovery reader would, at the moment a forward is
+ * dispatched. Other edges' prepareForward calls append to the same file concurrently (kkakkung-mr
+ * #169 saw 7→9 lines while the four forwards ran), so a torn trailing line belongs to another edge
+ * and is ignored: this edge's own intent line was fsynced before its dispatch. A compacted log
+ * keeps only an anchor line and moves retained records to the checkpoint file. Every problem is
+ * kept in the observation so a failure says why instead of a bare "expected false to be true".
+ */
+async function observeForwardIntent(
+  directory: string,
+  [sourceRoomName, identity, destinationRoomName]: readonly [string, string, string],
+): Promise<JournalObservation> {
+  const observation: JournalObservation = {
+    found: false,
+    completeLines: 0,
+    partialTail: false,
+    anchors: 0,
+    parseErrors: [],
+  };
+  const entries: JournalEntry[] = [];
+  const collect = (value: unknown) => {
+    if (typeof value === 'object' && value !== null && 'record' in value)
+      entries.push(value as JournalEntry);
+  };
+  try {
+    const text = await fs.readFile(path.join(directory, 'media-journal.jsonl'), 'utf8');
+    observation.partialTail = text.length > 0 && !text.endsWith('\n');
+    const complete = observation.partialTail ? text.slice(0, text.lastIndexOf('\n') + 1) : text;
+    for (const line of complete.split('\n').filter((candidate) => candidate.length > 0)) {
+      observation.completeLines += 1;
+      try {
+        const parsed = JSON.parse(line) as { kind?: string };
+        if (parsed.kind === 'checkpoint-anchor') observation.anchors += 1;
+        else collect(parsed);
+      } catch (error) {
+        observation.parseErrors.push(`line ${line.length}B: ${String(error)}`);
+      }
+    }
+    if (observation.anchors > 0) {
+      try {
+        const checkpoint = JSON.parse(
+          await fs.readFile(path.join(directory, 'media-journal.jsonl.checkpoint.json'), 'utf8'),
+        ) as { state?: { entries?: unknown[]; state?: { entries?: unknown[] } } };
+        for (const entry of checkpoint.state?.entries ?? checkpoint.state?.state?.entries ?? [])
+          collect(entry);
+      } catch (error) {
+        observation.parseErrors.push(`checkpoint: ${String(error)}`);
+      }
+    }
+    observation.found = entries.some(({ record }) =>
+      record.forwardIntents?.some(
+        (intent) =>
+          intent.sourceRoomName === sourceRoomName &&
+          intent.identity === identity &&
+          intent.destinationRoomName === destinationRoomName,
+      ),
+    );
+  } catch (error) {
+    observation.readError = String(error);
+  }
+  return observation;
+}
+
 describe('actual split media factory with durable files and controlled Cloud transport', () => {
   it('removes originals but keeps issuance and accounting blocked after a transport-unknown forward', async () => {
     const f = await setup();
@@ -36,25 +107,19 @@ describe('actual split media factory with durable files and controlled Cloud tra
     f.publish(a.grant);
     f.publish(b.grant);
     const original = f.forward.getMockImplementation()!;
-    let durableBeforeDispatch = false;
+    let observation: JournalObservation | null = null;
     f.forward.mockImplementationOnce(async (...args) => {
-      const lines = (await fs.readFile(path.join(f.directory, 'media-journal.jsonl'), 'utf8'))
-        .trim()
-        .split('\n');
-      const entries = lines.map((line) => JSON.parse(line) as JournalEntry);
-      durableBeforeDispatch = entries.some(({ record }) =>
-        record.forwardIntents?.some(
-          (intent) =>
-            intent.sourceRoomName === args[0] &&
-            intent.identity === args[1] &&
-            intent.destinationRoomName === args[2],
-        ),
-      );
+      // The read never decides the scenario: the forward still happens and then reports unknown.
+      observation = await observeForwardIntent(f.directory, [args[0], args[1], args[2]]);
       await original(...args);
       throw { code: 'deadline_exceeded' };
     });
     await f.coordinator.reconcile();
-    expect(durableBeforeDispatch).toBe(true);
+    expect(observation, 'forward was never dispatched').not.toBeNull();
+    expect(
+      observation!.found,
+      `intent not durable before dispatch: ${JSON.stringify(observation)}`,
+    ).toBe(true);
     await vi.waitFor(
       () => expect(f.coordinator.getReadiness().unresolvedCount).toBeGreaterThan(0),
       { timeout: 3000, interval: 5 },
