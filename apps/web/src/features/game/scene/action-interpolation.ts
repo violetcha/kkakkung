@@ -10,6 +10,8 @@ export function sampleAction(action: Action, tick: number) {
     x: action.from.x + (action.to.x - action.from.x) * alpha,
     z: action.from.y + (action.to.y - action.from.y) * alpha,
     yaw: directionYaw(action.from.dir) - ((turn * Math.PI) / 2) * alpha,
+    // S15P21C204-262. 이동 진행도. 걷기 모션이 같은 값에서 파생되며 위치·방향에는 영향이 없다.
+    stride: action.kind === 'move' ? alpha : null,
   };
 }
 export function sampleSelf(self: ActiveSelf, tick: number | null) {
@@ -22,5 +24,5 @@ export function sampleActor(
 ) {
   return self.action && tick !== null && Number.isFinite(tick)
     ? sampleAction(self.action, tick)
-    : { x: self.cell.x, z: self.cell.y, yaw: directionYaw(self.dir) };
+    : { x: self.cell.x, z: self.cell.y, yaw: directionYaw(self.dir), stride: null };
 }

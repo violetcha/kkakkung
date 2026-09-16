@@ -12,6 +12,22 @@ it('clamps delayed movement and never extrapolates authoritative position', () =
   expect(sampleAction(action, 14.5).z).toBe(0.5);
   expect(sampleAction(action, 100).z).toBe(0);
   expect(action.from.y).toBe(1);
+  // 걷기 모션용 진행도는 위치 보간과 같은 alpha 이며 범위를 벗어나면 잘린다.
+  expect(sampleAction(action, 14.5).stride).toBe(0.5);
+  expect(sampleAction(action, 100).stride).toBe(1);
+  expect(sampleAction(action, 0).stride).toBe(0);
+});
+it('reports no stride while turning or standing still', () => {
+  const turn = {
+    kind: 'turn' as const,
+    from: { x: 1, y: 1, dir: 3 as const },
+    to: { x: 1, y: 1, dir: 0 as const },
+    startTick: 10,
+    endTick: 16,
+  };
+  expect(sampleAction(turn, 13).stride).toBeNull();
+  expect(sampleActor({ cell: { x: 1, y: 1 }, dir: 0, action: null }, 13).stride).toBeNull();
+  expect(sampleActor({ cell: { x: 1, y: 1 }, dir: 0, action: turn }, null).stride).toBeNull();
 });
 it('takes a quarter turn across west/north rather than a three-quarter turn', () => {
   const action = {
