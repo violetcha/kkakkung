@@ -109,8 +109,13 @@ pipeline {
             echo "Verify 생략: 동일 트리 $TREE_SHA 는 $VERIFIED_BY 가 검증했습니다"
             exit 0
           fi
+          # 호스트 상태를 앞뒤로 남긴다. t3.xlarge 는 CPU 크레딧이 바닥나면 steal 이 치솟아 SwiftShader e2e 가
+          # 60초 예산을 넘긴다(kkakkung-mr #171). 실패 로그에서 "느린 호스트" 와 "느린 코드" 를 구분하는 근거.
+          host_state() { echo "host $1: load=$(cut -d' ' -f1-3 /proc/loadavg) steal_ticks=$(awk '/^cpu /{print $9}' /proc/stat) idle_ticks=$(awk '/^cpu /{print $5}' /proc/stat)"; }
+          host_state before-verify
           flock /var/lib/jenkins/verify.lock \
             docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
+          host_state after-verify
           node scripts/verified-tree.mjs record --state-dir "$STATE_DIR" --tree "$TREE_SHA" --commit "$GIT_SHA" --build "$JOB_NAME#$BUILD_NUMBER"
         '''
       }
