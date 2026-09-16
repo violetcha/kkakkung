@@ -15,6 +15,16 @@ import type { FaceTextures } from './face-textures';
 import { CHARACTER } from './scene-model';
 import { sampleActor } from './action-interpolation';
 import { visibilityMask } from './visibility-mask';
+import { walkPose } from './walk-pose';
+
+/** 팔·다리는 어깨·고관절에서 회전하도록 pivot 그룹 아래에 둔다(S15P21C204-262). */
+const LIMB = Object.freeze({
+  shoulderY: 0.43,
+  hipY: 0.235,
+  /** pivot 기준 원통 중심. 길이 0.24의 절반이다. */
+  limbDrop: -0.12,
+  bootDrop: -0.2025,
+});
 
 type Player = Extract<VisibleEntity, { kind: 'player' }>;
 function createAvatarResources() {
@@ -59,13 +69,21 @@ function Avatar({
   renderTick(): number | null;
 }) {
   const root = useRef<Group>(null);
+  const legs = [useRef<Group>(null), useRef<Group>(null)] as const;
+  const arms = [useRef<Group>(null), useRef<Group>(null)] as const;
   const face = useMemo(() => new MeshBasicMaterial({ color: '#7c8984', toneMapped: false }), []);
   useEffect(() => () => face.dispose(), [face]);
   const initial = sampleActor(player, renderTick());
   useFrame(() => {
     const next = sampleActor(player, renderTick());
-    root.current?.position.set(next.x, 0, next.z);
+    // 걷기 모션은 같은 보간 진행도에서 파생한 장식이다. 위치·방향은 서버 행동만 따른다.
+    const pose = walkPose(next.stride);
+    root.current?.position.set(next.x, pose.bob, next.z);
     root.current?.rotation.set(0, next.yaw, 0);
+    for (const index of [0, 1] as const) {
+      legs[index].current?.rotation.set(pose.leg[index], 0, 0);
+      arms[index].current?.rotation.set(pose.arm[index], 0, 0);
+    }
     const texture = faces?.get(player.id) ?? standIn ?? null;
     if (face.map !== texture) {
       face.map = texture;
@@ -89,16 +107,20 @@ function Avatar({
         rotation={[0, Math.PI, 0]}
       />
       <mesh geometry={g.body} material={m.cloth} position={[0, 0.32, 0.025]} />
-      {[-1, 1].map((side) => (
+      {([-1, 1] as const).map((side, index) => (
         <group key={side}>
-          <mesh
-            geometry={g.limb}
-            material={m.cloth}
-            position={[side * 0.195, 0.31, 0.025]}
-            rotation={[0, 0, side * 0.15]}
-          />
-          <mesh geometry={g.limb} material={m.boot} position={[side * 0.075, 0.115, 0.015]} />
-          <mesh geometry={g.boot} material={m.boot} position={[side * 0.075, 0.0325, -0.015]} />
+          <group ref={arms[index]} position={[side * 0.195, LIMB.shoulderY, 0.025]}>
+            <mesh
+              geometry={g.limb}
+              material={m.cloth}
+              position={[0, LIMB.limbDrop, 0]}
+              rotation={[0, 0, side * 0.15]}
+            />
+          </group>
+          <group ref={legs[index]} position={[side * 0.075, LIMB.hipY, 0.015]}>
+            <mesh geometry={g.limb} material={m.boot} position={[0, LIMB.limbDrop, 0]} />
+            <mesh geometry={g.boot} material={m.boot} position={[0, LIMB.bootDrop, -0.03]} />
+          </group>
           <mesh geometry={g.strap} material={m.boot} position={[side * 0.09, 0.32, 0.02]} />
         </group>
       ))}
