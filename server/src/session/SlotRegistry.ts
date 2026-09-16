@@ -1,12 +1,23 @@
 /**
  * Logical seat accounting across rooms: RESERVED (session issued), JOINED (connected) and
- * RETIRING (left but remote media not yet confirmed released). Room capacity is 6 seats,
- * service capacity is 60 seats and the number of rooms is the F-verified limit. A RETIRING
- * seat still counts; only `releaseConfirmed` (after E confirms retirement) frees it.
+ * RETIRING (left but remote media not yet confirmed released). A match room holds 6 seats and a
+ * demo room holds 1; service capacity is 60 seats and the number of rooms is the F-verified
+ * limit. A RETIRING seat still counts; only `releaseConfirmed` (after E confirms retirement)
+ * frees it.
  */
-import type { Phase } from '@kkakkung/protocol/game-schema';
+import type { Phase, Role } from '@kkakkung/protocol/game-schema';
 
 export type SlotState = 'RESERVED' | 'JOINED' | 'RETIRING';
+
+/**
+ * How a room was opened. A demo room (S15P21C204-258) holds one seat for the operator and its
+ * chosen role; the other five participants are server-driven puppets that never take a seat.
+ */
+export type RoomOptions = Readonly<{
+  capacity: number;
+  kind: 'match' | 'demo';
+  operatorRole: Role | null;
+}>;
 
 export type ReserveResult =
   'reserved' | 'ROOM_FULL' | 'SERVICE_FULL' | 'ROOM_LIMIT' | 'ROOM_CLOSED';
@@ -14,6 +25,9 @@ export type ReserveResult =
 type RoomEntry = {
   roomCode: string;
   phase: Phase;
+  capacity: number;
+  kind: 'match' | 'demo';
+  operatorRole: Role | null;
   slots: Map<string, { state: SlotState; joinOrder: number }>;
   nextJoinOrder: number;
   createdAtMs: number;
@@ -111,12 +125,20 @@ export class SlotRegistry {
     return this.rooms.get(roomCode)?.slots.get(playerId)?.state ?? null;
   }
 
+  /** How the room was opened. Null when the room no longer exists. */
+  optionsOf(roomCode: string): RoomOptions | null {
+    const room = this.rooms.get(roomCode);
+    return room
+      ? { capacity: room.capacity, kind: room.kind, operatorRole: room.operatorRole }
+      : null;
+  }
+
   /** New participants only in LOBBY/DEVICE_CHECK; refills during a match are refused. */
   reserve(
     roomCode: string,
     playerId: string,
     nowMs: number,
-    options: { create?: boolean } = {},
+    options: { create?: boolean; demo?: { operatorRole: Role } } = {},
   ): ReserveResult {
     let room = this.rooms.get(roomCode);
     if (!room) {
@@ -125,6 +147,10 @@ export class SlotRegistry {
       room = {
         roomCode,
         phase: 'LOBBY',
+        // A demo room seats only the operator; its five puppets are server-side participants.
+        capacity: options.demo ? 1 : this.roomCapacity,
+        kind: options.demo ? 'demo' : 'match',
+        operatorRole: options.demo?.operatorRole ?? null,
         slots: new Map(),
         nextJoinOrder: 0,
         createdAtMs: nowMs,
@@ -139,7 +165,7 @@ export class SlotRegistry {
     if (room.closing || room.joinLocked) return 'ROOM_CLOSED';
     if (room.slots.has(playerId)) return 'reserved';
     if (!JOINABLE_PHASES.includes(room.phase)) return 'ROOM_CLOSED';
-    if (room.slots.size >= this.roomCapacity) return 'ROOM_FULL';
+    if (room.slots.size >= room.capacity) return 'ROOM_FULL';
     if (this.totalOccupied() >= this.serviceCapacity) return 'SERVICE_FULL';
     room.slots.set(playerId, { state: 'RESERVED', joinOrder: room.nextJoinOrder++ });
     room.lastActivityMs = nowMs;

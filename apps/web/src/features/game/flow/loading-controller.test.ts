@@ -46,6 +46,37 @@ it('requires asset version, initial view, connected scope and verified self face
   expect(loader.check(loaded, bindings, media)).toBe(false);
   expect(send).toHaveBeenCalledOnce();
 });
+it('reports without camera or face when the room needs no media (operator demo room)', () => {
+  const send = vi.fn();
+  const loader = createLoadingController(send);
+  const view = viewFixture();
+  if (view.self?.status !== 'ACTIVE') throw new Error();
+  const loading = {
+    loadId: 'l',
+    initialViewVersion: 10,
+    mediaInstanceId: 'media',
+    receiverGeneration: 0,
+    assetVersion: 'asset',
+  };
+  const loaded = { ...view, self: { ...view.self, loading } };
+  const key = loader.update(roundFixture({ phase: 'GAME_LOADING' }), loaded);
+  // 자산·초기 화면은 여전히 기다린다.
+  expect(loader.pending(loaded, null, null, { mediaRequired: false })).toEqual(['경기장 자산']);
+  expect(loader.check(loaded, null, null, { mediaRequired: false })).toBe(false);
+  loader.assetsLoaded(key, 'asset');
+  expect(loader.pending(loaded, null, null, { mediaRequired: false })).toEqual([]);
+  expect(loader.check(loaded, null, null, { mediaRequired: false })).toBe(true);
+  expect(send).toHaveBeenCalledExactlyOnceWith({
+    loadId: 'l',
+    mediaInstanceId: 'media',
+    receiverGeneration: 0,
+  });
+  // 기본값은 여전히 미디어를 요구한다.
+  const again = createLoadingController(vi.fn());
+  const againKey = again.update(roundFixture({ phase: 'GAME_LOADING' }), loaded);
+  again.assetsLoaded(againKey, 'asset');
+  expect(again.check(loaded, null, null)).toBe(false);
+});
 it('keeps countdown covered at local zero until authoritative PLAYING', () => {
   expect(loadingDisplay(roundFixture({ phase: 'COUNTDOWN', startAt: 3000 }), 4000)).toMatchObject({
     covered: true,

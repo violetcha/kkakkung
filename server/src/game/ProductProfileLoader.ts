@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  activeExits,
   createLayoutSelector,
   createTemplateVariants,
   matchCore,
@@ -138,6 +139,17 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
       port: { preparePracticeLayout },
       raw: await readJson(resolve(content, 'maps/practice-v1.json')),
     },
+    // S15P21C204-259. Demo scenarios read the exits the match already decided; nothing is added
+    // to the rules, and the ordinary room never calls this.
+    demoExits: (state) =>
+      activeExits(state.exits).map((exit) => ({
+        exitId: exit.exitId,
+        ownerId: exit.ownerId,
+        approach: exit.approach,
+        wall: { x: exit.wall.x, y: exit.wall.y },
+      })),
+    // Start cells refuse devices (EQ-01); the scenario reads them so it never asks for one there.
+    demoStartCells: (state) => state.layout.players.map((placed) => placed.cell),
     layouts: {
       maps: { validateTemplate, createTemplateVariants },
       selection: createLayoutSelector({

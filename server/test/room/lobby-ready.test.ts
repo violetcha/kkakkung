@@ -63,6 +63,17 @@ describe('LobbyCoordinator', () => {
     expect(() => lobby(5).assignRoles(null)).toThrow('ROLE_ASSIGNMENT_REQUIRES_FULL_ROOM');
   });
 
+  it('marks a server-owned participant ready without a client report', () => {
+    const six = lobby(5);
+    six.add('demo-puppet-1', '인형 1', 100);
+    expect(six.markSystemReady('demo-puppet-1')).toBe(true);
+    expect(six.markSystemReady('nobody')).toBe(false);
+    expect(six.evaluate('LOBBY')).toBe('to-device-check');
+    for (let i = 0; i < 5; i++) six.applyReady(`p${i}`, true, 'DEVICE_CHECK');
+    // The puppet's readiness counts like anyone else's, so the room can move on.
+    expect(six.evaluate('DEVICE_CHECK')).toBe('all-ready');
+  });
+
   it('publishes a roster without roles or coordinates and tracks the host', () => {
     const six = lobby(3);
     six.applyReady('p1', true, 'DEVICE_CHECK');

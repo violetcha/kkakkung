@@ -13,22 +13,27 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
 import {
+  DEMO_SCENARIO_IDS,
   PRODUCT_CLIENT_MESSAGES,
   PRODUCT_SERVER_MESSAGES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  demoScenarioRequestSchema,
   productJoinOptionsSchema,
   requestStatusSchema,
   type AudioPolicy,
   type CommandCode,
+  type CommandEnvelope,
   type CommandOutcome,
   type CommandReceipt,
+  type DemoStateMessage,
   type MediaBindings,
   type MediaStatusReport,
 } from '@kkakkung/protocol/game-messages';
 import {
   PublicMatchState,
   RoundResultState,
+  type Cell,
   type LoadingView,
   type Phase,
   type Role,
@@ -64,6 +69,13 @@ import type { RoomExpiry } from '../session/RoomExpiry.js';
 import type { SessionAuth } from '../session/session-types.js';
 import type { SlotRegistry } from '../session/SlotRegistry.js';
 import { CountdownCoordinator } from './CountdownCoordinator.js';
+import {
+  availableScenarios,
+  createDemoRunner,
+  type DemoExit,
+  type DemoScenario,
+  type DemoWorld,
+} from './DemoScenarios.js';
 import { LoadingCoordinator } from './LoadingCoordinator.js';
 import { LobbyCoordinator } from './LobbyCoordinator.js';
 import { PracticeCoordinator } from './PracticeCoordinator.js';
@@ -72,6 +84,8 @@ import { preparationIssue } from './preparation-issue.js';
 import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
+/** S15P21C204-258. Puppets filling the other five seats of a demo room. */
+const DEMO_PUPPET_COUNT = 5;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -98,6 +112,13 @@ export type ProductRoomDeps<State> = Readonly<{
   } | null;
   /** E's coordinator; null means media disabled (loading barrier checks client reports only). */
   media: ProductMediaRuntime | null;
+  /**
+   * S15P21C204-259. Reads the match's active exits for a demo scenario. Only the demo room calls
+   * it, and a deployment without demo rooms can leave it out.
+   */
+  demoExits?: (state: State) => readonly DemoExit[];
+  /** Start cells of the match: the rules refuse a device there, so a scenario avoids them. */
+  demoStartCells?: (state: State) => readonly Cell[];
   canStart?: () => boolean;
   strictProduct?: boolean;
   assetVersion: string;
@@ -148,7 +169,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     });
     private readonly lobby = new LobbyCoordinator({ random });
     private readonly practice = new PracticeCoordinator();
-    private readonly loading = new LoadingCoordinator({ requireFace: deps.media !== null });
+    private readonly loading = new LoadingCoordinator({ requireFace: () => this.media !== null });
     private readonly countdown = new CountdownCoordinator();
     private readonly rematch = new RematchCoordinator();
     private readonly clientsByPlayer = new Map<string, Client>();
@@ -186,6 +207,22 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private abortReason: PublicMatchState['abortReason'] | null = null;
     private readonly dispatcher: EventDispatcher;
     private readonly driver: MatchDriver<State>;
+    /** S15P21C204-258. Set for a demo room: the operator's role, with five puppets filling 3:3. */
+    private operatorRole: Role | null = null;
+    private readonly puppets = new Set<string>();
+    private readonly demoRunner = createDemoRunner();
+    private puppetSequence = 0;
+    private demoStateSent: string | null = null;
+
+    /** A demo room exists to show game situations to one operator, never to admit players. */
+    private get demo() {
+      return this.operatorRole !== null;
+    }
+
+    /** Demo rooms take no media: puppets have no camera and nothing is published for them. */
+    private get media() {
+      return this.demo ? null : deps.media;
+    }
 
     constructor() {
       super();
@@ -222,7 +259,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         onOutcome: (actorId, outcome) => this.sendOutcome(actorId, outcome),
         onEvent: (event, gameInstanceId) => this.dispatcher.dispatchEvent(event, gameInstanceId),
         onMediaFrame: (frame) => {
-          deps.media?.observeFrame(frame);
+          this.media?.observeFrame(frame);
           this.observedMediaInstances.add(frame.mediaInstanceId);
           this.settleMediaFrameWaiters(frame.mediaInstanceId, true);
         },
@@ -265,7 +302,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       previousGeneration: number | null,
     ): Promise<PreparationResult | null> {
       const scope = this.mediaScopeFor(playerId, purpose);
-      if (!scope || !deps.media || (deps.canStart && !deps.canStart())) return null;
+      if (!scope || !this.media || (deps.canStart && !deps.canStart())) return null;
       this.pendingPreparations.set(
         scope.mediaInstanceId,
         (this.pendingPreparations.get(scope.mediaInstanceId) ?? 0) + 1,
@@ -291,7 +328,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       previousGeneration: number | null,
       scope: { mediaInstanceId: string },
     ): Promise<PreparationResult | null> {
-      if (!deps.media) return null;
+      if (!this.media) return null;
       const matchId = this.matchId;
       if (!(await this.waitForMediaFrame(scope.mediaInstanceId))) return null;
       if (
@@ -317,7 +354,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       let result: PreparationResult;
       try {
-        result = await deps.media.prepareGeneration(request);
+        result = await this.media.prepareGeneration(request);
       } catch {
         // An unclassified producer failure may have allocated a generation. Do not infer a
         // reusable previous cursor or let the practice transition silently pass this request.
@@ -345,7 +382,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     acceptMediaReport(playerId: string, report: MediaStatusReport): boolean {
       if (
-        !deps.media?.lifecycle ||
+        !this.media?.lifecycle ||
         report.matchId !== this.matchId ||
         !this.clientsByPlayer.has(playerId)
       )
@@ -366,7 +403,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         !(report.status === 'closed' && (matches(current) || matches(retiring)))
       )
         return false;
-      return deps.media.lifecycle.report({ ...report, playerId });
+      return this.media.lifecycle.report({ ...report, playerId });
     }
 
     enqueueMediaControl(control: MediaControl) {
@@ -441,6 +478,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (typeof roomCode !== 'string' || !deps.slots.hasRoom(roomCode))
         throw new ServerError(404, 'ROOM_NOT_AVAILABLE');
       this.roomCode = roomCode;
+      // How the room was opened belongs to the seat registry; the room never invents it.
+      const roomOptions = deps.slots.optionsOf(roomCode);
+      if (!roomOptions) throw new ServerError(404, 'ROOM_NOT_AVAILABLE');
+      this.operatorRole = roomOptions.operatorRole;
+      this.maxClients = roomOptions.capacity;
       this.autoDispose = true;
       this.patchRate = 50;
       this.syncPublic();
@@ -459,6 +501,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       onInbound(PRODUCT_CLIENT_MESSAGES.viewResync, (client, payload: unknown) => {
         const auth = this.playersByConnection.get(client.sessionId);
         if (auth) this.dispatcher.handleResync(auth.playerId, payload, this.phase);
+      });
+      onInbound(PRODUCT_CLIENT_MESSAGES.demoScenario, (client, payload: unknown) => {
+        const auth = this.playersByConnection.get(client.sessionId);
+        const parsed = demoScenarioRequestSchema.safeParse(payload);
+        if (!auth || !parsed.success || parsed.data.matchId !== this.context.matchId) return;
+        this.startDemoScenario(auth.playerId, parsed.data.scenario);
       });
       onInbound(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
         this.heartbeat.ack(client.sessionId, payload, this.context.matchId, deps.monotonicNow());
@@ -507,7 +555,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       this.clientsByPlayer.set(auth.playerId, client);
       this.playersByConnection.set(client.sessionId, auth);
-      deps.media?.lifecycle?.setGameConnection({
+      this.media?.lifecycle?.setGameConnection({
         matchId: this.matchId,
         playerId: auth.playerId,
         connected: true,
@@ -515,9 +563,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const joinOrder =
         deps.slots.joinOrder(this.roomCode, auth.playerId) ?? this.lobby.list().length;
       this.lobby.add(auth.playerId, auth.nickname, joinOrder);
+      if (this.demo && this.puppets.size === 0) this.addPuppets(auth.playerId);
       this.heartbeat.register(client.sessionId, auth.playerId, now);
       this.broadcastRoster();
       this.dispatcher.publishView(auth.playerId, 'initial', this.phase);
+      // The operator needs the scenario list before the match starts, not only while it runs.
+      if (this.demo) {
+        this.demoStateSent = null;
+        this.publishDemoState();
+      }
       this.evaluateWaiting();
       this.syncPublic();
     }
@@ -555,7 +609,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.slots.beginClose(this.roomCode);
       this.invalidateLayout();
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
-      deps.media?.releaseMatch?.(this.matchId);
+      this.media?.releaseMatch?.(this.matchId);
       for (const mediaInstanceId of this.mediaFrameWaiters.keys())
         this.settleMediaFrameWaiters(mediaInstanceId, false);
       deps.coordinator.unregister(this.roomId);
@@ -818,6 +872,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, message);
       }
       this.driver.tick();
+      // The scenario reads the state this tick produced and queues puppet commands for the next.
+      if (this.demo) this.advanceDemo();
       if (this.phase !== 'ABORTED' && this.phase !== 'RESULT' && deps.core) {
         const aborted = this.driver
           .attached()
@@ -843,7 +899,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             .map((p) => p.playerId);
           const verdict = this.practice.evaluate(now, members);
           if (verdict === 'continue') return;
-          if (deps.media) {
+          if (this.media) {
             const pending = this.hasPendingPreparations();
             const prepared = members.every((playerId) => {
               const scope = this.mediaScopeFor(playerId, 'practice');
@@ -949,6 +1005,180 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     // ---- Phase transitions ----
 
+    /**
+     * S15P21C204-258. Fills the other five places of a demo room with server-owned puppets and
+     * fixes the 3:3 assignment around the operator's chosen role. Puppets hold no seat and no
+     * session: they exist as participants so the real match rules have someone to act on. Their
+     * roster entries carry a neutral name, so the roster still never reveals a role.
+     */
+    private addPuppets(operatorId: string) {
+      if (!this.operatorRole) return;
+      for (let index = 0; index < DEMO_PUPPET_COUNT; index++) {
+        const playerId = `demo-puppet-${index + 1}`;
+        this.puppets.add(playerId);
+        // A high join order keeps the operator as host and first in the roster.
+        this.lobby.add(playerId, `인형 ${index + 1}`, 100 + index);
+        this.lobby.markSystemReady(playerId);
+      }
+      this.context.setRolePlan(this.puppetRolePlan(operatorId));
+    }
+
+    /** The 3:3 assignment around the operator's chosen role; puppets fill the rest in order. */
+    private puppetRolePlan(operatorId: string): Map<string, Role> | null {
+      const role = this.operatorRole;
+      if (!role) return null;
+      const plan = new Map<string, Role>([[operatorId, role]]);
+      const remaining = { runner: role === 'runner' ? 2 : 3, tagger: role === 'tagger' ? 2 : 3 };
+      for (const playerId of this.puppets) {
+        const puppetRole: Role = remaining.runner > 0 ? 'runner' : 'tagger';
+        remaining[puppetRole] -= 1;
+        plan.set(playerId, puppetRole);
+      }
+      return plan;
+    }
+
+    /** The one participant of a demo room that is not a puppet, or null before anyone joined. */
+    private operatorId(): string | null {
+      return this.lobby.list().find((p) => !this.puppets.has(p.playerId))?.playerId ?? null;
+    }
+
+    /**
+     * S15P21C204-259. Runs one tick of the current demo scenario. Puppet commands go through the
+     * same queue as any client command, so the rules judge them exactly the same way.
+     */
+    private advanceDemo() {
+      const world = this.demoWorld();
+      if (!world) {
+        // The round ended under a running scenario: its steps have nothing left to act on.
+        if (this.demoRunner.status.scenario !== null) {
+          this.demoRunner.stop();
+          this.publishDemoState();
+        }
+        return;
+      }
+      this.demoRunner.advance(world, {
+        send: (actor, command) =>
+          this.enqueuePuppetCommand(actor, command as Pick<CommandEnvelope, 'type' | 'payload'>),
+        drop: (actor) => this.dropPuppet(actor),
+      });
+      this.publishDemoState(world);
+    }
+
+    /**
+     * Treats a puppet as if its socket died: the same control the heartbeat raises for a silent
+     * client, so the rules abort the match with GAME_CONNECTION_LOST and nothing else changes.
+     * The puppet keeps its roster place, so a rematch fills the room again.
+     */
+    private dropPuppet(playerId: string): boolean {
+      if (!this.puppets.has(playerId)) return false;
+      const instance = this.context.instanceOf(playerId);
+      if (!instance) return false;
+      this.driver.enqueueControl(instance.gameInstanceId, { type: 'CONNECTION_LOST', playerId });
+      return true;
+    }
+
+    /** The world a scenario reads: positions from the core frame, exits from the demo reader. */
+    private demoWorld(): DemoWorld | null {
+      const instance = this.gameInstance();
+      const attached = instance ? this.driver.instance(instance.gameInstanceId) : null;
+      if (!attached || !deps.core || this.phase !== 'PLAYING') return null;
+      const frame = deps.core.getFrame(attached.state);
+      const operatorId = [...this.roles.keys()].find((playerId) => !this.puppets.has(playerId));
+      if (!operatorId) return null;
+      const challenges: Record<string, string> = {};
+      const exchanges: Record<string, string> = {};
+      for (const playerId of this.puppets) {
+        const self = deps.core.getPlayerSelf(attached.state, playerId);
+        if (self?.status !== 'ACTIVE') continue;
+        if (self.challenge) challenges[playerId] = self.challenge.challengeId;
+        if (self.exchange) exchanges[playerId] = self.exchange.exchangeId;
+      }
+      return {
+        tick: frame.tick,
+        topology: attached.topology,
+        participants: frame.participants,
+        exits: deps.demoExits?.(attached.state) ?? [],
+        startCells: deps.demoStartCells?.(attached.state) ?? [],
+        challenges,
+        exchanges,
+        operatorId,
+        puppetIds: [...this.puppets],
+      };
+    }
+
+    /** Accepts a scenario request from the operator of a demo room. */
+    private startDemoScenario(playerId: string, scenario: DemoScenario) {
+      if (!this.demo || this.puppets.has(playerId)) return;
+      const world = this.demoWorld();
+      if (!world || world.operatorId !== playerId) return;
+      this.demoRunner.start(scenario, world);
+      this.publishDemoState(world);
+    }
+
+    /**
+     * Before the match the whole list is offered; during it only what the operator's role and
+     * the puppets still alive can carry out, so a button never asks for a scenario that fails.
+     */
+    private publishDemoState(world: DemoWorld | null = null) {
+      const status = this.demoRunner.status;
+      const message: DemoStateMessage = {
+        matchId: this.context.matchId,
+        available: world ? availableScenarios(world) : [...DEMO_SCENARIO_IDS],
+        running: status.scenario,
+        step: status.step,
+        failure: status.failure,
+      };
+      const fingerprint = JSON.stringify(message);
+      if (fingerprint === this.demoStateSent) return;
+      this.demoStateSent = fingerprint;
+      for (const [playerId, client] of this.clientsByPlayer)
+        if (!this.puppets.has(playerId)) client.send(PRODUCT_SERVER_MESSAGES.demoState, message);
+    }
+
+    /**
+     * A puppet command enters the ordinary queue with a server-made envelope. The wire never
+     * carries it: no client can pretend to be a puppet, because puppets hold no session.
+     */
+    private enqueuePuppetCommand(
+      playerId: string,
+      input: Pick<CommandEnvelope, 'type' | 'payload'>,
+    ): boolean {
+      if (!this.puppets.has(playerId) || this.closing) return false;
+      const command = {
+        matchId: this.context.matchId,
+        requestId: randomUUID(),
+        sequence: ++this.puppetSequence,
+        ...input,
+      } as CommandEnvelope;
+      const parsed = toProductCommand(command, { currentMatchId: this.context.matchId });
+      if (parsed.status !== 'accepted') return false;
+      if (this.acceptanceGate(parsed.kind, command.type, playerId)) return false;
+      const instance = parsed.kind === 'core' ? this.context.instanceOf(playerId) : null;
+      const accepted = this.queue.accept({
+        actorId: playerId,
+        command,
+        gameInstanceId: instance?.gameInstanceId ?? null,
+        nowMs: deps.monotonicNow(),
+        stateVersion: this.dispatcher.applicableVersion(playerId),
+      });
+      return accepted.status === 'accepted';
+    }
+
+    /** Reports a puppet is ready for whatever the room is currently waiting on. */
+    private settlePuppets() {
+      for (const playerId of this.puppets) {
+        this.lobby.markSystemReady(playerId);
+        if (this.phase === 'TEAM_PRACTICE') this.practice.applyPracticeReady(playerId, true);
+        const barrier = this.loading.current;
+        if (this.phase === 'GAME_LOADING' && barrier)
+          this.loading.applyLoadReady(playerId, {
+            loadId: barrier.loadId,
+            mediaInstanceId: barrier.mediaInstanceId,
+            receiverGeneration: this.loading.receiverGeneration(playerId) ?? 0,
+          });
+      }
+    }
+
     private startPractice() {
       if (deps.canStart && !deps.canStart()) {
         this.blockedReason = 'NOT_READY';
@@ -984,7 +1214,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           players,
           role,
         });
-        const mediaInstanceId = deps.media ? randomUUID() : null;
+        const mediaInstanceId = this.media ? randomUUID() : null;
         if (mediaInstanceId) this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
         this.driver.attach({
           gameInstanceId: instance.gameInstanceId,
@@ -998,6 +1228,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       this.blockedReason = null;
       this.setPhase('TEAM_PRACTICE');
+      // Puppets report their practice readiness at once; only the operator is waited for.
+      this.settlePuppets();
     }
 
     private endPractice(next: 'to-map-finalizing' | 'to-device-check') {
@@ -1065,16 +1297,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         kind: 'game',
         state,
         topology: layout.topology,
-        mediaInstanceId: deps.media ? mediaInstanceId : null,
+        mediaInstanceId: this.media ? mediaInstanceId : null,
       });
       const playerIds = players.map((p) => p.playerId);
       this.loading.open({ loadId: randomUUID(), mediaInstanceId, playerIds, nowMs: now });
       for (const playerId of playerIds) {
         this.context.enterInstance(playerId, instance.gameInstanceId);
-        if (!deps.media) this.loading.setReceiverGeneration(playerId, mediaInstanceId, 0);
+        if (!this.media) this.loading.setReceiverGeneration(playerId, mediaInstanceId, 0);
         // The authenticated HTTP request starts or reuses this player's generation request.
       }
       this.setPhase('GAME_LOADING');
+      this.settlePuppets();
     }
 
     private startCountdown(now: number) {
@@ -1176,7 +1409,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       for (const playerId of members) {
         this.dispatcher.publishView(playerId, 'scope', this.phase);
-        if (mediaInstanceId && deps.media) this.retireGeneration(playerId, mediaInstanceId, reason);
+        if (mediaInstanceId && this.media) this.retireGeneration(playerId, mediaInstanceId, reason);
       }
     }
 
@@ -1186,7 +1419,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       reason: 'phase-change' | 'aborted' | 'round-ended' | 'connection-lost' | 'personal-ended',
     ) {
       const generation = this.playerGenerations.get(playerId);
-      if (!deps.media || !generation || generation.mediaInstanceId !== mediaInstanceId) return;
+      if (!this.media || !generation || generation.mediaInstanceId !== mediaInstanceId) return;
       this.retireKnownGeneration(
         {
           matchId: this.context.matchId,
@@ -1216,13 +1449,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       scope: Omit<RetireGenerationRequest, 'requestId' | 'reason'>,
       reason: RetireGenerationRequest['reason'],
     ) {
-      if (!deps.media) return;
+      if (!this.media) return;
       const key = this.generationKey(scope);
       if (this.confirmedRetirements.has(key) || this.pendingRetirements.has(key)) return;
       const request: RetireGenerationRequest = { ...scope, requestId: randomUUID(), reason };
       this.pendingRetirements.set(key, request);
       this.retiringScopes.set(scope.playerId, scope);
-      deps.media
+      this.media
         .retireGeneration(request)
         .then((result) => this.enqueueMediaControl({ type: 'MEDIA_RETIRED', result }))
         .catch(() =>
@@ -1286,14 +1519,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       for (const instance of this.driver.attached())
         this.retireInstance(instance.gameInstanceId, 'round-ended');
       this.driver.cancelAllPending('ROUND_ENDED');
-      deps.media?.releaseMatch?.(this.matchId);
+      this.media?.releaseMatch?.(this.matchId);
       this.context.startNewRound();
       this.queue.reset();
       this.heartbeat.resetForMatch(now);
       this.dispatcher.resetForMatch();
       this.lobby.clearReady();
       this.roles.clear();
-      this.context.setRolePlan(request?.plan ?? null);
+      // A demo room's "back to lobby" rematch still keeps the operator's chosen role: a random
+      // draw could hand the operator a role the scenario list was not made for.
+      const operatorId = this.demo ? this.operatorId() : null;
+      this.context.setRolePlan(
+        request?.plan ?? (operatorId ? this.puppetRolePlan(operatorId) : null),
+      );
       this.loading.invalidate();
       this.countdown.cancel();
       this.practice.stop();
@@ -1316,12 +1554,18 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.syncPublic();
       this.broadcastRoster();
       for (const playerId of this.clientsByPlayer.keys()) {
-        deps.media?.lifecycle?.setGameConnection({
+        this.media?.lifecycle?.setGameConnection({
           matchId: this.matchId,
           playerId,
           connected: true,
         });
         this.dispatcher.publishView(playerId, 'initial', this.phase);
+      }
+      // Puppets have no client to report READY again; the operator alone gates the next round.
+      if (this.demo) {
+        this.demoRunner.stop();
+        this.settlePuppets();
+        this.publishDemoState();
       }
       this.evaluateWaiting();
     }
@@ -1433,7 +1677,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private handleMediaIntent(intent: MediaIntent, gameInstanceId: string) {
       const mediaInstanceId = this.mediaInstances.get(gameInstanceId);
-      if (!mediaInstanceId || !deps.media) return;
+      if (!mediaInstanceId || !this.media) return;
       if (intent.type === 'RETIRE_PLAYER')
         this.retireGeneration(intent.playerId, mediaInstanceId, intent.reason);
       else
@@ -1442,7 +1686,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private handleConnectionLost(playerId: string) {
-      deps.media?.lifecycle?.setGameConnection({
+      this.media?.lifecycle?.setGameConnection({
         matchId: this.matchId,
         playerId,
         connected: false,
@@ -1453,7 +1697,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const mediaInstanceId = instance
         ? this.mediaInstances.get(instance.gameInstanceId)
         : undefined;
-      if (mediaInstanceId && deps.media) {
+      if (mediaInstanceId && this.media) {
         this.retireGeneration(playerId, mediaInstanceId, 'connection-lost');
       }
       if (this.hasUnresolvedMedia(playerId)) deps.slots.markRetiring(this.roomCode, playerId);

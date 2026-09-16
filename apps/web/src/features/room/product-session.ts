@@ -1,6 +1,7 @@
 import { Client } from '@colyseus/sdk';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import {
+  ROOM_CODE_PATTERN,
   sessionRequestSchema,
   sessionResponseSchema,
   SESSION_ERROR_CODES,
@@ -124,5 +125,29 @@ export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductR
       return () => room.onError.remove(handler);
     },
     leave: () => (room.connection.isOpen ? room.leave() : Promise.resolve()),
+  };
+}
+
+/**
+ * S15P21C204-260. Operator-only demo entry. The address fragment carries the session the demo
+ * route already issued; it is consumed and cleared exactly like an invitation, and there is no
+ * player-facing way to produce one.
+ */
+export function consumeDemoSession(
+  location: { hash: string; pathname: string; search: string },
+  history: { replaceState(data: unknown, unused: string, url: string): void },
+): SessionResponse | null {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const sessionToken = params.get('demo') ?? '';
+  const roomCode = params.get('room') ?? '';
+  const playerId = params.get('player') ?? '';
+  if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return {
+    sessionToken,
+    playerId,
+    roomCode,
+    expiresAt: Date.now() + 60_000,
+    protocolVersion: PRODUCT_PROTOCOL_VERSION,
   };
 }

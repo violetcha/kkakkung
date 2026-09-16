@@ -31,32 +31,43 @@ export function createLoadingController(
     assetsLoaded(loadKey: string, version: string) {
       if (loadKey === key && current?.assetVersion === version) assetReady = true;
     },
-    check(view: PrivateView | null, bindings: MediaBindings | null, media: MediaStatus | null) {
+    /**
+     * `mediaRequired`가 false 이면(관리자 데모 방, S15P21C204-260) 카메라 연결·얼굴 게시 없이
+     * 자산과 초기 화면만 확인하고 보고한다. 서버도 그 방에서는 얼굴 확인을 기다리지 않는다.
+     */
+    check(
+      view: PrivateView | null,
+      bindings: MediaBindings | null,
+      media: MediaStatus | null,
+      { mediaRequired = true }: { mediaRequired?: boolean } = {},
+    ) {
       if (
         !current ||
         sent ||
         !assetReady ||
         view?.self?.status !== 'ACTIVE' ||
-        view.stateVersion < current.initialViewVersion ||
-        media?.state !== 'connected'
+        view.stateVersion < current.initialViewVersion
       )
         return false;
-      if (
-        media.matchId !== view.matchId ||
-        media.mediaInstanceId !== current.mediaInstanceId ||
-        media.receiverGeneration !== current.receiverGeneration
-      )
-        return false;
-      if (
-        !bindings ||
-        bindings.matchId !== view.matchId ||
-        bindings.mediaInstanceId !== current.mediaInstanceId ||
-        bindings.receiverGeneration !== current.receiverGeneration
-      )
-        return false;
-      const self = bindings.participants.find((p) => p.playerId === view.self?.playerId);
-      if (!self?.faceTrackSid || self.publisherGeneration !== current.receiverGeneration)
-        return false;
+      if (mediaRequired) {
+        if (media?.state !== 'connected') return false;
+        if (
+          media.matchId !== view.matchId ||
+          media.mediaInstanceId !== current.mediaInstanceId ||
+          media.receiverGeneration !== current.receiverGeneration
+        )
+          return false;
+        if (
+          !bindings ||
+          bindings.matchId !== view.matchId ||
+          bindings.mediaInstanceId !== current.mediaInstanceId ||
+          bindings.receiverGeneration !== current.receiverGeneration
+        )
+          return false;
+        const self = bindings.participants.find((p) => p.playerId === view.self?.playerId);
+        if (!self?.faceTrackSid || self.publisherGeneration !== current.receiverGeneration)
+          return false;
+      }
       sent = true;
       send({
         loadId: current.loadId,
@@ -73,12 +84,14 @@ export function createLoadingController(
       view: PrivateView | null,
       bindings: MediaBindings | null,
       media: MediaStatus | null,
+      { mediaRequired = true }: { mediaRequired?: boolean } = {},
     ): string[] {
       if (!current || sent) return [];
       const waiting: string[] = [];
       if (!assetReady) waiting.push('경기장 자산');
       if (view?.self?.status !== 'ACTIVE' || view.stateVersion < current.initialViewVersion)
         waiting.push('초기 화면');
+      if (!mediaRequired) return waiting;
       if (
         media?.state !== 'connected' ||
         media.matchId !== view?.matchId ||

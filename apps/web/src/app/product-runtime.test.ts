@@ -1250,3 +1250,134 @@ it('publishes the device runtime face guidance once per change and clears it', a
   expect(changed()).toBeNull();
   await f.runtime.leave();
 });
+
+it('keeps demo state for the running match and sends only listed scenarios', async () => {
+  const f = fixture();
+  try {
+    f.state({ phase: 'PLAYING', stateVersion: 5 });
+    const matchId = f.runtime.getSnapshot().round!.matchId;
+    const demo = {
+      matchId,
+      available: ['trap', 'capture'],
+      running: null,
+      step: null,
+      failure: null,
+    };
+    // A message for another match is not this room's demo state.
+    f.messages.get('demo-state')!({ ...demo, matchId: 'other-match' });
+    expect(f.runtime.getSnapshot().demo).toBeUndefined();
+    f.messages.get('demo-state')!(demo);
+    expect(f.runtime.getSnapshot().demo).toMatchObject({ available: ['trap', 'capture'] });
+    f.runtime.runDemoScenario('trap');
+    expect(f.send.mock.calls.filter(([channel]) => channel === 'demo-scenario')).toEqual([
+      ['demo-scenario', { matchId, scenario: 'trap' }],
+    ]);
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('in a demo room skips media grants and reports LOAD_READY from assets and the initial view alone', async () => {
+  const f = fixture();
+  try {
+    // 서버는 입장 직후, 경기 전에 demo-state 를 보낸다.
+    f.state({ phase: 'DEVICE_CHECK', stateVersion: 11 });
+    const matchId = f.runtime.getSnapshot().round!.matchId;
+    f.messages.get('demo-state')!({
+      matchId,
+      available: ['trap'],
+      running: null,
+      step: null,
+      failure: null,
+    });
+    // 연습: 데모 방은 미디어 발급을 요청하지 않는다(요청하면 NOT_READY 로 거절돼 오류만 남는다).
+    f.state({ phase: 'TEAM_PRACTICE', stateVersion: 12 });
+    f.messages.get('private-view')!(
+      viewFixture({
+        stateVersion: 12,
+        gameScope: { kind: 'practice', revision: 1, gameInstanceId: 'practice' },
+      }),
+    );
+    f.time(200);
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.runtime.getSnapshot().error).toBeNull();
+    // 로딩: 카메라 연결·얼굴 게시 없이 자산과 초기 화면만으로 보고한다.
+    f.state({ phase: 'GAME_LOADING', stateVersion: 13 });
+    const view = viewFixture({ stateVersion: 13 });
+    if (view.self?.status !== 'ACTIVE') throw new Error();
+    f.messages.get('private-view')!({
+      ...view,
+      self: {
+        ...view.self,
+        loading: {
+          loadId: 'load-1',
+          initialViewVersion: 13,
+          mediaInstanceId: 'media-demo',
+          receiverGeneration: 0,
+          assetVersion: 'c-primitives-1',
+        },
+      },
+    });
+    f.time(400);
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.runtime.getSnapshot().loadingPending ?? []).toEqual([]);
+    const loadReady = f.send.mock.calls.filter(
+      ([channel, value]) =>
+        channel === 'command' && (value as { type: string }).type === 'LOAD_READY',
+    );
+    expect(loadReady).toHaveLength(1);
+    expect((loadReady[0]![1] as { payload: unknown }).payload).toEqual({
+      loadId: 'load-1',
+      mediaInstanceId: 'media-demo',
+      receiverGeneration: 0,
+    });
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('keeps a demo-state that arrives before the first round until the round confirms its match', async () => {
+  const room: ProductRoomPort = {
+    state: { matchId: '' } as unknown as PublicMatchState,
+    send: vi.fn(),
+    leave: vi.fn(async () => {}),
+    onMessage: (type, handler) => {
+      messages.set(type, handler);
+      return () => messages.delete(type);
+    },
+    onStateChange: (handler) => {
+      stateHandler = handler;
+      return vi.fn();
+    },
+    onLeave: () => vi.fn(),
+    onError: () => vi.fn(),
+  };
+  const messages = new Map<string, (value: unknown) => void>();
+  let stateHandler!: (state: PublicMatchState) => void;
+  const runtime = bindProductRoom(
+    room,
+    {
+      sessionToken: 'private',
+      playerId: 'self',
+      roomCode: 'ABCDEF',
+      expiresAt: 1900000000000,
+      protocolVersion: '0.2.0',
+    },
+    {
+      now: () => 0,
+      uuid: () => '10000000-0000-4000-8000-000000000000',
+      changed: vi.fn(),
+      interactionFactory: () => fixture().fake,
+    },
+  );
+  try {
+    const demo = { matchId: 'm', available: ['trap'], running: null, step: null, failure: null };
+    // 첫 상태 패치보다 먼저 온 demo-state 는 버리지 않고 들고 있다.
+    messages.get('demo-state')!(demo);
+    expect(runtime.getSnapshot().demo).toBeUndefined();
+    stateHandler(roundFixture({ phase: 'LOBBY', stateVersion: 1 }) as unknown as PublicMatchState);
+    expect(runtime.getSnapshot().demo).toMatchObject({ matchId: 'm', available: ['trap'] });
+  } finally {
+    await runtime.leave();
+  }
+});

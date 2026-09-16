@@ -67,6 +67,30 @@ export const ROOM_INVITATION_ERROR_CODES = [
 ] as const;
 export type RoomInvitationErrorCode = (typeof ROOM_INVITATION_ERROR_CODES)[number];
 
+/**
+ * Operator-only demo room (S15P21C204-258). The operator token opens a room whose other five
+ * participants are server-driven puppets, so one person can show game situations that normally
+ * need six. There is no player-facing route to it: the response carries the operator's own
+ * session, and the room refuses ordinary admission.
+ */
+export const DEMO_ROOM_ROUTE = '/api/operations/demo-rooms';
+export const demoRoomRequestSchema = z.strictObject({
+  role: z.enum(['runner', 'tagger']),
+  nickname: nicknameSchema.optional(),
+});
+export type DemoRoomRequest = z.infer<typeof demoRoomRequestSchema>;
+export const demoRoomResponseSchema = z.strictObject({
+  sessionToken: z.string().min(1),
+  playerId: z.string().min(1),
+  roomCode: roomCodeSchema,
+  role: z.enum(['runner', 'tagger']),
+  expiresAt: z.number().int().positive().safe(),
+  protocolVersion: z.literal(PRODUCT_PROTOCOL_VERSION),
+  /** Ready-made address fragment for the operator: the page consumes and clears it on open. */
+  entryFragment: z.string().min(1).max(1024),
+});
+export type DemoRoomResponse = z.infer<typeof demoRoomResponseSchema>;
+
 /** Safe HTTP error codes for the session route. No hidden room content is ever returned. */
 export const SESSION_ERROR_CODES = [
   'INVALID_REQUEST',

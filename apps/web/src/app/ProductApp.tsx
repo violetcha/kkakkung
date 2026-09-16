@@ -9,6 +9,7 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
+import { DemoPanel } from '../features/game/flow/DemoPanel';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { FaceGuidanceNotice } from '../features/game/flow/FaceGuidanceNotice';
 import { LocalControls } from '../features/game/flow/LocalControls';
@@ -28,6 +29,7 @@ import { PracticeScreen } from '../features/game/flow/PracticeScreen';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
+import { createDemoFaceTexture } from '../features/game/scene/demo-face';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { SoloPracticeScreen } from '../features/game/solo/SoloPracticeScreen';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
@@ -41,9 +43,12 @@ import {
 export function ProductApp({
   invitation,
   initialRoom = '',
+  demoSession,
 }: {
   invitation: string;
   initialRoom?: string;
+  /** S15P21C204-260. Operator demo session from the address fragment; absent for players. */
+  demoSession?: SessionResponse;
 }) {
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState(initialRoom);
@@ -86,6 +91,10 @@ export function ProductApp({
     async () => (await runtime.current?.playTestTone()) ?? 'unavailable',
     [],
   );
+  // Demo rooms only: one drawn face shared by every puppet, disposed with the page.
+  const demoFace = useRef<ReturnType<typeof createDemoFaceTexture> | null>(null);
+  if (demoSession && demoFace.current === null) demoFace.current = createDemoFaceTexture();
+  useEffect(() => () => demoFace.current?.dispose(), []);
   const generation = useRef(0);
   const pendingSession = useRef<SessionResponse | null>(null);
   useEffect(() => {
@@ -169,8 +178,20 @@ export function ProductApp({
       void old?.leave().catch(() => {});
     };
   }, [leave, cancelPendingAdmission]);
+  const entered = useRef(false);
+  useEffect(() => {
+    // The operator's demo session opens its room straight away: there is no form for it.
+    if (!demoSession || entered.current) return;
+    entered.current = true;
+    // The session is fixed for the life of the page, so this runs once.
+    void enter(demoSession);
+  }, [demoSession]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
+    await enter();
+  }
+  /** Joins with a session: the form requests one, the demo entry already has it. */
+  async function enter(given: SessionResponse | null = null) {
     if (joining || runtime.current || solo) return;
     const run = ++generation.current;
     setJoining(true);
@@ -182,11 +203,13 @@ export function ProductApp({
         nickname: nickname.trim(),
         ...(invitation ? { inviteToken: invitation } : {}),
       };
-      session = await requestSession(
-        createRoom
-          ? { ...base, createRoom: true }
-          : { ...base, createRoom: false, roomCode: roomCode.trim().toUpperCase() },
-      );
+      session =
+        given ??
+        (await requestSession(
+          createRoom
+            ? { ...base, createRoom: true }
+            : { ...base, createRoom: false, roomCode: roomCode.trim().toUpperCase() },
+        ));
       if (run !== generation.current) {
         await cancelSessionReservation(session);
         return;
@@ -490,6 +513,12 @@ export function ProductApp({
                 view?.self?.status === 'ACTIVE' && (
                   <FaceGuidanceNotice notice={snapshot.faceGuidance} />
                 )}
+              {worldVisible && snapshot.demo && (
+                <DemoPanel
+                  demo={snapshot.demo}
+                  onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                />
+              )}
               {worldVisible && view && (
                 <MiniMap
                   view={view}
@@ -589,6 +618,7 @@ export function ProductApp({
                       snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
                     )}
                     quality={snapshot.quality}
+                    standIn={demoFace.current}
                     renderTick={() => runtime.current?.renderTick() ?? null}
                     {...(metrics.current
                       ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }

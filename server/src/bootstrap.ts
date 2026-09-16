@@ -10,6 +10,7 @@ import {
   mediaGrantRequestSchema,
   mediaStatusReportSchema,
 } from '@kkakkung/protocol/game-messages';
+import type { Cell } from '@kkakkung/protocol/game-schema';
 import {
   PROTOCOL_VERSION,
   PRODUCT_PROTOCOL_VERSION,
@@ -36,12 +37,14 @@ import type {
 } from './game/ports.js';
 import { createGameRoom } from './rooms/GameRoom.js';
 import { DevKkakkungRoom } from './rooms/DevKkakkungRoom.js';
+import type { DemoExit } from './rooms/DemoScenarios.js';
 import { createKkakkungRoom } from './rooms/KkakkungRoom.js';
 import { RoomDirectory } from './rooms/RoomDirectory.js';
 import { AdmissionLimiter } from './session/AdmissionLimiter.js';
 import { checkOrigin, installHttpBoundary } from './session/HttpBoundary.js';
 import { InviteStore } from './session/InviteStore.js';
 import { RoomInvitations } from './session/RoomInvitations.js';
+import { createDemoRoutes, createDemoUnavailableRoutes } from './session/DemoRoutes.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -86,6 +89,10 @@ export type ProductProfile<State = unknown> = Readonly<{
   core: CorePort<State> | null;
   tuning: MatchTuning | null;
   practice: { port: PracticeLayoutPort; raw: unknown } | null;
+  /** S15P21C204-259. Reads a match's active exits for demo scenarios; absent disables them. */
+  demoExits?: (state: State) => readonly DemoExit[];
+  /** Start cells of a match, so a demo scenario never tries to install where the rules refuse. */
+  demoStartCells?: (state: State) => readonly Cell[];
   layouts: {
     maps: MapPreparationPort;
     selection: LayoutSelectionPort;
@@ -353,6 +360,18 @@ export function createApplication<State = unknown>(
         );
         if (authorize) {
           app.use(createInvitationRoutes({ invites, authorize }));
+          // Demo rooms stay closed unless the deployment enabled them (S15P21C204-258).
+          app.use(
+            config.demoRooms
+              ? createDemoRoutes({
+                  sessions: productSessions,
+                  slots,
+                  authorize,
+                  monotonicNow,
+                  cleanupReservations,
+                })
+              : createDemoUnavailableRoutes(authorize),
+          );
           if (media?.createOperationsHandlers) {
             const handlers = media.createOperationsHandlers(authorize);
             app.post(OPERATIONS_ROUTES.commands, protect(handlers.command));
@@ -437,6 +456,8 @@ export function createApplication<State = unknown>(
       core: product.core,
       tuning: product.tuning,
       practice: product.practice,
+      ...(product.demoExits ? { demoExits: product.demoExits } : {}),
+      ...(product.demoStartCells ? { demoStartCells: product.demoStartCells } : {}),
       layouts: product.layouts
         ? {
             loader: new LayoutLoader({

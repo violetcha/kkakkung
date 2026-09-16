@@ -78,6 +78,10 @@ const environment = z.object({
   // Operator API token (E OP-07). Separate from session bearer tokens.
   OPS_TOKEN: nonEmpty,
 
+  // Demo rooms (S15P21C204-258): an operator-only room with server-driven puppets, used to show
+  // game situations without six people. Off unless explicitly enabled, and always behind OPS_TOKEN.
+  DEMO_ROOMS: z.enum(['0', '1']).default('0'),
+
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
   OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: positiveSafeInt,
@@ -272,6 +276,8 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
+    // The operator token is the only way in, so a demo room without it is never opened.
+    demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,
