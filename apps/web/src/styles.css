@@ -939,3 +939,93 @@ kbd {
 .demo-panel button {
   text-align: left;
 }
+
+/* S15P21C204-261. 결정적 순간의 전면 플래시와 구속 비네트. 색만으로 전달하지 않도록 문구를 함께 둔다. */
+.cue-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  pointer-events: none;
+  text-align: center;
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f4f8f6;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  animation: cue-flash-fade 0.9s ease-out forwards;
+}
+.cue-flash[data-cue='captured'] {
+  box-shadow: inset 0 0 0 100vmax rgba(140, 20, 24, 0.55);
+  animation-name: cue-flash-fade, cue-flash-shake;
+  animation-duration: 0.9s, 0.45s;
+}
+.cue-flash[data-cue='restrained'] {
+  box-shadow: inset 0 0 160px 40px rgba(212, 169, 93, 0.6);
+  animation-name: cue-flash-fade, cue-flash-shake;
+  animation-duration: 0.9s, 0.3s;
+}
+.cue-flash[data-cue='escaped'],
+.cue-flash[data-cue='victory'] {
+  box-shadow: inset 0 0 0 100vmax rgba(139, 219, 188, 0.5);
+}
+.cue-flash[data-cue='exit-failed'],
+.cue-flash[data-cue='defeat'] {
+  box-shadow: inset 0 0 200px 60px rgba(30, 30, 34, 0.85);
+}
+@keyframes cue-flash-fade {
+  from {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes cue-flash-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+.product-stage {
+  position: relative;
+}
+.product-stage[data-restrained]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px 30px rgba(212, 169, 93, 0.35);
+  animation: cue-restrained-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cue-restrained-pulse {
+  50% {
+    box-shadow: inset 0 0 90px 20px rgba(212, 169, 93, 0.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cue-flash,
+  .product-stage[data-restrained]::after {
+    animation: none;
+  }
+  .cue-flash {
+    box-shadow: none;
+    background: rgba(5, 12, 19, 0.7);
+  }
+}

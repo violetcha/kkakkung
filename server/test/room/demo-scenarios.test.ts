@@ -148,12 +148,15 @@ async function playing(role: Role) {
 it('offers the scenario list to the operator and refuses an unknown request', async () => {
   const demo = await playing('runner');
   try {
-    await vi.waitFor(() => expect(demo.states.at(-1)).toBeDefined());
+    // Before the match the whole list is offered and only a PLAYING tick narrows it to the
+    // operator's role, so waiting for "some state arrived" can still read the opening list.
+    // The list follows the operator's role: a runner cannot be shown a tagger's trace view.
+    await vi.waitFor(() => expect(demo.states.at(-1)?.available).not.toContain('exchange-trace'), {
+      timeout: 5000,
+    });
     expect(demo.states.at(-1)?.available).toContain('trap');
     expect(demo.states.at(-1)?.available).toContain('capture');
     expect(demo.states.at(-1)?.available).toContain('exchange');
-    // The list follows the operator's role: a runner cannot be shown a tagger's trace view.
-    expect(demo.states.at(-1)?.available).not.toContain('exchange-trace');
     expect(demo.states.at(-1)?.running).toBeNull();
     // A malformed request changes nothing: the room keeps waiting for a real scenario id.
     demo.room.send(PRODUCT_CLIENT_MESSAGES.demoScenario, { matchId: demo.room.state.matchId });

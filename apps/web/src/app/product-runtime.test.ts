@@ -51,6 +51,7 @@ function fixture(
       testTonePlaying: false,
     }),
     playTestTone: async () => 'unavailable',
+    playCue: vi.fn(() => 'played' as const),
   };
   const send = vi.fn();
   const leave = vi.fn(async () => {});
@@ -1380,4 +1381,73 @@ it('keeps a demo-state that arrives before the first round until the round confi
   } finally {
     await runtime.leave();
   }
+});
+
+it('plays state cues once, defers count cues behind my own ending and flashes the screen', () => {
+  const f = fixture();
+  const played = () => vi.mocked(f.fake.playCue!).mock.calls.map(([kind]) => kind);
+  const view = viewFixture();
+  f.state({ phase: 'PLAYING', stateVersion: 11, counts: { escaped: 0, captured: 0 } });
+  f.messages.get('private-view')!({ ...view, stateVersion: 11 });
+  expect(played()).toEqual([]);
+  const event = (type: string, payload: unknown, eventId: string) => ({
+    matchId: 'm',
+    gameScope: view.gameScope,
+    eventId,
+    tick: 100,
+    stateVersion: 11,
+    type,
+    payload,
+  });
+  f.messages.get('private-event')!(
+    event('EXCHANGE_OFFER', { exchangeId: 'x', fromPlayerId: 'friend', expiresAtTick: 140 }, 'e1'),
+  );
+  f.messages.get('private-event')!(
+    event('EXIT_CHALLENGE_ENDED', { challengeId: 'c', result: 'failed', reason: null }, 'e2'),
+  );
+  f.messages.get('private-event')!(
+    event('EXIT_CHALLENGE_ENDED', { challengeId: 'c', result: 'canceled', reason: null }, 'e3'),
+  );
+  expect(played()).toEqual(['exchange-offer', 'exit-failed']);
+  expect(f.runtime.getSnapshot().cueFlash).toMatchObject({ kind: 'exit-failed' });
+  const flashId = f.runtime.getSnapshot().cueFlash!.id;
+  // 아군 탈출은 잠시 미룬 뒤 낸다.
+  f.state({ phase: 'PLAYING', stateVersion: 12, counts: { escaped: 1, captured: 0 } });
+  expect(played()).toHaveLength(2);
+  f.time(300);
+  expect(played()).toEqual(['exchange-offer', 'exit-failed', 'ally-progress']);
+  // 라운드 누계가 먼저 오고 내 포획이 뒤따르면 누계 안내음은 버리고 포획만 낸다.
+  f.state({ phase: 'PLAYING', stateVersion: 13, counts: { escaped: 1, captured: 1 } });
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.messages.get('private-view')!({
+    ...view,
+    stateVersion: 13,
+    self: { playerId: 'self', role: 'runner', status: 'CAPTURED' },
+  });
+  f.time(700);
+  expect(played()).toEqual(['exchange-offer', 'exit-failed', 'ally-progress', 'captured']);
+  expect(f.runtime.getSnapshot().cueFlash).toMatchObject({ kind: 'captured' });
+  expect(f.runtime.getSnapshot().cueFlash!.id).toBeGreaterThan(flashId);
+  // 종료된 뒤에도 팀 결과는 듣고, 같은 결과를 두 번 내지 않는다.
+  f.state({
+    phase: 'RESULT',
+    stateVersion: 14,
+    counts: { escaped: 1, captured: 2 },
+    result: { winner: 'taggers', reason: 'two-captured' },
+  });
+  f.state({
+    phase: 'RESULT',
+    stateVersion: 15,
+    counts: { escaped: 1, captured: 2 },
+    result: { winner: 'taggers', reason: 'two-captured' },
+  });
+  expect(played().slice(4)).toEqual(['defeat']);
+  // 새 경기에서는 이전 경기와 비교하지 않는다.
+  f.state({
+    matchId: 'next',
+    phase: 'LOBBY',
+    stateVersion: 0,
+    counts: { escaped: 0, captured: 0 },
+  });
+  expect(played()).toHaveLength(5);
 });
