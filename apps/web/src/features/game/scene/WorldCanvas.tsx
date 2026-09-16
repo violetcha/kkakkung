@@ -7,6 +7,7 @@ import { FirstPersonCamera } from './FirstPersonCamera';
 import { VisibleTerrain } from './VisibleTerrain';
 import { QUALITY_PRESETS, type QualityPreset } from './quality-presets';
 import type { OwnerNames } from './ExitOwnerLabel';
+import type { Texture } from 'three';
 import type { FaceTextures } from './face-textures';
 import { FacilityLighting } from './FacilityLighting';
 import { FACILITY } from './facility-theme';
@@ -17,6 +18,7 @@ export function WorldCanvas({
   view,
   ownerNames,
   faces,
+  standIn,
   quality = 'medium',
   renderTick = () => null,
   onMetrics,
@@ -25,6 +27,8 @@ export function WorldCanvas({
   view?: PrivateView;
   ownerNames?: OwnerNames;
   faces?: FaceTextures;
+  /** Demo rooms only: drawn face for participants without a camera. */
+  standIn?: Texture | null;
   quality?: QualityPreset;
   renderTick?(): number | null;
   onMetrics?(metrics: FrameMetrics): void;
@@ -47,7 +51,13 @@ export function WorldCanvas({
             <FacilityLighting self={view.self} renderTick={renderTick} quality={quality} />
           </>
         )}
-        <VisibleTerrain view={view} ownerNames={ownerNames} faces={faces} renderTick={renderTick} />
+        <VisibleTerrain
+          view={view}
+          ownerNames={ownerNames}
+          faces={faces}
+          standIn={standIn}
+          renderTick={renderTick}
+        />
         {onMetrics && <FrameMetricsProbe report={onMetrics} />}
       </Canvas>
     );

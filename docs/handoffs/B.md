@@ -13,26 +13,27 @@ B는 공개 전송 계약(protocol 0.2.0), HTTP 입장, Colyseus Room과 Tick �
 
 ## 모듈 진입점
 
-| 모듈                                           | 책임                                                                                                           |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `server/src/game/ports.ts`                     | 서버 내부 포트: A `CorePort`, E `MediaCoordinator`·`OperationsPort`, F `EmitMetric`. 제품 코드는 이것을 import |
-| `server/src/game/MatchContext.ts`              | serverEpoch·matchId·연속 stateVersion/serverTick, 논리 scope(practice/game/none) 레지스트리                    |
-| `server/src/game/CommandAdapter.ts`            | wire 명령 검증 → core/phase 명령, actorId 주입                                                                 |
-| `server/src/game/CommandQueue.ts`              | 중복·STALE·QUEUE_FULL, 유지 이동 500ms 만료. 대기 참가자당 64 / 방 384, 완료 기록 참가자당 512·2분             |
-| `server/src/game/CommandLimiter.ts`            | 토큰 버킷 초당 30·버스트 60                                                                                    |
-| `server/src/game/MatchDriver.ts`               | 한 Tick에 core step 1회, outcome 정확히 1개, 미디어 control 적용                                               |
-| `server/src/game/RoomTickCoordinator.ts`       | 50ms Tick, catch-up 최대 4회, 250ms 초과 overload, 방별 예외 격리·재무장                                       |
-| `server/src/game/EventDispatcher.ts`           | private-view 발행(구조 비교로 변경 판정), 사건 전달, view-resync                                               |
-| `server/src/game/PlayerProjection.ts`          | 개인 뷰 투영. 공개 상태 키 allowlist, 술래 출구 빈 배열                                                        |
-| `server/src/game/Heartbeat.ts`, `ClockSync.ts` | 2초 heartbeat, 6초 무응답 → CONNECTION_LOST, clock-probe 초당 5회                                              |
-| `server/src/game/LayoutLoader.ts`              | 맵 파일 hash·variant·seed·fallback, 예산 100ms / 256 / 8                                                       |
-| `server/src/rooms/KkakkungRoom.ts`             | 제품 Room 조립과 단계 전환                                                                                     |
-| `server/src/rooms/*Coordinator.ts`             | Lobby(방장·준비·역할), Practice(60초/전원 준비), Loading(30초 장벽·자기 얼굴 확인), Countdown(3초), Rematch    |
-| `server/src/session/SessionRoutes.ts`          | `POST /api/sessions`, `DELETE /api/sessions/current`, 방장 초대 라우트                                         |
-| `server/src/session/ProductSessionStore.ts`    | 세션 lease 30분·최대 2시간, 메모리 토큰                                                                        |
-| `server/src/session/SlotRegistry.ts`           | 방·좌석(6/방, `maxRooms`), RESERVED 60초, RETIRING 좌석은 회수 확인 전 유지                                    |
-| `server/src/session/RoomExpiry.ts`             | 체류 기한 결정과 방장 위임                                                                                     |
-| `server/src/session/HttpBoundary.ts`           | Origin 정확 일치, `/matchmake`·`/api` 본문 2,048B                                                              |
+| 모듈                                                         | 책임                                                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `server/src/game/ports.ts`                                   | 서버 내부 포트: A `CorePort`, E `MediaCoordinator`·`OperationsPort`, F `EmitMetric`. 제품 코드는 이것을 import |
+| `server/src/game/MatchContext.ts`                            | serverEpoch·matchId·연속 stateVersion/serverTick, 논리 scope(practice/game/none) 레지스트리                    |
+| `server/src/game/CommandAdapter.ts`                          | wire 명령 검증 → core/phase 명령, actorId 주입                                                                 |
+| `server/src/game/CommandQueue.ts`                            | 중복·STALE·QUEUE_FULL, 유지 이동 500ms 만료. 대기 참가자당 64 / 방 384, 완료 기록 참가자당 512·2분             |
+| `server/src/game/CommandLimiter.ts`                          | 토큰 버킷 초당 30·버스트 60                                                                                    |
+| `server/src/game/MatchDriver.ts`                             | 한 Tick에 core step 1회, outcome 정확히 1개, 미디어 control 적용                                               |
+| `server/src/game/RoomTickCoordinator.ts`                     | 50ms Tick, catch-up 최대 4회, 250ms 초과 overload, 방별 예외 격리·재무장                                       |
+| `server/src/game/EventDispatcher.ts`                         | private-view 발행(구조 비교로 변경 판정), 사건 전달, view-resync                                               |
+| `server/src/game/PlayerProjection.ts`                        | 개인 뷰 투영. 공개 상태 키 allowlist, 술래 출구 빈 배열                                                        |
+| `server/src/game/Heartbeat.ts`, `ClockSync.ts`               | 2초 heartbeat, 6초 무응답 → CONNECTION_LOST, clock-probe 초당 5회                                              |
+| `server/src/game/LayoutLoader.ts`                            | 맵 파일 hash·variant·seed·fallback, 예산 100ms / 256 / 8                                                       |
+| `server/src/rooms/KkakkungRoom.ts`                           | 제품 Room 조립과 단계 전환                                                                                     |
+| `server/src/rooms/*Coordinator.ts`                           | Lobby(방장·준비·역할), Practice(60초/전원 준비), Loading(30초 장벽·자기 얼굴 확인), Countdown(3초), Rematch    |
+| `server/src/session/SessionRoutes.ts`                        | `POST /api/sessions`, `DELETE /api/sessions/current`, 방장 초대 라우트                                         |
+| `server/src/session/ProductSessionStore.ts`                  | 세션 lease 30분·최대 2시간, 메모리 토큰                                                                        |
+| `server/src/session/SlotRegistry.ts`                         | 방·좌석(6/방, 데모 방은 1석, `maxRooms`), RESERVED 60초, RETIRING 좌석은 회수 확인 전 유지                     |
+| `server/src/session/DemoRoutes.ts`, `rooms/DemoScenarios.ts` | 운영 토큰 전용 데모 방 개설과 인형 시나리오(258·259). `DEMO_ROOMS=0`이면 503                                   |
+| `server/src/session/RoomExpiry.ts`                           | 체류 기한 결정과 방장 위임                                                                                     |
+| `server/src/session/HttpBoundary.ts`                         | Origin 정확 일치, `/matchmake`·`/api` 본문 2,048B                                                              |
 
 ## HTTP
 

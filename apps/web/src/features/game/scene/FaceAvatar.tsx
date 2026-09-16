@@ -8,6 +8,7 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   SphereGeometry,
+  type Texture,
 } from 'three';
 import type { PrivateView, VisibleEntity } from '@kkakkung/protocol/game-schema';
 import type { FaceTextures } from './face-textures';
@@ -45,12 +46,15 @@ function Avatar({
   player,
   ally,
   faces,
+  standIn,
   resources,
   renderTick,
 }: {
   player: Player;
   ally: boolean;
   faces?: FaceTextures;
+  /** Demo rooms only: the drawn face used for a participant that has no camera. */
+  standIn?: Texture | null;
   resources: ReturnType<typeof createAvatarResources>;
   renderTick(): number | null;
 }) {
@@ -62,7 +66,7 @@ function Avatar({
     const next = sampleActor(player, renderTick());
     root.current?.position.set(next.x, 0, next.z);
     root.current?.rotation.set(0, next.yaw, 0);
-    const texture = faces?.get(player.id) ?? null;
+    const texture = faces?.get(player.id) ?? standIn ?? null;
     if (face.map !== texture) {
       face.map = texture;
       face.color.set(texture ? '#ffffff' : '#7c8984');
@@ -107,10 +111,12 @@ function Avatar({
 export function FaceAvatars({
   view,
   faces,
+  standIn,
   renderTick = () => null,
 }: {
   view: PrivateView;
   faces?: FaceTextures;
+  standIn?: Texture | null;
   renderTick?(): number | null;
 }) {
   const resources = useMemo(createAvatarResources, []);
@@ -123,6 +129,7 @@ export function FaceAvatars({
           player={player}
           ally={player.role !== undefined && player.role === view.self?.role}
           faces={faces}
+          standIn={standIn}
           resources={resources}
           renderTick={renderTick}
         />

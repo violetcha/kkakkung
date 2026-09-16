@@ -1,5 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { consumeInvitation, invitationRoom } from '../features/room/product-session';
+import {
+  consumeDemoSession,
+  consumeInvitation,
+  invitationRoom,
+} from '../features/room/product-session';
 import { ProductApp } from './ProductApp';
 import '../styles.css';
 
@@ -8,7 +12,9 @@ const isDiagnostic =
 const DevelopmentApp = import.meta.env.DEV ? lazy(() => import('./DevelopmentApp')) : null;
 const PreviewApp = import.meta.env.DEV ? lazy(() => import('./PreviewApp')) : null;
 const initialRoom = invitationRoom(window.location.hash);
-const invitation = consumeInvitation(window.location, window.history);
+// S15P21C204-260. Operator demo entry, consumed before the invitation so its fragment is cleared.
+const demoSession = consumeDemoSession(window.location, window.history);
+const invitation = demoSession ? '' : consumeInvitation(window.location, window.history);
 export default function App() {
   const [navigation, setNavigation] = useState({ invitation, initialRoom, isDiagnostic });
   useEffect(() => {
@@ -36,6 +42,10 @@ export default function App() {
       <DevelopmentApp />
     </Suspense>
   ) : (
-    <ProductApp invitation={navigation.invitation} initialRoom={navigation.initialRoom} />
+    <ProductApp
+      invitation={navigation.invitation}
+      initialRoom={navigation.initialRoom}
+      {...(demoSession ? { demoSession } : {})}
+    />
   );
 }

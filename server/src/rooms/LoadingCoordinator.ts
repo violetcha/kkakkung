@@ -21,7 +21,15 @@ export class LoadingCoordinator {
   private barrier: LoadingBarrier | null = null;
   private readonly participants = new Map<string, Participant>();
 
-  constructor(private readonly options: { timeoutMs?: number; requireFace: boolean }) {}
+  constructor(
+    private readonly options: { timeoutMs?: number; requireFace: boolean | (() => boolean) },
+  ) {}
+
+  /** Whether this room's media publishes a face at all; a demo room has none to wait for. */
+  private get requireFace(): boolean {
+    const { requireFace } = this.options;
+    return typeof requireFace === 'function' ? requireFace() : requireFace;
+  }
 
   get timeoutMs() {
     return this.options.timeoutMs ?? LOADING_TIMEOUT_MS;
@@ -116,7 +124,7 @@ export class LoadingCoordinator {
     if (nowMs - this.barrier.openedAtMs >= this.timeoutMs) return 'timeout';
     for (const participant of this.participants.values()) {
       if (!participant.reported) return 'waiting';
-      if (this.options.requireFace && !participant.faceConfirmed) return 'waiting';
+      if (this.requireFace && !participant.faceConfirmed) return 'waiting';
     }
     return 'complete';
   }

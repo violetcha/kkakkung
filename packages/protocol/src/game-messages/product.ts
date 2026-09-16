@@ -14,6 +14,8 @@ export const PRODUCT_CLIENT_MESSAGES = {
   heartbeatAck: 'game-heartbeat-ack',
   clockProbe: 'clock-probe',
   mediaBindingsRefresh: 'media-bindings-refresh',
+  /** Operator-only demo room (S15P21C204-259). Ordinary rooms refuse it. */
+  demoScenario: 'demo-scenario',
 } as const;
 
 export const PRODUCT_SERVER_MESSAGES = {
@@ -28,6 +30,8 @@ export const PRODUCT_SERVER_MESSAGES = {
   clockReply: 'clock-reply',
   mediaBindings: 'media-bindings',
   audioPolicy: 'audio-policy',
+  /** Operator-only demo room: which scenarios exist and what is running. */
+  demoState: 'demo-state',
 } as const;
 
 export const COMMAND_CODES = [
@@ -195,3 +199,37 @@ export function correlateRejectedCommand(payload: unknown): {
     sequence: sequence.success ? sequence.data : -1,
   };
 }
+
+/**
+ * Operator-only demo room messages (S15P21C204-259). The scenario list is server-owned; the
+ * client picks one of the ids it was given and never describes the choreography itself.
+ */
+export const DEMO_SCENARIO_IDS = [
+  'trap',
+  'sensor',
+  'capture',
+  'capture-one',
+  'approach',
+  'exit',
+  'exchange',
+  'exchange-cancel',
+  'exchange-trace',
+  'result-tagger-win',
+  'result-runner-win',
+  'abort-connection-lost',
+] as const;
+export type DemoScenarioId = (typeof DEMO_SCENARIO_IDS)[number];
+export const demoScenarioRequestSchema = z.strictObject({
+  matchId: matchIdSchema,
+  scenario: z.enum(DEMO_SCENARIO_IDS),
+});
+export type DemoScenarioRequest = z.infer<typeof demoScenarioRequestSchema>;
+export const demoStateSchema = z.strictObject({
+  matchId: matchIdSchema,
+  available: z.array(z.enum(DEMO_SCENARIO_IDS)).max(DEMO_SCENARIO_IDS.length),
+  running: z.enum(DEMO_SCENARIO_IDS).nullable(),
+  step: z.string().max(128).nullable(),
+  /** Why the last scenario stopped early, in a short code. Cleared when a new one starts. */
+  failure: z.string().max(128).nullable(),
+});
+export type DemoStateMessage = z.infer<typeof demoStateSchema>;

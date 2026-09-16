@@ -6,6 +6,7 @@ import {
 } from '@kkakkung/protocol/game-schema';
 import {
   roomRosterSchema,
+  demoStateSchema,
   roomAccessSchema,
   audioPolicySchema,
   mediaBindingsSchema,
@@ -14,6 +15,8 @@ import {
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
   type SessionResponse,
+  type DemoScenarioId,
+  type DemoStateMessage,
   type RoomRosterMessage,
   type RoomAccessMessage,
 } from '@kkakkung/protocol/game-messages';
@@ -81,6 +84,8 @@ export type ProductSnapshot = {
   round: PublicRoundState | null;
   view: PrivateView | null;
   roster: RoomRosterMessage | null;
+  /** S15P21C204-260. Only an operator demo room sends this; player rooms never do. */
+  demo?: DemoStateMessage | null;
   roomAccess?: RoomAccessMessage | null;
   devices: DeviceStatus;
   media: MediaStatus | null;
@@ -200,6 +205,12 @@ export function bindProductRoom(
       : null;
   };
   const unsubscribers: (() => void)[] = [];
+  /**
+   * S15P21C204-260. 서버는 데모 방에서만 `demo-state` 를 보낸다(입장 직후, 경기 전에). 방의 종류는
+   * 재경기로 바뀌지 않으므로 한 번 받으면 그 뒤로 그 방을 데모 방으로 본다.
+   */
+  const isDemoRoom = () => snapshot.demo != null;
+  let pendingDemo: DemoStateMessage | null = null;
   const publish = (patch: Partial<ProductSnapshot>) => {
     if (active) {
       snapshot = { ...snapshot, ...patch };
@@ -591,11 +602,14 @@ export function bindProductRoom(
     // LOAD_READY 는 장치 상태(카메라·추적·보정·소리)에 묶지 않는다. 얼굴 게시는 서버가 바인딩으로
     // 독립 확인하고, 추적이 잠깐 끊긴 것은 경기 중 폴백이 다룬다. 2026-09-14 실기기: 얼굴 6/6 확인에도
     // 클라이언트가 '장치 준비' 대기로 보고를 보내지 않아 30초 타임아웃이 반복됐다.
-    loading.check(snapshot.view, bindings, snapshot.media);
+    // 데모 방(S15P21C204-260)은 서버가 미디어를 발급하지 않으므로 카메라 연결·얼굴 게시를 기다리면
+    // 30초 뒤 LOADING_TIMEOUT 만 반복된다. 서버도 그 방에서는 얼굴 확인 없이 LOAD_READY 만 본다.
+    const mediaRequired = !isDemoRoom();
+    loading.check(snapshot.view, bindings, snapshot.media, { mediaRequired });
     const pending =
       snapshot.round.phase === 'GAME_LOADING'
         ? describePending(
-            loading.pending(snapshot.view, bindings, snapshot.media),
+            loading.pending(snapshot.view, bindings, snapshot.media, { mediaRequired }),
             bridge?.runtime.getReadinessTrace?.() ?? readinessTrace,
           )
         : [];
@@ -745,7 +759,9 @@ export function bindProductRoom(
       !round ||
       !participating ||
       !allowedPhases.includes(round.phase) ||
-      view.gameScope.kind === 'none'
+      view.gameScope.kind === 'none' ||
+      // 데모 방은 미디어 발급이 없다. 요청하면 NOT_READY 로 거절돼 오류 문구만 남는다.
+      isDemoRoom()
     ) {
       if (recovery)
         void recovery.reported.catch(failed('미디어 실패 상태 보고', MEDIA_REPORT_NOTICE));
@@ -931,6 +947,10 @@ export function bindProductRoom(
       commands.clear();
     }
     publish({ round });
+    if (pendingDemo) {
+      if (pendingDemo.matchId === round.matchId) publish({ demo: pendingDemo });
+      pendingDemo = null;
+    }
     // One measurement bucket per match: a rematch opens a new one and a decided
     // round closes it, so repeated matches stay comparable.
     deps.metrics?.startMatch(round.matchId);
@@ -958,6 +978,14 @@ export function bindProductRoom(
   on('command-outcome', commands.outcome);
   on('request-status-result', commands.lookup);
   on('private-event', events.receive);
+  on('demo-state', (value) => {
+    const result = demoStateSchema.safeParse(value);
+    if (!result.success) return;
+    // 서버는 입장 직후 보내므로 첫 상태 패치(50ms 주기)보다 먼저 올 수 있다. 그때 버리면 이 방을
+    // 데모 방으로 알지 못해 미디어를 기다리게 되니, 라운드를 알 때까지 들고 있다가 맞춰 본다.
+    if (!snapshot.round) pendingDemo = result.data;
+    else if (result.data.matchId === snapshot.round.matchId) publish({ demo: result.data });
+  });
   on('room-access', (value) => {
     const result = roomAccessSchema.safeParse(value);
     if (
@@ -1147,6 +1175,11 @@ export function bindProductRoom(
     },
     playTestTone: () => bridge.runtime.playTestTone(),
     quality: (value: QualityPreset) => quality.select(value),
+    /** Asks the server to run a demo scenario. Ordinary rooms ignore the message. */
+    runDemoScenario(scenario: DemoScenarioId) {
+      if (!snapshot.round || !snapshot.demo) return;
+      send('demo-scenario', { matchId: snapshot.round.matchId, scenario });
+    },
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
       publish({ interaction });

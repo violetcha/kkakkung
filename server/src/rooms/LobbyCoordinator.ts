@@ -98,6 +98,17 @@ export class LobbyCoordinator {
     for (const participant of this.participants.values()) participant.ready = false;
   }
 
+  /**
+   * S15P21C204-258. Marks a server-owned participant (a demo room puppet) ready. It has no
+   * client to make the report, and READY from a socket still goes through `applyReady`.
+   */
+  markSystemReady(playerId: string): boolean {
+    const participant = this.participants.get(playerId);
+    if (!participant) return false;
+    participant.ready = true;
+    return true;
+  }
+
   evaluate(phase: Phase): LobbyEvaluation {
     const connected = this.connectedCount();
     if (phase === 'LOBBY') return connected >= this.capacity ? 'to-device-check' : 'stay';

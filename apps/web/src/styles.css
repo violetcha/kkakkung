@@ -932,3 +932,10 @@ kbd {
 .preview-host video {
   transform: scaleX(-1);
 }
+.demo-panel .actions {
+  display: grid;
+  gap: 6px;
+}
+.demo-panel button {
+  text-align: left;
+}

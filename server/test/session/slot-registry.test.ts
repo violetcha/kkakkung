@@ -58,6 +58,25 @@ describe('SlotRegistry', () => {
     expect(slots.hasRoom('ROOM01')).toBe(false);
   });
 
+  it('opens a demo room with one operator seat and reports how it was opened', () => {
+    const slots = new SlotRegistry({ maxRooms: 2 });
+    expect(
+      slots.reserve('D00001', 'operator', 0, { create: true, demo: { operatorRole: 'runner' } }),
+    ).toBe('reserved');
+    expect(slots.optionsOf('D00001')).toEqual({
+      capacity: 1,
+      kind: 'demo',
+      operatorRole: 'runner',
+    });
+    // The single seat is the barrier: nobody else can reserve into the demo room.
+    expect(slots.reserve('D00001', 'other', 0)).toBe('ROOM_FULL');
+    expect(slots.reserve('D00001', 'operator', 0)).toBe('reserved');
+    slots.reserve('M00001', 'p0', 0, { create: true });
+    expect(slots.optionsOf('M00001')).toEqual({ capacity: 6, kind: 'match', operatorRole: null });
+    expect(slots.reserve('M00001', 'p1', 0)).toBe('reserved');
+    expect(slots.optionsOf('MISSING')).toBeNull();
+  });
+
   it('exposes join order and read-only activity counts without double counting', () => {
     const slots = new SlotRegistry({ maxRooms: 2 });
     slots.reserve('A00001', 'p0', 0, { create: true });

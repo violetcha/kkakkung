@@ -322,4 +322,11 @@ describe('operations and media configuration groups (F-01)', () => {
       roomIdleTtlMs: 600000,
     });
   });
+  it('keeps demo rooms off unless enabled together with an operator token', () => {
+    expect(parseConfig({}).demoRooms).toBe(false);
+    expect(parseConfig({ DEMO_ROOMS: '1' }).demoRooms).toBe(false);
+    expect(parseConfig({ OPS_TOKEN: 'token' }).demoRooms).toBe(false);
+    expect(parseConfig({ DEMO_ROOMS: '1', OPS_TOKEN: 'token' }).demoRooms).toBe(true);
+    expect(() => parseConfig({ DEMO_ROOMS: 'yes' })).toThrow();
+  });
 });
