@@ -52,8 +52,19 @@ import { practicePresenter } from '../features/game/flow/practice-presenter';
 import {
   createLoadingController,
   describePending,
+  loadingDisplay,
   SCENE_ASSET_VERSION,
 } from '../features/game/flow/loading-controller';
+import {
+  cueState,
+  detectCues,
+  isFlashCue,
+  isProgressCue,
+  PROGRESS_CUE_DELAY_MS,
+  type CueState,
+  type FlashCue,
+} from '../features/game/flow/match-cues';
+import type { CueKind } from '../features/media/cue-buffer';
 import type { FaceConditionNotice } from '../features/media/face-condition';
 import type { ReadinessTrace } from '../features/devices/readiness-trace';
 import { createQualityControl, type QualityPreset } from '../features/game/scene/quality-presets';
@@ -110,6 +121,8 @@ export type ProductSnapshot = {
   error: string | null;
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
+  /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
+  cueFlash?: { kind: FlashCue; id: number } | null;
 };
 export function bindProductRoom(
   room: ProductRoomPort,
@@ -154,6 +167,11 @@ export function bindProductRoom(
     endedSelf: null,
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
+  // S15P21C204-261. 안내음은 이전 상태와의 차이로만 고른다. 누계 안내음은 라운드·개인 뷰 도착
+  // 순서에 따라 자기 종료 안내음과 겹칠 수 있어 잠시 미뤄 두고, 자기 종료가 오면 버린다.
+  let lastCueState: CueState | null = null;
+  let flashId = 0;
+  let deferredProgress: { kinds: CueKind[]; at: number } | null = null;
   let microphoneWanted = false;
   let deviceAction = 0;
   const canRecoverDevices = () =>
@@ -272,8 +290,44 @@ export function bindProductRoom(
   const MEDIA_REPORT_NOTICE = '미디어 상태를 서버에 알리지 못했습니다. 연결 상태를 확인해 주세요.';
   const DEVICE_NOTICE =
     '카메라·마이크를 시작하지 못했습니다. 브라우저의 장치 권한과 다른 앱의 카메라 사용을 확인해 주세요.';
+  const playCue = (kind: CueKind) => {
+    if (!active || snapshot.lost) return;
+    bridge.runtime.playCue?.(kind);
+    if (isFlashCue(kind)) publish({ cueFlash: { kind, id: ++flashId } });
+  };
+  const emitCues = () => {
+    if (!active || snapshot.lost) return;
+    const round = snapshot.round;
+    const next = cueState({
+      round,
+      self: snapshot.view?.self ?? null,
+      endedSelf: snapshot.endedSelf,
+      tick: clock.renderTick() ?? round?.serverTick ?? 0,
+      countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
+    });
+    const cues = detectCues(lastCueState, next);
+    lastCueState = next;
+    for (const kind of cues) {
+      if (isProgressCue(kind)) {
+        deferredProgress = {
+          kinds: [...(deferredProgress?.kinds ?? []), kind],
+          at: deps.now() + PROGRESS_CUE_DELAY_MS,
+        };
+        continue;
+      }
+      if (kind === 'captured' || kind === 'escaped') deferredProgress = null;
+      playCue(kind);
+    }
+  };
+  const flushProgressCues = () => {
+    if (!deferredProgress || deps.now() < deferredProgress.at) return;
+    const { kinds } = deferredProgress;
+    deferredProgress = null;
+    kinds.forEach(playCue);
+  };
   const lose = (code?: number) => {
     if (!active || snapshot.lost) return;
+    deferredProgress = null;
     audioPreferences = DEFAULT_AUDIO_PREFERENCES;
     publish({
       lost: true,
@@ -312,10 +366,16 @@ export function bindProductRoom(
             ].slice(-64),
           });
       }
-      if (event.type === 'EXCHANGE_COMPLETED')
+      if (event.type === 'EXCHANGE_COMPLETED') {
         publish({ exchangeNotice: '지도 교환이 완료되었습니다.' });
+        playCue('exchange-completed');
+      }
       if (event.type === 'EXCHANGE_CANCELED')
         publish({ exchangeNotice: `교환이 종료되었습니다. (${event.payload.reason})` });
+      if (event.type === 'EXCHANGE_OFFER') playCue('exchange-offer');
+      // 성공은 자기 상태 전이(ESCAPED)가, 취소는 내 조작이 이미 알린다.
+      if (event.type === 'EXIT_CHALLENGE_ENDED' && event.payload.result === 'failed')
+        playCue('exit-failed');
     },
   });
   const views = createProductView({
@@ -352,6 +412,7 @@ export function bindProductRoom(
       }
       updateContext();
       updateLoading();
+      emitCues();
     },
   });
   async function post(path: string, body: unknown) {
@@ -963,6 +1024,7 @@ export function bindProductRoom(
       void participation.end().catch(failed('경기 종료 뒤 미디어 정리', null));
     updateContext();
     updateLoading();
+    emitCues();
     void connectForView();
   }
   unsubscribers.push(room.onStateChange(sync), room.onLeave(lose), room.onError(lose));
@@ -1068,6 +1130,9 @@ export function bindProductRoom(
       views.poll();
       events.poll();
       updateChallenge();
+      // 카운트다운 초가 바뀌는 시점과 미뤄 둔 누계 안내음은 여기서만 잡힌다.
+      emitCues();
+      flushProgressCues();
       // 대기 항목의 경과 시간을 갱신한다. 문자열이 바뀔 때만 발행하므로 초당 한 번 수준이다.
       if (snapshot.round?.phase === 'GAME_LOADING') updateLoading();
       if (startPending?.until !== null && startPending && deps.now() >= startPending.until) {

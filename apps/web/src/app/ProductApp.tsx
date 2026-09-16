@@ -30,6 +30,8 @@ import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { createDemoFaceTexture } from '../features/game/scene/demo-face';
+import { restraintPresenter } from '../features/game/equipment/restraint-presenter';
+import { CueFlash } from '../features/game/flow/CueFlash';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { SoloPracticeScreen } from '../features/game/solo/SoloPracticeScreen';
 import { bindProductRoom, type ProductSnapshot } from './product-runtime';
@@ -276,6 +278,11 @@ export function ProductApp({
     !inResult &&
     ['PLAYING', 'TEAM_PRACTICE'].includes(round.phase) &&
     view?.self?.status === 'ACTIVE';
+  // 구속 중에는 화면 가장자리를 어둡게 유지한다(S15P21C204-261). 남은 시간은 RestraintHud 가 쓴다.
+  const restrained =
+    worldVisible &&
+    (restraintPresenter(view ?? null, runtime.current?.renderTick() ?? round?.serverTick ?? 0)
+      ?.restraintSeconds ?? 0) > 0;
   const localControls =
     round && !inResult && round.phase !== 'LOBBY' ? (
       <>
@@ -609,7 +616,7 @@ export function ProductApp({
               )}
             </aside>
             {worldVisible && view && (
-              <section className="product-stage">
+              <section className="product-stage" data-restrained={restrained || undefined}>
                 <div className="product-canvas">
                   <WorldCanvas
                     view={view}
@@ -628,6 +635,7 @@ export function ProductApp({
               </section>
             )}
           </div>
+          <CueFlash flash={snapshot.cueFlash} />
           {/* 문구가 생기고 사라져도 페이지 높이가 바뀌지 않도록 자리를 항상 잡아 둔다 */}
           <p role="status" className="command-feedback">
             {snapshot.request?.type !== 'REMATCH' ? commandFeedback(snapshot.request) : null}

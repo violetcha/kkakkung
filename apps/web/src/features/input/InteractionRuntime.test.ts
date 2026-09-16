@@ -677,6 +677,44 @@ describe('createInteractionRuntime', () => {
     },
   );
 
+  it('plays state cues through the injected cue player regardless of the output lock, honoring mute and volume', async () => {
+    const audioNode = () => ({ connect() {}, disconnect() {} });
+    const cues = { play: vi.fn(() => true), activeCount: 0, dispose: vi.fn() };
+    const base = harness({
+      audio: {
+        cues,
+        masterGain: { ...audioNode(), gainValue: 0 },
+        destination: audioNode(),
+        createSourceFromTrack: audioNode,
+        createEffectSource: audioNode,
+        createGain: () => ({ ...audioNode(), gainValue: 0 }),
+        createFilter: () => ({ ...audioNode(), frequency: 0 }),
+        createPanner: () => ({ ...audioNode(), azimuthRad: 0 }),
+      },
+    });
+    try {
+      base.runtime.setAudioOutputLock('locked');
+      base.runtime.setAudioPreferences({ volume: 0.5, muted: false, mutedPlayerIds: [] });
+      expect(base.runtime.playCue?.('captured')).toBe('played');
+      expect(cues.play).toHaveBeenCalledWith('captured', 0.5);
+      base.runtime.setAudioPreferences({ volume: 0.5, muted: true, mutedPlayerIds: [] });
+      expect(base.runtime.playCue?.('victory')).toBe('muted');
+      base.runtime.setAudioPreferences({ volume: 0, muted: false, mutedPlayerIds: [] });
+      expect(base.runtime.playCue?.('victory')).toBe('muted');
+      expect(cues.play).toHaveBeenCalledOnce();
+      cues.play.mockReturnValueOnce(false);
+      base.runtime.setAudioPreferences({ volume: 1, muted: false, mutedPlayerIds: [] });
+      expect(base.runtime.playCue?.('start')).toBe('unavailable');
+    } finally {
+      await base.runtime.dispose();
+    }
+    expect(base.runtime.playCue?.('start')).toBe('unavailable');
+    // 안내음 없는 환경에서는 조용히 unavailable 이다.
+    const bare = harness();
+    expect(bare.runtime.playCue?.('start')).toBe('unavailable');
+    await bare.runtime.dispose();
+  });
+
   it('turns both ways from fresh calibrated face samples and suppresses motion in keyboard mode', async () => {
     const base = harness();
     try {

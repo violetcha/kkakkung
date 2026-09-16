@@ -74,6 +74,10 @@ import {
 import { createPolicyStore, type AudioPolicy, type PolicyStore } from '../media/audio-policy';
 import { createEffectBuffer } from '../media/effect-buffer';
 import { createAudioDiagnostics } from '../media/audio-diagnostics';
+import { createAudioCues, type CueResult } from '../media/audio-cues';
+import type { CueKind } from '../media/cue-buffer';
+export type { CueKind } from '../media/cue-buffer';
+export type { CueResult } from '../media/audio-cues';
 import {
   DEFAULT_AUDIO_PREFERENCES,
   normalizeAudioPreferences,
@@ -304,6 +308,11 @@ export interface InteractionRuntime {
   setAudioPreferences(preferences: AudioPreferences): void;
   getLocalAudioStatus(): LocalAudioStatus;
   playTestTone(): Promise<TestToneResult>;
+  /**
+   * S15P21C204-261. 자기 상태 안내음. 출력 잠금과 무관하게 음소거·음량만 따른다. 장치 점검에서
+   * 연 Context가 없으면 'unavailable'. 시험용 부분 구현 fixture 때문에 선택 메서드다.
+   */
+  playCue?(kind: CueKind): CueResult;
   endParticipation(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -518,6 +527,7 @@ function browserAudio(): (AudioGraphEnvironment & AudioUnlockPort) | null {
   if (typeof AudioContext === 'undefined') return null;
   const context = new AudioContext();
   const diagnostics = createAudioDiagnostics(context);
+  const cues = createAudioCues(context);
   const effectBuffers = new Map<
     Parameters<AudioGraphEnvironment['createEffectSource']>[0],
     AudioBuffer
@@ -537,9 +547,11 @@ function browserAudio(): (AudioGraphEnvironment & AudioUnlockPort) | null {
       return context.state;
     },
     diagnostics,
+    cues,
     resume: () => context.resume(),
     close: async () => {
       diagnostics.dispose();
+      cues.dispose();
       master.disconnect();
       effectBuffers.clear();
       await context.close();
@@ -1534,6 +1546,12 @@ export const createInteractionRuntime = (
       if (!canTestAudio() || lastStatus.audioPlayback !== 'ready') return 'unavailable';
       if (audioPreferences.muted || audioPreferences.volume === 0) return 'muted';
       return localAudio()?.playTestTone(audioPreferences.volume) ? 'played' : 'unavailable';
+    },
+    playCue(kind) {
+      if (disposed) return 'unavailable';
+      if (audioPreferences.muted || audioPreferences.volume === 0) return 'muted';
+      const cues = (options.audio ?? sharedAudio)?.cues;
+      return cues?.play(kind, audioPreferences.volume) ? 'played' : 'unavailable';
     },
 
     /** B의 검증 목록만 신원 매핑 근거로 쓴다. 이름·metadata로 추측하지 않는다. */

@@ -3,6 +3,7 @@
 // audio element attach 재생을 추가하지 않는다. gain=0은 접근 차단이 아니라 표현층 mute다.
 import type { AudioEffect, ResolvedVoice } from './audio-policy';
 import type { AudioDiagnostics } from './audio-diagnostics';
+import type { AudioCues } from './audio-cues';
 import {
   DEFAULT_AUDIO_PREFERENCES,
   normalizeAudioPreferences,
@@ -42,6 +43,8 @@ export interface SourceLike extends AudioNodeLike {
 /** 사용자 제스처로 이미 열린 AudioContext를 재사용한다. */
 export interface AudioGraphEnvironment {
   readonly diagnostics?: AudioDiagnostics;
+  /** S15P21C204-261. 자기 상태 안내음. 잠금 대상인 master gain을 거치지 않는다. */
+  readonly cues?: AudioCues;
   createSourceFromTrack(track: MediaStreamTrack): SourceLike;
   createEffectSource(kind: AudioEffect['kind']): SourceLike;
   createGain(): GainLike;
