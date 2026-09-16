@@ -1,6 +1,8 @@
 // D-10 / IN-08. 회전 모션·키 발동.
 // 한 번 발동하면 latch를 잠그고 중립 안정 구간을 지나야 다음 회전을 만든다.
 // 서버 6 Tick 행동과 1개 버퍼를 따르며 웹에 무한 행동 큐를 만들지 않는다.
+// S15P21C204-265. 키보드 회전도 같은 규칙이다: 키를 turnHoldMs 유지해야 한 번 발동하고,
+// 놓은 뒤 neutralHoldMs가 지나야 다음 회전을 받는다. 즉시 반응하는 키는 모션보다 유리하다.
 import { applyHysteresis } from './one-euro-filter';
 import { INPUT_TUNING, type InputTuning } from './input-tuning';
 
@@ -9,15 +11,19 @@ export type InputMode = 'motion' | 'keyboard';
 
 export type TurnIntentDeps = Readonly<{
   send(direction: TurnDirection): void;
+  /** 키 유지·중립 대기 판정에 쓴다. 모션은 표본 시각을 쓰므로 이 시계와 섞지 않는다. */
+  now(): number;
+  setTimer(handler: () => void, delayMs: number): number;
+  clearTimer(handle: number): void;
   tuning?: InputTuning;
 }>;
 
 export interface TurnIntentController {
   /** 보정된 상대 yaw. 보정 전에는 null이며 회전을 만들지 않는다. */
   updateMotion(relativeYawRad: number | null, nowMs: number): void;
-  /** 첫 keydown만 받는다. event.repeat는 무시한다. */
+  /** 첫 keydown만 받는다. event.repeat는 무시한다. turnHoldMs 뒤에도 눌려 있어야 발동한다. */
   keyDown(direction: TurnDirection, repeat: boolean): void;
-  /** keyup은 재발동을 허용하는 조건이다. 놓을 때 회전하지 않는다. */
+  /** keyup은 재발동을 허용하는 조건이다. 놓을 때 회전하지 않고, neutralHoldMs 뒤에 latch가 풀린다. */
   keyUp(direction: TurnDirection): void;
   setMode(mode: InputMode): void;
   reset(): void;
@@ -34,12 +40,79 @@ export function createTurnIntentController(deps: TurnIntentDeps): TurnIntentCont
   let neutralSince: number | null = null;
   let heldDirection: TurnDirection | null = null;
   const pressed = new Set<TurnDirection>();
+  /** 유지 시간을 채우는 중인 키와 그 시작 시각·타이머. 없으면 어떤 키도 발동을 기다리지 않는다. */
+  let keyHeld: TurnDirection | null = null;
+  let keyHeldSince: number | null = null;
+  let keyHoldTimer: number | null = null;
+  /** 키를 모두 놓은 시각과 latch를 푸는 타이머. 그 사이 새 키가 눌리면 취소한다. */
+  let keyNeutralSince: number | null = null;
+  let keyNeutralTimer: number | null = null;
 
   const clearMotion = () => {
     active = false;
     heldSince = null;
     neutralSince = null;
     heldDirection = null;
+  };
+
+  const stopKeyHold = () => {
+    keyHeld = null;
+    keyHeldSince = null;
+    if (keyHoldTimer === null) return;
+    deps.clearTimer(keyHoldTimer);
+    keyHoldTimer = null;
+  };
+
+  const stopKeyNeutral = () => {
+    keyNeutralSince = null;
+    if (keyNeutralTimer === null) return;
+    deps.clearTimer(keyNeutralTimer);
+    keyNeutralTimer = null;
+  };
+
+  /** 타이머가 이르게 깨어나도 시계로 유지 시간을 다시 재고, 모자라면 남은 만큼 다시 잔다. */
+  const armKeyHold = (direction: TurnDirection) => {
+    const since = keyHeldSince;
+    if (since === null) return;
+    const remaining = tuning.turnHoldMs - (deps.now() - since);
+    if (remaining > 0) {
+      keyHoldTimer = deps.setTimer(
+        () => {
+          keyHoldTimer = null;
+          if (keyHeld !== direction || !pressed.has(direction) || latched) return stopKeyHold();
+          armKeyHold(direction);
+        },
+        Math.max(1, remaining),
+      );
+      return;
+    }
+    stopKeyHold();
+    latched = true;
+    deps.send(direction);
+  };
+
+  const armKeyNeutral = () => {
+    const since = keyNeutralSince;
+    if (since === null || pressed.size > 0) return;
+    const remaining = tuning.neutralHoldMs - (deps.now() - since);
+    if (remaining > 0) {
+      keyNeutralTimer = deps.setTimer(
+        () => {
+          keyNeutralTimer = null;
+          armKeyNeutral();
+        },
+        Math.max(1, remaining),
+      );
+      return;
+    }
+    stopKeyNeutral();
+    latched = false;
+  };
+
+  const clearKeys = () => {
+    pressed.clear();
+    stopKeyHold();
+    stopKeyNeutral();
   };
 
   return {
@@ -83,24 +156,41 @@ export function createTurnIntentController(deps: TurnIntentDeps): TurnIntentCont
       if (repeat) return;
       if (pressed.has(direction)) return;
       pressed.add(direction);
-      deps.send(direction);
+      // 키가 눌려 있는 동안은 중립이 아니다. 놓았다가 다시 누른 경우 대기를 처음부터 센다.
+      stopKeyNeutral();
+      // 두 방향을 함께 누르면 모션의 방향 전환처럼 유지를 버린다. 하나를 놓아도 새로 눌러야 한다.
+      if (pressed.size > 1) {
+        stopKeyHold();
+        return;
+      }
+      if (latched) return;
+      stopKeyHold();
+      keyHeld = direction;
+      keyHeldSince = deps.now();
+      armKeyHold(direction);
     },
 
     keyUp(direction) {
       pressed.delete(direction);
+      if (keyHeld === direction) stopKeyHold();
+      // 모든 키를 놓은 채 중립 시간을 채워야 다음 회전을 받는다.
+      if (latched && pressed.size === 0 && keyNeutralSince === null) {
+        keyNeutralSince = deps.now();
+        armKeyNeutral();
+      }
     },
 
     setMode(next) {
       if (next === mode) return;
       mode = next;
       latched = false;
-      pressed.clear();
+      clearKeys();
       clearMotion();
     },
 
     reset() {
       latched = false;
-      pressed.clear();
+      clearKeys();
       clearMotion();
     },
 

@@ -863,18 +863,75 @@ describe('createInteractionRuntime', () => {
         preventDefault() {},
       } as KeyboardEvent;
       keys.get('keydown')!(event);
-      base.advance(100);
+      const moves = () =>
+        vi
+          .mocked(base.deps.sendCommand)
+          .mock.calls.filter(([command]) => command.type === 'MOVE_INTENT')
+          .map(([command]) => command.payload);
+      // 폴백 뒤의 키도 모션과 같은 유지 시간을 채워야 의도가 된다(S15P21C204-265).
+      base.advance(INPUT_TUNING.forwardHoldMs - 20);
+      base.fireTimers();
+      expect(moves()).toEqual([]);
+      base.advance(20);
       base.fireTimers();
       base.advance(100);
       base.fireTimers();
-      const moves = vi
-        .mocked(base.deps.sendCommand)
-        .mock.calls.filter(([command]) => command.type === 'MOVE_INTENT')
-        .map(([command]) => command.payload);
-      expect(moves.length).toBeGreaterThanOrEqual(2);
+      expect(moves().length).toBeGreaterThanOrEqual(2);
       expect(
-        moves.every((payload) => 'direction' in payload && payload.direction === 'forward'),
+        moves().every((payload) => 'direction' in payload && payload.direction === 'forward'),
       ).toBe(true);
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('does not move on a keyboard press while the motion mode is active', async () => {
+    const keys = new Map<string, (event: KeyboardEvent) => void>();
+    const base = harness({
+      keyboardTarget: {
+        addEventListener: (type, listener) => {
+          keys.set(type, listener);
+        },
+        removeEventListener: (type) => {
+          keys.delete(type);
+        },
+      },
+    });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      });
+      const press = (code: string, type = 'keydown') =>
+        keys.get(type)!({
+          code,
+          repeat: false,
+          isComposing: false,
+          target: null,
+          preventDefault() {},
+        } as KeyboardEvent);
+      // 모션 모드는 웹캠으로만 움직인다: 이동 키도 회전 키도 명령을 만들지 않는다.
+      press('KeyW');
+      press('KeyA');
+      base.advance(INPUT_TUNING.backHoldMs + INPUT_TUNING.turnHoldMs);
+      base.fireTimers();
+      base.advance(100);
+      base.fireTimers();
+      press('KeyW', 'keyup');
+      press('KeyA', 'keyup');
+      const game = vi
+        .mocked(base.deps.sendCommand)
+        .mock.calls.filter(
+          ([command]) => command.type === 'MOVE_INTENT' || command.type === 'TURN',
+        );
+      expect(game).toEqual([]);
     } finally {
       await base.runtime.dispose();
     }
