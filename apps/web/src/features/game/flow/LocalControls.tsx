@@ -36,7 +36,7 @@ export function LocalControls({
         <p>
           {mode === 'motion'
             ? '고개를 좌우로 돌리면 90° 회전합니다. 정면으로 돌아온 뒤 다시 돌리세요. 몸을 앞뒤로 기울이면 전진·후진합니다.'
-            : 'W/S 또는 ↑/↓: 전진·후진 · A/D 또는 ←/→: 90° 회전. 회전 키는 한 번씩 눌러 주세요.'}
+            : 'W/S 또는 ↑/↓: 전진·후진 · A/D 또는 ←/→: 90° 회전. 키를 잠깐 누르고 있어야 움직입니다. 반응 시간은 모션과 같고, 회전은 키를 놓은 뒤 다시 누르세요.'}
         </p>
         <div className="actions">
           <button disabled={mode === 'keyboard'} onClick={onKeyboard}>

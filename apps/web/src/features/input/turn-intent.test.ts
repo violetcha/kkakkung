@@ -5,8 +5,46 @@ import { createTurnIntentController, type TurnDirection } from './turn-intent';
 
 function harness() {
   const sent: TurnDirection[] = [];
-  const controller = createTurnIntentController({ send: (direction) => sent.push(direction) });
-  return { controller, sent };
+  const timers = new Map<number, () => void>();
+  let next = 1;
+  let clock = 0;
+  const controller = createTurnIntentController({
+    send: (direction) => sent.push(direction),
+    now: () => clock,
+    setTimer: (handler) => {
+      const handle = next++;
+      timers.set(handle, handler);
+      return handle;
+    },
+    clearTimer: (handle) => timers.delete(handle),
+  });
+  return {
+    controller,
+    sent,
+    get timerCount() {
+      return timers.size;
+    },
+    advance: (ms: number) => {
+      clock += ms;
+    },
+    fire: () => {
+      for (const [handle, handler] of [...timers.entries()]) {
+        timers.delete(handle);
+        handler();
+      }
+    },
+    /** 키를 누르고 유지 시간을 채운 뒤 타이머를 깨운다. */
+    hold: (direction: TurnDirection) => {
+      controller.keyDown(direction, false);
+      const handles = [...timers.keys()];
+      clock += INPUT_TUNING.turnHoldMs;
+      for (const handle of handles) {
+        const handler = timers.get(handle);
+        timers.delete(handle);
+        handler?.();
+      }
+    },
+  };
 }
 
 const RIGHT = INPUT_TUNING.turnEnterRad + 0.05;
@@ -84,27 +122,78 @@ describe('createTurnIntentController', () => {
     expect(base.sent).toEqual(['left']);
   });
 
-  it('sends one turn on the first keydown and ignores the auto repeat', () => {
+  it('turns once after the key is held for the motion hold time and ignores the auto repeat', () => {
     const base = harness();
     base.controller.setMode('keyboard');
 
     base.controller.keyDown('left', false);
     base.controller.keyDown('left', true);
-    base.controller.keyDown('left', true);
+    expect(base.sent).toEqual([]);
 
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
+    base.controller.keyDown('left', true);
     expect(base.sent).toEqual(['left']);
+    expect(base.controller.latched).toBe(true);
   });
 
-  it('does not turn on keyup and allows a new press afterwards', () => {
+  it('sends nothing for a key released before the hold time', () => {
     const base = harness();
     base.controller.setMode('keyboard');
-    base.controller.keyDown('right', false);
 
+    base.controller.keyDown('right', false);
+    base.advance(INPUT_TUNING.turnHoldMs - 10);
     base.controller.keyUp('right');
+    base.advance(100);
+    base.fire();
+
+    expect(base.sent).toEqual([]);
+    expect(base.controller.latched).toBe(false);
+    expect(base.timerCount).toBe(0);
+  });
+
+  it('needs the key released and a neutral wait before the next turn', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+    base.hold('right');
     expect(base.sent).toEqual(['right']);
 
+    // 놓고 바로 다시 누르면 중립이 아니므로 받지 않는다.
+    base.controller.keyUp('right');
     base.controller.keyDown('right', false);
-    expect(base.sent).toEqual(['right', 'right']);
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['right']);
+    expect(base.controller.latched).toBe(true);
+
+    // 모든 키를 놓고 중립 시간을 채우면 latch가 풀린다.
+    base.controller.keyUp('right');
+    base.advance(INPUT_TUNING.neutralHoldMs - 1);
+    base.fire();
+    expect(base.controller.latched).toBe(true);
+    base.advance(1);
+    base.fire();
+    expect(base.controller.latched).toBe(false);
+
+    base.hold('left');
+    expect(base.sent).toEqual(['right', 'left']);
+  });
+
+  it('drops the hold when a second direction is pressed at the same time', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.keyDown('left', false);
+    base.controller.keyDown('right', false);
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
+    expect(base.sent).toEqual([]);
+
+    // 한쪽을 놓아도 남은 키는 새로 눌러야 한다.
+    base.controller.keyUp('right');
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
+    expect(base.sent).toEqual([]);
   });
 
   it('accepts only the current mode candidate', () => {
@@ -112,6 +201,8 @@ describe('createTurnIntentController', () => {
 
     // 모션 모드에서는 키 후보를 채택하지 않는다.
     base.controller.keyDown('left', false);
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
     expect(base.sent).toEqual([]);
 
     base.controller.setMode('keyboard');
@@ -119,7 +210,7 @@ describe('createTurnIntentController', () => {
     base.controller.updateMotion(RIGHT, 1000 + INPUT_TUNING.turnHoldMs);
     expect(base.sent).toEqual([]);
 
-    base.controller.keyDown('left', false);
+    base.hold('left');
     expect(base.sent).toEqual(['left']);
   });
 
@@ -133,19 +224,29 @@ describe('createTurnIntentController', () => {
 
     expect(base.controller.latched).toBe(false);
     expect(base.controller.mode).toBe('keyboard');
-    base.controller.keyDown('right', false);
+    base.hold('right');
     expect(base.sent).toEqual(['right', 'right']);
+
+    // 키를 누른 채 모션으로 돌아가면 그 키는 버려진다.
+    base.controller.keyUp('right');
+    base.controller.keyDown('left', false);
+    base.controller.setMode('motion');
+    base.advance(INPUT_TUNING.turnHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['right', 'right']);
+    expect(base.timerCount).toBe(0);
   });
 
   it('requires a fresh press or neutral after reset', () => {
     const base = harness();
     base.controller.setMode('keyboard');
-    base.controller.keyDown('left', false);
+    base.hold('left');
+    expect(base.sent).toEqual(['left']);
 
     base.controller.reset();
-    base.controller.keyDown('left', false);
+    expect(base.controller.latched).toBe(false);
+    base.hold('left');
 
     expect(base.sent).toEqual(['left', 'left']);
-    expect(base.controller.latched).toBe(false);
   });
 });

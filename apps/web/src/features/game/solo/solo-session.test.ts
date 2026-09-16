@@ -4,6 +4,7 @@ import {
   createInteractionRuntime,
   type InteractionRuntimeOptions,
 } from '../../input/InteractionRuntime';
+import { INPUT_TUNING } from '../../input/input-tuning';
 
 function setup(options: InteractionRuntimeOptions = {}) {
   let now = 0;
@@ -51,6 +52,13 @@ function setup(options: InteractionRuntimeOptions = {}) {
       now += ms;
       session.poll();
     },
+    /** 잡힌 런타임 타이머를 모두 깨운다. 유지 시간이 덜 찬 타이머는 스스로 다시 잔다. */
+    fire() {
+      for (const [id, callback] of [...timer.entries()]) {
+        timer.delete(id);
+        callback();
+      }
+    },
     key(name: 'keydown' | 'keyup', code: string, repeat = false) {
       listeners.get(name)?.({ code, repeat, target: null, preventDefault() {} } as KeyboardEvent);
     },
@@ -60,7 +68,11 @@ function setup(options: InteractionRuntimeOptions = {}) {
 it('uses real runtime keyboard handlers and cleans their timers without loading or joining LiveKit', async () => {
   const h = setup();
   expect(h.listeners.size).toBe(2);
+  // 개인 체험도 제품과 같은 키보드 규칙이다: 모션과 같은 유지 시간을 채워야 움직인다(265).
   h.key('keydown', 'KeyW');
+  expect(h.session.snapshot().self.action).toBeNull();
+  h.advance(INPUT_TUNING.forwardHoldMs);
+  h.fire();
   expect(h.session.snapshot().self.action?.kind).toBe('move');
   h.advance(200);
   h.key('keyup', 'KeyW');
@@ -71,6 +83,8 @@ it('uses real runtime keyboard handlers and cleans their timers without loading 
   expect(h.session.snapshot().completed).toContain('neutral');
   h.key('keydown', 'KeyA');
   h.key('keydown', 'KeyA', true);
+  h.advance(INPUT_TUNING.turnHoldMs);
+  h.fire();
   h.key('keyup', 'KeyA');
   h.advance(300);
   expect(h.session.snapshot().self.dir).toBe(3);

@@ -7,9 +7,10 @@ function harness() {
   const sent: MoveIntent[] = [];
   const timers = new Map<number, () => void>();
   let next = 1;
+  let clock = 0;
   const controller = createMoveIntentController({
     send: (direction) => sent.push(direction),
-    now: () => 0,
+    now: () => clock,
     setTimer: (handler) => {
       const handle = next++;
       timers.set(handle, handler);
@@ -22,6 +23,9 @@ function harness() {
     sent,
     get timerCount() {
       return timers.size;
+    },
+    advance: (ms: number) => {
+      clock += ms;
     },
     fire: () => {
       for (const [handle, handler] of [...timers.entries()]) {
@@ -97,23 +101,113 @@ describe('createMoveIntentController', () => {
     expect(base.sent.filter((value) => value === null)).toHaveLength(1);
   });
 
-  it('routes the keyboard through the same intent function', () => {
+  it('ignores movement keys in motion mode', () => {
     const base = harness();
 
     base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs * 2);
+    base.fire();
+    base.controller.setKey('forward', false);
+
+    expect(base.sent).toEqual([]);
+    expect(base.controller.current).toBeNull();
+    expect(base.controller.mode).toBe('motion');
+  });
+
+  it('holds a movement key for the motion hold time before it sends', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.setKey('forward', true);
+    expect(base.sent).toEqual([]);
+    // 유지 시간을 채우기 전에 타이머가 깨어나도 의도를 만들지 않는다.
+    base.advance(INPUT_TUNING.forwardHoldMs - 1);
+    base.fire();
+    expect(base.sent).toEqual([]);
+
+    base.advance(1);
+    base.fire();
     expect(base.sent).toEqual(['forward']);
 
+    // 놓으면 즉시 멈춘다. 모션도 임계를 벗어나면 바로 멈추므로 같은 규칙이다.
     base.controller.setKey('forward', false);
     expect(base.sent).toEqual(['forward', null]);
+    expect(base.timerCount).toBe(0);
+  });
+
+  it('uses the longer back hold time for the back key too', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.setKey('back', true);
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual([]);
+
+    base.advance(INPUT_TUNING.backHoldMs - INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['back']);
+  });
+
+  it('sends nothing for a key released before the hold time', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs - 20);
+    base.controller.setKey('forward', false);
+    base.advance(100);
+    base.fire();
+
+    expect(base.sent).toEqual([]);
+    expect(base.timerCount).toBe(0);
   });
 
   it('treats both directions at once as neutral', () => {
     const base = harness();
+    base.controller.setMode('keyboard');
     base.controller.setKey('forward', true);
-    base.controller.setKey('back', true);
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['forward']);
 
+    base.controller.setKey('back', true);
     expect(base.sent).toEqual(['forward', null]);
     expect(base.controller.current).toBeNull();
+
+    // 한쪽을 놓아도 남은 키는 유지 시간을 다시 채워야 한다.
+    base.controller.setKey('forward', false);
+    base.advance(INPUT_TUNING.backHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['forward', null, 'back']);
+  });
+
+  it('drops a held key when the mode changes back to motion', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+    base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['forward']);
+
+    base.controller.setMode('motion');
+    expect(base.sent).toEqual(['forward', null]);
+    // 모션 모드가 된 뒤의 키는 무시하고, 이전 키가 이어지지도 않는다.
+    base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['forward', null]);
+  });
+
+  it('ignores motion candidates in keyboard mode', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.updateMotion(FORWARD, 1000);
+    base.controller.updateMotion(FORWARD, 1000 + INPUT_TUNING.forwardHoldMs);
+
+    expect(base.sent).toEqual([]);
+    expect(base.controller.motionActive).toBe(false);
   });
 
   it('treats a motion in both directions as neutral', () => {

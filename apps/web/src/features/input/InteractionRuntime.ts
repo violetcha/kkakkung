@@ -851,6 +851,9 @@ export const createInteractionRuntime = (
     send: (direction) => {
       deps.sendCommand({ type: 'TURN', payload: { direction } });
     },
+    now: () => vision.now(),
+    setTimer: (handler, delayMs) => vision.setTimer(handler, delayMs),
+    clearTimer: (handle) => vision.clearTimer(handle),
     tuning,
   });
   const gestures: GestureIntentController = createGestureIntentController({
@@ -874,6 +877,7 @@ export const createInteractionRuntime = (
   const fallback: InputFallback = createInputFallback({
     clearHolds,
     onModeChange: (nextMode) => {
+      move.setMode(nextMode);
       turn.setMode(nextMode);
       gestures.setMode(nextMode);
     },
@@ -1482,6 +1486,8 @@ export const createInteractionRuntime = (
         clearHolds();
       // pageActive=false이면 입력과 버퍼를 비우고 새 의도를 막는다.
       if (!context.acceptsInput) clearHolds();
+      // 이동 키도 키보드 모드에서만 받는다(S15P21C204-265). 모션 모드는 웹캠으로만 움직인다.
+      move.setMode(next.mode);
       turn.setMode(next.mode);
       gestures.syncEquipment(next.selectedEquipment ?? 'sensor');
       gestures.setMode(next.mode);

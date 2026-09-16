@@ -109,17 +109,23 @@ test('solo teaches actual keyboard movement and both roles without admission or 
   await enter(page);
   const progress = page.getByLabel('체험 진행');
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(400);
   await page.keyboard.up('KeyW');
   await expect(progress.getByText('✓ 완료 · 한 칸 전진', { exact: true })).toBeVisible();
   await page.keyboard.down('KeyS');
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(600);
   await page.keyboard.up('KeyS');
   await expect(progress.getByText('✓ 완료 · 한 칸 후진', { exact: true })).toBeVisible();
   await expect(progress.getByText('✓ 완료 · 중립으로 멈추기', { exact: true })).toBeVisible();
-  await page.keyboard.press('KeyA');
+  await page.keyboard.down('KeyA');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyA');
   await expect(progress.getByText('✓ 완료 · 왼쪽 90° 회전', { exact: true })).toBeVisible();
-  await page.keyboard.press('KeyD');
+  // 회전은 키를 놓고 중립 시간(150ms)이 지나야 다음 회전을 받는다(265).
+  await page.waitForTimeout(300);
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyD');
   await expect(progress.getByText('✓ 완료 · 오른쪽 90° 회전', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '술래 체험', exact: true }).click();
   await page.keyboard.press('KeyF');

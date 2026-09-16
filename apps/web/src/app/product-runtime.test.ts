@@ -12,6 +12,41 @@ import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
 import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
 import { createRuntimeMetrics, type RuntimeMetrics } from './runtime-metrics';
+import { INPUT_TUNING } from '../features/input/input-tuning';
+
+/** S15P21C204-265. 키보드는 모션과 같은 유지 시간을 채워야 하므로 시계와 타이머를 손으로 돈다. */
+function manualVision() {
+  const timers = new Map<number, () => void>();
+  let clock = 0;
+  let nextTimer = 0;
+  return {
+    vision: {
+      now: () => clock,
+      setTimer: (handler: () => void) => {
+        const id = ++nextTimer;
+        timers.set(id, handler);
+        return id;
+      },
+      clearTimer: (id: number) => {
+        timers.delete(id);
+      },
+      createWorker: () => {
+        throw Error('No camera needed');
+      },
+      createFrameSource: () => {
+        throw Error('No camera needed');
+      },
+    },
+    /** 시계를 옮기고 그때까지 잡힌 타이머를 모두 깨운다. 이르게 깨어난 타이머는 스스로 다시 잔다. */
+    elapse: (ms: number) => {
+      clock += ms;
+      for (const [id, handler] of [...timers.entries()]) {
+        timers.delete(id);
+        handler();
+      }
+    },
+  };
+}
 function fixture(
   interactionFactory?: (deps: InteractionDeps) => InteractionRuntime,
   metrics?: RuntimeMetrics,
@@ -757,6 +792,7 @@ it.each([0, 1, 2, 3] as const)(
 
 it('sends a final movement stop on blur through the real keyboard input runtime', async () => {
   const keys = new Map<string, (event: KeyboardEvent) => void>();
+  const manual = manualVision();
   const f = fixture((deps) =>
     createInteractionRuntime(deps, {
       keyboardTarget: {
@@ -767,22 +803,14 @@ it('sends a final movement stop on blur through the real keyboard input runtime'
           keys.delete(type);
         },
       },
-      vision: {
-        now: () => 0,
-        setTimer: () => 1,
-        clearTimer: () => {},
-        createWorker: () => {
-          throw Error('No camera needed');
-        },
-        createFrameSource: () => {
-          throw Error('No camera needed');
-        },
-      },
+      vision: manual.vision,
     }),
   );
   try {
     f.state({ phase: 'PLAYING' });
     f.messages.get('private-view')!(viewFixture());
+    // 이동 키는 키보드 모드에서만, 모션과 같은 유지 시간을 채운 뒤에 움직인다(265).
+    f.runtime.selectInputMode('keyboard');
     const event = {
       code: 'KeyW',
       repeat: false,
@@ -791,6 +819,8 @@ it('sends a final movement stop on blur through the real keyboard input runtime'
       preventDefault() {},
     } as KeyboardEvent;
     keys.get('keydown')!(event);
+    expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toEqual([]);
+    manual.elapse(INPUT_TUNING.forwardHoldMs);
     f.runtime.setPageActive(false);
     keys.get('keydown')!(event);
     expect(f.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } })).toBe('');
@@ -810,6 +840,7 @@ it('sends a final movement stop on blur through the real keyboard input runtime'
 
 it('routes explicit keyboard mode to real left and right turn handlers', async () => {
   const keys = new Map<string, (event: KeyboardEvent) => void>();
+  const manual = manualVision();
   const f = fixture((deps) =>
     createInteractionRuntime(deps, {
       keyboardTarget: {
@@ -820,6 +851,7 @@ it('routes explicit keyboard mode to real left and right turn handlers', async (
           keys.delete(type);
         },
       },
+      vision: manual.vision,
     }),
   );
   const key = (type: string, code: string, repeat = false) =>
@@ -830,22 +862,33 @@ it('routes explicit keyboard mode to real left and right turn handlers', async (
       target: null,
       preventDefault() {},
     } as KeyboardEvent);
+  const commands = () =>
+    f.send.mock.calls.filter(([channel]) => channel === 'command').map(([, value]) => value);
   try {
     f.state({ phase: 'PLAYING' });
     f.messages.get('private-view')!(viewFixture());
     key('keydown', 'KeyA');
+    manual.elapse(INPUT_TUNING.turnHoldMs);
     key('keyup', 'KeyA');
-    expect(f.send.mock.calls.filter(([channel]) => channel === 'command')).toEqual([]);
+    expect(commands()).toEqual([]);
     f.runtime.selectInputMode('keyboard');
     expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    // 회전 키도 모션처럼 유지 시간을 채워야 한 번 발동하고, 자동 반복은 무시한다(265).
     key('keydown', 'KeyA');
     key('keydown', 'KeyA', true);
+    expect(commands()).toEqual([]);
+    manual.elapse(INPUT_TUNING.turnHoldMs);
     key('keyup', 'KeyA');
+    // 놓은 직후의 다음 키는 중립 대기가 끝나기 전이라 받지 않는다.
     key('keydown', 'ArrowRight');
+    manual.elapse(INPUT_TUNING.turnHoldMs);
     key('keyup', 'ArrowRight');
-    expect(
-      f.send.mock.calls.filter(([channel]) => channel === 'command').map(([, value]) => value),
-    ).toMatchObject([
+    expect(commands()).toMatchObject([{ type: 'TURN', payload: { direction: 'left' } }]);
+    manual.elapse(INPUT_TUNING.neutralHoldMs);
+    key('keydown', 'ArrowRight');
+    manual.elapse(INPUT_TUNING.turnHoldMs);
+    key('keyup', 'ArrowRight');
+    expect(commands()).toMatchObject([
       { type: 'TURN', payload: { direction: 'left' } },
       { type: 'TURN', payload: { direction: 'right' } },
     ]);
