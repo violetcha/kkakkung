@@ -41,6 +41,10 @@ const configuration = () => ({
     SESSION_ATTEMPTS_PER_INVITE: '20',
     SESSION_ATTEMPTS_PER_IP: '100',
     ROOM_IDLE_TTL_MS: '600000',
+    // S15P21C204-267. KKAKKUNG_DEMO_MAP=maze-v1 runs the same scenarios on the corridor maze.
+    ...(process.env.KKAKKUNG_DEMO_MAP
+      ? { PRODUCT_MAP_TEMPLATE: process.env.KKAKKUNG_DEMO_MAP }
+      : {}),
   }),
   port: 0,
 });

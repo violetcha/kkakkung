@@ -6,13 +6,19 @@ import { validateConnectivity } from '../../src/match/map/validate-connectivity.
 import { selectLayout } from '../../src/match/map/select-layout.js';
 import { validateTuning } from '../../src/match/tuning.js';
 import type { FallbackLayout, RosterEntry } from '../../src/match/types.js';
-import { loadFallback, loadMaster, masterTemplate, loadTuning } from './helpers.js';
+import {
+  CERTIFIED_TEMPLATE_IDS,
+  certifiedTemplate,
+  loadFallbackFile,
+  loadTemplateFile,
+  loadTuning,
+} from './helpers.js';
 
 /**
- * Certification of the real server data: every validated master variant must
- * be connected with a single core, carry a stored fallback with the same source
- * fields, and that fallback must pass the full layout rules for a real roster.
- * Intended for `pnpm test:maps` (root script owned by F).
+ * Certification of the real server data: every validated variant of every shipped template must
+ * be connected with a single core, carry a stored fallback with the same source fields, and that
+ * fallback must pass the full layout rules for a real roster. Intended for `pnpm test:maps`
+ * (root script owned by F). S15P21C204-267 added the corridor maze beside the open grid.
  */
 const tuning = validateTuning(loadTuning());
 if (!tuning.ok) throw new Error('tuning invalid');
@@ -34,15 +40,15 @@ type FallbackFile = {
   fallbacks: FallbackLayout[];
 };
 
-describe('master-v1 certification', () => {
-  const template = masterTemplate();
+describe.each(CERTIFIED_TEMPLATE_IDS)('%s certification', (templateId) => {
+  const template = certifiedTemplate(templateId);
   const variants = createTemplateVariants(template);
-  const file = loadFallback() as FallbackFile;
+  const file = loadFallbackFile(templateId) as FallbackFile;
 
-  it('stores the SHA-256 of the current master file bytes', () => {
-    const { source } = loadMaster();
+  it('stores the SHA-256 of the current template file bytes', () => {
+    const { source } = loadTemplateFile(templateId);
     expect(file.templateHash).toBe(source.templateHash);
-    expect(file.templateId).toBe('master-v1');
+    expect(file.templateId).toBe(templateId);
     expect(file.templateVersion).toBe('1');
   });
 
@@ -106,4 +112,14 @@ describe('master-v1 certification', () => {
       }
     }
   });
+});
+
+it('the two templates are different terrain under the same rules', () => {
+  const master = certifiedTemplate('master-v1');
+  const maze = certifiedTemplate('maze-v1');
+  expect(master.topology.width).toBe(32);
+  expect(maze.topology.width).toBe(31);
+  expect(loadTemplateFile('master-v1').source.templateHash).not.toBe(
+    loadTemplateFile('maze-v1').source.templateHash,
+  );
 });

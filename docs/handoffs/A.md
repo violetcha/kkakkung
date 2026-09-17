@@ -45,7 +45,7 @@ const certified = selector.certifyFallback(input); // 탐색 전에 인증·보�
 const iterator = selector.selectWithFallback(input); // next()마다 후보 최대 8개. 시간 초과면 iterator.return(certified)
 ```
 
-- 자료: `server/content/maps/master-v1.json`, `practice-v1.json`(`preparePracticeLayout(raw, players, role)`), `server/content/placements/master-v1-fallback.json`, `server/config/tuning/mvp-v1.json`.
+- 자료: `server/content/maps/master-v1.json`, `maze-v1.json`(267, 통로 1칸 미로), `practice-v1.json`(`preparePracticeLayout(raw, players, role)`), `server/content/placements/master-v1-fallback.json`, `maze-v1-fallback.json`, `server/config/tuning/mvp-v1.json`. 본경기 템플릿은 `PRODUCT_MAP_TEMPLATE`으로 고르며 `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝이다. maze-v1은 `scripts/generate-maze-template.mjs`(seed 267)가 재생성한다.
 - core에는 `LayoutSelectionResult.selected.layout`만 넘긴다. seed·후보·fallback 원문은 서버 내부 자료다. fallback의 `tagger-1..3`/`runner-1..3` 슬롯은 `certifyFallback`이 실제 playerId로 치환한다.
 - 거리는 경로 간선 수다. E의 가청 거리는 `buildGraph(topology)` → `bfsDistances`/`distance`/`distanceMatrix`(미도달 `UNREACHABLE` = −1). 브라우저에 graph를 주지 않는다.
 

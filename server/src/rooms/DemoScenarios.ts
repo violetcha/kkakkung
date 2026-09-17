@@ -124,11 +124,20 @@ export function createDemoRunner(): DemoRunner {
   let scenario: DemoScenario | null = null;
   let tracks: Track[] = [];
   let failure: string | null = null;
+  /**
+   * Puppets whose last forward intent has not been released yet. The server keeps an intent
+   * held until it is released or its TTL lapses, and the held move resumes in the very tick the
+   * first cell completes, so an unreleased intent walks a second cell before the scenario can
+   * look again. Releasing on the next tick makes one intent exactly one cell: in a corridor one
+   * cell wide (S15P21C204-267) the overshoot otherwise never converges on a neighbouring cell.
+   */
+  const releasing = new Set<string>();
 
   const finish = (reason: string | null) => {
     if (reason) failure = reason;
     scenario = null;
     tracks = [];
+    releasing.clear();
   };
   return {
     start(next, world) {
@@ -137,6 +146,7 @@ export function createDemoRunner(): DemoRunner {
       scenario = next;
       tracks = built.map((steps) => ({ steps, index: 0, enteredAt: world.tick }));
       failure = null;
+      releasing.clear();
       return null;
     },
     stop: () => finish(null),
@@ -150,7 +160,7 @@ export function createDemoRunner(): DemoRunner {
         const budget =
           step.kind === 'until' ? (step.timeout ?? STEP_TIMEOUT_TICKS) : STEP_TIMEOUT_TICKS;
         if (elapsed > budget) return finish(`${step.label}:TIMEOUT`);
-        const outcome = run(step, world, io, elapsed);
+        const outcome = run(step, world, io, elapsed, releasing);
         if (outcome === 'failed') return finish(`${step.label}:FAILED`);
         if (outcome === 'done') {
           track.index += 1;
@@ -173,11 +183,19 @@ function run(
   world: DemoWorld,
   { send, drop }: DemoIo,
   elapsed: number,
+  releasing: Set<string>,
 ): 'done' | 'running' | 'failed' {
   if (step.kind === 'wait') return elapsed >= step.ticks ? 'done' : 'running';
   if (step.kind === 'until') return step.done(world) ? 'done' : 'running';
   const actor = subject(world, step.actor);
   if (!actor || actor.status !== 'ACTIVE') return 'failed';
+  // The tick after a forward intent: let go of it before the first cell completes, so the
+  // server does not carry the puppet on into a second cell. Retried until the queue takes it.
+  if (releasing.has(actor.playerId)) {
+    if (send(actor.playerId, { type: 'MOVE_INTENT', payload: { direction: null } }))
+      releasing.delete(actor.playerId);
+    return 'running';
+  }
   if (step.kind === 'drop') return drop?.(step.actor) ? 'done' : 'failed';
   if (step.kind === 'send') {
     const command = step.command(world);
@@ -189,7 +207,7 @@ function run(
   const target = typeof step.target === 'function' ? step.target(world) : step.target;
   if (!target) return 'failed';
   if (step.kind === 'face') return turnToward(actor, target, send) ?? 'done';
-  return walk(actor, target, step.adjacent === true, world, send);
+  return walk(actor, target, step.adjacent === true, world, send, releasing);
 }
 
 /** Emits the turn that brings the actor one quarter closer to `target`, or null when it faces it. */
@@ -216,6 +234,7 @@ function walk(
   adjacent: boolean,
   world: DemoWorld,
   send: (actor: string, command: PuppetCommand) => boolean,
+  releasing: Set<string>,
 ): 'done' | 'running' | 'failed' {
   if (sameCell(actor.cell, target)) return 'done';
   const next = pathStep(world, actor, target, adjacent);
@@ -223,10 +242,12 @@ function walk(
   if (!next) return 'failed';
   const turn = turnToward(actor, next, send);
   if (turn) return turn;
-  // Facing the next cell: one forward intent moves exactly one cell under the server's timing.
-  return send(actor.playerId, { type: 'MOVE_INTENT', payload: { direction: 'forward' } })
-    ? 'running'
-    : 'failed';
+  // Facing the next cell: one forward intent starts one move under the server's timing, and the
+  // release the runner sends on the next tick keeps it to that one cell.
+  if (!send(actor.playerId, { type: 'MOVE_INTENT', payload: { direction: 'forward' } }))
+    return 'failed';
+  releasing.add(actor.playerId);
+  return 'running';
 }
 
 /**

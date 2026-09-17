@@ -365,3 +365,55 @@ it('captures one puppet runner with one puppet tagger for the tally scenario', (
 function sameCell(a: GameSubject, b: GameSubject) {
   return a.cell.x === b.cell.x && a.cell.y === b.cell.y;
 }
+
+// S15P21C204-267. On the real server a forward intent stays held until released or expired, and
+// the held move resumes in the tick the first cell completes: an unreleased intent is two cells.
+it('releases every forward intent on the next tick so a puppet walks exactly one cell', () => {
+  const runner = createDemoRunner();
+  let tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 }, dir: 0 });
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  expect(runner.start('capture', world([operator, tagger]))).toBeNull();
+  const sent: PuppetCommand[] = [];
+  for (let tick = 1; tick <= 40 && !sameCell(tagger, operator); tick++) {
+    // The world shows the move in progress on the tick after the intent, then it lands.
+    const last = sent.at(-1);
+    const busy = last?.type === 'MOVE_INTENT' && last.payload.direction === 'forward';
+    const shown = busy
+      ? {
+          ...tagger,
+          action: {
+            kind: 'move' as const,
+            from: { ...tagger.cell, dir: tagger.dir },
+            to: { ...apply(tagger, last).cell, dir: tagger.dir },
+            startTick: tick - 1,
+            endTick: tick + 8,
+          },
+        }
+      : tagger;
+    runner.advance(world([operator, shown], { tick }), (actor, command) => {
+      expect(actor).toBe('puppet-tagger');
+      sent.push(command);
+      if (command.type === 'MOVE_INTENT' && command.payload.direction === null) {
+        // The move the intent started still lands; only the hold is gone.
+        tagger = apply(tagger, { type: 'MOVE_INTENT', payload: { direction: 'forward' } });
+      }
+      if (command.type === 'TURN') tagger = apply(tagger, command);
+      return true;
+    });
+  }
+  expect(sameCell(tagger, operator)).toBe(true);
+  const forwards = sent.filter(
+    (command) => command.type === 'MOVE_INTENT' && command.payload.direction === 'forward',
+  );
+  const releases = sent.filter(
+    (command) => command.type === 'MOVE_INTENT' && command.payload.direction === null,
+  );
+  expect(forwards.length).toBeGreaterThan(0);
+  expect(releases.length).toBe(forwards.length);
+  // Every release directly follows its intent: nothing else is sent while the puppet is moving.
+  sent.forEach((command, index) => {
+    if (command.type === 'MOVE_INTENT' && command.payload.direction === 'forward') {
+      expect(sent[index + 1]).toEqual({ type: 'MOVE_INTENT', payload: { direction: null } });
+    }
+  });
+});

@@ -43,6 +43,12 @@ const environment = z.object({
   PRODUCT_ASSET_VERSION: z.string().min(1).default('c-primitives-1'),
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
   PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
+  // S15P21C204-267. Which certified template under PRODUCT_CONTENT_DIR the product room plays:
+  // maps/<id>.json with placements/<id>-fallback.json. The open grid stays the default.
+  PRODUCT_MAP_TEMPLATE: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .default('master-v1'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(2567),
   ALLOWED_ORIGINS: z
@@ -257,6 +263,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     assetVersion: raw.PRODUCT_ASSET_VERSION,
     contentDir: raw.PRODUCT_CONTENT_DIR,
     tuningPath: raw.PRODUCT_TUNING_PATH,
+    mapTemplate: raw.PRODUCT_MAP_TEMPLATE,
     host: raw.HOST,
     port: raw.PORT,
     allowedOrigins,

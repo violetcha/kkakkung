@@ -31,7 +31,9 @@ describe('sentinels come from the server files, not from a hand-written list', (
     const ids = sentinels.map((s) => s.id);
     expect(ids).toContain('map:master-v1:templateId');
     expect(ids).toContain('map:practice-v1:templateId');
-    expect(ids).toContain('fallback:templateHash');
+    expect(ids).toContain('fallback:master-v1:templateHash');
+    expect(ids).toContain('map:maze-v1:templateId');
+    expect(ids).toContain('fallback:maze-v1:templateHash');
     expect(ids).toContain('tuning:version');
     expect(ids).toContain('secret-name:OPS_TOKEN');
     expect(ids.filter((id) => id.startsWith('map:master-v1:row')).length).toBeGreaterThan(10);
