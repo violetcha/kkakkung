@@ -179,6 +179,31 @@ describe('createTurnIntentController', () => {
     expect(base.sent).toEqual(['right', 'left']);
   });
 
+  it('turns on release when the hold elapsed but the timer never fired', () => {
+    // 이동과 같은 경합: keyup이 유지 타이머를 앞질러도 시계상 채운 유지 시간은 잃지 않는다.
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.keyDown('left', false);
+    base.advance(INPUT_TUNING.turnHoldMs + 30);
+    base.controller.keyUp('left');
+
+    expect(base.sent).toEqual(['left']);
+    expect(base.controller.latched).toBe(true);
+
+    // 놓은 뒤에는 보통처럼 중립 시간이 지나야 다음 회전을 받는다.
+    base.advance(INPUT_TUNING.neutralHoldMs);
+    base.fire();
+    expect(base.controller.latched).toBe(false);
+
+    // 유지 시간 전에 놓으면 발동하지 않는다.
+    base.controller.keyDown('right', false);
+    base.advance(INPUT_TUNING.turnHoldMs - 1);
+    base.controller.keyUp('right');
+    expect(base.sent).toEqual(['left']);
+    expect(base.timerCount).toBe(0);
+  });
+
   it('drops the hold when a second direction is pressed at the same time', () => {
     const base = harness();
     base.controller.setMode('keyboard');

@@ -192,10 +192,16 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
       const nowMs = deps.now();
       if (direction === 'forward') {
         if (pressed === keyForward) return;
+      } else if (pressed === keyBack) return;
+      // 놓는 시점에 먼저 시계로 판정한다. 메인 스레드가 막혀 유지 타이머가 keyup보다 늦게
+      // 처리되면 타이머는 취소되고 채운 유지 시간이 사라진다. 모션은 표본 시각으로 재므로
+      // 같은 지연에 견디는데, 키만 입력을 잃으면 동등하지 않다. 유지 시간을 채웠다면 여기서
+      // 의도를 내보내고 바로 아래에서 놓기를 처리해 모션의 "임계 진입 뒤 즉시 이탈"과 같아진다.
+      if (!pressed) resolve();
+      if (direction === 'forward') {
         keyForward = pressed;
         keyForwardSince = pressed ? nowMs : null;
       } else {
-        if (pressed === keyBack) return;
         keyBack = pressed;
         keyBackSince = pressed ? nowMs : null;
       }

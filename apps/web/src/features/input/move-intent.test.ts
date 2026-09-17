@@ -182,6 +182,28 @@ describe('createMoveIntentController', () => {
     expect(base.sent).toEqual(['forward', null, 'back']);
   });
 
+  it('sends the intent on release when the hold elapsed but the timer never fired', () => {
+    // 메인 스레드가 막히면 keyup이 유지 타이머보다 먼저 처리된다. 시계상 유지 시간을 채웠으면
+    // 놓는 시점에 forward가 나가고 곧바로 null이 따라야 한다(모션의 임계 진입 뒤 즉시 이탈과 같음).
+    const base = harness();
+    base.controller.setMode('keyboard');
+
+    base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs + 50);
+    base.controller.setKey('forward', false);
+
+    expect(base.sent).toEqual(['forward', null]);
+    expect(base.controller.current).toBeNull();
+    expect(base.timerCount).toBe(0);
+
+    // 유지 시간을 채우지 못한 채 놓으면 타이머가 안 돌았어도 아무것도 나가지 않는다.
+    base.controller.setKey('back', true);
+    base.advance(INPUT_TUNING.backHoldMs - 1);
+    base.controller.setKey('back', false);
+    expect(base.sent).toEqual(['forward', null]);
+    expect(base.timerCount).toBe(0);
+  });
+
   it('drops a held key when the mode changes back to motion', () => {
     const base = harness();
     base.controller.setMode('keyboard');
