@@ -13,18 +13,19 @@ F는 설정 스키마, 배포 파이프라인과 배포 러너, 관측 등록명
 
 ## 진입점
 
-| 영역       | 파일                                                                                                                                                                 | 비고                                                                                         |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 설정       | `server/src/config/env.ts`(`parseConfig`), `ProductDeployment.ts`, `RuntimeEvidence.ts`                                                                              | E는 `process.env`를 직접 읽지 않는다. `NODE_ENV=production` 거절                             |
-| 배포       | `scripts/product-release.mjs`, `deploy-release.mjs`, `verify-release.mjs`, `lib/release-sequence.mjs`, `infra/deploy.sh`                                             | Jenkins와 수동 배포가 같은 러너. 결과 `/opt/kkakkung/releases/<tag>/release.json`            |
-| CI         | `Jenkinsfile`, `scripts/ci-verify.mjs`, `infra/docker/Dockerfile.ci`                                                                                                 | 도구체인 → SHA 대조 → frozen install → Chromium → `pnpm verify`                              |
-| 관측       | `server/src/observability/MetricRegistry.ts`, `StructuredEvents.ts`, `AlertPolicy.ts`, `scripts/collect-observability.mjs`                                           | 등록되지 않은 이름·단위는 registry가 거절한다. label은 `matchRef`·`generation`·`requestId`만 |
-| Cloud 시험 | `scripts/run-cloud-check.mjs`, `tests/cloud/CloudPreflight.ts`(`CLOUD_CASES`), `ProbeHarness.ts`, `EvidenceWriter.ts`, `GatewayFaultAdapter.ts`, `SyntheticMedia.ts` | 사례 allowlist → preflight → 한 사례. 직접 vitest로 열면 실패                                |
-| 부하       | `scripts/run-game-load.mjs`, `summarize-load.mjs`, `run-media-load.mjs`, `summarize-integrated-load.mjs`, `tests/load/*`                                             | 게임 단독은 LiveKit에 연결하지 않는다                                                        |
-| 성능 분석  | `scripts/probe-extract.mjs`, `profile-summary.mjs`, `profile-callers.mjs`                                                                                            | CI 프로브 창과 로컬 CPU 프로파일 요약                                                        |
-| 인수 판정  | `scripts/collect-six-device-results.mjs`, `scripts/verify-mvp-evidence.mjs`, `tests/fixtures/manual-six-device.md`                                                   | 보고서는 `.local/qa/mvp-gate-report.md`(기본값)에 쓴다                                       |
-| 자산 검사  | `scripts/check-product-assets.mjs`, `scripts/lib/vision-asset-notices.mjs`                                                                                           | 모델·WASM 해시와 고지. `--require-reviewed-rights`는 현재 pending 때문에 실패                |
-| 공유 계약  | `tests/contracts/shared/`                                                                                                                                            | 웹·서버 시험용 계약 사본(EXEC-CONTRACT-3). 제품 코드는 import하지 않음                       |
+| 영역        | 파일                                                                                                                                                                 | 비고                                                                                                                                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 설정        | `server/src/config/env.ts`(`parseConfig`), `ProductDeployment.ts`, `RuntimeEvidence.ts`                                                                              | E는 `process.env`를 직접 읽지 않는다. `NODE_ENV=production` 거절                                                                                     |
+| 배포        | `scripts/product-release.mjs`, `deploy-release.mjs`, `verify-release.mjs`, `lib/release-sequence.mjs`, `infra/deploy.sh`                                             | Jenkins와 수동 배포가 같은 러너. 결과 `/opt/kkakkung/releases/<tag>/release.json`                                                                    |
+| CI          | `Jenkinsfile`, `scripts/ci-verify.mjs`, `infra/docker/Dockerfile.ci`                                                                                                 | 도구체인 → SHA 대조 → frozen install → Chromium → `pnpm verify`                                                                                      |
+| 관측        | `server/src/observability/MetricRegistry.ts`, `StructuredEvents.ts`, `AlertPolicy.ts`, `scripts/collect-observability.mjs`                                           | 등록되지 않은 이름·단위는 registry가 거절한다. label은 `matchRef`·`generation`·`requestId`만                                                         |
+| Cloud 시험  | `scripts/run-cloud-check.mjs`, `tests/cloud/CloudPreflight.ts`(`CLOUD_CASES`), `ProbeHarness.ts`, `EvidenceWriter.ts`, `GatewayFaultAdapter.ts`, `SyntheticMedia.ts` | 사례 allowlist → preflight → 한 사례. 직접 vitest로 열면 실패                                                                                        |
+| 부하 프로브 | `tests/cloud/LoadProbePool.ts`, `load-probe.ts`, `MarkerDetector.ts`, `LoadProbeTypes.ts`                                                                            | QA-11/12용. 표식 트랙을 게시하고 수신 트랙에서 다시 읽어 `MediaObserver`에 넣는다. 제품 `composeMediaEvidence`로 증거를 낸다(REQ-D-13). Cloud 미검증 |
+| 부하        | `scripts/run-game-load.mjs`, `summarize-load.mjs`, `run-media-load.mjs`, `summarize-integrated-load.mjs`, `tests/load/*`                                             | 게임 단독은 LiveKit에 연결하지 않는다                                                                                                                |
+| 성능 분석   | `scripts/probe-extract.mjs`, `profile-summary.mjs`, `profile-callers.mjs`                                                                                            | CI 프로브 창과 로컬 CPU 프로파일 요약                                                                                                                |
+| 인수 판정   | `scripts/collect-six-device-results.mjs`, `scripts/verify-mvp-evidence.mjs`, `tests/fixtures/manual-six-device.md`                                                   | 보고서는 `.local/qa/mvp-gate-report.md`(기본값)에 쓴다                                                                                               |
+| 자산 검사   | `scripts/check-product-assets.mjs`, `scripts/lib/vision-asset-notices.mjs`                                                                                           | 모델·WASM 해시와 고지. `--require-reviewed-rights`는 현재 pending 때문에 실패                                                                        |
+| 공유 계약   | `tests/contracts/shared/`                                                                                                                                            | 웹·서버 시험용 계약 사본(EXEC-CONTRACT-3). 제품 코드는 import하지 않음                                                                               |
 
 ### 관측 등록명
 
@@ -36,14 +37,14 @@ Node 24.19.0·pnpm 11.19.0, 이미지 컨텍스트 = 루트, 서버 엔트리 `s
 
 ## 요청 받은 것 (미반영)
 
-| 요청     | 출처 | 내용                                                                                                       |
-| -------- | ---- | ---------------------------------------------------------------------------------------------------------- |
-| REQ-D-12 | D    | `vision-asset-notices.mjs`가 `bundledNoticesReview:'verified'`일 때 고지 파일 쪽도 확인                    |
-| REQ-D-13 | D    | 제품 runtime의 `getMediaEvidence()`를 Cloud runner가 읽는 노출 지점(probe 페이지·harness 또는 C 앱 진입점) |
+| 요청     | 출처 | 내용                                                                                    |
+| -------- | ---- | --------------------------------------------------------------------------------------- |
+| REQ-D-12 | D    | `vision-asset-notices.mjs`가 `bundledNoticesReview:'verified'`일 때 고지 파일 쪽도 확인 |
 
 ## 남은 일
 
 - G1(QA-03–06)·G4 metadata(QA-08)·제품 6화면(QA-09)·성능(QA-02)·단계 부하(QA-11/12) Cloud 사례의 BLOCKED를 실제 관측 생산자로 교체.
+- QA-11/12 단계 구동기: 부하 프로브(위)는 있고, 브라우저마다 실제 제품 세션을 붙여 5→6→7→6→5 셀을 걷게 하고 구간별 `MediaStageInput`을 만드는 쪽이 없다. 두 Cloud 사례는 그 이유로 BLOCKED다.
 - 게임 단독 60클라이언트 30분 재실행(이전 10방 포화의 원인 F-REQ-12–15와 readiness 비용은 해소됨) → 실제 Cloud 단계 부하(S15P21C204-251과 함께).
 - 외부 장애 알림 전달, 호스트 외부 백업과 복원 훈련, Docker 메모리·CPU·PID 상한, Trivy 결과의 차단·예외 기준.
 - W07 공개 대상: `infra/nginx/host.conf`·배포 manifest·`release-sequence`의 audience 선택과 동일 이미지 team→public→team 리허설.
