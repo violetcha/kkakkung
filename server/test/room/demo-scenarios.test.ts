@@ -211,6 +211,18 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
       await vi.waitFor(() => expect(demo.room.state.counts.captured).toBe(1), { timeout: 55_000 });
       await vi.waitFor(() => expect(demo.self()).toBeNull());
       expect(demo.room.state.phase).toBe('PLAYING');
+      // S15P21C204-269. The ended operator now watches a surviving puppet runner and can switch.
+      await vi.waitFor(() => expect(demo.views.at(-1)?.spectating?.targetId).toBeTruthy());
+      const spectating = demo.views.at(-1)!.spectating!;
+      expect(spectating.candidates).toHaveLength(2);
+      expect(spectating.candidates).toContain(spectating.targetId);
+      const other = spectating.candidates.find((id) => id !== spectating.targetId)!;
+      expect(
+        (await demo.send({ type: 'SPECTATE', payload: { targetPlayerId: other } })).status,
+      ).toBe('accepted');
+      await vi.waitFor(() => expect(demo.views.at(-1)?.spectating?.targetId).toBe(other));
+      // The spectator's body is the target's: exits, sight and memory travel with the target.
+      expect(demo.views.at(-1)!.visibleCells.length).toBeGreaterThan(0);
     } finally {
       await demo.close();
     }

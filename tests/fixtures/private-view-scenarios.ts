@@ -12,7 +12,8 @@ import {
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { readPublicRoundState } from '@kkakkung/protocol/game-schema';
 import { EventDispatcher, type ViewReason } from '../../server/src/game/EventDispatcher.ts';
-import { projectPrivateBody } from '../../server/src/game/PlayerProjection.ts';
+import { projectPrivateBody, projectSpectateBody } from '../../server/src/game/PlayerProjection.ts';
+import { chooseSpectateTarget, spectateCandidates } from '../../server/src/game/Spectate.ts';
 import {
   DEFAULT_PLACEMENTS,
   SEED,
@@ -56,6 +57,25 @@ export function createViewHarness(options: HarnessOptions = {}) {
     list.push(value);
     map.set(id, list);
   };
+  // S15P21C204-269. The room's spectate choice, mirrored: an ended runner's view body is its
+  // target's projection while the match is PLAYING.
+  const spectateChoices = new Map<string, string>();
+  const viewBody = (id: string) => {
+    const state = h.state();
+    if (h.frame().phase === 'PLAYING') {
+      const participants = matchCore.getFrame(state).participants;
+      const targetId = chooseSpectateTarget(participants, id, spectateChoices.get(id));
+      if (targetId)
+        return projectSpectateBody(
+          matchCore,
+          state,
+          id,
+          targetId,
+          spectateCandidates(participants, id),
+        );
+    }
+    return projectPrivateBody(matchCore, state, id, null);
+  };
   const dispatcher = new EventDispatcher({
     context: h.context,
     now: h.clock.now,
@@ -65,7 +85,7 @@ export function createViewHarness(options: HarnessOptions = {}) {
       sendOutcome: () => undefined,
       sendStatus: () => undefined,
     },
-    viewBody: (id) => projectPrivateBody(matchCore, h.state(), id, null),
+    viewBody,
   });
   let delivered = 0;
   const ids = (options.placements ?? DEFAULT_PLACEMENTS).map((p) => p.playerId);
@@ -96,6 +116,10 @@ export function createViewHarness(options: HarnessOptions = {}) {
         api.deliverEvents();
         api.publish('change');
       }
+    },
+    /** The room's SPECTATE choice for an ended runner; the next publish reflects it. */
+    spectate(id: string, targetId: string) {
+      spectateChoices.set(id, targetId);
     },
     latestView(id: string): PrivateView {
       const list = recorded.views.get(id);

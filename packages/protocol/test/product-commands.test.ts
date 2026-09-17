@@ -44,6 +44,7 @@ describe('product command envelope', () => {
         'EXIT_CANCEL',
         'EXIT_PROGRESS',
         'REMATCH',
+        'SPECTATE',
       ].sort(),
     );
     expect(COMMAND_TYPES).not.toContain('USE_ITEM');
@@ -54,6 +55,7 @@ describe('product command envelope', () => {
       'PRACTICE_READY',
       'LOAD_READY',
       'REMATCH',
+      'SPECTATE',
     ]);
   });
 

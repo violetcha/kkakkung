@@ -1186,3 +1186,39 @@ describe('E-16 actual coordinator factory with real local disk and synthetic Clo
     ).toMatchObject({ status: 'ready', receiverGeneration: 1 });
   });
 });
+
+// S15P21C204-269. A personal end no longer retires the ended runner's receiving generation while
+// the authoritative frame lists it as a spectator; the moment the frame stops listing it, the
+// ordinary personal-ended retirement runs.
+describe('spectating ended runners keep receiving', () => {
+  it('keeps the generation while listed as a spectator and retires it once unlisted', async () => {
+    const f = await fixture();
+    await open(f);
+    const two = game(2);
+    alive(f, two);
+    const first = await prepare(f);
+    f.publish(first.grant, first.playerId);
+    const ended = { ...two.participants[0]!, status: 'CAPTURED' as const };
+    f.coordinator.observeFrame(
+      game(2, {
+        frameRevision: 2,
+        participants: [ended, two.participants[1]!],
+        spectators: [{ playerId: 'p1', targetId: 'p2' }],
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(
+      f.removeParticipant.mock.calls.some(([, identity]) => identity === first.grant.mediaIdentity),
+    ).toBe(false);
+    f.coordinator.observeFrame(
+      game(2, { frameRevision: 3, participants: [ended, two.participants[1]!], spectators: [] }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        f.removeParticipant.mock.calls.some(
+          ([, identity]) => identity === first.grant.mediaIdentity,
+        ),
+      ).toBe(true),
+    );
+  });
+});

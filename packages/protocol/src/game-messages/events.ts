@@ -203,6 +203,14 @@ export const knownExitSchema = z.strictObject({
   wall: wallFaceSchema,
   approach: cellSchema,
 });
+/** S15P21C204-269. An ended runner's watch target; only ever beside an ended runner self. */
+export const spectateViewSchema = z.strictObject({
+  targetId: idSchema,
+  cell: cellSchema,
+  dir: dirSchema,
+  action: actionSchema.nullable(),
+  candidates: z.array(idSchema).max(3),
+});
 export const privateViewSchema = z.strictObject({
   mapVersion: z.number().int().nonnegative().safe(),
   knownTerrain: z.array(knownTerrainSchema),
@@ -214,5 +222,6 @@ export const privateViewSchema = z.strictObject({
   visibleCells: z.array(cellSchema),
   visibleWallFaces: z.array(wallFaceSchema),
   visibleEntities: z.array(visibleEntitySchema),
+  spectating: spectateViewSchema.optional(),
 });
 export type PrivateViewMessage = z.infer<typeof privateViewSchema>;

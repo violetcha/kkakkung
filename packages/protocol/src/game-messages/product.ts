@@ -90,6 +90,8 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
     completed: z.boolean(),
   }),
   envelope('REMATCH', { mode: z.enum(['same', 'swap', 'lobby']) }),
+  /** S15P21C204-269. An ended runner picks which surviving runner to watch. */
+  envelope('SPECTATE', { targetPlayerId: playerIdSchema }),
 ]);
 export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
 export type CommandType = CommandEnvelope['type'];
@@ -108,6 +110,7 @@ export const PHASE_COMMAND_TYPES = [
   'PRACTICE_READY',
   'LOAD_READY',
   'REMATCH',
+  'SPECTATE',
 ] as const;
 export type PhaseCommandType = (typeof PHASE_COMMAND_TYPES)[number];
 export type CoreCommandType = Exclude<CommandType, PhaseCommandType>;

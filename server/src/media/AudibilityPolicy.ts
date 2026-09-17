@@ -120,20 +120,30 @@ export class AudibilityPolicy {
     const pairs = new Set<string>();
     const open = ['TEAM_PRACTICE', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'].includes(frame.phase);
     const active = open ? frame.participants.filter((p) => p.status === 'ACTIVE') : [];
+    // S15P21C204-269. A spectator listens from its target's cell and hears what the target
+    // hears: the target's own voice is excluded like a receiver's own voice would be.
+    const spectatorTargets = new Map(
+      (frame.spectators ?? []).map((link) => [link.playerId, link.targetId] as const),
+    );
     const receivers = frame.participants.map((receiver) => {
       const voices: (AcousticValues & { playerId: string })[] = [];
       const effects: AudioPolicy['effects'][number][] = [];
-      if (open && receiver.status === 'ACTIVE') {
+      const target = spectatorTargets.has(receiver.playerId)
+        ? active.find((p) => p.playerId === spectatorTargets.get(receiver.playerId))
+        : undefined;
+      const ears = receiver.status === 'ACTIVE' ? receiver : target;
+      if (open && ears) {
         let route = routes.receivers.get(receiver.playerId);
-        if (!route || route.x !== receiver.cell.x || route.y !== receiver.cell.y) {
-          route = { ...receiver.cell, paths: shortestAcousticPaths(frame.topology, receiver.cell) };
+        if (!route || route.x !== ears.cell.x || route.y !== ears.cell.y) {
+          route = { ...ears.cell, paths: shortestAcousticPaths(frame.topology, ears.cell) };
           routes.receivers.set(receiver.playerId, route);
         }
         const paths = route.paths;
         for (const sender of active) {
           if (
             sender.playerId === receiver.playerId ||
-            (frame.instancePurpose === 'practice' && sender.role !== receiver.role)
+            sender.playerId === ears.playerId ||
+            (frame.instancePurpose === 'practice' && sender.role !== ears.role)
           )
             continue;
           const path = paths.get(cellKey(sender.cell));
@@ -142,7 +152,7 @@ export class AudibilityPolicy {
           pairs.add(pair);
           voices.push({
             playerId: sender.playerId,
-            ...this.acoustics(receiver, sender.cell, path),
+            ...this.acoustics(ears, sender.cell, path),
           });
         }
         for (const event of frame.events) {
@@ -152,8 +162,7 @@ export class AudibilityPolicy {
             ? active.find((p) => p.playerId === event.sourcePlayerId)
             : null;
           if (event.sourcePlayerId && !sender) continue;
-          if (frame.instancePurpose === 'practice' && sender && sender.role !== receiver.role)
-            continue;
+          if (frame.instancePurpose === 'practice' && sender && sender.role !== ears.role) continue;
           // Footsteps require B's completed movement event, never a turn or ongoing move.
           if (
             event.kind === 'footstep' &&
@@ -168,14 +177,14 @@ export class AudibilityPolicy {
             eventId: event.eventId,
             kind: event.kind,
             tick: event.tick,
-            ...this.acoustics(receiver, event.cell, path),
+            ...this.acoustics(ears, event.cell, path),
           });
         }
       }
       return { playerId: receiver.playerId, voices, effects };
     });
-    const activeIds = new Set(active.map((p) => p.playerId));
-    for (const id of routes.receivers.keys()) if (!activeIds.has(id)) routes.receivers.delete(id);
+    const listenerIds = new Set([...active.map((p) => p.playerId), ...spectatorTargets.keys()]);
+    for (const id of routes.receivers.keys()) if (!listenerIds.has(id)) routes.receivers.delete(id);
     this.scopes.set(key, { revision: frame.frameRevision, pairs });
     return {
       matchId: frame.matchId,

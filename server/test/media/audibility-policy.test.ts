@@ -227,3 +227,49 @@ it('projects per-track outgoing permissions and renews leases on unchanged autho
   )!;
   expect(retired.publisherPermissions).toEqual([]);
 });
+
+// S15P21C204-269. A spectating ended runner listens from its target's cell and hears exactly what
+// the target hears; an ended runner the frame does not list as a spectator stays silent.
+describe('spectators', () => {
+  const ended = (playerId: string, x: number): GameSubject => ({
+    ...player(playerId, x),
+    status: 'CAPTURED',
+  });
+  const spectating = (revision: number, spectators: TrustedMediaFrame['spectators']) => ({
+    ...frame(0, revision),
+    participants: [
+      ended('watcher', 9),
+      player('target', 0),
+      player('near', 2),
+      { ...player('tagger', 4), role: 'tagger' as const },
+    ],
+    spectators,
+  });
+
+  it('hears through the target: same senders, same distances, never the target itself', () => {
+    const policy = new AudibilityPolicy();
+    const result = policy.observe(spectating(1, [{ playerId: 'watcher', targetId: 'target' }]))!;
+    const byId = new Map(result.receivers.map((r) => [r.playerId, r]));
+    const target = byId.get('target')!;
+    const watcher = byId.get('watcher')!;
+    expect(target.voices.map((v) => v.playerId).sort()).toEqual(['near', 'tagger']);
+    expect(watcher.voices.map((v) => v.playerId).sort()).toEqual(['near', 'tagger']);
+    for (const voice of watcher.voices) {
+      const same = target.voices.find((v) => v.playerId === voice.playerId)!;
+      expect(voice.gain).toBeCloseTo(same.gain);
+      expect(voice.azimuthRad).toBeCloseTo(same.azimuthRad);
+    }
+    // Nobody hears the ended runner: only ACTIVE senders are audible.
+    for (const receiver of result.receivers)
+      expect(receiver.voices.some((v) => v.playerId === 'watcher')).toBe(false);
+  });
+
+  it('keeps an unlisted ended runner silent and follows a target change', () => {
+    const policy = new AudibilityPolicy();
+    const silent = policy.observe(spectating(1, []))!;
+    expect(silent.receivers.find((r) => r.playerId === 'watcher')!.voices).toEqual([]);
+    const moved = policy.observe(spectating(2, [{ playerId: 'watcher', targetId: 'near' }]))!;
+    const watcher = moved.receivers.find((r) => r.playerId === 'watcher')!;
+    expect(watcher.voices.map((v) => v.playerId).sort()).toEqual(['tagger', 'target']);
+  });
+});

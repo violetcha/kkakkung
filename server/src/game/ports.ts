@@ -319,6 +319,8 @@ export type RetireGenerationRequest = MediaScope &
   }>;
 export type RetirementResult = RetireGenerationRequest &
   ({ status: 'confirmed'; code: null } | { status: 'unknown'; code: MediaFailureCode });
+/** S15P21C204-269. An ended runner listening from a surviving runner's position. */
+export type SpectatorLink = Readonly<{ playerId: string; targetId: string }>;
 export type TrustedMediaFrame = Readonly<{
   matchId: string;
   mediaInstanceId: string;
@@ -329,6 +331,8 @@ export type TrustedMediaFrame = Readonly<{
   topology: Topology;
   participants: readonly GameSubject[];
   events: readonly SpatialSoundEvent[];
+  /** Ended runners still receiving media through their target's ears and eyes (269). */
+  spectators?: readonly SpectatorLink[];
 }>;
 export type MediaControl =
   | Readonly<{ type: 'MEDIA_PREPARED'; result: PreparationResult }>

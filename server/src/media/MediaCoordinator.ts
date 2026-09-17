@@ -587,12 +587,16 @@ class Coordinator implements MediaCoordinatorRuntime {
 
   observeFrame(frame: TrustedMediaFrame): void {
     if (this.closed || !this.registry.observe(frame)) return;
+    // S15P21C204-269. An ended runner that the frame lists as a spectator keeps its receiving
+    // generation: it hears and sees through its target until the round ends. Its own voice and
+    // face are never audible or visible to anyone, because only ACTIVE senders are.
+    const spectating = new Set((frame.spectators ?? []).map((link) => link.playerId));
     for (const p of frame.participants) {
       if (!this.registry.isLatestScope(frame.matchId, p.playerId, frame.mediaInstanceId)) continue;
-      if (p.status !== 'ACTIVE')
-        this.transition.invalidatePlayer(frame.matchId, p.playerId, 'personal-ended');
-      else if (['RESULT', 'ABORTED'].includes(frame.phase))
+      if (['RESULT', 'ABORTED'].includes(frame.phase))
         this.transition.invalidatePlayer(frame.matchId, p.playerId, 'round-ended');
+      else if (p.status !== 'ACTIVE' && !spectating.has(p.playerId))
+        this.transition.invalidatePlayer(frame.matchId, p.playerId, 'personal-ended');
     }
     // Only the latest authoritative instance may retire this player's media. A delayed
     // practice RESULT cannot end the new game; an omitted player in the current frame must retire.

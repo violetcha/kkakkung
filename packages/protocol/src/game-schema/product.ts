@@ -160,6 +160,19 @@ export type ActiveGameScope = Readonly<{
 }>;
 export type GameViewScope =
   ActiveGameScope | Readonly<{ gameInstanceId: null; kind: 'none'; revision: number }>;
+/**
+ * S15P21C204-269. What an ended runner watches: the surviving runner whose sight, memory and
+ * exits the rest of the view now carries. `cell/dir/action` place the spectator's camera;
+ * `candidates` are the runners a `SPECTATE` command may switch to. Never present for an
+ * ACTIVE self, and never for a tagger.
+ */
+export type SpectateView = Readonly<{
+  targetId: string;
+  cell: Cell;
+  dir: Dir;
+  action: Action | null;
+  candidates: readonly string[];
+}>;
 export type PrivateView = PlayerKnowledge &
   Readonly<{
     matchId: string;
@@ -169,6 +182,8 @@ export type PrivateView = PlayerKnowledge &
     visibleCells: readonly Cell[];
     visibleWallFaces: readonly WallFace[];
     visibleEntities: readonly VisibleEntity[];
+    /** Present only while `self` is an ended runner watching a surviving one (269). */
+    spectating?: SpectateView;
   }>;
 export type RoomRoster = Readonly<{
   matchId: string;
