@@ -120,6 +120,13 @@ export type ProductRoomDeps<State> = Readonly<{
   /** Start cells of the match: the rules refuse a device there, so a scenario avoids them. */
   demoStartCells?: (state: State) => readonly Cell[];
   canStart?: () => boolean;
+  /**
+   * Readiness gate for a demo room (S15P21C204-258). A demo room never issues, publishes or
+   * receives media, so media readiness says nothing about whether it can run; gating it on that
+   * makes the room unopenable wherever media is disabled. Left unset the room falls back to
+   * `canStart`, so nothing changes for a caller that does not wire it.
+   */
+  canStartDemo?: () => boolean;
   strictProduct?: boolean;
   assetVersion: string;
   emitMetric?: EmitMetric;
@@ -149,6 +156,11 @@ const ABORTABLE_PHASES: readonly Phase[] = [
 
 export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
   const random = deps.random ?? Math.random;
+  /**
+   * The readiness gate this room answers to. A demo room uses its own gate when one is wired and
+   * otherwise falls back to `canStart`, so every existing caller keeps the behaviour it had.
+   */
+  const gateFor = (demo: boolean) => (demo ? (deps.canStartDemo ?? deps.canStart) : deps.canStart);
 
   class KkakkungRoom extends Room<{ state: PublicMatchState }> implements ProductRoomHandle {
     maxClients = 6;
@@ -450,7 +462,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // ---- Colyseus lifecycle ----
 
     static async onAuth(_token: string, options: unknown, _context: AuthContext) {
-      if (deps.strictProduct && !deps.canStart?.()) throw new ServerError(503, 'NOT_READY');
+      // Read the room code leniently first: only the seat registry can say whether this code is a
+      // demo room, and only the operator route can have put it there. A player cannot reach the
+      // demo gate by naming a code of their own.
+      const requested =
+        typeof options === 'object' && options !== null
+          ? (options as { roomCode?: unknown }).roomCode
+          : undefined;
+      const demo =
+        typeof requested === 'string' && deps.slots.optionsOf(requested)?.kind === 'demo';
+      if (deps.strictProduct && !gateFor(demo)?.()) throw new ServerError(503, 'NOT_READY');
       const parsed = productJoinOptionsSchema.safeParse(options);
       if (!parsed.success) throw new ServerError(400, 'INVALID_JOIN');
       if (parsed.data.protocolVersion !== PRODUCT_PROTOCOL_VERSION)
@@ -537,7 +558,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     onJoin(client: Client, _options: unknown, auth: SessionAuth) {
       if (this.closing) throw new ServerError(403, 'ROOM_CLOSED');
-      if (deps.strictProduct && !deps.canStart?.()) throw new ServerError(503, 'NOT_READY');
+      if (deps.strictProduct && !gateFor(this.demo)?.()) throw new ServerError(503, 'NOT_READY');
       const now = deps.monotonicNow();
       if (!auth || auth.roomCode !== this.roomCode) throw new ServerError(403, 'WRONG_ROOM');
       if (this.phase !== 'LOBBY' && this.phase !== 'DEVICE_CHECK')
@@ -1180,7 +1201,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private startPractice() {
-      if (deps.canStart && !deps.canStart()) {
+      const gate = gateFor(this.demo);
+      if (gate && !gate()) {
         this.blockedReason = 'NOT_READY';
         return;
       }
@@ -1311,7 +1333,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private startCountdown(now: number) {
-      if (deps.canStart && !deps.canStart()) return;
+      const gate = gateFor(this.demo);
+      if (gate && !gate()) return;
       const barrier = this.loading.current;
       if (!barrier) return;
       const startAt = this.countdown.arm(barrier.loadId, now);

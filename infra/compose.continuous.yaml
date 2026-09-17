@@ -8,9 +8,15 @@ services:
       TRUST_PROXY_HOPS: 1
       # D-2026-09-13-01: overrides legacy private env files on every product release.
       ROOM_IDLE_TTL_MS: '600000'
-      # S15P21C204-251: deployed capacity, raised only to the stage that passed load (six seats per room).
-      MAX_ROOMS: '1'
-      MAX_SLOTS: '6'
+      # S15P21C204-251: deployed capacity, six seats per room. Raised to the schema ceiling so the
+      # always-available demo room does not compete with a real match for the only room. The staged
+      # Cloud load (1-7) has not run, so ten rooms of real media is still unmeasured.
+      MAX_ROOMS: '10'
+      MAX_SLOTS: '60'
+      # S15P21C204-258: the operator demo room stays available so a demonstration needs no redeploy.
+      # It is still reachable only with OPS_TOKEN and has no entry point on the home screen, and it
+      # takes a room from MAX_ROOMS above while it is open.
+      DEMO_ROOMS: '1'
       # Requires the loopback-only web proxy and host GitLab auth_request boundary.
       SERVICE_AUDIENCE: team
       SESSION_ADMISSION_MODE: gitlab-sso
