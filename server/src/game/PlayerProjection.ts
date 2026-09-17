@@ -168,6 +168,43 @@ export function projectSelf(
 }
 
 /**
+ * S15P21C204-269. The view an ended runner receives while watching `targetId`: the target's
+ * memory, sight, exits and allied markers, exactly as the target itself would get them, plus
+ * where the target stands so the spectator's camera can follow. The spectator's own self stays
+ * the minimal ended record. Nothing here is computed from the spectator's former position.
+ */
+export function projectSpectateBody<State>(
+  core: CorePort<State>,
+  state: State,
+  playerId: string,
+  targetId: string,
+  candidates: readonly string[],
+): PrivateViewBody {
+  const self = projectSelf(core.getPlayerSelf(state, playerId), null);
+  const target = core.getPlayerSelf(state, targetId);
+  if (!self || self.status === 'ACTIVE' || !target || target.status !== 'ACTIVE')
+    return projectPrivateBody(core, state, playerId, null);
+  const knowledge = core.getPlayerKnowledge(state, targetId);
+  const surfaces = core.getVisibleSurfaces(state, targetId);
+  return {
+    mapVersion: knowledge.mapVersion,
+    knownTerrain: projectTerrain(knowledge.knownTerrain),
+    knownActiveExits: target.role === 'runner' ? knowledge.knownActiveExits.map(projectExit) : [],
+    self,
+    visibleCells: surfaces.visibleCells.map(cell),
+    visibleWallFaces: surfaces.visibleWallFaces.map(wall),
+    visibleEntities: projectVisibleEntities(core.getVisibleEntities(state, targetId), target.role),
+    spectating: {
+      targetId,
+      cell: cell(target.cell),
+      dir: target.dir,
+      action: action(target.action),
+      candidates: [...candidates],
+    },
+  };
+}
+
+/**
  * Builds the recipient's allowlisted view body from core selectors only. Ended players keep
  * their minimal self and receive no terrain, entities or surfaces. Taggers never receive exits.
  */

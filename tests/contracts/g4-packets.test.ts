@@ -142,8 +142,19 @@ describe('runners: only discovered, still-active exits; nothing of the others be
   });
 });
 
-describe('ended players receive nothing new', () => {
-  it('after a capture the ended runner gets one minimal view and no further views or events while survivors move; its exit closes', () => {
+// S15P21C204-269. An ended runner watches a surviving runner: it receives that runner's view and
+// nothing the runner itself would not receive. Its own position, the taggers' knowledge and any
+// exit it did not learn through the target stay on the server.
+describe('ended runners receive only their spectate target’s view', () => {
+  const strip = (view: ReturnType<typeof parseView>) => ({
+    knownTerrain: view.knownTerrain,
+    knownActiveExits: view.knownActiveExits,
+    visibleCells: view.visibleCells,
+    visibleWallFaces: view.visibleWallFaces,
+    visibleEntities: view.visibleEntities,
+  });
+
+  it('after a capture the ended runner gets the first surviving runner’s view, follows it as it moves and keeps its own ended self; its exit closes', () => {
     const v = createViewHarness();
     v.h.start();
     v.publish('initial');
@@ -152,23 +163,26 @@ describe('ended players receive nothing new', () => {
     expect(v.h.player('r1').status).toBe('CAPTURED');
     const ended = parseView(v.latestView('r1'));
     expect(ended.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });
-    expect(ended.knownTerrain).toEqual([]);
-    expect(ended.visibleEntities).toEqual([]);
-    expect(ended.knownActiveExits).toEqual([]);
-    expect(coordinatesIn(ended)).toEqual([]);
-    const viewsBefore = v.viewsOf('r1').length;
+    expect(ended.spectating?.targetId).toBe('r2');
+    expect(ended.spectating?.candidates).toEqual(['r2', 'r3']);
+    // The body is r2's own delivered view, field for field.
+    expect(strip(ended)).toEqual(strip(parseView(v.latestView('r2'))));
+    expect(ended.spectating?.cell).toEqual(v.h.player('r2').cell);
+    // No coordinate of r1's own last position: only what r2 sees or remembers.
+    for (const c of coordinatesIn(ended))
+      expect(allowedCells(parseView(v.latestView('r2'))).has(key(c)), key(c)).toBe(true);
+    // r2 walks: the spectator's view moves with it and never labels an enemy role.
     const eventsBefore = v.eventsOf('r1').length;
-    // t1 keeps moving right next to the ended runner; r2 walks too.
-    v.h.stop('t1');
-    v.tickAndPublish(1);
-    v.h.face('t1', 'right');
-    v.publish('change');
-    v.h.move('t1');
     v.h.move('r2');
-    v.tickAndPublish(MOVE + 2);
-    expect(v.viewsOf('r1').length).toBe(viewsBefore);
+    v.tickAndPublish(MOVE + 1);
+    const later = parseView(v.latestView('r1'));
+    expect(later.spectating?.cell).toEqual(v.h.player('r2').cell);
+    expect(strip(later)).toEqual(strip(parseView(v.latestView('r2'))));
+    for (const e of later.visibleEntities)
+      if (e.kind === 'player' && 'role' in e) expect(e.role).toBe('runner');
+    expect(JSON.stringify(later)).not.toMatch(/"seed"|"layout"|"topology"|g3-layout|g3-topology/);
+    // Events stay audience-scoped by the rules: the ended runner joins no new audience.
     expect(v.eventsOf('r1').length).toBe(eventsBefore);
-    expect(v.publish('change').get('r1')).toBeNull();
     // The closed exit is gone from the authoritative active set and from the media frames' ACTIVE roster.
     expect(
       activeExits(v.h.state().exits)
@@ -177,6 +191,45 @@ describe('ended players receive nothing new', () => {
     ).toEqual(['r2', 'r3']);
     const lastFrame = v.h.frames.at(-1)!;
     expect(lastFrame.participants.find((p) => p.playerId === 'r1')?.status).toBe('CAPTURED');
+    expect(lastFrame.spectators ?? []).toEqual([]);
+  });
+
+  it('switches to a chosen surviving runner, refuses a tagger, and moves on when the target ends', () => {
+    const v = createViewHarness();
+    v.h.start();
+    v.publish('initial');
+    v.h.move('t1');
+    v.tickAndPublish(MOVE + 1);
+    expect(v.h.player('r1').status).toBe('CAPTURED');
+    v.spectate('r1', 'r3');
+    v.publish('change');
+    let view = parseView(v.latestView('r1'));
+    expect(view.spectating?.targetId).toBe('r3');
+    expect(strip(view)).toEqual(strip(parseView(v.latestView('r3'))));
+    // A tagger is not a candidate: the choice is ignored and the fallback stays a runner.
+    v.spectate('r1', 't2');
+    v.publish('change');
+    view = parseView(v.latestView('r1'));
+    expect(view.spectating?.targetId).toBe('r2');
+    // r3 chosen again, then captured: the spectator follows the remaining runner.
+    v.spectate('r1', 'r3');
+    v.publish('change');
+    v.h.move('t3');
+    v.tickAndPublish(MOVE + 1);
+    expect(v.h.player('r3').status).toBe('CAPTURED');
+    // Two captures end the round; the spectate view is gone with PLAYING.
+    expect(v.publicState().phase).toBe('RESULT');
+    expect(parseView(v.latestView('r1')).spectating).toBeUndefined();
+  });
+
+  it('taggers and active runners never carry a spectate field', () => {
+    const v = createViewHarness();
+    v.h.start();
+    v.publish('initial');
+    v.h.move('t1');
+    v.tickAndPublish(MOVE + 1);
+    for (const id of [...TAGGERS, 'r2', 'r3'])
+      for (const view of deliveredViews(v, id)) expect(view.spectating).toBeUndefined();
   });
 });
 

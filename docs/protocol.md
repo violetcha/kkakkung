@@ -48,21 +48,21 @@ HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. �
 
 ### 채널
 
-| 방향      | 채널                                       | 본문                                                                                                                                                                                      |
-| --------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C→S       | `command`                                  | `CommandEnvelope {matchId, requestId(UUID), sequence, type, payload}` — 16종. 게임 코어 명령과 방 단계 명령(`READY`, `ROOM_LOCK`, `ROOM_KICK`, `PRACTICE_READY`, `LOAD_READY`, `REMATCH`) |
-| S→C       | `command-result`                           | `CommandReceipt` accepted(code null) / rejected(CommandCode). 접수 단계 결과                                                                                                              |
-| S→C       | `command-outcome`                          | `CommandOutcome {…, tick, stateVersion, result: applied\|rejected\|canceled, code}` — accepted마다 정확히 하나, 요청자에게만                                                              |
-| C→S / S→C | `request-status` / `request-status-result` | 자기 원장의 pending / done(원래 outcome) / unknown                                                                                                                                        |
-| C→S / S→C | `demo-scenario` / `demo-state`             | 관리자 데모 방 전용(259). 일반 방은 보내지도 받지도 않는다                                                                                                                                |
-| S→C       | `room-roster`                              | 대기 단계 목록. role/좌표/출구 없음                                                                                                                                                       |
-| S→C       | `private-view`                             | 수신자 전용 전체 교체 뷰. `gameScope`는 practice/game/none + revision                                                                                                                     |
-| S→C       | `private-event`                            | audience 사건. `gameScope`는 ActiveGameScope                                                                                                                                              |
-| C→S       | `view-resync`                              | `{matchId, lastStateVersion}`, 수신자당 1초 1회                                                                                                                                           |
-| S→C / C→S | `game-heartbeat` / `game-heartbeat-ack`    | 2초 간격, 6초 무응답 또는 close → 연결 상실                                                                                                                                               |
-| C→S / S→C | `clock-probe` / `clock-reply`              | 표시용 시각 추정. 서버 monotonic ms, 초당 5회                                                                                                                                             |
-| S→C       | `media-bindings`, `audio-policy`           | E가 만든 허용 목록. scope는 미디어 식별자                                                                                                                                                 |
-| C→S       | `media-bindings-refresh`                   | 현재 목록 재전송 요청, 1초 1회                                                                                                                                                            |
+| 방향      | 채널                                       | 본문                                                                                                                                                                                                  |
+| --------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C→S       | `command`                                  | `CommandEnvelope {matchId, requestId(UUID), sequence, type, payload}` — 17종. 게임 코어 명령과 방 단계 명령(`READY`, `ROOM_LOCK`, `ROOM_KICK`, `PRACTICE_READY`, `LOAD_READY`, `REMATCH`, `SPECTATE`) |
+| S→C       | `command-result`                           | `CommandReceipt` accepted(code null) / rejected(CommandCode). 접수 단계 결과                                                                                                                          |
+| S→C       | `command-outcome`                          | `CommandOutcome {…, tick, stateVersion, result: applied\|rejected\|canceled, code}` — accepted마다 정확히 하나, 요청자에게만                                                                          |
+| C→S / S→C | `request-status` / `request-status-result` | 자기 원장의 pending / done(원래 outcome) / unknown                                                                                                                                                    |
+| C→S / S→C | `demo-scenario` / `demo-state`             | 관리자 데모 방 전용(259). 일반 방은 보내지도 받지도 않는다                                                                                                                                            |
+| S→C       | `room-roster`                              | 대기 단계 목록. role/좌표/출구 없음                                                                                                                                                                   |
+| S→C       | `private-view`                             | 수신자 전용 전체 교체 뷰. `gameScope`는 practice/game/none + revision. 개인 종료한 도망자가 생존 도망자를 관전하는 동안만 `spectating {targetId, cell, dir, action, candidates}`가 붙는다(269)        |
+| S→C       | `private-event`                            | audience 사건. `gameScope`는 ActiveGameScope                                                                                                                                                          |
+| C→S       | `view-resync`                              | `{matchId, lastStateVersion}`, 수신자당 1초 1회                                                                                                                                                       |
+| S→C / C→S | `game-heartbeat` / `game-heartbeat-ack`    | 2초 간격, 6초 무응답 또는 close → 연결 상실                                                                                                                                                           |
+| C→S / S→C | `clock-probe` / `clock-reply`              | 표시용 시각 추정. 서버 monotonic ms, 초당 5회                                                                                                                                                         |
+| S→C       | `media-bindings`, `audio-policy`           | E가 만든 허용 목록. scope는 미디어 식별자                                                                                                                                                             |
+| C→S       | `media-bindings-refresh`                   | 현재 목록 재전송 요청, 1초 1회                                                                                                                                                                        |
 
 공개 Colyseus 상태 `PublicMatchState`는 `phase, matchId, stateVersion, serverTick, startTick, startAt, deadlineTick, counts, result, abortReason`과 선택 안내 필드만 가진다. null 필드는 Schema에서 **absent(undefined)** 로 전달되므로 소비자는 `readPublicRoundState(state)`로 정규화한다. 전체 맵·플레이어·출구·seed·튜닝은 공개 상태에 없다.
 
@@ -70,7 +70,9 @@ HTTP 발급 후 첫 게임 소켓 연결은 60초 안에 완료해야 한다. �
 - `preparationIssue`: LOBBY/DEVICE_CHECK의 준비 실패를 `SERVICE_NOT_READY`, `LAYOUT_UNAVAILABLE`, `DEVICE_LOADING_TIMEOUT`, `MEDIA_NOT_READY`, `PREPARATION_UNAVAILABLE`로만 전달한다. 내부 blockedReason·경로·맵 정보는 전달하지 않고 재시도 단계에 진입하면 지운다.
 - `rematchState`: RESULT/ABORTED에서 `settling`(연결 회수 대기), `available`(재경기 선택 가능), `requested`(방장이 요청하여 전환 대기)를 전달한다. 회수 중에도 방장은 요청할 수 있으며 회수가 확인되면 로비로 전환한다. 인원이 6명 미만이면 로비에서 모집한다. 새 경기에서는 필드를 지운다.
 
-새 필드는 뒤에 추가한 선택 메타데이터다. 이전 0.2 서버는 생략할 수 있고 웹은 일반 준비/재경기 안내를 유지한다. 알 수 없는 준비·재경기 값은 화면에 노출하지 않는다. 명령·개인 뷰·미디어 wire는 변경하지 않는다.
+새 필드는 뒤에 추가한 선택 메타데이터다. 이전 0.2 서버는 생략할 수 있고 웹은 일반 준비/재경기 안내를 유지한다. 알 수 없는 준비·재경기 값은 화면에 노출하지 않는다.
+
+**관전(269).** PLAYING 중 개인 종료(포획·탈출)한 도망자는 결과 화면 대신 생존 도망자 한 명의 뷰를 받는다. `private-view`의 `knownTerrain·knownActiveExits·visibleCells·visibleWallFaces·visibleEntities`는 **대상의 것**이고 `self`는 자기 종료 기록 그대로, `spectating`에 대상 id·칸·방향·행동과 전환 가능한 후보(`candidates`, 생존 도망자 id)가 온다. 대상은 `SPECTATE {targetPlayerId}` 방 단계 명령으로 바꾸며(PLAYING에서만, 후보 밖이면 `NOT_ALLOWED`), 고르지 않으면 명단 순서의 첫 생존 도망자다. 대상이 종료되면 다음 생존 도망자로 자동 전환되고 생존 도망자가 없으면 라운드가 끝난다. 관전자는 게임 명령을 낼 수 없고(`NOT_ACTIVE`), 미디어는 **대상 위치를 가청 기준**으로 받는다 — 대상이 듣는 음성(대상 본인 목소리 제외)과 대상이 보는 얼굴. 관전자 본인의 얼굴·음성은 누구에게도 가지 않는다(ACTIVE 발신자만 가청·가시). 술래는 개인 종료가 없어 관전하지 않는다. 이 필드와 명령은 0.2.0 안의 추가분이며 관전자에게만 붙는다.
 
 ### 거절과 크기
 

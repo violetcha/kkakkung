@@ -145,8 +145,16 @@ export class MediaGenerationRegistry {
       this.playerInstances.get(playerKey(input.matchId, input.playerId)) !== input.mediaInstanceId
     )
       return false;
-    if (!frame.participants.some((p) => p.playerId === input.playerId && p.status === 'ACTIVE'))
-      return false;
+    // S15P21C204-269. A spectating ended runner stays eligible, so its receiving generation is
+    // not retired as out of scope and a dropped connection could be re-prepared while watching.
+    // The room only requests new grants for ACTIVE players (`mediaScopeFor`).
+    const listed = frame.participants.some(
+      (p) =>
+        p.playerId === input.playerId &&
+        (p.status === 'ACTIVE' ||
+          (frame.spectators ?? []).some((link) => link.playerId === input.playerId)),
+    );
+    if (!listed) return false;
     return input.purpose === 'practice'
       ? frame.phase === 'TEAM_PRACTICE'
       : ['GAME_LOADING', 'COUNTDOWN', 'PLAYING'].includes(frame.phase);

@@ -14,10 +14,12 @@ import type {
   CoreCommand,
   CoreOutcome,
   CorePort,
+  GameSubject,
   MediaControl,
   MediaIntent,
   OutcomeResult,
   SpatialSoundEvent,
+  SpectatorLink,
   Topology,
   TrustedMediaFrame,
 } from './ports.js';
@@ -49,6 +51,11 @@ export type MatchDriverDeps<State> = Readonly<{
   onMediaFrame: (frame: TrustedMediaFrame) => void;
   onMediaIntent: (intent: MediaIntent, gameInstanceId: string) => void;
   onIntegrityFailure: (gameInstanceId: string, reason: string) => void;
+  /** S15P21C204-269. Ended runners and the survivor each one listens through, per frame. */
+  spectators?: (
+    instance: AttachedInstance<State>,
+    participants: readonly GameSubject[],
+  ) => readonly SpectatorLink[];
 }>;
 
 export type TickReport = Readonly<{
@@ -281,6 +288,7 @@ export class MatchDriver<State> {
           topology: instance.topology,
           participants: frame.participants,
           events: sounds,
+          spectators: this.deps.spectators?.(instance, frame.participants) ?? [],
         });
       }
     }

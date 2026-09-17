@@ -48,7 +48,8 @@ import { HeartbeatTracker } from '../game/Heartbeat.js';
 import type { LayoutLoader } from '../game/LayoutLoader.js';
 import { MatchContext } from '../game/MatchContext.js';
 import { MatchDriver } from '../game/MatchDriver.js';
-import { projectPrivateBody } from '../game/PlayerProjection.js';
+import { projectPrivateBody, projectSpectateBody } from '../game/PlayerProjection.js';
+import { chooseSpectateTarget, spectateCandidates, spectatorLinks } from '../game/Spectate.js';
 import type { RoomTickCoordinator } from '../game/RoomTickCoordinator.js';
 import type {
   CorePort,
@@ -187,6 +188,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly clientsByPlayer = new Map<string, Client>();
     private readonly playersByConnection = new Map<string, SessionAuth>();
     private readonly roles = new Map<string, Role>();
+    /**
+     * S15P21C204-269. Ended runner → the surviving runner it chose to watch. A missing or
+     * ended choice falls back to roster order at read time; cleared with every new round.
+     */
+    private readonly spectateChoices = new Map<string, string>();
     private readonly mediaInstances = new Map<string, string>();
     private readonly playerGenerations = new Map<
       string,
@@ -278,6 +284,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         onMediaIntent: (intent, gameInstanceId) => this.handleMediaIntent(intent, gameInstanceId),
         onIntegrityFailure: (gameInstanceId, reason) =>
           this.abortMatch(null, `INTEGRITY:${gameInstanceId}:${reason}`),
+        // Spectators exist only in the real game during PLAYING; practice frames carry none.
+        spectators: (instance, participants) =>
+          instance.kind === 'game' && this.phase === 'PLAYING'
+            ? spectatorLinks(participants, this.spectateChoices)
+            : [],
       });
     }
 
@@ -612,6 +623,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       deps.sessions.releaseConnection(auth.sessionId, client.sessionId);
       this.clientsByPlayer.delete(auth.playerId);
       this.lobby.setConnected(auth.playerId, false);
+      this.spectateChoices.delete(auth.playerId);
       if (control || heartbeatLost) this.handleConnectionLost(auth.playerId);
       if (this.phase === 'LOBBY' || this.phase === 'DEVICE_CHECK') {
         this.lobby.remove(auth.playerId);
@@ -725,6 +737,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
+        SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
       if ((type === 'ROOM_LOCK' || type === 'ROOM_KICK') && playerId !== this.lobby.host)
@@ -834,6 +847,23 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           return decision.result === 'applied'
             ? { result: 'applied', code: null }
             : { result: decision.result, code: decision.code };
+        }
+        case 'SPECTATE': {
+          // Only an ended runner of the running game may pick, and only a surviving runner of
+          // its own team. The choice takes effect in the next view publish; the rules see nothing.
+          const instance = this.gameInstance();
+          const attached = instance ? this.driver.instance(instance.gameInstanceId) : null;
+          if (this.phase !== 'PLAYING' || !attached || !deps.core)
+            return { result: 'rejected', code: 'INVALID_PHASE' };
+          const participants = deps.core.getFrame(attached.state).participants;
+          const target = command.payload.targetPlayerId;
+          if (!spectateCandidates(participants, entry.actorId).includes(target))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (chooseSpectateTarget(participants, entry.actorId, target) !== target)
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          this.spectateChoices.set(entry.actorId, target);
+          this.dispatcher.publishView(entry.actorId, 'change', this.phase);
+          return { result: 'applied', code: null };
         }
         default:
           return { result: 'rejected', code: 'INVALID_COMMAND' };
@@ -1549,6 +1579,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.dispatcher.resetForMatch();
       this.lobby.clearReady();
       this.roles.clear();
+      this.spectateChoices.clear();
       // A demo room's "back to lobby" rematch still keeps the operator's chosen role: a random
       // draw could hand the operator a role the scenario list was not made for.
       const operatorId = this.demo ? this.operatorId() : null;
@@ -1761,6 +1792,23 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.phase === 'GAME_LOADING'
           ? this.loading.loadingView(playerId, this.context.stateVersion, deps.assetVersion)
           : null;
+      // S15P21C204-269. An ended runner of the running game watches a surviving runner.
+      if (instance.kind === 'game' && this.phase === 'PLAYING') {
+        const participants = deps.core.getFrame(attached.state).participants;
+        const targetId = chooseSpectateTarget(
+          participants,
+          playerId,
+          this.spectateChoices.get(playerId),
+        );
+        if (targetId)
+          return projectSpectateBody(
+            deps.core,
+            attached.state,
+            playerId,
+            targetId,
+            spectateCandidates(participants, playerId),
+          );
+      }
       return projectPrivateBody(deps.core, attached.state, playerId, loading);
     }
 
