@@ -7,7 +7,7 @@ import { LayoutLoader } from '../../src/game/LayoutLoader.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
 import { localConfiguration } from '../media/generation-fixtures.js';
 
-const config = () => ({
+const config = (overrides: Record<string, string> = {}) => ({
   ...parseConfig({
     NODE_ENV: 'test',
     SERVER_PROFILE: 'product',
@@ -18,6 +18,7 @@ const config = () => ({
     SESSION_ATTEMPTS_PER_INVITE: '20',
     SESSION_ATTEMPTS_PER_IP: '20',
     ROOM_IDLE_TTL_MS: '60000',
+    ...overrides,
   }),
   port: 0,
 });
@@ -76,6 +77,52 @@ describe('real product profile assembly without Cloud', () => {
       expect(profile.core!.getFrame(state).phase).toBe('TEAM_PRACTICE');
       expect(profile.core!.getPlayerSelf(state, members[0]!.playerId)?.status).toBe('ACTIVE');
     }
+  });
+
+  // S15P21C204-267. The corridor maze is selected by PRODUCT_MAP_TEMPLATE and goes through the
+  // same hash, variant and fallback certification as the open grid; the default stays master-v1.
+  it('selects the maze template by configuration and plays it through the same loader', async () => {
+    expect((await loadProductProfile(config())).layouts!.templateId).toBe('master-v1');
+    const profile = await loadProductProfile(config({ PRODUCT_MAP_TEMPLATE: 'maze-v1' }));
+    const maps = profile.layouts!;
+    expect(maps.templateId).toBe('maze-v1');
+    expect(maps.masterPath.endsWith('maze-v1.json')).toBe(true);
+    expect(maps.fallbackPath.endsWith('maze-v1-fallback.json')).toBe(true);
+    const players = Array.from({ length: 6 }, (_, index) => ({
+      playerId: `player-${index}`,
+      role: index < 3 ? ('runner' as const) : ('tagger' as const),
+    }));
+    for (const maxAttempts of [0, 256]) {
+      const loader = new LayoutLoader({
+        readFile,
+        maps: maps.maps,
+        selection: maps.selection,
+        now: () => performance.now(),
+        maxAttempts,
+      });
+      for (let seed = 0; seed < 8; seed++) {
+        const selected = await loader.prepare({ ...maps, players, seed });
+        expect(selected.status, JSON.stringify(selected)).toBe('selected');
+        if (selected.status !== 'selected') throw new Error('MAP_SELECTION_FAILED');
+        expect(selected.layout.source).toBe(maxAttempts === 0 ? 'fallback' : 'online');
+        expect(selected.layout.layout.topology.width).toBe(31);
+        const state = profile.core!.createMatch({
+          matchId: 'match-maze',
+          gameInstanceId: `game-${maxAttempts}-${seed}`,
+          seed,
+          players,
+          layout: selected.layout.layout,
+          tuning: profile.tuning!,
+        });
+        expect(profile.core!.getFrame(state).participants).toHaveLength(6);
+      }
+    }
+  });
+
+  it('refuses a template id without content instead of falling back to another map', async () => {
+    await expect(
+      loadProductProfile(config({ PRODUCT_MAP_TEMPLATE: 'no-such-map' })),
+    ).rejects.toThrow('PRODUCT_CONTENT_UNAVAILABLE');
   });
 
   it('wires the configured media ceiling into the running alert sampler', async () => {

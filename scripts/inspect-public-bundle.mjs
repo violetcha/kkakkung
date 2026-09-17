@@ -38,7 +38,7 @@ export function deriveSentinels(serverRoot = root) {
     const file = resolve(serverRoot, p);
     return existsSync(file) ? readFileSync(file, 'utf8') : null;
   };
-  for (const name of ['master-v1', 'practice-v1']) {
+  for (const name of ['master-v1', 'maze-v1', 'practice-v1']) {
     const raw = read(`server/content/maps/${name}.json`);
     if (!raw) continue;
     const json = JSON.parse(raw);
@@ -54,15 +54,16 @@ export function deriveSentinels(serverRoot = root) {
         sentinels.push({ id: `map:${name}:row${i}`, literal: row });
     }
   }
-  const fallback = read('server/content/placements/master-v1-fallback.json');
-  if (fallback) {
+  for (const name of ['master-v1', 'maze-v1']) {
+    const fallback = read(`server/content/placements/${name}-fallback.json`);
+    if (!fallback) continue;
     const json = JSON.parse(fallback);
     if (typeof json.templateHash === 'string')
-      sentinels.push({ id: 'fallback:templateHash', literal: json.templateHash });
+      sentinels.push({ id: `fallback:${name}:templateHash`, literal: json.templateHash });
     for (const f of json.fallbacks ?? []) {
       if (typeof f.variantId === 'string' && f.layout)
         sentinels.push({
-          id: `fallback:${f.variantId}`,
+          id: `fallback:${name}:${f.variantId}`,
           literal: JSON.stringify(f.layout).slice(0, 120),
         });
     }

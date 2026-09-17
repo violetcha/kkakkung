@@ -14,12 +14,13 @@ pnpm verify
 
 `pnpm verify` = `format:check` → `lint`(ESLint + 의존 경계) → `typecheck` → `test`(Vitest) → `build` → `check:product-assets` → `test:e2e`(Playwright).
 
-| 명령                   | 확인 범위                                                                                                |
-| ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| `pnpm test`            | packages·apps·server 단위/통합, `tests/contracts`, `tests/load`의 짧은 단위 시험. `*.cloud.test.ts` 제외 |
-| `pnpm test:maps`       | 실제 맵 변형·연결성·fallback·선발(`certified-maps.test.ts`)                                              |
-| `pnpm test:e2e`        | 웹·서버 진단/제품 입장, 개인 체험, 시설 렌더링. 자체 개발 서버를 띄우므로 `pnpm dev`를 끄고 실행         |
-| `check:product-assets` | 빌드된 Worker·고정 모델·WASM 해시와 빈 프레임 추론. 실제 얼굴·포즈 인식 품질은 아니다                    |
+| 명령                   | 확인 범위                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm test`            | packages·apps·server 단위/통합, `tests/contracts`, `tests/load`의 짧은 단위 시험. `*.cloud.test.ts` 제외                 |
+| `pnpm test:maps`       | 실제 맵 변형·연결성·fallback·선발(`certified-maps.test.ts`, master-v1·maze-v1) + 미로 구조 약속(`maze-template.test.ts`) |
+| `pnpm maps:check`      | 커밋된 `maze-v1.json`·fallback이 생성기(seed 267)의 산출과 바이트 단위로 같은지 확인. 재생성은 `pnpm maps:generate`      |
+| `pnpm test:e2e`        | 웹·서버 진단/제품 입장, 개인 체험, 시설 렌더링. 자체 개발 서버를 띄우므로 `pnpm dev`를 끄고 실행                         |
+| `check:product-assets` | 빌드된 Worker·고정 모델·WASM 해시와 빈 프레임 추론. 실제 얼굴·포즈 인식 품질은 아니다                                    |
 
 깨끗한 checkout에는 `dist`가 없으므로 루트 명령이 protocol·game-core를 먼저 빌드한다. 개별 시험이 `PHASES is not iterable` 같은 오류를 내면 `pnpm build:packages`를 먼저 실행한다.
 
@@ -29,15 +30,15 @@ pnpm verify
 
 ## 2. 제품 통합 시험
 
-| 시험                                                        | 내용                                                                                                                                                                                                 |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/test/media/product-integration.test.ts`             | 실제 A/B/E/F 서버를 자식 프로세스로, 실제 C 런타임 6개를 붙여 장치 준비→연습→로딩→경기→결과→재경기. Cloud 전송과 장치는 합성, 250ms 과부하 판정은 실제 타이머                                        |
-| `server/test/room/demo-room.test.ts`, `demo-runner.test.ts` | 관리자 데모 방이 혼자 PLAYING까지 가는지와 인형 조종 규칙(역할별 목록·교환 세션 대기·연결 상실 drop). 기본 검사에 포함                                                                               |
-| `server/test/room/demo-room-web-runtime.test.ts`            | 같은 데모 방을 실제 웹 런타임(`product-runtime`+합성 D facade)으로 진입해 미디어 발급 없이 PLAYING에 닿는지. 원시 클라이언트가 LOAD_READY를 직접 보내는 위 시험이 놓치는 클라이언트 로딩 관문을 본다 |
-| `server/test/room/demo-scenarios.test.ts`                   | 목록·무효·재경기는 기본 검사. 인형이 미로를 걷는 실시간 시나리오(포획·덫·결과)는 옵트인 `KKAKKUNG_DEMO_SCENARIOS=1`. 한 판을 실제 시간으로 돌려 CPU를 다툰다                                         |
-| `server/test/media/multi-room-integration.test.ts`          | 옵트인. `KKAKKUNG_TEST_ROOMS=2–10`일 때만 N방을 동시에 진행하고 tick·event-loop 지연·API 60초 최대치를 측정                                                                                          |
-| `tests/contracts/g3-*.test.ts`, `g4-*.test.ts`              | 실제 코어·Room의 규칙·과부하 격리, 개인 뷰 패킷·공개 번들의 정보 누출                                                                                                                                |
-| `tests/contracts/deployment-*.test.ts`                      | 배포 순서·장벽 계약. 실제 Jenkins·Docker를 실행하지 않는다                                                                                                                                           |
+| 시험                                                        | 내용                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/test/media/product-integration.test.ts`             | 실제 A/B/E/F 서버를 자식 프로세스로, 실제 C 런타임 6개를 붙여 장치 준비→연습→로딩→경기→결과→재경기. Cloud 전송과 장치는 합성, 250ms 과부하 판정은 실제 타이머                                                                                  |
+| `server/test/room/demo-room.test.ts`, `demo-runner.test.ts` | 관리자 데모 방이 혼자 PLAYING까지 가는지와 인형 조종 규칙(역할별 목록·교환 세션 대기·연결 상실 drop). 기본 검사에 포함                                                                                                                         |
+| `server/test/room/demo-room-web-runtime.test.ts`            | 같은 데모 방을 실제 웹 런타임(`product-runtime`+합성 D facade)으로 진입해 미디어 발급 없이 PLAYING에 닿는지. 원시 클라이언트가 LOAD_READY를 직접 보내는 위 시험이 놓치는 클라이언트 로딩 관문을 본다                                           |
+| `server/test/room/demo-scenarios.test.ts`                   | 목록·무효·재경기는 기본 검사. 인형이 미로를 걷는 실시간 시나리오(포획·덫·결과)는 옵트인 `KKAKKUNG_DEMO_SCENARIOS=1`. 한 판을 실제 시간으로 돌려 CPU를 다툰다. `KKAKKUNG_DEMO_MAP=maze-v1`을 더하면 통로 1칸 미로에서 같은 시나리오를 돈다(267) |
+| `server/test/media/multi-room-integration.test.ts`          | 옵트인. `KKAKKUNG_TEST_ROOMS=2–10`일 때만 N방을 동시에 진행하고 tick·event-loop 지연·API 60초 최대치를 측정                                                                                                                                    |
+| `tests/contracts/g3-*.test.ts`, `g4-*.test.ts`              | 실제 코어·Room의 규칙·과부하 격리, 개인 뷰 패킷·공개 번들의 정보 누출                                                                                                                                                                          |
+| `tests/contracts/deployment-*.test.ts`                      | 배포 순서·장벽 계약. 실제 Jenkins·Docker를 실행하지 않는다                                                                                                                                                                                     |
 
 ```bash
 KKAKKUNG_TEST_ROOMS=10 KKAKKUNG_TEST_REPORT=.local/integration/rooms-10.json \

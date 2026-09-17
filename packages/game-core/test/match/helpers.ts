@@ -15,12 +15,19 @@ export function loadServerJson(relativePath: string): { raw: unknown; hash: stri
   };
 }
 
-export function loadMaster(): { raw: Record<string, unknown>; source: MapSource } {
-  const { raw, hash } = loadServerJson('content/maps/master-v1.json');
+/** Certified product templates: each ships `content/maps/<id>.json` and `<id>-fallback.json`. */
+export const CERTIFIED_TEMPLATE_IDS = ['master-v1', 'maze-v1'] as const;
+export type CertifiedTemplateId = (typeof CERTIFIED_TEMPLATE_IDS)[number];
+
+export function loadTemplateFile(templateId: CertifiedTemplateId): {
+  raw: Record<string, unknown>;
+  source: MapSource;
+} {
+  const { raw, hash } = loadServerJson(`content/maps/${templateId}.json`);
   return {
     raw: raw as Record<string, unknown>,
     source: {
-      templateId: 'master-v1',
+      templateId,
       templateVersion: '1',
       templateHash: hash,
       variantId: 'r0',
@@ -28,11 +35,23 @@ export function loadMaster(): { raw: Record<string, unknown>; source: MapSource 
   };
 }
 
-export function masterTemplate(): LayoutTemplate {
-  const { raw, source } = loadMaster();
+export function certifiedTemplate(templateId: CertifiedTemplateId): LayoutTemplate {
+  const { raw, source } = loadTemplateFile(templateId);
   const result = validateTemplate(raw, source);
   if (result.status !== 'valid') throw new Error(JSON.stringify(result));
   return result.template;
+}
+
+export function loadFallbackFile(templateId: CertifiedTemplateId): unknown {
+  return loadServerJson(`content/placements/${templateId}-fallback.json`).raw;
+}
+
+export function loadMaster(): { raw: Record<string, unknown>; source: MapSource } {
+  return loadTemplateFile('master-v1');
+}
+
+export function masterTemplate(): LayoutTemplate {
+  return certifiedTemplate('master-v1');
 }
 
 export function loadPractice(): unknown {
@@ -44,7 +63,7 @@ export function loadTuning(): unknown {
 }
 
 export function loadFallback(): unknown {
-  return loadServerJson('content/placements/master-v1-fallback.json').raw;
+  return loadFallbackFile('master-v1');
 }
 
 /** Deep structural clone for mutation tests without touching the original. */

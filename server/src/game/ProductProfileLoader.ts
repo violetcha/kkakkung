@@ -32,7 +32,9 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
   const content = resolve(repositoryRoot, config.contentDir);
   const tuning = validateTuning(await readJson(resolve(repositoryRoot, config.tuningPath)));
   if (!tuning.ok) throw new Error('INVALID_PRODUCT_TUNING');
-  const masterPath = resolve(content, 'maps/master-v1.json');
+  // S15P21C204-267. The template id names both the map and its certified placement file; the
+  // loader still hashes the bytes and certifies the fallback, so a wrong pairing fails preparation.
+  const masterPath = resolve(content, `maps/${config.mapTemplate}.json`);
   const master = await readJson(masterPath);
   if (
     typeof master !== 'object' ||
@@ -157,7 +159,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
         selection: tuning.template.selection,
       }),
       masterPath,
-      fallbackPath: resolve(content, 'placements/master-v1-fallback.json'),
+      fallbackPath: resolve(content, `placements/${config.mapTemplate}-fallback.json`),
       templateId: master.templateId,
       templateVersion: master.templateVersion,
     },
