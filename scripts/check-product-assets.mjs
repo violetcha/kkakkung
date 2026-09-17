@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-/* global Worker, createImageBitmap, OffscreenCanvas */
+/* global Worker, createImageBitmap, document, getComputedStyle, OffscreenCanvas */
 // Run after pnpm build. Exercises the shipped Worker and model bytes, not fake inference.
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +38,20 @@ try {
   const notices = await verifyVisionAssetNotices(root, {
     requireReviewedRights: process.argv.includes('--require-reviewed-rights'),
   });
+  const fontAssets = [
+    ['Galmuri9.woff2', '275d995906625eaaa5d2d9baa0a80f90a5c033c381c0dc2108a8729d371041a6'],
+    ['Galmuri11.woff2', 'f467d1b10e6b88dfa8399c9f93b38c7643e050abfe4fc15800ac0b000f5a57d6'],
+    ['Galmuri11-Bold.woff2', '8643094f395aa2dbad6bc4385cc043314801eaec2e759d549435ec8ac4f2d078'],
+    ['Galmuri14.woff2', '79b34b22b86536d0fe9ebe7105dd5f20f56558d691c67a0c6432807a03ec5a82'],
+    ['OFL-1.1.txt', '86a3ee9495f942f0243f18c103da9faca27adb88142613edb8bb852e56c892c1'],
+  ];
+  for (const [name, expected] of fontAssets) {
+    const bytes = await readFile(resolve(root, 'fonts', name));
+    if (name.endsWith('.woff2') && bytes.subarray(0, 4).toString('ascii') !== 'wOF2')
+      throw new Error('FONT_FILE_INVALID');
+    if (createHash('sha256').update(bytes).digest('hex') !== expected)
+      throw new Error('FONT_FILE_INVALID');
+  }
   const workers = (await readdir(resolve(root, 'assets'))).filter((name) =>
     /^vision\.worker-.*\.js$/.test(name),
   );
@@ -49,6 +64,36 @@ try {
   browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${address.port}/`);
+  const fonts = await page.evaluate(async () => {
+    const requested = [
+      ['Galmuri9', '400 9px Galmuri9'],
+      ['Galmuri11', '400 11px Galmuri11'],
+      ['Galmuri11-Bold', '700 11px Galmuri11'],
+      ['Galmuri14', '400 14px Galmuri14'],
+    ];
+    const loaded = {};
+    for (const [name, descriptor] of requested) {
+      const faces = await document.fonts.load(descriptor, '까꿍');
+      loaded[name] = faces.length > 0 && document.fonts.check(descriptor, '까꿍');
+    }
+    const style = getComputedStyle(document.documentElement);
+    return {
+      loaded,
+      body: style.getPropertyValue('--font-body').trim(),
+      control: style.getPropertyValue('--font-control').trim(),
+      small: style.getPropertyValue('--font-small').trim(),
+    };
+  });
+  const normalizedFamily = (value) => value.replaceAll('"', '').replaceAll("'", '');
+  if (Object.values(fonts.loaded).some((loaded) => !loaded)) throw new Error('FONT_LOAD_FAILED');
+  if (
+    normalizedFamily(fonts.body) !== 'Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif' ||
+    normalizedFamily(fonts.control) !==
+      'Galmuri11, Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif' ||
+    normalizedFamily(fonts.small) !==
+      'Galmuri9, Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif'
+  )
+    throw new Error('FONT_FALLBACK_INVALID');
   const result = await page.evaluate(async (workerPath) => {
     const worker = new Worker(workerPath, { type: 'module' });
     try {
@@ -110,6 +155,8 @@ try {
       syntheticBlankFrame: true,
       actualCamera: false,
       cloudExecuted: false,
+      fontAssetsVerified: fontAssets.length,
+      fontFacesLoaded: Object.keys(fonts.loaded),
       ...notices,
     }),
   );
@@ -117,7 +164,9 @@ try {
   console.error(
     error instanceof Error && error.message === 'VISION_ASSET_RIGHTS_PENDING'
       ? error.message
-      : 'BUILT_PRODUCT_ASSETS_FAILED',
+      : error instanceof Error && error.message.startsWith('FONT_')
+        ? error.message
+        : 'BUILT_PRODUCT_ASSETS_FAILED',
   );
   process.exitCode = 1;
 } finally {

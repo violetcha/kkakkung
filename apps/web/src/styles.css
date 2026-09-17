@@ -1,3 +1,32 @@
+@font-face {
+  font-family: Galmuri9;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Galmuri9.woff2') format('woff2');
+}
+@font-face {
+  font-family: Galmuri11;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Galmuri11.woff2') format('woff2');
+}
+@font-face {
+  font-family: Galmuri11;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Galmuri11-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: Galmuri14;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Galmuri14.woff2') format('woff2');
+}
+
 .solo-heading {
   display: flex;
   justify-content: space-between;
@@ -74,7 +103,7 @@
 }
 .solo-practice .eyebrow {
   color: #88dfbd;
-  font-size: 0.8rem;
+  font-size: 9px;
 }
 @media (max-width: 800px) {
   .solo-layout,
@@ -88,29 +117,80 @@
 }
 
 :root {
-  font-family: Inter, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
-  color: #e8f3f8;
-  background: #050c13;
+  --font-display: Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
+  --font-body: Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
+  --font-control: Galmuri11, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
+  --font-small: Galmuri9, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
+  --text-small: 9px;
+  --text-control: 11px;
+  --text-body: 14px;
+  --text-heading: 28px;
+  --text-hero: 56px;
+  --color-bg: #090706;
+  --color-panel: #171310e6;
+  --color-panel-raised: #211a15;
+  --color-text: #f4ead7;
+  --color-muted: #b8aa91;
+  --color-border: #796651;
+  --color-border-strong: #c4a46b;
+  --color-seam: #3a2b22;
+  --color-focus: #f0c674;
+  --color-tagger: #d4684f;
+  --color-runner: #6fb7a6;
+  --color-success: #8dcf9f;
+  --color-warning: #d8aa61;
+  --color-danger: #d16d62;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 32px;
+  --radius-pixel: 2px;
+  --outline-pixel: 3px solid var(--color-bg);
+  --inset-highlight: inset 0 0 0 1px #f4ead755;
+  --shadow-pixel: 6px 6px 0 #000;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
   font-synthesis: none;
+  font-synthesis-weight: none;
 }
 
 .product-shell {
   width: min(1120px, calc(100% - 40px));
   margin: auto;
   padding: 28px 0 56px;
-  color: #f3f2e9;
+  color: var(--color-text);
+  font-size: var(--text-body);
+  -webkit-font-smoothing: none;
+}
+.brand-logo {
+  margin: 0;
+  line-height: 0;
+}
+.brand-logo img {
+  display: block;
+  width: 184px;
+  height: auto;
+  image-rendering: pixelated;
 }
 .product-shell h1 {
   letter-spacing: -0.03em;
 }
 .product-shell h2 {
   margin: 0 0 20px;
-  font-size: clamp(1.5rem, 3vw, 2.3rem);
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
   letter-spacing: -0.02em;
 }
 .product-shell p {
   line-height: 1.75;
   max-width: 68ch;
+}
+.product-shell small,
+.product-shell .eyebrow,
+.product-shell figcaption {
+  font-family: var(--font-small);
+  font-size: var(--text-small);
 }
 .product-shell section {
   margin-top: 36px;
@@ -121,18 +201,19 @@
 }
 .product-shell form {
   display: grid;
-  gap: 14px;
-  margin-top: 32px;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }
 .product-shell input:not([type='checkbox'], [type='radio']),
 .product-shell select {
   min-height: 44px;
-  color: #f3f2e9;
-  background: #17252b;
-  border: 1px solid #779097;
-  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-panel-raised);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-pixel);
   padding: 10px;
   width: 100%;
+  box-shadow: var(--inset-highlight);
 }
 .product-shell fieldset {
   display: flex;
@@ -145,18 +226,29 @@
 .product-shell input[type='checkbox'] {
   width: auto;
   min-height: auto;
-  accent-color: #b8ebca;
+  accent-color: var(--color-runner);
 }
 .product-shell button {
   min-height: 44px;
-  border-radius: 6px;
-  background: #b8ebca;
-  color: #10251c;
+  border-radius: var(--radius-pixel);
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow:
+    var(--inset-highlight),
+    3px 3px 0 var(--color-seam);
+}
+.product-shell button,
+.product-shell input,
+.product-shell select,
+.product-shell label {
+  font-family: var(--font-control);
+  font-size: var(--text-control);
 }
 .product-shell button.quiet {
   background: transparent;
-  color: #eee;
-  border: 1px solid #779097;
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  box-shadow: none;
 }
 .product-shell button:hover:not(:disabled) {
   filter: brightness(1.08);
@@ -166,12 +258,12 @@
   opacity: 0.6;
 }
 .product-shell :focus-visible {
-  outline: 3px solid #dfbb79;
+  outline: 3px solid var(--color-focus);
   outline-offset: 4px;
 }
 .product-shell ::selection {
-  background: #dfbb79;
-  color: #17211e;
+  background: var(--color-focus);
+  color: var(--color-bg);
 }
 .product-shell .asset-notices-link {
   color: #b7d9ff;
@@ -179,6 +271,7 @@
 }
 .product-shell .notice {
   color: #b6c9cf;
+  font-size: var(--text-body);
 }
 .game-workspace {
   display: grid;
@@ -236,7 +329,7 @@
   margin-bottom: 6px;
 }
 .playing-shell h1 {
-  font-size: 1.7rem;
+  font-size: var(--text-heading);
 }
 .playing-shell .game-workspace {
   margin-top: 12px;
@@ -264,12 +357,12 @@
   gap: 16px;
 }
 .game-hud strong {
-  font-size: 1.7rem;
+  font-size: var(--text-heading);
   font-variant-numeric: tabular-nums;
 }
 .game-hud p {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--text-body);
 }
 .role-badge {
   border: 1px solid #789e88;
@@ -279,7 +372,7 @@
 .hud-status {
   display: grid;
   gap: 5px;
-  font-size: 0.8rem;
+  font-size: var(--text-control);
   color: #b8cbc3;
   /* "행동 가능" ↔ "이동 중" 처럼 문구 길이가 바뀌어도 HUD 줄바꿈이 달라지지 않게 폭을 고정 */
   min-width: min(21rem, 100%);
@@ -325,7 +418,7 @@
 }
 .product-shell .restraint-hud {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--text-body);
 }
 .restraint-hud p {
   margin: 6px 0 0;
@@ -358,12 +451,12 @@
 }
 .product-shell:has(.render-preview) h1,
 .product-shell .render-preview h2 {
-  font-size: 1.2rem;
+  font-size: var(--text-body);
   margin: 0;
 }
 .product-shell:has(.render-preview) > p,
 .render-preview p {
-  font-size: 0.75rem;
+  font-size: var(--text-control);
   margin: 4px 0;
   max-width: none;
 }
@@ -374,7 +467,7 @@
 .product-shell:has(.render-preview) button {
   min-height: 32px;
   padding: 8px 12px;
-  font-size: 0.8rem;
+  font-size: var(--text-control);
 }
 .product-shell .render-preview {
   margin-top: 8px;
@@ -385,7 +478,7 @@
 }
 .render-preview output {
   display: block;
-  font-size: 0.8rem;
+  font-size: var(--text-control);
   padding-top: 6px;
 }
 .game-workspace .mini-map {
@@ -396,7 +489,7 @@
   padding-top: 16px;
 }
 .product-shell .game-panel h2 {
-  font-size: 1.2rem;
+  font-size: var(--text-body);
   margin-bottom: 12px;
 }
 .game-panel label {
@@ -456,6 +549,14 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 32px;
+  border-top: 4px double var(--color-border-strong);
+  border-bottom: 4px double var(--color-border-strong);
+  outline: var(--outline-pixel);
+  outline-offset: 2px;
+  background:
+    linear-gradient(90deg, transparent 0 49.7%, var(--color-seam) 49.7% 50.3%, transparent 50.3%),
+    var(--color-panel);
+  box-shadow: var(--inset-highlight), var(--shadow-pixel);
 }
 .product-shell .lobby li {
   display: flex;
@@ -463,10 +564,11 @@
   flex-wrap: wrap;
   gap: 10px;
   padding: 18px 0;
-  border-bottom: 1px solid #385059;
+  border-bottom: 2px dashed var(--color-seam);
+  padding-inline: 14px;
 }
 .product-shell .lobby li span:last-child {
-  color: #b6c9cf;
+  color: var(--color-muted);
 }
 .device-check {
   display: grid;
@@ -548,7 +650,7 @@
   display: block;
 }
 .mini-map figcaption {
-  font-size: 0.85rem;
+  font-size: var(--text-small);
   margin-top: 8px;
   color: #b6c9cf;
 }
@@ -567,7 +669,7 @@
   color: #f1e3c4;
 }
 .loading-cover .countdown {
-  font-size: 3.5rem;
+  font-size: 56px;
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
@@ -603,7 +705,10 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: radial-gradient(circle at 15% 0%, #123047 0, transparent 38%), #050c13;
+  background:
+    linear-gradient(rgb(9 7 6 / 88%), rgb(9 7 6 / 96%)),
+    repeating-linear-gradient(0deg, transparent 0 31px, var(--color-seam) 31px 32px),
+    var(--color-bg);
 }
 button,
 input,
@@ -949,12 +1054,18 @@ kbd {
   place-content: center;
   pointer-events: none;
   text-align: center;
-  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  font-family: var(--font-display);
+  font-size: var(--text-hero);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #f4f8f6;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
   animation: cue-flash-fade 0.9s ease-out forwards;
+}
+@media (max-width: 600px) {
+  .cue-flash {
+    font-size: var(--text-heading);
+  }
 }
 .cue-flash[data-cue='captured'] {
   box-shadow: inset 0 0 0 100vmax rgba(140, 20, 24, 0.55);

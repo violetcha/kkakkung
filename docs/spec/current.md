@@ -207,7 +207,41 @@ E는 들어온 교환 수락 → 유효한 자기 출구 도전 → 선택 대�
 
 기울임은 양어깨 화면 거리와 뺨 거리를 각각 자연로그로 만들어 중립값을 뺀 평균이다. 고개가 해제 임계(12°) 이상 돌아간 동안은 이동 판정을 만들지 않는다. 표본별 One Euro Filter를 적용하고, 만료·장치 세대·모드·보정 변경 때 필터와 유지 상태를 정리한다. 내 미리보기는 거울처럼 뒤집는다.
 
-근거: [입력 런타임](../../apps/web/src/features/input/InteractionRuntime.ts), [입력 튜닝](../../apps/web/src/features/input/input-tuning.ts), [장치 준비](../../apps/web/src/features/game/flow/device-readiness.ts).
+### 6.4 화면 디자인 기반
+
+제품 화면은 갈무리9·11·11 Bold·14를 용도에 맞게 쓰고, 각 갈무리 글꼴 로딩 실패나 지원하지
+않는 글리프는 Galmuri14 → Pretendard → Noto Sans KR → system-ui 순서로 대체한다. 갈무리11은
+픽셀 형태를 살리기 위해 브라우저 합성 굵기를 만들지 않고 제공된 400·700 파일만 사용한다.
+글자 크기는 9·11·14·28·56px의 정수 도트 배율 토큰을 쓰고 제품 화면에서는 WebKit 글꼴 평활화를
+끄며, 공통 헤더의 까꿍 로고는 홈·로비·장치 점검·연습·로딩·경기·결과·복구 화면에서 같은
+자산을 유지한다.
+
+| 토큰                    | 값                          | 용도                      |
+| ----------------------- | --------------------------- | ------------------------- |
+| `--color-bg`            | `#090706`                   | 전체 배경                 |
+| `--color-panel`         | `#171310e6`                 | 반투명 기본 패널          |
+| `--color-panel-raised`  | `#211a15`                   | 입력·돌출 패널            |
+| `--color-text`          | `#f4ead7`                   | 본문·주요 선              |
+| `--color-muted`         | `#b8aa91`                   | 보조 설명                 |
+| `--color-border`        | `#796651`                   | 기본 경계                 |
+| `--color-border-strong` | `#c4a46b`                   | 강조 경계·로비 박음질     |
+| `--color-seam`          | `#3a2b22`                   | 픽셀 그림자·점선          |
+| `--color-focus`         | `#f0c674`                   | 키보드 포커스             |
+| `--color-tagger`        | `#d4684f`                   | 술래 역할                 |
+| `--color-runner`        | `#6fb7a6`                   | 도망자 역할               |
+| `--color-success`       | `#8dcf9f`                   | 성공                      |
+| `--color-warning`       | `#d8aa61`                   | 대기·경고                 |
+| `--color-danger`        | `#d16d62`                   | 실패·위험                 |
+| `--space-1..4`          | `4·8·16·32px`               | 도트 배율 간격            |
+| `--radius-pixel`        | `2px`                       | 픽셀 모서리               |
+| `--outline-pixel`       | `3px solid`                 | 두꺼운 바깥 선            |
+| `--inset-highlight`     | `inset 0 0 0 1px #f4ead755` | 안쪽 뼛빛 선              |
+| `--shadow-pixel`        | `6px 6px 0 #000`            | 카드·명단의 계단형 그림자 |
+
+로비 명단은 이중 테두리, 점선 이음새, 계단형 그림자를 함께 써 봉제된 공포 게임 카드처럼
+보이게 한다. 상태와 역할은 색만으로 구분하지 않고 기존 문구·글리프·테두리를 함께 유지한다.
+
+근거: [입력 런타임](../../apps/web/src/features/input/InteractionRuntime.ts), [입력 튜닝](../../apps/web/src/features/input/input-tuning.ts), [장치 준비](../../apps/web/src/features/game/flow/device-readiness.ts), [공통 스타일](../../apps/web/src/styles.css), [브랜드 로고](../../apps/web/public/brand/kkakkung-logo.svg).
 
 ## 7. 맵·시야·개인 지도
 
@@ -320,6 +354,10 @@ master-v1은 32×32 격자다. 서버가 검증된 고정 맵의 8개 변형·�
 근거: [얼굴 가공](../../apps/web/src/features/media/face-compositor.ts), [게시](../../apps/web/src/features/media/track-publisher.ts), [가청 정책](../../server/src/media/AudibilityPolicy.ts), [음향](../../apps/web/src/features/media/audio-graph.ts), [안내음 판정](../../apps/web/src/features/game/flow/match-cues.ts), [안내음 재생](../../apps/web/src/features/media/audio-cues.ts), [개인정보 안내](../../apps/web/src/features/room/privacy-notice.ts), [미디어](../media.md).
 
 ## 12. 종료·복구·재경기
+
+종료·복구·재경기 화면도 공통 헤더의 까꿍 로고와 디자인 토큰을 유지한다. 사용자는 결과나
+오류 화면으로 전환되어도 같은 서비스 안에 있다는 표식을 잃지 않으며, 나가기 동작은 로고와
+분리된 명시적 버튼으로 남는다.
 
 | 상황                                 | 동작                                                                                                               | 한계·주의                                               |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |

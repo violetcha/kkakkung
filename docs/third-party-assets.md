@@ -43,7 +43,40 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 
 ## 코드로 만든 자산
 
-시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 발소리·감지기·덫 효과음 3종도 코드로 생성한 PCM이다. 외부 모델·텍스처·폰트·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 렌더 자산·음원·폰트 대장 정리는 S15P21C204-225에서 이어간다.
+시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 발소리·감지기·덫 효과음 3종도 코드로 생성한 PCM이다. 외부 모델·텍스처·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 폰트는 아래의 갈무리 패키지만 추가했다. 렌더 자산·음원·폰트 대장 정리는 S15P21C204-225에서 이어간다.
+
+### 갈무리 폰트
+
+| 항목        | 내용                                                                               |
+| ----------- | ---------------------------------------------------------------------------------- |
+| 이름과 버전 | Galmuri 2.40.3, Galmuri9·11·11 Bold·14                                             |
+| 제작자      | Lee Minseo (quiple)                                                                |
+| 출처        | [공식 사이트](https://galmuri.quiple.dev), npm `galmuri@2.40.3`                    |
+| 라이선스    | SIL Open Font License 1.1, 예약 폰트 이름 `Galmuri`                                |
+| 배포 방식   | WOFF2 네 파일과 OFL 원문을 `apps/web/public/fonts`에서 자체 호스팅, CDN 사용 안 함 |
+| 무결성      | 정확한 패키지 버전과 integrity를 `pnpm-lock.yaml`에 고정                           |
+| 갱신 책임   | 웹 UI 담당자가 버전·OFL 고지·fallback을 함께 검토                                  |
+
+폰트 파일을 수정하거나 이름을 바꾸지 않는다. 해당 갈무리 글꼴 로드에 실패하면 Galmuri14,
+Pretendard, Noto Sans KR, system-ui 순서로 대체하므로 글자가 사라지지 않는다. 패키지에 포함된
+OFL 원문은 배포 의존성과 함께 보존하며, 사용자용 오픈소스 고지 화면 연결은 별도 자산 고지
+정리에서 이어간다.
+
+| 파일                   | bytes   | SHA256                                                             |
+| ---------------------- | ------- | ------------------------------------------------------------------ |
+| `Galmuri9.woff2`       | 429,612 | `275d995906625eaaa5d2d9baa0a80f90a5c033c381c0dc2108a8729d371041a6` |
+| `Galmuri11.woff2`      | 504,736 | `f467d1b10e6b88dfa8399c9f93b38c7643e050abfe4fc15800ac0b000f5a57d6` |
+| `Galmuri11-Bold.woff2` | 166,632 | `8643094f395aa2dbad6bc4385cc043314801eaec2e759d549435ec8ac4f2d078` |
+| `Galmuri14.woff2`      | 564,892 | `79b34b22b86536d0fe9ebe7105dd5f20f56558d691c67a0c6432807a03ec5a82` |
+| `OFL-1.1.txt`          | 4,360   | `86a3ee9495f942f0243f18c103da9faca27adb88142613edb8bb852e56c892c1` |
+
+### 까꿍 로고
+
+`apps/web/public/brand/kkakkung-logo.svg`는 S15P21C204-271에서 프로젝트용으로 직접 만든
+원본 SVG이며 제3자 그림·상표·폰트 파일을 포함하지 않는다. 제작 주체는 S15P21C204 프로젝트,
+권리는 저장소 자체 제작물과 같은 조건으로 관리한다. 워드마크 윤곽은 동봉한 Galmuri11 Bold의
+두 글자를 SVG path로 변환해 플랫폼 설치 글꼴에 의존하지 않는다. 1,012bytes, SHA256
+`668680699db54aa79fd444676633448e07f5bda1960041ee4e8b48a70e471378`이다.
 
 ## 자산 추가 기록
 
