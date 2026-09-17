@@ -73,6 +73,16 @@ async function enter(page: Page) {
   await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
   await expect(page.getByRole('heading', { name: '혼자 준비해 볼까요?' })).toBeVisible();
 }
+/**
+ * 키를 유지 시간 동안 누른다. 앱의 유지 타이머는 페이지 시계로 돌므로 러너의 벽시계로 기다리면
+ * 메인 스레드가 막힌 CI에서 keyup이 그 타이머보다 먼저 처리될 수 있다. 페이지 안에서 기다리면
+ * 먼저 걸린 앱 타이머가 반드시 앞서 발화한다(S15P21C204-265 후속).
+ */
+async function holdKey(page: Page, code: string, ms: number) {
+  await page.keyboard.down(code);
+  await page.evaluate((delay) => new Promise<void>((done) => setTimeout(done, delay)), ms);
+  await page.keyboard.up(code);
+}
 async function resources(page: Page) {
   return page.evaluate(() => {
     const probe = (globalThis as typeof globalThis & { soloProbe: Probe }).soloProbe;
@@ -108,24 +118,16 @@ test('solo teaches actual keyboard movement and both roles without admission or 
   });
   await enter(page);
   const progress = page.getByLabel('체험 진행');
-  await page.keyboard.down('KeyW');
-  await page.waitForTimeout(400);
-  await page.keyboard.up('KeyW');
+  await holdKey(page, 'KeyW', 400);
   await expect(progress.getByText('✓ 완료 · 한 칸 전진', { exact: true })).toBeVisible();
-  await page.keyboard.down('KeyS');
-  await page.waitForTimeout(600);
-  await page.keyboard.up('KeyS');
+  await holdKey(page, 'KeyS', 600);
   await expect(progress.getByText('✓ 완료 · 한 칸 후진', { exact: true })).toBeVisible();
   await expect(progress.getByText('✓ 완료 · 중립으로 멈추기', { exact: true })).toBeVisible();
-  await page.keyboard.down('KeyA');
-  await page.waitForTimeout(400);
-  await page.keyboard.up('KeyA');
+  await holdKey(page, 'KeyA', 400);
   await expect(progress.getByText('✓ 완료 · 왼쪽 90° 회전', { exact: true })).toBeVisible();
-  // 회전은 키를 놓고 중립 시간(150ms)이 지나야 다음 회전을 받는다(265).
-  await page.waitForTimeout(300);
-  await page.keyboard.down('KeyD');
-  await page.waitForTimeout(400);
-  await page.keyboard.up('KeyD');
+  // 회전은 키를 놓고 중립 시간(150ms)이 지나야 다음 회전을 받는다(265). 같은 이유로 페이지 시계.
+  await page.evaluate(() => new Promise<void>((done) => setTimeout(done, 300)));
+  await holdKey(page, 'KeyD', 400);
   await expect(progress.getByText('✓ 완료 · 오른쪽 90° 회전', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '술래 체험', exact: true }).click();
   await page.keyboard.press('KeyF');

@@ -70,6 +70,20 @@ export function createTurnIntentController(deps: TurnIntentDeps): TurnIntentCont
     keyNeutralTimer = null;
   };
 
+  /** 유지 중인 키가 유지 시간을 채웠는지 시계로 판정한다. 타이머 발화 여부와 무관하다. */
+  const keyHoldElapsed = (direction: TurnDirection) =>
+    keyHeld === direction &&
+    keyHeldSince !== null &&
+    !latched &&
+    pressed.has(direction) &&
+    deps.now() - keyHeldSince >= tuning.turnHoldMs;
+
+  const fireKeyHold = (direction: TurnDirection) => {
+    stopKeyHold();
+    latched = true;
+    deps.send(direction);
+  };
+
   /** 타이머가 이르게 깨어나도 시계로 유지 시간을 다시 재고, 모자라면 남은 만큼 다시 잔다. */
   const armKeyHold = (direction: TurnDirection) => {
     const since = keyHeldSince;
@@ -86,9 +100,7 @@ export function createTurnIntentController(deps: TurnIntentDeps): TurnIntentCont
       );
       return;
     }
-    stopKeyHold();
-    latched = true;
-    deps.send(direction);
+    fireKeyHold(direction);
   };
 
   const armKeyNeutral = () => {
@@ -171,6 +183,9 @@ export function createTurnIntentController(deps: TurnIntentDeps): TurnIntentCont
     },
 
     keyUp(direction) {
+      // 메인 스레드가 막혀 유지 타이머가 keyup보다 늦게 처리돼도, 실제로 유지 시간을 채운
+      // 키는 놓는 시점에 발동한다. 모션이 표본 시각으로 재는 것과 같은 판정이다.
+      if (keyHoldElapsed(direction)) fireKeyHold(direction);
       pressed.delete(direction);
       if (keyHeld === direction) stopKeyHold();
       // 모든 키를 놓은 채 중립 시간을 채워야 다음 회전을 받는다.
