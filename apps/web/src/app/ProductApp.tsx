@@ -41,6 +41,7 @@ import {
   publishRuntimeMetrics,
   type RuntimeMetrics,
 } from './runtime-metrics';
+import { BrandLogo } from './BrandLogo';
 
 export function ProductApp({
   invitation,
@@ -320,7 +321,7 @@ export function ProductApp({
   return (
     <main className={worldVisible ? 'product-shell playing-shell' : 'product-shell'}>
       <header>
-        <h1>까꿍</h1>
+        <BrandLogo />
         {snapshot && (
           <button className="quiet" onClick={() => void leave()}>
             나가기

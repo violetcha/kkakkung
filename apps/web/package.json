@@ -9,10 +9,11 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json"
   },
   "dependencies": {
-    "@kkakkung/protocol": "workspace:*",
     "@colyseus/sdk": "0.18.2",
+    "@kkakkung/protocol": "workspace:*",
     "@mediapipe/tasks-vision": "1.0.1",
     "@react-three/fiber": "9.7.0",
+    "galmuri": "2.40.3",
     "livekit-client": "2.22.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
