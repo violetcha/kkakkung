@@ -8,6 +8,7 @@ import type {
   WallFace,
 } from '@kkakkung/protocol/game-schema';
 import type { CommandInput } from '../../input/InteractionRuntime';
+import { PRODUCT_TICK_MS } from '@kkakkung/protocol/game-schema';
 import { SERVER_ACTION_MS } from '../../input/input-tuning';
 import { advanceKey, challengeKeys, type ChallengeKey } from '../pose/key-challenge';
 
@@ -72,7 +73,7 @@ export function createSoloWorld(now: () => number) {
   let poseProgress = 0;
   let enabled = true;
   let message = 'W/S로 앞뒤 이동, A/D로 90° 회전을 해 보세요.';
-  const tick = () => now() / 50;
+  const tick = () => now() / PRODUCT_TICK_MS;
   const exit = {
     exitId: 'solo-exit',
     ownerId: self.playerId,
@@ -119,13 +120,20 @@ export function createSoloWorld(now: () => number) {
       ...self,
       cell: { x: to.x, y: to.y },
       dir: to.dir,
-      action: { kind, from, to, startTick: tick(), endTick: tick() + SERVER_ACTION_MS[kind] / 50 },
+      action: {
+        kind,
+        from,
+        to,
+        startTick: tick(),
+        endTick: tick() + SERVER_ACTION_MS[kind] / PRODUCT_TICK_MS,
+      },
     };
   };
   const poll = () => {
     if (!enabled) return;
     if (self.action && tick() >= self.action.endTick) {
-      if (neutralAt !== null) neutralAt = Math.max(neutralAt, self.action.endTick * 50);
+      if (neutralAt !== null)
+        neutralAt = Math.max(neutralAt, self.action.endTick * PRODUCT_TICK_MS);
       if (pendingLesson) completed.add(pendingLesson);
       self = { ...self, action: null };
       pendingLesson = null;

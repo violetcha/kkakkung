@@ -38,6 +38,18 @@ export type Action = Readonly<{
   startTick: number;
   endTick: number;
 }>;
+/**
+ * S15P21C204-270. The server's authoritative action durations, mirrored for clients that have no
+ * server (the solo practice world) and for copy that names them. Real matches never read these:
+ * every `Action` carries its own `startTick`/`endTick`. The server test pins these to the shipped
+ * tuning profile, so a speed change must touch both or fails verify.
+ */
+export const PRODUCT_TICK_MS = 50 as const;
+export const PRODUCT_ACTION_TICKS = Object.freeze({ move: 12, turn: 8 });
+export const PRODUCT_ACTION_MS = Object.freeze({
+  move: PRODUCT_ACTION_TICKS.move * PRODUCT_TICK_MS,
+  turn: PRODUCT_ACTION_TICKS.turn * PRODUCT_TICK_MS,
+});
 export type Counts = Readonly<{ escaped: number; captured: number }>;
 export type RoundResult = Readonly<{
   winner: 'runners' | 'taggers';

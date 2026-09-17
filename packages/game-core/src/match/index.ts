@@ -31,7 +31,12 @@ export {
   topologyVersionOf,
   validateTemplate,
 } from './map/validate-template.js';
-export { MATCH_TUNING_CONSTANTS, validateTuning } from './tuning.js';
+export {
+  MATCH_TUNING_CONSTANTS,
+  MATCH_TUNING_DEFAULTS,
+  MATCH_TUNING_RANGES,
+  validateTuning,
+} from './tuning.js';
 
 export { preparePracticeLayout } from './map/prepare-practice-layout.js';
 

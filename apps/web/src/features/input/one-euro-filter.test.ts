@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { PRODUCT_ACTION_MS } from '@kkakkung/protocol/game-schema';
 import { INPUT_TUNING, SENSOR_TUNING_VERSION, SERVER_ACTION_MS } from './input-tuning';
 import { applyHysteresis, createOneEuroFilter, smoothingAlpha } from './one-euro-filter';
 
@@ -143,8 +144,10 @@ describe('INPUT_TUNING', () => {
   });
 
   it('keeps the server action time separate from the local recognition delays', () => {
-    expect(SERVER_ACTION_MS.move).toBe(450);
-    expect(SERVER_ACTION_MS.turn).toBe(300);
+    // S15P21C204-270. The web mirrors the protocol's action durations; no local 450/300 remains.
+    expect(SERVER_ACTION_MS).toEqual(PRODUCT_ACTION_MS);
+    expect(SERVER_ACTION_MS.move).toBe(600);
+    expect(SERVER_ACTION_MS.turn).toBe(400);
     expect(SERVER_ACTION_MS.move).not.toBe(INPUT_TUNING.forwardHoldMs);
     expect(SERVER_ACTION_MS.turn).not.toBe(INPUT_TUNING.turnHoldMs);
   });

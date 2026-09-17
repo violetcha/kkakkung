@@ -7,7 +7,11 @@ import {
   passageNeighbors,
   validateTemplate,
 } from '../../src/match/map/validate-template.js';
-import { validateTuning } from '../../src/match/tuning.js';
+import {
+  MATCH_TUNING_DEFAULTS,
+  MATCH_TUNING_RANGES,
+  validateTuning,
+} from '../../src/match/tuning.js';
 import type { MapTemplateResult } from '../../src/match/types.js';
 import { clone, loadMaster, loadTuning } from './helpers.js';
 
@@ -231,14 +235,16 @@ describe('structural rejection', () => {
 });
 
 describe('tuning data', () => {
-  it('validates mvp-v1 tuning and rejects changed constants', () => {
+  it('validates the shipped tuning, keeps speed inside its range and rejects changed constants', () => {
     const raw = loadTuning();
     const result = validateTuning(raw);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.template.tuningVersion).toBe('mvp-v1');
-    expect(result.template.match.moveTicks).toBe(9);
-    expect(result.template.match.turnTicks).toBe(6);
+    expect(result.template.tuningVersion).toBe('mvp-v2');
+    // S15P21C204-270. Speed is tuned (12 ticks a cell, 8 a turn, provisional until the six-device
+    // session); the shipped values are the fixture defaults so code-built tunings match the JSON.
+    expect(result.template.match.moveTicks).toBe(MATCH_TUNING_DEFAULTS.moveTicks);
+    expect(result.template.match.turnTicks).toBe(MATCH_TUNING_DEFAULTS.turnTicks);
     expect(result.template.match.roundTicks).toBe(3600);
     expect(result.template.selection).toEqual({
       maxAttempts: 256,
@@ -246,8 +252,22 @@ describe('tuning data', () => {
       attemptsPerBatch: 8,
     });
     expect(result.template.layout.maxExitRatio).toBe(1.3);
+    const speed = (moveTicks: number, turnTicks: number) => {
+      const changed = clone(raw) as { match: Record<string, number> };
+      changed.match.moveTicks = moveTicks;
+      changed.match.turnTicks = turnTicks;
+      return validateTuning(changed).ok;
+    };
+    // Any integer speed inside the ranges is a valid profile; a turn slower than a step is not.
+    expect(speed(9, 6)).toBe(true);
+    expect(speed(MATCH_TUNING_RANGES.moveTicks.max, MATCH_TUNING_RANGES.turnTicks.min)).toBe(true);
+    expect(speed(MATCH_TUNING_RANGES.moveTicks.min - 1, 2)).toBe(false);
+    expect(speed(MATCH_TUNING_RANGES.moveTicks.max + 1, 8)).toBe(false);
+    expect(speed(12, 13)).toBe(false);
+    expect(speed(12.5, 8)).toBe(false);
+    // The remaining constants are still fixed.
     const changed = clone(raw) as { match: Record<string, number> };
-    changed.match.moveTicks = 8;
+    changed.match.roundTicks = 3000;
     expect(validateTuning(changed).ok).toBe(false);
   });
 });

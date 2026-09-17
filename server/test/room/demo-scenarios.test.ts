@@ -208,7 +208,7 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
     try {
       demo.scenario('capture');
       // The capture is A's verdict on a completed move into the operator's cell.
-      await vi.waitFor(() => expect(demo.room.state.counts.captured).toBe(1), { timeout: 55_000 });
+      await vi.waitFor(() => expect(demo.room.state.counts.captured).toBe(1), { timeout: 80_000 });
       await vi.waitFor(() => expect(demo.self()).toBeNull());
       expect(demo.room.state.phase).toBe('PLAYING');
       // S15P21C204-269. The ended operator now watches a surviving puppet runner and can switch.
@@ -226,7 +226,7 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
     } finally {
       await demo.close();
     }
-  }, 90_000);
+  }, 130_000);
 
   it('restrains the operator with a puppet-installed trap', async () => {
     const demo = await playing('runner');
@@ -235,7 +235,7 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
       // Wait for the device to be armed and the installer to have stepped off it: walking into
       // a tagger would be a capture, and an ended operator has no restraint to show.
       await vi.waitFor(() => expect(demo.states.at(-1)?.step).toBe('step-back'), {
-        timeout: 55_000,
+        timeout: 80_000,
       });
       await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBeNull(), { timeout: 20_000 });
       expect(demo.states.at(-1)?.failure).toBeNull();
@@ -251,17 +251,17 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
     } finally {
       await demo.close();
     }
-  }, 120_000);
+  }, 160_000);
 
   it('ends the match with a real result when two puppet runners escape', async () => {
     const demo = await playing('tagger');
     try {
       demo.scenario('result-runner-win');
-      await vi.waitFor(() => expect(demo.room.state.counts.escaped).toBe(2), { timeout: 110_000 });
+      await vi.waitFor(() => expect(demo.room.state.counts.escaped).toBe(2), { timeout: 150_000 });
       await vi.waitFor(() => expect(demo.room.state.phase).toBe('RESULT'), { timeout: 10_000 });
       expect(demo.room.state.result?.winner).toBe('runners');
     } finally {
       await demo.close();
     }
-  }, 180_000);
+  }, 220_000);
 });

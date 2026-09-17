@@ -125,7 +125,7 @@ result = stepMatch(result.state, { tick: tick + 1, commands, controls });
 - `getVisibleEntities` → 같은 마스크의 다른 ACTIVE 플레이어(`cell`/`dir`/`action`/`role`)와 `sensor`(cell·wall·state)·`trap`(cell·state). 장비 소유자와 무장 예정 Tick은 없다.
 - `getPlayerKnowledge` → `{ mapVersion, knownTerrain, knownActiveExits }`. `knownActiveExits`는 도망자만(poseKind 없음), 술래는 항상 빈 배열. `mapVersion`은 지형·활성 출구 집합이 바뀔 때만 증가한다. 출구 발견은 활성 출구 벽면이 `visibleWallFaces`에 정확히 있을 때만.
 - `getPlayerSelf`(ACTIVE): `exchange`, `installation`, `ownedEquipment`, `equipment`, `restraintUntilTick`, `restraintImmuneUntilTick`, `challenge`. 개인 종료자는 `playerId`/`role`/`status`만.
-- `Action = { kind: move|turn, from, to, startTick, endTick }`. 이동 9 Tick·회전 6 Tick, 완료 Tick에만 cell/dir 확정. 3D 변환(x→x, y→z)은 C.
+- `Action = { kind: move|turn, from, to, startTick, endTick }`. 이동·회전 길이는 튜닝 `moveTicks`·`turnTicks`(현재 12·8 Tick, 270 임시값, `MATCH_TUNING_RANGES` 안의 정수), 완료 Tick에만 cell/dir 확정. 3D 변환(x→x, y→z)은 C.
 - 설치 10 Tick → UNARMED(재고 소모) → 20 Tick → ARMED. 구속 30 Tick, 해제 뒤 면역 40 Tick(끝 경계 배타). 구속 중 회전 허용·이동 거절, 진행 중 도전은 canceled, 교환 세션은 같은 Tick 정리 단계에서 종료. 도전 실패 뒤 재시도 게이트 10 Tick.
 - 서버는 실제 신체 자세나 카메라 진위를 증명하지 않는다. C가 보고한 성공의 시간·위치·중복만 보장한다.
 

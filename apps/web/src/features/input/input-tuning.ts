@@ -1,5 +1,6 @@
 // D-06 / IN-06. 입력 인식의 첫 수치. 한 판 실행 중에는 바뀌지 않는다.
-// 서버 행동 시간(move 9 Tick=450ms, turn 6 Tick=300ms)과 다른 값이며 섞지 않는다.
+// 서버 행동 시간(PRODUCT_ACTION_MS: move 12 Tick=600ms, turn 8 Tick=400ms)과 다른 값이며 섞지 않는다.
+import { PRODUCT_ACTION_MS } from '@kkakkung/protocol/game-schema';
 
 /** 이 버전은 검사 증거에 남긴다. sensorTuningVersion은 D, poseTuningVersion은 C가 소유한다. */
 export const SENSOR_TUNING_VERSION = 'D-input-4-shoulder-span';
@@ -53,8 +54,11 @@ export const INPUT_TUNING: InputTuning = Object.freeze({
   filterMaxGapMs: 500,
 });
 
-/** 서버 권위 행동 시간. 로컬 인식 지연 상수와 구분하기 위해 함께 적어 둔다. */
-export const SERVER_ACTION_MS = Object.freeze({ move: 450, turn: 300 });
+/**
+ * 서버 권위 행동 시간. 로컬 인식 지연 상수와 구분하기 위해 함께 적어 둔다.
+ * S15P21C204-270. 웹에 숫자를 두지 않고 프로토콜의 미러 상수를 쓴다(서버 튜닝과 시험으로 고정).
+ */
+export const SERVER_ACTION_MS = PRODUCT_ACTION_MS;
 
 /**
  * 고개가 이만큼 돌아가 있으면 전후 이동 판정을 만들지 않는다(회전 해제 임계와 같은 값).

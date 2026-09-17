@@ -29,10 +29,16 @@ export const roster: RosterEntry[] = [
   { playerId: 'r-c', role: 'runner' },
 ];
 
+/**
+ * Rule tests read the shipped profile for every fixed constant but pin the speed at the original
+ * 9-tick move / 6-tick turn: their tick-by-tick expectations describe the rules at that pace and
+ * would only be renumbered by a speed change (S15P21C204-270). The shipped speed itself is
+ * checked by template.test and, against the protocol mirror, by the server profile test.
+ */
 export function tuning(): MatchTuning {
   const result = validateTuning(loadTuning());
   if (!result.ok) throw new Error('tuning invalid');
-  return result.template.match;
+  return Object.freeze({ ...result.template.match, moveTicks: 9, turnTicks: 6 });
 }
 
 /** Identity fallback bound to the test roster: taggers (8,16)/(16,12)/(25,16), runners (2,2)/(29,2)/(16,30). */

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { PRODUCT_ACTION_TICKS, PRODUCT_TICK_MS } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import { createApplication } from '../../src/bootstrap.js';
 import { parseConfig } from '../../src/config/env.js';
@@ -28,6 +29,13 @@ describe('real product profile assembly without Cloud', () => {
     const profile = await loadProductProfile(config());
     expect(profile.assetVersion).toBe('c-primitives-1');
     expect(profile.strictProduct).toBe(true);
+    // S15P21C204-270. The protocol mirrors the shipped action durations for server-less clients;
+    // a speed change must update the tuning profile and the mirror together.
+    expect(profile.tuning).toMatchObject({
+      tickMs: PRODUCT_TICK_MS,
+      moveTicks: PRODUCT_ACTION_TICKS.move,
+      turnTicks: PRODUCT_ACTION_TICKS.turn,
+    });
     const players = Array.from({ length: 6 }, (_, index) => ({
       playerId: `player-${index}`,
       role: index < 3 ? ('runner' as const) : ('tagger' as const),
