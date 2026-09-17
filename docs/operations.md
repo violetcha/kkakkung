@@ -37,6 +37,17 @@
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
 
+### 관리자 데모 방 열기
+
+홈에 진입점이 없으므로 주소를 `scripts/open-demo.mjs`로 받는다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이 함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).
+
+```bash
+OPS_TOKEN=... node scripts/open-demo.mjs \
+  --base-url http://127.0.0.1:2567 --public-url http://127.0.0.1:5173 --role runner
+```
+
+주소에 살아 있는 세션이 들어 있어 내 기기(loopback)에서만 화면에 찍고, 그 밖의 대상은 `--output`으로 비공개 파일(0600)에 쓴다. 실패는 원인별로 답한다: `DEMO_UNAVAILABLE`은 `DEMO_ROOMS=0`, `CAPACITY`는 방 예산 소진(열린 데모 방을 닫는다), `401`은 토큰이다. 데모 방도 `MAX_ROOMS`를 함께 쓰므로 1방 운영에서는 데모 방 하나가 그 한 방을 차지한다.
+
 ## 3. 배포와 헬스
 
 배포 순서: 매니페스트(SHA·digest) → SSO 격리 확인 → drain → 이미지 교체 → `/health/ready` → resume/OPEN → 실제 Cloud DP-06(1방·6 합성 클라이언트, 시험 600초+정리 60초, 계획 유효 30분) → 공개 재검사 → last-good 기록. 실패하면 새 requestId로 다시 drain한 뒤에만 이전 digest로 복귀하며, 조건을 확인할 수 없으면 `ROLLBACK_BLOCKED`로 둔다. 세부 장벽은 [인프라 안내](../infra/README.md)의 “배포 장벽”을 따른다.
