@@ -75,7 +75,7 @@ import {
 | REQ-D-10 | C    | `loading-controller`의 대기 항목 옆에 `ReadinessTrace`의 막힌 단계·원인 표시(S15P21C204-240). “카메라 연결” ↔ permission·device-open, “내 얼굴 게시 확인” ↔ first-publish, model-load도 함께 | 연결(254) |
 | REQ-D-11 | C    | `apps/web/public/licenses/index.html`에 `sdk.bundledComponents` 목록과 최소 XNNPACK BSD-3-Clause 고지 원문. `licenseVerified:false` 항목은 확인 중으로 표시                                  | 미연결    |
 | REQ-D-12 | F    | `scripts/lib/vision-asset-notices.mjs`가 `bundledNoticesReview:'verified'`를 받을 때 고지 파일 쪽도 확인(지금은 플래그만 바꿔도 통과)                                                        | 미반영    |
-| REQ-D-13 | F    | 제품 runtime의 `getMediaEvidence()`를 Cloud runner가 읽을 노출 지점(앱 진입점 C 또는 probe·harness F). 지금 `tests/cloud/probe.ts`는 합성 클라이언트를 본다                                  | 미연결    |
+| REQ-D-13 | F    | 제품 runtime의 `getMediaEvidence()`를 Cloud runner가 읽을 노출 지점(앱 진입점 C 또는 probe·harness F)                                                                                        | 연결(251) |
 
 ## 남은 일
 

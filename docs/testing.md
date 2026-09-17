@@ -61,14 +61,14 @@ KKAKKUNG_TEST_ROOMS=10 KKAKKUNG_TEST_REPORT=.local/integration/rooms-10.json \
 pnpm cloud:check --case <ID> --preflight <preflight.json> --evidence .local/qa/<ID>
 ```
 
-| 사례                     | 파일                                         | 상태                                                 |
-| ------------------------ | -------------------------------------------- | ---------------------------------------------------- |
-| DP-06                    | `tests/cloud/deployment-smoke.cloud.test.ts` | 매 제품 배포에서 자동 실행(1방·6 합성 클라이언트)    |
-| MC-01                    | `server/test/media/capability.cloud.test.ts` | 권한 모드별 capability 보고서 생성                   |
-| MC-PUBLIC-01/02/03       | `server/test/media/*.cloud.test.ts`          | split 후보 진단. 실행 기록은 [미디어](media.md) 6장  |
-| QA-03–06 (G1-A–D)        | `tests/cloud/g1-*.cloud.test.ts`             | 실제 관측 생산자 연결 필요                           |
-| QA-08 (G4), QA-09, QA-02 | `g4-metadata`, `mvp-flow`, `performance`     | 실제 제품 6화면·성능 관측 연결 필요                  |
-| QA-11, QA-12 (G2/G6)     | `staged-load`, `ten-room-integrated`         | preflight 뒤 BLOCKED. 실제 행동·수신·API 계측 미연결 |
+| 사례                     | 파일                                         | 상태                                                        |
+| ------------------------ | -------------------------------------------- | ----------------------------------------------------------- |
+| DP-06                    | `tests/cloud/deployment-smoke.cloud.test.ts` | 매 제품 배포에서 자동 실행(1방·6 합성 클라이언트)           |
+| MC-01                    | `server/test/media/capability.cloud.test.ts` | 권한 모드별 capability 보고서 생성                          |
+| MC-PUBLIC-01/02/03       | `server/test/media/*.cloud.test.ts`          | split 후보 진단. 실행 기록은 [미디어](media.md) 6장         |
+| QA-03–06 (G1-A–D)        | `tests/cloud/g1-*.cloud.test.ts`             | 실제 관측 생산자 연결 필요                                  |
+| QA-08 (G4), QA-09, QA-02 | `g4-metadata`, `mvp-flow`, `performance`     | 실제 제품 6화면·성능 관측 연결 필요                         |
+| QA-11, QA-12 (G2/G6)     | `staged-load`, `ten-room-integrated`         | preflight 뒤 BLOCKED. 부하 프로브는 있고 단계 구동기가 없다 |
 
 - 시험 전용 namespace(`qa-…`)를 쓰고 운영 namespace를 쓰지 않는다. 운영 자격은 운영 호스트의 격리 프로세스에서만 읽는다.
 - 실행 전에 LiveKit 대시보드의 사용량·한도를 확인하고 사례별 방·참가자·API·시간 상한 안에서만 실행한다.
@@ -83,6 +83,7 @@ pnpm cloud:check --case <ID> --preflight <preflight.json> --evidence .local/qa/<
 | `scripts/summarize-load.mjs`            | 게임 부하 증거 요약                                                                               |
 | `scripts/run-media-load.mjs`            | 미디어 포함 부하 러너(`tests/load/MediaLoadScenario.ts`)                                          |
 | `scripts/summarize-integrated-load.mjs` | 10방 통합 증거 판정(`tests/load/TenRoomSchedule.ts`). 통과 0, 관문 실패 1, 입력 손상 BLOCKED 3    |
+| `tests/cloud/LoadProbePool.ts`          | QA-11/12 부하 프로브. 참가자마다 브라우저 하나, 표식 트랙 게시와 수신 트랙 복호. Cloud 미검증     |
 
 ```bash
 node scripts/run-game-load.mjs --stages 1,3,5,10 --final-duration-seconds 1800 \
