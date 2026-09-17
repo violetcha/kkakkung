@@ -19,8 +19,9 @@ export function EquipmentObjects({ view }: { view: PrivateView }) {
                 roughness={0.58}
               />
             </mesh>
-            <mesh position={[0, 0.01, 0.075]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.055, 0.055, 0.015, 12]} />
+            {/* S15P21C204-268. Block forms only: the lens is a square plate, the post a square bar. */}
+            <mesh position={[0, 0.01, 0.075]}>
+              <boxGeometry args={[0.1, 0.1, 0.015]} />
               <meshStandardMaterial
                 color={EQUIPMENT_COLORS.sensorLens}
                 metalness={0.3}
@@ -68,7 +69,7 @@ export function EquipmentObjects({ view }: { view: PrivateView }) {
             ))}
             {/* 인접 셀에서도 보이도록 바닥판 위에 세운 지지대와 표시등. 상태 색은 감지기와 같다. */}
             <mesh position={[0, plate.height / 2 + post.height / 2, 0]}>
-              <cylinderGeometry args={[post.radius, post.radius * 1.4, post.height, 8]} />
+              <boxGeometry args={[post.radius * 2, post.height, post.radius * 2]} />
               <meshStandardMaterial
                 color={EQUIPMENT_COLORS.trapPost}
                 metalness={0.5}

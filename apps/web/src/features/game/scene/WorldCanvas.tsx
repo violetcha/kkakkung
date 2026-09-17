@@ -10,8 +10,19 @@ import type { OwnerNames } from './ExitOwnerLabel';
 import type { Texture } from 'three';
 import type { FaceTextures } from './face-textures';
 import { FacilityLighting } from './FacilityLighting';
+import { BlockLighting } from './BlockLighting';
 import { FACILITY } from './facility-theme';
+import { BLOCK } from './block-theme';
 import { FrameMetricsProbe, type FrameMetrics } from './FrameMetrics';
+import { resolveSceneTheme, type SceneThemeId } from './scene-theme';
+import { HeldTool } from './HeldTool';
+import { defaultHeldTool, type HeldToolKind } from './held-tool';
+
+/** Background and fog per theme. The fog never reaches past the server's 3.5-cell sight. */
+export const sceneWorld = (theme: SceneThemeId) =>
+  theme === 'block'
+    ? { background: BLOCK.background, fogNear: BLOCK.fogNear, fogFar: BLOCK.fogFar }
+    : { background: FACILITY.background, fogNear: FACILITY.fogNear, fogFar: FACILITY.fogFar };
 
 export function WorldCanvas({
   scene,
@@ -20,6 +31,8 @@ export function WorldCanvas({
   faces,
   standIn,
   quality = 'medium',
+  theme = resolveSceneTheme(),
+  heldTool,
   renderTick = () => null,
   onMetrics,
 }: {
@@ -30,25 +43,38 @@ export function WorldCanvas({
   /** Demo rooms only: drawn face for participants without a camera. */
   standIn?: Texture | null;
   quality?: QualityPreset;
+  /** S15P21C204-268. Rendering look; resolved from the URL or the saved choice when omitted. */
+  theme?: SceneThemeId;
+  /** What the first-person hand holds. Omitted: derived from the player's role and stock. */
+  heldTool?: HeldToolKind | null;
   renderTick?(): number | null;
   onMetrics?(metrics: FrameMetrics): void;
 } = {}) {
   const players = useAppStore((state) => state.players);
   const sessionId = useAppStore((state) => state.sessionId);
-  if (view)
+  if (view) {
+    const world = sceneWorld(theme);
+    const self = view.self?.status === 'ACTIVE' ? view.self : null;
+    const tool = self ? (heldTool === undefined ? defaultHeldTool(self) : heldTool) : null;
     return (
       <Canvas
         dpr={QUALITY_PRESETS[quality].dpr}
         gl={{ antialias: false }}
         camera={{ position: [0, 0.8, 0], near: 0.03, far: 3.5 }}
         aria-label="까꿍 미로"
+        data-theme={theme}
       >
-        <color attach="background" args={[FACILITY.background]} />
-        <fog attach="fog" args={[FACILITY.background, FACILITY.fogNear, FACILITY.fogFar]} />
-        {view.self?.status === 'ACTIVE' && (
+        <color attach="background" args={[world.background]} />
+        <fog attach="fog" args={[world.background, world.fogNear, world.fogFar]} />
+        {self && (
           <>
-            <FirstPersonCamera self={view.self} renderTick={renderTick} />
-            <FacilityLighting self={view.self} renderTick={renderTick} quality={quality} />
+            <FirstPersonCamera self={self} renderTick={renderTick} />
+            {theme === 'block' ? (
+              <BlockLighting self={self} renderTick={renderTick} />
+            ) : (
+              <FacilityLighting self={self} renderTick={renderTick} quality={quality} />
+            )}
+            {theme === 'block' && <HeldTool tool={tool} />}
           </>
         )}
         <VisibleTerrain
@@ -57,10 +83,12 @@ export function WorldCanvas({
           faces={faces}
           standIn={standIn}
           renderTick={renderTick}
+          theme={theme}
         />
         {onMetrics && <FrameMetricsProbe report={onMetrics} />}
       </Canvas>
     );
+  }
   if (scene)
     return (
       <Canvas camera={{ position: [0, 0.8, 2], fov: 60 }} aria-label="까꿍 미로">
