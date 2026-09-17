@@ -43,12 +43,12 @@ const configuration = (demoRooms: boolean) => ({
   port: 0,
 });
 
-async function fixture(demoRooms = true) {
+async function fixture(demoRooms = true, strictProduct = false) {
   const config = configuration(demoRooms);
   const real = await loadProductProfile(config);
   const application = createApplication<MatchState>(config, {
     ...real,
-    strictProduct: false,
+    strictProduct,
     developmentAdmission: () => 'OPEN',
     createOperatorAuth: createTestOperatorAuth,
     publicWindow: { mode: 'continuous' },
@@ -227,3 +227,44 @@ it('answers the route with 503 while demo rooms are off', async () => {
     await f.close();
   }
 });
+
+it('opens the demo room on the deployed composition, where a match cannot start', async () => {
+  // The deployed overlays run a strict product with MEDIA_MODE disabled, so media readiness never
+  // reaches READY there and every match gate answers NOT_READY. The demo room uses no media and
+  // must still open and play (S15P21C204-258); it is the only room that does.
+  const f = await fixture(true, true);
+  try {
+    const refused = await fetch(f.endpoint + '/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nickname: 'friend', createRoom: true }),
+    });
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ error: 'ADMISSION_CLOSED' });
+
+    const created = await f.open({ role: 'tagger' });
+    expect(created.status).toBe(201);
+    const session = demoRoomResponseSchema.parse(await created.json());
+    // onAuth and onJoin: the operator is admitted although the match gate is shut.
+    const room = await f.connect(session);
+    const views: PrivateView[] = [];
+    room.onMessage('private-view', (value: PrivateView) => views.push(value));
+    await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
+    expect(f.application.slots!.occupied(session.roomCode)).toBe(1);
+    // startPractice and startCountdown answer to the same demo gate.
+    expect((await f.send(room, { type: 'READY', payload: { ready: true } })).status).toBe(
+      'accepted',
+    );
+    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 5000 });
+    expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
+      'accepted',
+    );
+    await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
+    expect((await f.send(room, { type: 'LOAD_READY', payload: loadPayload(views) })).status).toBe(
+      'accepted',
+    );
+    await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 15_000 });
+  } finally {
+    await f.close();
+  }
+}, 60_000);

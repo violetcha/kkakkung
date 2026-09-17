@@ -173,6 +173,12 @@ export function createApplication<State = unknown>(
     readinessState() === 'READY' &&
     admission() === 'OPEN' &&
     (!product?.strictProduct || media?.canIssue?.() === true);
+  // S15P21C204-258. An operator demo room issues, publishes and receives no media at all, so media
+  // readiness says nothing about whether it can run and would keep it shut wherever media is
+  // disabled. Where a media coordinator runs, its drain still closes it: the room holds a seat from
+  // the same budget, and letting one open while the service is being replaced is exactly what
+  // draining is for. Without one there is no drain, and the room is simply available.
+  const demoOperationsReady = () => !media || admission() === 'OPEN';
   const productSecurityReady = Boolean(
     product &&
     product.opsToken &&
@@ -477,6 +483,7 @@ export function createApplication<State = unknown>(
       emitMetric,
       emitEvent: eventLogger.emit,
       canStart: operationsReady,
+      canStartDemo: demoOperationsReady,
       strictProduct: product.strictProduct,
       random: product.random,
       onInvalidateRoom: (roomCode) => {

@@ -195,6 +195,10 @@ export function ProductApp({
   /** Joins with a session: the form requests one, the demo entry already has it. */
   async function enter(given: SessionResponse | null = null) {
     if (joining || runtime.current || solo) return;
+    // A demo session is handed to the page and cannot be asked for again, so the page never throws
+    // it away: an abandoned seat is freed by the server's own admission deadline instead. Only a
+    // session this page requested is one it may cancel.
+    const owned = given === null;
     const run = ++generation.current;
     setJoining(true);
     setError('');
@@ -213,16 +217,16 @@ export function ProductApp({
             : { ...base, createRoom: false, roomCode: roomCode.trim().toUpperCase() },
         ));
       if (run !== generation.current) {
-        await cancelSessionReservation(session);
+        if (owned) await cancelSessionReservation(session);
         return;
       }
-      pendingSession.current = session;
+      if (owned) pendingSession.current = session;
       const room = await joinProductRoom(session);
       joined = room;
       if (pendingSession.current === session) pendingSession.current = null;
       if (run !== generation.current) {
         await room.leave();
-        await cancelSessionReservation(session);
+        if (owned) await cancelSessionReservation(session);
         return;
       }
       runtime.current = bindProductRoom(productRoomPort(room), session, {
@@ -242,7 +246,7 @@ export function ProductApp({
         await productRoomPort(joined)
           .leave()
           .catch(() => {});
-      if (session) await cancelSessionReservation(session);
+      if (session && owned) await cancelSessionReservation(session);
       if (run === generation.current) {
         runtime.current = null;
         setSnapshot(null);
