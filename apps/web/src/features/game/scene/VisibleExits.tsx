@@ -40,7 +40,7 @@ export function VisibleExits({
                       ? EQUIPMENT_COLORS.ownExitGlow
                       : EQUIPMENT_COLORS.otherExitGlow
                   }
-                  emissiveIntensity={0.55}
+                  emissiveIntensity={1.1}
                   roughness={0.5}
                   metalness={0.5}
                 />

@@ -42,7 +42,38 @@ async function openRenderReview(page: Page) {
   };
   await expect.poll(counts).not.toBeNull();
   mark('first-frame');
-  return { errors, metrics, counts };
+  // 렌더 측정 reports once a second, so a reading right after a scene change is usually the
+  // previous scene's report. The baseline is taken only from a report produced after the change
+  // and confirmed by the next report carrying the same resource counts, whichever theme draws
+  // (S15P21C204-268: the block theme already has five textures in the corridor scene, so a
+  // "texture ≥ 4" wait alone no longer proves the exit scene has arrived).
+  const settledAfter = async (before: string | null) => {
+    await expect
+      .poll(async () => (await metrics.textContent()) !== before, { timeout: 15_000 })
+      .toBe(true);
+    let text = await metrics.textContent();
+    let previous = await counts();
+    await expect
+      .poll(
+        async () => {
+          const now = await metrics.textContent();
+          if (now === text) return false;
+          const current = await counts();
+          const same =
+            previous !== null &&
+            current !== null &&
+            current.geometry === previous.geometry &&
+            current.texture === previous.texture;
+          text = now;
+          previous = current;
+          return same;
+        },
+        { timeout: 15_000, intervals: [250] },
+      )
+      .toBe(true);
+    return counts();
+  };
+  return { errors, metrics, counts, settledAfter };
 }
 
 async function fullPageShot(page: Page, info: TestInfo, name: string) {
@@ -53,11 +84,12 @@ async function fullPageShot(page: Page, info: TestInfo, name: string) {
 test('product renderer survives direction, quality, visibility and scene lifecycle changes', async ({
   page,
 }, info) => {
-  const { errors, metrics, counts } = await openRenderReview(page);
+  const { errors, metrics, counts, settledAfter } = await openRenderReview(page);
+  const beforeExit = await metrics.textContent();
   await page.getByRole('button', { name: '출구·장비', exact: true }).click();
   await expect.poll(async () => (await counts())?.texture ?? 0).toBeGreaterThanOrEqual(4);
+  const original = await settledAfter(beforeExit);
   mark('exit-scene');
-  const original = await counts();
   for (const facing of ['0', '1', '2', '3']) {
     await page.getByRole('combobox', { name: '바라보는 방향' }).selectOption(facing);
     await expect(page.locator('canvas')).toHaveCount(1);

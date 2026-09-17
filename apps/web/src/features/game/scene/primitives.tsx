@@ -3,19 +3,21 @@ import { BoxGeometry, MeshStandardMaterial } from 'three';
 import type { Cell, Dir, WallFace } from '@kkakkung/protocol/game-schema';
 import { CHARACTER, cellPosition, directionYaw, wallKey, wallModel } from './scene-model';
 import { createFacilityResources, FACILITY } from './facility-theme';
+import { BLOCK, createBlockResources, isMossyFace } from './block-theme';
+import { DEFAULT_SCENE_THEME, type SceneThemeId } from './scene-theme';
 
 /** The scene owns these shared resources; children never dispose them. */
 export function ScenePrimitives({
   cells,
   walls,
   players,
+  theme = DEFAULT_SCENE_THEME,
 }: {
   cells: readonly Cell[];
   walls: readonly WallFace[];
   players: readonly { id: string; cell: Cell; dir: Dir }[];
+  theme?: SceneThemeId;
 }) {
-  const facility = useMemo(createFacilityResources, []);
-  useEffect(() => () => facility.dispose(), [facility]);
   const resources = useMemo(
     () => ({
       head: new BoxGeometry(CHARACTER.head, CHARACTER.head, CHARACTER.head),
@@ -33,6 +35,66 @@ export function ScenePrimitives({
   );
   return (
     <group dispose={null}>
+      {theme === 'block' ? (
+        <BlockTerrain cells={cells} walls={walls} />
+      ) : (
+        <FacilityTerrain cells={cells} walls={walls} />
+      )}
+      {players.map((player) => (
+        <group
+          key={player.id}
+          position={cellPosition(player.cell)}
+          rotation={[0, directionYaw(player.dir), 0]}
+        >
+          <mesh geometry={resources.head} material={resources.white} position={[0, 0.72, 0]} />
+          <mesh geometry={resources.body} material={resources.black} position={[0, 0.35, 0]} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * S15P21C204-268. Block terrain: one pixel-tiled plane per floor, ceiling and wall face, no
+ * trims or lamps. The forms are the grid cells themselves; the lantern does the rest.
+ */
+function BlockTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonly WallFace[] }) {
+  const block = useMemo(createBlockResources, []);
+  useEffect(() => () => block.dispose(), [block]);
+  return (
+    <>
+      {cells.map((cell) => (
+        <group key={`${cell.x}:${cell.y}`} position={cellPosition(cell)}>
+          <mesh
+            geometry={block.geometry.floor}
+            material={block.material.floor}
+            rotation={[-Math.PI / 2, 0, 0]}
+          />
+          <mesh
+            geometry={block.geometry.floor}
+            material={block.material.ceiling}
+            position={[0, BLOCK.ceilingHeight, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+        </group>
+      ))}
+      {walls.map((wall) => (
+        <mesh
+          key={wallKey(wall)}
+          geometry={block.geometry.wall}
+          material={isMossyFace(wall) ? block.material.mossWall : block.material.wall}
+          {...wallModel(wall)}
+        />
+      ))}
+    </>
+  );
+}
+
+function FacilityTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonly WallFace[] }) {
+  const facility = useMemo(createFacilityResources, []);
+  useEffect(() => () => facility.dispose(), [facility]);
+  return (
+    <>
       {cells.map((cell) => (
         <group key={`${cell.x}:${cell.y}`} position={cellPosition(cell)}>
           <mesh
@@ -83,16 +145,6 @@ export function ScenePrimitives({
           />
         </group>
       ))}
-      {players.map((player) => (
-        <group
-          key={player.id}
-          position={cellPosition(player.cell)}
-          rotation={[0, directionYaw(player.dir), 0]}
-        >
-          <mesh geometry={resources.head} material={resources.white} position={[0, 0.72, 0]} />
-          <mesh geometry={resources.body} material={resources.black} position={[0, 0.35, 0]} />
-        </group>
-      ))}
-    </group>
+    </>
   );
 }

@@ -10,9 +10,17 @@ import {
 import type { Dir } from '@kkakkung/protocol/game-schema';
 import type { FrameMetrics } from '../features/game/scene/FrameMetrics';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
+import {
+  SCENE_THEME_IDS,
+  SCENE_THEME_LABELS,
+  rememberSceneTheme,
+  resolveSceneTheme,
+  type SceneThemeId,
+} from '../features/game/scene/scene-theme';
 
 export function RenderPreview({ quality }: { quality: QualityPreset }) {
   const [scene, setScene] = useState<RenderScene>('복도');
+  const [theme, setTheme] = useState<SceneThemeId>(() => resolveSceneTheme());
   const [facing, setFacing] = useState<Dir>(0);
   const [tick, setTick] = useState(10);
   const [selfMotion, setSelfMotion] = useState<SelfMotion>('still');
@@ -20,12 +28,31 @@ export function RenderPreview({ quality }: { quality: QualityPreset }) {
   const [metrics, setMetrics] = useState<FrameMetrics | null>(null);
   return (
     <section className="render-preview">
-      <h2>시설 공간 렌더 검수</h2>
+      <h2>공간 렌더 검수</h2>
       <p>
         합성 개인 뷰로 실제 제품 렌더러를 확인합니다. 실제 맵·카메라·Cloud·장치 성능 인수와는
-        별도입니다.
+        별도입니다. 어두운 블록 테마에서는 시야 끝(3칸)의 상대 식별과 출구 인지, 든 도구를 함께
+        봅니다.
       </p>
       <div className="actions">
+        <label>
+          렌더 테마
+          <select
+            aria-label="렌더 테마"
+            value={theme}
+            onChange={(event) => {
+              const next = event.target.value as SceneThemeId;
+              setTheme(next);
+              rememberSceneTheme(next);
+            }}
+          >
+            {SCENE_THEME_IDS.map((id) => (
+              <option key={id} value={id}>
+                {SCENE_THEME_LABELS[id]}
+              </option>
+            ))}
+          </select>
+        </label>
         {RENDER_SCENES.map((name) => (
           <button key={name} aria-pressed={scene === name} onClick={() => setScene(name)}>
             {name}
@@ -84,6 +111,7 @@ export function RenderPreview({ quality }: { quality: QualityPreset }) {
           <WorldCanvas
             view={renderFixture(scene, facing, selfMotion)}
             quality={quality}
+            theme={theme}
             renderTick={() => tick}
             onMetrics={setMetrics}
           />

@@ -9,23 +9,24 @@ C는 화면 조립과 서버 연결 수명을 소유한다. 장치·추론·미�
 - 제품 화면: 홈(접속 방식 안내·개인 체험·오픈소스 고지) → 로비(친구 초대 패널·방장 잠금/강퇴·개인정보 처리 안내) → 장치 점검 → 팀 연습(역할별 안내) → 로딩(내 준비 대기 항목) → 카운트다운 → 경기(HUD·지도·장비·포즈/키 도전) → 결과(팀 승패·이유와 개인 결과, 재경기 3종) → 무효 안내.
 - 개인 체험(3×5 연습 공간, 방·미디어 없음), 소리 점검·음량·친구별 음소거, 시설 렌더링, 제품 측정 수집(`?metrics=1`), 고정 오류 문구·이동 흔들림 정리가 병합돼 있다.
 - 관리자 데모(260): 주소 fragment의 운영 세션으로 바로 입장하고, 데모 방일 때만 시나리오 버튼과 인형 대역 얼굴을 쓴다. 홈·일반 경기 화면에는 아무 것도 추가하지 않는다. 데모 방(`demo-state`를 받은 방)에서는 미디어 발급을 요청하지 않고 로딩 보고도 카메라 연결·얼굴 게시 없이 자산·초기 화면만으로 보낸다. 서버가 그 방에서 미디어를 발급하지 않아, 기다리면 30초 LOADING_TIMEOUT만 반복되기 때문이다. `demo-state`는 첫 상태 패치보다 먼저 올 수 있어 라운드를 알 때까지 들고 있다가 맞춰 본다.
+- 어두운 블록 테마(268): 마인크래프트 레퍼런스의 블록 형태·16×16 픽셀 타일(`NearestFilter`)만 가져오고 어둠·시야 3.5칸은 규칙대로. 광원은 든 랜턴 한 점, 안개 1.5–3.2셀(≤ 시야). 아바타는 블록 비율·역할별 색(`#b8402f`/`#2f9f96`)·실루엣(챙/가방), 우하단 `HeldTool`(랜턴+선택 장비/지도 조각, HUD 선택은 `heldTool` prop). 기본 테마가 블록이며 `?theme=facility`로 이전 복도를 본다. HUD 토큰 `--role-tagger`/`--role-runner`는 유림(271) 쪽에서 같은 hex로 넣는다.
 - 대표 장면 보완(223): 렌더 검수에 내 동작(회전·이동) 추가, 인접 셀 덫 지지대, 45° 회전 클리핑 퇴화 수정(눈 1mm 앞당김), 조명·재질 대비(`LIGHTING`), HUD 상태 글리프. 벽 관통·얼굴-몸 어긋남·잔상은 대표 장면에서 재현되지 않았고 셀 등장 튐은 렌더 원인이 없어 실기기 틱 수신 타이밍으로 넘긴다. 전후 비교 10장(develop `5666c1f` 대비, 1280×900)은 MR 본문에 있다. 합성 장면이므로 공포감·실기기 성능 인수가 아니다.
 - 실제 6인 흐름은 서버 제품 통합 시험에서 합성 장치로 확인했다. 실제 6대·Cloud의 화면 인수는 남아 있다.
 
 ## 진입점
 
-| 경로(`apps/web/src/` 기준)                                                      | 책임                                                                                                                                |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `app/App.tsx`, `app/ProductApp.tsx`                                             | 초대 fragment 소비 후 즉시 제거, 제품 화면 조립. 개발 `/`는 진단, `/play`·초대 링크·배포 빌드는 제품, `/preview`는 합성 검수        |
-| `app/product-runtime.ts`                                                        | Room 상태·명령 수명·미디어 흐름 결합. 논리 gameScope와 mediaInstanceId/receiverGeneration을 분리                                    |
-| `app/interaction-bridge.ts`                                                     | D `InteractionRuntime`에 입력 문맥 전달                                                                                             |
-| `app/runtime-metrics.ts`                                                        | 경기별 렌더 fps·긴 프레임·추론 지연·미디어 전이. 참가자 id·원본 미디어 없음                                                         |
-| `app/product-integration-fixture.ts`                                            | 서버 통합 시험 전용 합성 D facade(`createSyntheticInteractionFactory`). 제품 App은 import하지 않음                                  |
-| `features/room/product-session.ts`, `game-heartbeat.ts`, `command-lifecycle.ts` | 세션·heartbeat ACK·6초 단절, 명령 requestId/sequence·receipt/outcome·request-status. 자동 재접속 없음                               |
-| `features/room/private-events.ts`                                               | match/scope/tick/eventId 검증, 중복·오래된 사건 폐기, 미래 사건 64개·1초 보관, resync 1초 간격                                      |
-| `features/game/flow/`                                                           | 로딩 장벽(loadId·assetVersion·미디어·바인딩), 카운트다운, 결과·무효·재경기, 연결 상실, 안내음 판정(`match-cues`)·플래시(`CueFlash`) |
-| `features/game/map/`, `equipment/`, `pose/`                                     | 기억 지형·가시 아군·교환 대상, 권위 재고·설치·구속 HUD, 포즈 1.2초 유지 평가와 `EXIT_PROGRESS`·키 도전                              |
-| `features/game/scene/`                                                          | 단일 R3F WorldCanvas, 시설 테마, `FaceAvatar`·`face-textures`(가시 플레이어만 VideoTexture, C 텍스처만 dispose)                     |
+| 경로(`apps/web/src/` 기준)                                                      | 책임                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/App.tsx`, `app/ProductApp.tsx`                                             | 초대 fragment 소비 후 즉시 제거, 제품 화면 조립. 개발 `/`는 진단, `/play`·초대 링크·배포 빌드는 제품, `/preview`는 합성 검수                                                                                           |
+| `app/product-runtime.ts`                                                        | Room 상태·명령 수명·미디어 흐름 결합. 논리 gameScope와 mediaInstanceId/receiverGeneration을 분리                                                                                                                       |
+| `app/interaction-bridge.ts`                                                     | D `InteractionRuntime`에 입력 문맥 전달                                                                                                                                                                                |
+| `app/runtime-metrics.ts`                                                        | 경기별 렌더 fps·긴 프레임·추론 지연·미디어 전이. 참가자 id·원본 미디어 없음                                                                                                                                            |
+| `app/product-integration-fixture.ts`                                            | 서버 통합 시험 전용 합성 D facade(`createSyntheticInteractionFactory`). 제품 App은 import하지 않음                                                                                                                     |
+| `features/room/product-session.ts`, `game-heartbeat.ts`, `command-lifecycle.ts` | 세션·heartbeat ACK·6초 단절, 명령 requestId/sequence·receipt/outcome·request-status. 자동 재접속 없음                                                                                                                  |
+| `features/room/private-events.ts`                                               | match/scope/tick/eventId 검증, 중복·오래된 사건 폐기, 미래 사건 64개·1초 보관, resync 1초 간격                                                                                                                         |
+| `features/game/flow/`                                                           | 로딩 장벽(loadId·assetVersion·미디어·바인딩), 카운트다운, 결과·무효·재경기, 연결 상실, 안내음 판정(`match-cues`)·플래시(`CueFlash`)                                                                                    |
+| `features/game/map/`, `equipment/`, `pose/`                                     | 기억 지형·가시 아군·교환 대상, 권위 재고·설치·구속 HUD, 포즈 1.2초 유지 평가와 `EXIT_PROGRESS`·키 도전                                                                                                                 |
+| `features/game/scene/`                                                          | 단일 R3F WorldCanvas, 테마 둘(`block-theme` 기본·`facility-theme`, 선택은 `scene-theme`), 블록 아바타 `FaceAvatar`(역할 색 `role-colors`)·`HeldTool`·`face-textures`(가시 플레이어만 VideoTexture, C 텍스처만 dispose) |
 
 ## 미디어 세대 교체 순서 (C 쪽)
 

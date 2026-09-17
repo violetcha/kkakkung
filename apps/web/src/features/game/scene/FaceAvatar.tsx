@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import {
   BoxGeometry,
-  CylinderGeometry,
   Group,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -10,48 +9,95 @@ import {
   SphereGeometry,
   type Texture,
 } from 'three';
-import type { PrivateView, VisibleEntity } from '@kkakkung/protocol/game-schema';
+import type { PrivateView, Role, VisibleEntity } from '@kkakkung/protocol/game-schema';
 import type { FaceTextures } from './face-textures';
 import { CHARACTER } from './scene-model';
 import { sampleActor } from './action-interpolation';
 import { visibilityMask } from './visibility-mask';
 import { walkPose } from './walk-pose';
+import { ROLE_COLORS, ROLE_SILHOUETTE } from './role-colors';
 
-/** 팔·다리는 어깨·고관절에서 회전하도록 pivot 그룹 아래에 둔다(S15P21C204-262). */
-const LIMB = Object.freeze({
-  shoulderY: 0.43,
+/**
+ * S15P21C204-268 (W1). Block proportions: cube head, box torso, box limbs. The real face plane
+ * stays on the head's front, unlit so it reads in the dark. Limbs swing from pivot groups at the
+ * shoulder and hip (S15P21C204-262). Roles differ in cloth colour and in shape: a tagger is
+ * broad-shouldered with a visor brim, a runner narrower with a satchel. Unknown role (an entity
+ * the server did not label) falls back to neutral grey and no shape cue.
+ */
+export const AVATAR = Object.freeze({
+  headY: 0.72,
+  torsoY: 0.33,
+  torsoHeight: 0.3,
+  torsoDepth: 0.18,
+  shoulderY: 0.47,
   hipY: 0.235,
-  /** pivot 기준 원통 중심. 길이 0.24의 절반이다. */
-  limbDrop: -0.12,
-  bootDrop: -0.2025,
+  armLength: 0.28,
+  legLength: 0.235,
+  limbWidth: 0.1,
+  bootHeight: 0.06,
+  brimY: 0.9,
 });
 
 type Player = Extract<VisibleEntity, { kind: 'player' }>;
+type RoleKey = Role | 'neutral';
+const NEUTRAL = Object.freeze({ cloth: '#5e5a52', accent: '#8a857b', boot: '#1f2223' });
+
+/**
+ * Every box part is the one unit cube scaled per mesh, so the GPU holds three avatar
+ * geometries (cube, face plane, badge) no matter which roles appear. Role-specific parts
+ * uploading lazily would make the resource count drift between scenes (facility-rendering e2e).
+ */
+export const AVATAR_PARTS = Object.freeze({
+  head: [CHARACTER.head, CHARACTER.head, CHARACTER.head] as const,
+  torso: (shoulder: number) => [shoulder, AVATAR.torsoHeight, AVATAR.torsoDepth] as const,
+  arm: [AVATAR.limbWidth, AVATAR.armLength, AVATAR.limbWidth] as const,
+  leg: [AVATAR.limbWidth, AVATAR.legLength - AVATAR.bootHeight, AVATAR.limbWidth] as const,
+  boot: [AVATAR.limbWidth + 0.01, AVATAR.bootHeight, AVATAR.limbWidth + 0.04] as const,
+  stripe: [0.2, 0.05, 0.012] as const,
+  brim: [CHARACTER.head + 0.04, 0.05, 0.2] as const,
+  satchel: [0.22, 0.16, 0.08] as const,
+});
+
 function createAvatarResources() {
   const geometry = {
-    head: new BoxGeometry(CHARACTER.head, CHARACTER.head, CHARACTER.head),
-    body: new BoxGeometry(0.28, 0.32, 0.2),
-    limb: new CylinderGeometry(0.045, 0.035, 0.24, 6),
-    boot: new BoxGeometry(0.1, 0.065, 0.15),
+    cube: new BoxGeometry(1, 1, 1),
     face: new PlaneGeometry(0.418, 0.418),
     badge: new SphereGeometry(0.032, 8, 6),
-    strap: new BoxGeometry(0.02, 0.3, 0.207),
   };
+  const roleMaterials = (colors: { cloth: string; accent: string; boot: string }) => ({
+    cloth: new MeshStandardMaterial({ color: colors.cloth, roughness: 1 }),
+    accent: new MeshStandardMaterial({
+      color: colors.accent,
+      emissive: colors.accent,
+      emissiveIntensity: 0.25,
+      roughness: 0.9,
+    }),
+    boot: new MeshStandardMaterial({ color: colors.boot, roughness: 0.9 }),
+  });
   const material = {
-    head: new MeshStandardMaterial({ color: '#364243', roughness: 0.85, metalness: 0.15 }),
-    cloth: new MeshStandardMaterial({ color: '#696455', roughness: 1 }),
-    boot: new MeshStandardMaterial({ color: '#1a2425', roughness: 0.87 }),
+    head: new MeshStandardMaterial({ color: '#33302c', roughness: 0.9 }),
     ally: new MeshBasicMaterial({ color: '#a9e6d1', toneMapped: false }),
+    role: {
+      tagger: roleMaterials(ROLE_COLORS.tagger),
+      runner: roleMaterials(ROLE_COLORS.runner),
+      neutral: roleMaterials(NEUTRAL),
+    } satisfies Record<RoleKey, unknown>,
   };
+  const all = [
+    ...Object.values(geometry),
+    material.head,
+    material.ally,
+    ...Object.values(material.role).flatMap((set) => Object.values(set)),
+  ];
   return {
     geometry,
     material,
     dispose() {
-      Object.values(geometry).forEach((resource) => resource.dispose());
-      Object.values(material).forEach((resource) => resource.dispose());
+      all.forEach((resource) => resource.dispose());
     },
   };
 }
+
 function Avatar({
   player,
   ally,
@@ -92,6 +138,11 @@ function Avatar({
     }
   });
   const { geometry: g, material: m } = resources;
+  const role: RoleKey = player.role ?? 'neutral';
+  const colors = m.role[role];
+  const shape = role === 'neutral' ? null : ROLE_SILHOUETTE[role];
+  const shoulder = shape?.shoulder ?? 0.36;
+  const box = (scale: readonly [number, number, number]) => [...scale] as [number, number, number];
   return (
     <group
       ref={root}
@@ -99,29 +150,73 @@ function Avatar({
       position={[initial.x, 0, initial.z]}
       rotation={[0, initial.yaw, 0]}
     >
-      <mesh geometry={g.head} material={m.head} position={[0, 0.72, 0]} />
+      <mesh
+        geometry={g.cube}
+        material={m.head}
+        position={[0, AVATAR.headY, 0]}
+        scale={box(AVATAR_PARTS.head)}
+      />
       <mesh
         geometry={g.face}
         material={face}
-        position={[0, 0.72, -0.241]}
+        position={[0, AVATAR.headY, -0.241]}
         rotation={[0, Math.PI, 0]}
       />
-      <mesh geometry={g.body} material={m.cloth} position={[0, 0.32, 0.025]} />
+      {shape?.brim && (
+        <mesh
+          geometry={g.cube}
+          material={colors.cloth}
+          position={[0, AVATAR.brimY, -0.12]}
+          scale={box(AVATAR_PARTS.brim)}
+        />
+      )}
+      <mesh
+        geometry={g.cube}
+        material={colors.cloth}
+        position={[0, AVATAR.torsoY, 0]}
+        scale={box(AVATAR_PARTS.torso(shoulder))}
+      />
+      <mesh
+        geometry={g.cube}
+        material={colors.accent}
+        position={[0, AVATAR.torsoY + 0.08, -AVATAR.torsoDepth / 2 - 0.006]}
+        scale={box(AVATAR_PARTS.stripe)}
+      />
+      {shape?.satchel && (
+        <mesh
+          geometry={g.cube}
+          material={colors.accent}
+          position={[0, AVATAR.torsoY - 0.02, AVATAR.torsoDepth / 2 + 0.04]}
+          scale={box(AVATAR_PARTS.satchel)}
+        />
+      )}
       {([-1, 1] as const).map((side, index) => (
         <group key={side}>
-          <group ref={arms[index]} position={[side * 0.195, LIMB.shoulderY, 0.025]}>
+          <group
+            ref={arms[index]}
+            position={[side * (shoulder / 2 + AVATAR.limbWidth / 2), AVATAR.shoulderY, 0]}
+          >
             <mesh
-              geometry={g.limb}
-              material={m.cloth}
-              position={[0, LIMB.limbDrop, 0]}
-              rotation={[0, 0, side * 0.15]}
+              geometry={g.cube}
+              material={colors.cloth}
+              position={[0, -AVATAR.armLength / 2, 0]}
+              scale={box(AVATAR_PARTS.arm)}
             />
           </group>
-          <group ref={legs[index]} position={[side * 0.075, LIMB.hipY, 0.015]}>
-            <mesh geometry={g.limb} material={m.boot} position={[0, LIMB.limbDrop, 0]} />
-            <mesh geometry={g.boot} material={m.boot} position={[0, LIMB.bootDrop, -0.03]} />
+          <group ref={legs[index]} position={[side * 0.06, AVATAR.hipY, 0]}>
+            <mesh
+              geometry={g.cube}
+              material={colors.boot}
+              position={[0, -(AVATAR.legLength - AVATAR.bootHeight) / 2, 0]}
+              scale={box(AVATAR_PARTS.leg)}
+            />
+            <mesh
+              geometry={g.cube}
+              material={colors.boot}
+              position={[0, -AVATAR.legLength + AVATAR.bootHeight / 2, -0.02]}
+              scale={box(AVATAR_PARTS.boot)}
+            />
           </group>
-          <mesh geometry={g.strap} material={m.boot} position={[side * 0.09, 0.32, 0.02]} />
         </group>
       ))}
       {ally && <mesh geometry={g.badge} material={m.ally} position={[0, 1.035, 0]} />}
