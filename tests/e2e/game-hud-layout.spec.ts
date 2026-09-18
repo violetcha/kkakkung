@@ -78,6 +78,41 @@ test('the six game overlays sit in their own place over a full-bleed 3D stage', 
   expect(errors).toEqual([]);
 });
 
+// S15P21C204-278. 장비를 쓸 수 있다는 것을 화면이 먼저 알려 준다.
+test('the hotbar and crosshair say whether the selected equipment can go here', async ({
+  page,
+}) => {
+  const errors = await openHud(page);
+  const crosshair = page.locator('.game-stage > .crosshair');
+  const hint = page.locator('.hotbar-hint');
+
+  // 벽을 마주 본 술래: 십자선과 안내 줄이 함께 '가능'을 말한다.
+  await expect(crosshair).toHaveAttribute('data-install', 'ready');
+  await expect(hint).toHaveAttribute('data-ready', 'true');
+  await expect(hint).toContainText('설치할 수 있어요');
+
+  // 벽이 없으면 막힌 이유를 그 자리에서 알려 준다.
+  await page.getByRole('button', { name: '설치 가능 칸 끄기', exact: true }).click();
+  await expect(crosshair).toHaveAttribute('data-install', 'blocked');
+  await expect(hint).toHaveAttribute('data-ready', 'false');
+  await expect(hint).toContainText('벽을 마주 보고');
+
+  // 덫은 바닥에 놓으므로 같은 자리에서 다시 가능해진다.
+  await page.locator('.hotbar-slot[data-slot="trap"]').click();
+  await expect(crosshair).toHaveAttribute('data-install', 'ready');
+  await expect(page.locator('.hotbar-slot[data-slot="trap"]')).toHaveAttribute(
+    'data-state',
+    'selected',
+  );
+
+  // 도망자에게는 설치 안내가 없다.
+  await page.getByRole('button', { name: '도망자 시점', exact: true }).click();
+  await expect(crosshair).toHaveAttribute('data-install', 'none');
+  await expect(hint).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
 test('the same overlays fit a 400px wide screen without a sideways scroll', async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 780 });
   const errors = await openHud(page);

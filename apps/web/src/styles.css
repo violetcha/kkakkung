@@ -748,7 +748,7 @@
   margin: 0;
   max-width: 100%;
 }
-/* 2 중앙 십자선 */
+/* 2 중앙 십자선. 설치할 수 있는 칸이면 색이 바뀐다(S15P21C204-278). */
 .game-stage > .crosshair {
   grid-area: 2 / 2 / 3 / 3;
   place-self: center;
@@ -759,6 +759,17 @@
     linear-gradient(var(--color-text), var(--color-text)) center / 2px 14px no-repeat,
     linear-gradient(var(--color-text), var(--color-text)) center / 14px 2px no-repeat;
   opacity: 0.75;
+}
+.game-stage > .crosshair[data-install='ready'] {
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  background:
+    linear-gradient(var(--color-success), var(--color-success)) center / 2px 20px no-repeat,
+    linear-gradient(var(--color-success), var(--color-success)) center / 20px 2px no-repeat;
+}
+.game-stage > .crosshair[data-install='blocked'] {
+  opacity: 0.45;
 }
 /* 3 좌하단 사건 로그 */
 .game-stage > .event-log {
@@ -780,8 +791,28 @@
 .game-stage > .hotbar {
   grid-area: 3 / 2 / 4 / 3;
   place-self: end center;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+}
+.hotbar-slots {
   display: flex;
   gap: var(--space-2);
+}
+/* S15P21C204-278. 지금 설치할 수 있는지 한 줄로 알린다. 십자선 색과 같은 뜻이다. */
+.hotbar-hint {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-control);
+  font-size: var(--text-control);
+  color: var(--color-muted);
+  background: var(--color-panel);
+  border: 2px solid var(--color-seam);
+  border-radius: var(--radius-pixel);
+}
+.hotbar-hint[data-ready='true'] {
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 /* 5 우하단 미니맵 */
 .game-stage > .mini-map {
@@ -838,10 +869,20 @@
   border: 2px solid var(--color-border);
   border-radius: var(--radius-pixel);
 }
+/* S15P21C204-278. 고른 칸은 테두리를 두껍게 하고 바탕을 올려 한눈에 잡히게 한다. */
 .product-shell .hotbar-slot[data-state='selected'] {
   color: var(--color-text);
+  background: var(--color-panel-raised);
   border-color: var(--color-border-strong);
-  box-shadow: var(--inset-highlight);
+  border-width: 3px;
+  box-shadow:
+    var(--inset-highlight),
+    0 -3px 0 var(--color-border-strong);
+}
+.product-shell .hotbar-slot[data-state='selected'] .hotbar-key {
+  color: var(--color-bg);
+  background: var(--color-border-strong);
+  border-color: var(--color-border-strong);
 }
 .product-shell .hotbar-slot[data-state='unavailable'],
 .product-shell .hotbar-slot[data-state='reserved'] {
