@@ -41,7 +41,7 @@
 - Produces: `BACKROOMS_TEXTURE_PATHS`, `backroomsTexturePaths(quality)`, and `configureBackroomsTexture(texture, kind)`.
 - Consumes: `QualityPreset` from `quality-presets.ts`.
 
-- [ ] **Step 1: Write the failing texture contract test**
+- [x] **Step 1: Write the failing texture contract test**
 
 ```ts
 it('uses full PBR maps for medium and one seamless color map for low', () => {
@@ -58,11 +58,11 @@ it('uses full PBR maps for medium and one seamless color map for low', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify an import failure**
+- [x] **Step 2: Run the test and verify an import failure**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/scene/backrooms-textures.test.ts`
 
-- [ ] **Step 3: Add the four assets, texture configuration, and ledger hashes**
+- [x] **Step 3: Add the four assets, texture configuration, and ledger hashes**
 
 ```ts
 export function backroomsTexturePaths(quality: QualityPreset) {
@@ -76,11 +76,11 @@ export function backroomsTexturePaths(quality: QualityPreset) {
 }
 ```
 
-- [ ] **Step 4: Run the texture and asset-ledger tests**
+- [x] **Step 4: Run the texture and asset-ledger tests**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/scene/backrooms-textures.test.ts tests/contracts/asset-ledger.test.ts`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 design: 백룸 벽지 PBR 재질을 추가한다
