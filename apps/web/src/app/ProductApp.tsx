@@ -22,6 +22,7 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
 import { EventLog } from '../features/game/flow/EventLog';
+import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
 import { crosshairState, installHint } from '../features/game/flow/install-hint';
 import { QualityControl } from '../features/game/flow/QualityControl';
@@ -556,20 +557,29 @@ export function ProductApp({
                     : {})}
                 />
               </div>
-              {/* 1 상태 줄 */}
-              {round && (
-                <GameHud
-                  round={round}
-                  {...(activeSelf
-                    ? { self: activeSelf, mode: snapshot.interaction.mode }
-                    : {
-                        spectating: spectating!,
-                        playerNames,
-                        onSpectate: (targetPlayerId: string) =>
-                          runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } }),
-                      })}
-                />
-              )}
+              <GameStatusChrome
+                status={
+                  round ? (
+                    <>
+                      <GameHud
+                        round={round}
+                        {...(activeSelf
+                          ? { self: activeSelf, mode: snapshot.interaction.mode }
+                          : {
+                              spectating: spectating!,
+                              playerNames,
+                              onSpectate: (targetPlayerId: string) =>
+                                runtime.current?.send({
+                                  type: 'SPECTATE',
+                                  payload: { targetPlayerId },
+                                }),
+                            })}
+                      />
+                      {interactiveWorld && <EventLog events={snapshot.events} />}
+                    </>
+                  ) : null
+                }
+              />
               {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
               {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
               {interactiveWorld && (
@@ -579,9 +589,7 @@ export function ProductApp({
                   data-install={crosshairState(equipmentHint)}
                 />
               )}
-              {/* 3 좌하단 사건 로그 */}
-              {interactiveWorld && <EventLog events={snapshot.events} />}
-              {/* 4 아래 가운데 핫바. 오른쪽은 든 도구(HeldTool)가 캔버스 안에 그리므로 비워 둔다. */}
+              {/* 아래 가운데 핫바. 사건 기록은 접근성 레이어에만 남기고 시야를 가리지 않는다. */}
               {interactiveWorld && (
                 <Hotbar
                   view={view}

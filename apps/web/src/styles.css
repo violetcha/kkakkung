@@ -173,7 +173,6 @@
   display: block;
   width: 184px;
   height: auto;
-  image-rendering: pixelated;
 }
 .product-shell h1 {
   letter-spacing: -0.03em;
@@ -704,24 +703,18 @@
   gap: 20px;
 }
 
-/* S15P21C204-276. 경기 화면은 3D 가 전부를 차지하고 나머지는 그 위의 오버레이다.
-   자리는 3×3 격자로 잡아 오버레이끼리 겹칠 수 없게 한다. 오른쪽 가운데 칸은 캔버스 안의
-   든 도구(HeldTool) 자리라 비워 둔다. */
+/* S15P21C204-279. 3D 위에 캠코더 프레임과 최소 조작 UI만 겹친다. */
 .game-stage {
-  --hud-gutter: 16px;
   position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: var(--hud-gutter);
   width: 100%;
   height: calc(100dvh - 128px);
   min-height: 360px;
   margin-top: var(--space-2);
-  padding: 0 var(--hud-gutter) var(--hud-gutter);
   overflow: hidden;
-  border: 2px solid var(--color-seam);
-  background: var(--color-bg);
+  border: 1px solid #ffffff2e;
+  border-radius: 4px;
+  background: #0b0a07;
+  box-shadow: 0 16px 48px #000a;
 }
 .game-stage > .product-canvas {
   position: absolute;
@@ -733,25 +726,90 @@
   z-index: 1;
   min-width: 0;
 }
-/* 1 상태 줄: 시간·누계·구속·면역이 같은 줄에 선다. */
-.product-shell .game-stage > .game-hud {
-  grid-area: 1 / 1 / 2 / 4;
-  margin: 0 calc(-1 * var(--hud-gutter));
+.game-stage > .camcorder-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #f4f4ef;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-shadow: 0 1px 3px #000;
+}
+.camcorder-status {
+  position: absolute;
+  top: 28px;
+  left: 34px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+.camcorder-rec-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #ff3535;
+  box-shadow: 0 0 9px #ff272799;
+}
+.camcorder-status time {
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.camcorder-corner {
+  position: absolute;
+  width: 45px;
+  height: 45px;
+  opacity: 0.86;
+}
+.camcorder-corner[data-corner='top-left'] {
+  top: 24px;
+  left: 24px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+}
+.camcorder-corner[data-corner='top-right'] {
+  top: 24px;
+  right: 24px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+}
+.camcorder-corner[data-corner='bottom-left'] {
+  bottom: 24px;
+  left: 24px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+}
+.camcorder-corner[data-corner='bottom-right'] {
+  right: 24px;
+  bottom: 24px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+.game-status-a11y {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
   border: 0;
-  border-bottom: 2px solid var(--color-seam);
-  background: var(--color-panel);
 }
 .game-stage > .face-guidance {
-  grid-area: 2 / 2 / 3 / 3;
-  align-self: start;
-  justify-self: center;
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  width: min(520px, calc(100% - 160px));
   margin: 0;
-  max-width: 100%;
+  transform: translateX(-50%);
 }
 /* 2 중앙 십자선. 설치할 수 있는 칸이면 색이 바뀐다(S15P21C204-278). */
 .game-stage > .crosshair {
-  grid-area: 2 / 2 / 3 / 3;
-  place-self: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 14px;
   height: 14px;
   pointer-events: none;
@@ -759,6 +817,8 @@
     linear-gradient(var(--color-text), var(--color-text)) center / 2px 14px no-repeat,
     linear-gradient(var(--color-text), var(--color-text)) center / 14px 2px no-repeat;
   opacity: 0.75;
+  filter: drop-shadow(0 1px 2px #000);
+  transform: translate(-50%, -50%);
 }
 .game-stage > .crosshair[data-install='ready'] {
   width: 20px;
@@ -771,69 +831,68 @@
 .game-stage > .crosshair[data-install='blocked'] {
   opacity: 0.45;
 }
-/* 3 좌하단 사건 로그 */
-.game-stage > .event-log {
-  grid-area: 3 / 1 / 4 / 2;
-  align-self: end;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: var(--space-1);
-  max-width: 300px;
-  font-family: var(--font-control);
-  font-size: var(--text-control);
-  color: var(--color-text);
-  text-shadow: 2px 2px 0 var(--color-bg);
-  pointer-events: none;
-}
-/* 4 아래 가운데 핫바 */
+/* 아래 가운데 핫바. 사건 기록은 숨은 접근성 레이어에만 둔다. */
 .game-stage > .hotbar {
-  grid-area: 3 / 2 / 4 / 3;
-  place-self: end center;
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
   display: grid;
   justify-items: center;
-  gap: var(--space-1);
+  gap: 7px;
+  max-width: calc(100% - 240px);
+  transform: translateX(-50%);
 }
 .hotbar-slots {
   display: flex;
-  gap: var(--space-2);
+  gap: 7px;
 }
 /* S15P21C204-278. 지금 설치할 수 있는지 한 줄로 알린다. 십자선 색과 같은 뜻이다. */
 .hotbar-hint {
   margin: 0;
-  padding: var(--space-1) var(--space-2);
-  font-family: var(--font-control);
-  font-size: var(--text-control);
-  color: var(--color-muted);
-  background: var(--color-panel);
-  border: 2px solid var(--color-seam);
-  border-radius: var(--radius-pixel);
+  padding: 5px 9px;
+  font:
+    600 11px/1.2 Inter,
+    Pretendard,
+    system-ui,
+    sans-serif;
+  color: #c7c7bf;
+  white-space: nowrap;
+  background: #070807d9;
+  border: 1px solid #a8aaa59c;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #0009;
+  backdrop-filter: blur(3px);
 }
 .hotbar-hint[data-ready='true'] {
-  color: var(--color-success);
-  border-color: var(--color-success);
+  color: #b9f5cf;
+  border-color: #67d38ebd;
 }
 /* 5 우하단 미니맵 */
 .game-stage > .mini-map {
-  grid-area: 3 / 3 / 4 / 4;
-  align-self: end;
-  width: 168px;
-  padding: var(--space-1);
-  background: var(--color-panel);
-  border: 2px solid var(--color-border);
+  position: absolute;
+  right: 28px;
+  bottom: 28px;
+  width: clamp(112px, 13vw, 168px);
+  padding: 5px;
+  overflow: hidden;
+  background: #070807c9;
+  border: 1px solid #d8d8d0a8;
+  border-radius: 6px;
+  box-shadow: 0 4px 18px #0009;
+  backdrop-filter: blur(3px);
 }
-/* 6 접히는 오버레이. 든 도구 띠(오른쪽 가운데)를 피해 왼쪽에 둔다. */
 .game-stage > .hud-drawer {
-  grid-area: 2 / 1 / 3 / 2;
-  align-self: start;
-  width: min(320px, 100%);
-  max-height: 100%;
+  position: absolute;
+  top: 82px;
+  left: 24px;
+  width: min(300px, calc(100% - 48px));
+  max-height: calc(100% - 170px);
   overflow: auto;
   scrollbar-width: thin;
-  background: var(--color-panel);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-pixel);
+  background: #090a09d6;
+  border: 1px solid #d7d7cf5c;
+  border-radius: 6px;
+  backdrop-filter: blur(5px);
 }
 .hud-drawer > summary {
   cursor: pointer;
@@ -856,75 +915,131 @@
   max-width: 180px;
 }
 .product-shell .hotbar-slot {
-  display: grid;
-  grid-template-columns: auto auto;
-  grid-template-rows: auto auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0 var(--space-2);
-  min-width: 132px;
-  padding: var(--space-2);
-  text-align: left;
-  color: var(--color-muted);
-  background: var(--color-panel);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-pixel);
+  justify-content: center;
+  gap: 2px;
+  width: clamp(64px, 6.2vw, 78px);
+  min-width: clamp(64px, 6.2vw, 78px);
+  height: clamp(64px, 6.2vw, 78px);
+  padding: 8px 5px 5px;
+  text-align: center;
+  color: #dddcd4;
+  background: linear-gradient(145deg, #2b2c2bd9, #0c0d0de8 62%, #050505ed);
+  border: 1px solid #bfc2bea6;
+  border-radius: 7px;
+  box-shadow:
+    inset 0 1px 0 #fff2,
+    inset 0 -12px 24px #0005,
+    0 4px 12px #0009;
+  font-family: Inter, Pretendard, system-ui, sans-serif;
+  backdrop-filter: blur(4px);
 }
 /* S15P21C204-278. 고른 칸은 테두리를 두껍게 하고 바탕을 올려 한눈에 잡히게 한다. */
 .product-shell .hotbar-slot[data-state='selected'] {
-  color: var(--color-text);
-  background: var(--color-panel-raised);
-  border-color: var(--color-border-strong);
-  border-width: 3px;
+  color: #fff;
+  border: 3px solid #f0f0e8;
   box-shadow:
-    var(--inset-highlight),
-    0 -3px 0 var(--color-border-strong);
+    inset 0 0 0 2px #ffffff24,
+    0 0 11px #fff5,
+    0 4px 12px #000b;
+  transform: translateY(-3px);
 }
 .product-shell .hotbar-slot[data-state='selected'] .hotbar-key {
-  color: var(--color-bg);
-  background: var(--color-border-strong);
-  border-color: var(--color-border-strong);
+  color: #101111;
+  background: #f0f0e8;
+  border-color: #f0f0e8;
 }
 .product-shell .hotbar-slot[data-state='unavailable'],
 .product-shell .hotbar-slot[data-state='reserved'] {
   opacity: 0.55;
 }
 .hotbar-key {
-  grid-row: 1 / span 2;
-  font-family: var(--font-small);
-  font-size: var(--text-small);
-  padding: 2px 5px;
-  border: 2px solid var(--color-seam);
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font:
+    600 10px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  color: #d7d7d0a8;
 }
 .hotbar-glyph {
-  font-size: var(--text-body);
+  font-size: clamp(21px, 2vw, 27px);
+  line-height: 1;
+  text-shadow: 0 2px 5px #000;
 }
 .hotbar-label {
-  font-family: var(--font-control);
-  font-size: var(--text-control);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .hotbar-detail {
-  grid-column: 2;
-  font-family: var(--font-small);
-  font-size: var(--text-small);
+  font-size: 9px;
+  line-height: 1;
+  color: #cbc9bdba;
 }
-/* 좁은 화면에서도 같은 자리를 지키되 칸과 글줄만 줄인다. */
 @media (max-width: 700px) {
-  .game-stage {
-    --hud-gutter: 8px;
+  .camcorder-status {
+    top: 20px;
+    left: 26px;
+    gap: 8px;
+    font-size: 12px;
   }
-  .game-stage > .mini-map {
-    width: 104px;
+  .camcorder-rec-dot {
+    width: 10px;
+    height: 10px;
   }
-  .game-stage > .event-log {
-    max-width: 150px;
+  .camcorder-corner {
+    width: 30px;
+    height: 30px;
   }
-  .game-stage > .hud-drawer {
-    width: min(220px, 100%);
+  .camcorder-corner[data-corner='top-left'],
+  .camcorder-corner[data-corner='top-right'] {
+    top: 14px;
+  }
+  .camcorder-corner[data-corner='bottom-left'],
+  .camcorder-corner[data-corner='bottom-right'] {
+    bottom: 14px;
+  }
+  .camcorder-corner[data-corner='top-left'],
+  .camcorder-corner[data-corner='bottom-left'] {
+    left: 14px;
+  }
+  .camcorder-corner[data-corner='top-right'],
+  .camcorder-corner[data-corner='bottom-right'] {
+    right: 14px;
+  }
+  .game-stage > .hotbar {
+    bottom: 14px;
+    gap: 4px;
+    max-width: calc(100% - 24px);
   }
   .product-shell .hotbar-slot {
-    min-width: 0;
+    width: clamp(43px, 13vw, 50px);
+    min-width: clamp(43px, 13vw, 50px);
+    height: clamp(43px, 13vw, 50px);
+    padding: 5px 2px;
   }
-  .hotbar-label {
+  .game-stage > .mini-map {
+    right: 14px;
+    bottom: 74px;
+    width: 86px;
+  }
+  .game-stage > .hud-drawer {
+    top: 62px;
+    left: 14px;
+    width: min(190px, calc(100% - 28px));
+    max-height: calc(100% - 150px);
+  }
+  .hotbar-label,
+  .hotbar-detail {
     display: none;
   }
 }

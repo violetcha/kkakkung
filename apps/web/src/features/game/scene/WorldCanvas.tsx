@@ -91,6 +91,7 @@ export function WorldCanvas({
           standIn={standIn}
           renderTick={renderTick}
           theme={theme}
+          quality={quality}
         />
         {onMetrics && <FrameMetricsProbe report={onMetrics} />}
       </Canvas>

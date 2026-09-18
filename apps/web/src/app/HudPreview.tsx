@@ -1,25 +1,21 @@
 import { useState } from 'react';
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
-import { roundFixture, viewFixture } from '../features/room/product-fixture';
+import { roundFixture } from '../features/room/product-fixture';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { GameHud } from '../features/game/flow/GameHud';
-import { EventLog } from '../features/game/flow/EventLog';
+import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { crosshairState, installHint } from '../features/game/flow/install-hint';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import type { EquipmentKind } from '@kkakkung/protocol/game-schema';
+import { renderFixture } from '../features/game/scene/render-fixture';
 
 const TICK = 100;
 
 function previewView(role: 'runner' | 'tagger'): PrivateView {
-  const base = viewFixture({
-    visibleCells: [
-      { x: 1, y: 1 },
-      { x: 1, y: 0 },
-    ],
-  });
+  const base = renderFixture('복도');
   const self = base.self!;
   if (self.status !== 'ACTIVE') throw new Error('fixture self must be active');
   return {
@@ -54,15 +50,22 @@ export function HudPreview() {
   const [role, setRole] = useState<'runner' | 'tagger'>('tagger');
   const [selected, setSelected] = useState<EquipmentKind>('sensor');
   const [drawer, setDrawer] = useState(false);
-  const [facingWall, setFacingWall] = useState(true);
-  const view = { ...previewView(role), ...(facingWall ? {} : { visibleWallFaces: [] }) };
+  const [facingWall, setFacingWall] = useState(false);
+  const baseView = previewView(role);
+  const baseSelf = baseView.self;
+  if (baseSelf?.status !== 'ACTIVE') throw new Error('preview self must be active');
+  const view = facingWall
+    ? {
+        ...baseView,
+        visibleWallFaces: [
+          ...baseView.visibleWallFaces,
+          { x: baseSelf.cell.x, y: baseSelf.cell.y - 1, side: 2 as const },
+        ],
+      }
+    : baseView;
   const self = view.self;
   if (self?.status !== 'ACTIVE') throw new Error('preview self must be active');
   const round = roundFixture({ phase: 'PLAYING', serverTick: TICK, deadlineTick: TICK + 2400 });
-  const events = [
-    { id: 1, text: '경기 시작', atMs: Date.now() },
-    { id: 2, text: '상대 팀이 한 걸음 앞섰습니다', atMs: Date.now() },
-  ];
   return (
     <>
       <div className="actions" aria-label="검수 설정">
@@ -82,13 +85,16 @@ export function HudPreview() {
         <div className="product-canvas">
           <WorldCanvas view={view} quality="low" />
         </div>
-        <GameHud round={round} self={self} mode="motion" />
+        <GameStatusChrome
+          startedAtMs={0}
+          nowMs={4_000}
+          status={<GameHud round={round} self={self} mode="motion" />}
+        />
         <div
           className="crosshair"
           aria-hidden="true"
           data-install={crosshairState(installHint(view, selected, TICK))}
         />
-        <EventLog events={events} />
         <Hotbar
           view={view}
           tick={TICK}

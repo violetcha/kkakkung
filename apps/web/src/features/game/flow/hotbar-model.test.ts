@@ -17,12 +17,18 @@ const slots = (view: PrivateView, selected: 'sensor' | 'trap' = 'sensor') =>
   hotbarSlots({ view, tick: TICK, selected }) ?? [];
 
 describe('hotbarSlots', () => {
-  it('gives the tagger the two equipment slots with their counts and selection', () => {
+  it('keeps two tagger controls in a five-slot bar without inventing more equipment', () => {
     const view = asRole('tagger', { equipment: { sensor: 2, trap: 1 } });
     const bar = slots(view);
-    expect(bar.map((slot) => [slot.key, slot.label, slot.detail, slot.state])).toEqual([
+    expect(bar).toHaveLength(5);
+    expect(bar.slice(0, 2).map((slot) => [slot.key, slot.label, slot.detail, slot.state])).toEqual([
       ['1', '감지기', '2개', 'selected'],
       ['2', '덫', '1개', 'available'],
+    ]);
+    expect(bar.slice(2).map((slot) => [slot.id, slot.key, slot.state])).toEqual([
+      ['locked-3', '3', 'reserved'],
+      ['locked-4', '4', 'reserved'],
+      ['locked-5', '5', 'reserved'],
     ]);
     expect(slots(view, 'trap')[1]?.state).toBe('selected');
   });
@@ -35,15 +41,21 @@ describe('hotbarSlots', () => {
       equipment: { sensor: 2, trap: 1 },
       restraintUntilTick: TICK + 40,
     });
-    expect(slots(restrained).map((slot) => slot.state)).toEqual(['unavailable', 'unavailable']);
+    expect(
+      slots(restrained)
+        .slice(0, 2)
+        .map((slot) => slot.state),
+    ).toEqual(['unavailable', 'unavailable']);
   });
 
-  it('gives the runner the map exchange and keeps the second slot reserved', () => {
+  it('keeps the runner exchange in a five-slot bar without enabling undecided items', () => {
     const bar = slots(asRole('runner'));
-    expect(bar.map((slot) => [slot.key, slot.label, slot.state])).toEqual([
+    expect(bar).toHaveLength(5);
+    expect(bar.slice(0, 2).map((slot) => [slot.key, slot.label, slot.state])).toEqual([
       ['E', '지도 교환', 'unavailable'],
       ['2', '예약 슬롯', 'reserved'],
     ]);
+    expect(bar.slice(2).every((slot) => slot.state === 'reserved')).toBe(true);
   });
 
   it('lights the exchange slot once an ally is next to me', () => {

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// S15P21C204-276. 경기 화면 풀스크린 오버레이 배치. /preview 의 합성 fixture 만 쓴다.
+// S15P21C204-279. 백룸 경기 화면 오버레이 배치. /preview 의 합성 fixture 만 쓴다.
 async function openHud(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -10,19 +10,14 @@ async function openHud(page: Page) {
   return errors;
 }
 
-/** 화면 위 사각형. 오버레이가 무대 안에 있는지, 서로 겹치는지 보는 데 쓴다. */
+/** 화면 위 사각형. 오버레이가 무대 안에 있는지 보는 데 쓴다. */
 const box = async (page: Page, selector: string) => {
   const rect = await page.locator(selector).boundingBox();
   if (!rect) throw new Error(`${selector} 없음`);
   return rect;
 };
 
-const overlaps = (
-  a: { x: number; y: number; width: number; height: number },
-  b: { x: number; y: number; width: number; height: number },
-) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-
-test('the six game overlays sit in their own place over a full-bleed 3D stage', async ({
+test('the camcorder frame, five-slot hotbar and minimap sit over a full-bleed 3D stage', async ({
   page,
 }) => {
   const errors = await openHud(page);
@@ -33,11 +28,17 @@ test('the six game overlays sit in their own place over a full-bleed 3D stage', 
   expect(Math.abs(canvas.width - stage.width)).toBeLessThan(6);
   expect(Math.abs(canvas.height - stage.height)).toBeLessThan(6);
 
-  // 여섯 오버레이가 모두 무대 안에 있다.
+  const camera = await box(page, '.game-stage > .camcorder-overlay');
+  expect(Math.abs(camera.width - stage.width)).toBeLessThan(6);
+  expect(Math.abs(camera.height - stage.height)).toBeLessThan(6);
+  await expect(page.getByLabel('녹화 중 00:00:04')).toBeVisible();
+  await expect(page.locator('.game-stage > .event-log')).toHaveCount(0);
+  await expect(page.locator('.game-stage > .game-hud')).toHaveCount(0);
+  await expect(page.locator('.game-status-a11y .game-hud')).toBeAttached();
+
+  // 조작 오버레이가 모두 무대 안에 있다.
   const parts = {
-    hud: await box(page, '.game-stage > .game-hud'),
     hotbar: await box(page, '.game-stage > .hotbar'),
-    log: await box(page, '.game-stage > .event-log'),
     crosshair: await box(page, '.game-stage > .crosshair'),
     minimap: await box(page, '.game-stage > .mini-map'),
     drawer: await box(page, '.game-stage > .hud-drawer'),
@@ -49,21 +50,20 @@ test('the six game overlays sit in their own place over a full-bleed 3D stage', 
     expect(rect.y + rect.height, name).toBeLessThanOrEqual(stage.y + stage.height + 1);
   }
 
-  // 상태 줄은 위, 핫바는 아래 가운데, 로그는 좌하단, 미니맵은 우하단이다.
-  expect(parts.hud.y).toBeLessThan(stage.y + stage.height / 2);
+  // 핫바는 아래 가운데, 미니맵은 우하단, 십자선은 화면 가운데다.
+  await expect(page.locator('.game-stage > .hotbar .hotbar-slot')).toHaveCount(5);
   expect(parts.hotbar.y).toBeGreaterThan(stage.y + stage.height / 2);
-  expect(parts.log.x).toBeLessThan(stage.x + stage.width / 2);
-  expect(parts.log.y).toBeGreaterThan(stage.y + stage.height / 2);
+  expect(
+    Math.abs(parts.hotbar.x + parts.hotbar.width / 2 - (stage.x + stage.width / 2)),
+  ).toBeLessThan(3);
   expect(parts.minimap.x).toBeGreaterThan(stage.x + stage.width / 2);
   expect(parts.minimap.y).toBeGreaterThan(stage.y + stage.height / 2);
-
-  // 서로 겹치지 않는다.
-  const names = Object.keys(parts) as (keyof typeof parts)[];
-  for (let i = 0; i < names.length; i++)
-    for (let j = i + 1; j < names.length; j++)
-      expect(overlaps(parts[names[i]!]!, parts[names[j]!]!), `${names[i]} × ${names[j]}`).toBe(
-        false,
-      );
+  expect(
+    Math.abs(parts.crosshair.x + parts.crosshair.width / 2 - (stage.x + stage.width / 2)),
+  ).toBeLessThan(3);
+  expect(
+    Math.abs(parts.crosshair.y + parts.crosshair.height / 2 - (stage.y + stage.height / 2)),
+  ).toBeLessThan(3);
 
   // 술래는 감지기·덫, 도망자는 지도 교환과 예약 슬롯을 같은 자리에서 본다.
   await expect(page.locator('.hotbar-slot[data-slot="sensor"]')).toBeVisible();
@@ -86,16 +86,19 @@ test('the hotbar and crosshair say whether the selected equipment can go here', 
   const crosshair = page.locator('.game-stage > .crosshair');
   const hint = page.locator('.hotbar-hint');
 
-  // 벽을 마주 본 술래: 십자선과 안내 줄이 함께 '가능'을 말한다.
+  // 기본 열린 복도에서는 막힌 이유를 그 자리에서 알려 준다.
+  await expect(crosshair).toHaveAttribute('data-install', 'blocked');
+  await expect(hint).toHaveAttribute('data-ready', 'false');
+  await expect(hint).toContainText('벽을 마주 보고');
+
+  // 검수용 앞 벽을 켜면 십자선과 안내 줄이 함께 '가능'을 말한다.
+  await page.getByRole('button', { name: '설치 가능 칸 켜기', exact: true }).click();
   await expect(crosshair).toHaveAttribute('data-install', 'ready');
   await expect(hint).toHaveAttribute('data-ready', 'true');
   await expect(hint).toContainText('설치할 수 있어요');
 
-  // 벽이 없으면 막힌 이유를 그 자리에서 알려 준다.
   await page.getByRole('button', { name: '설치 가능 칸 끄기', exact: true }).click();
   await expect(crosshair).toHaveAttribute('data-install', 'blocked');
-  await expect(hint).toHaveAttribute('data-ready', 'false');
-  await expect(hint).toContainText('벽을 마주 보고');
 
   // 덫은 바닥에 놓으므로 같은 자리에서 다시 가능해진다.
   await page.locator('.hotbar-slot[data-slot="trap"]').click();
@@ -113,15 +116,14 @@ test('the hotbar and crosshair say whether the selected equipment can go here', 
   expect(errors).toEqual([]);
 });
 
-test('the same overlays fit a 400px wide screen without a sideways scroll', async ({ page }) => {
+test('the camcorder HUD keeps five slots and a minimap inside a 400px screen', async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 780 });
   const errors = await openHud(page);
 
   const stage = await box(page, '.game-stage');
   for (const selector of [
-    '.game-stage > .game-hud',
+    '.game-stage > .camcorder-overlay',
     '.game-stage > .hotbar',
-    '.game-stage > .event-log',
     '.game-stage > .mini-map',
     '.game-stage > .hud-drawer',
   ]) {
@@ -133,6 +135,8 @@ test('the same overlays fit a 400px wide screen without a sideways scroll', asyn
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+  await expect(page.locator('.game-stage > .hotbar .hotbar-slot')).toHaveCount(5);
+  await expect(page.locator('.game-stage > .event-log')).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });

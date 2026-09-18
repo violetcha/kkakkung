@@ -109,7 +109,8 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
     await expect(metrics).toHaveText('측정 대기');
     await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
     // A fresh Canvas has not uploaded the earlier corridor's cached avatar geometry yet.
-    // It may own fewer resources, but it must not accumulate more across re-entry.
+    // It may own fewer resources, and WebGL releases disposed textures asynchronously, but neither
+    // resource kind may accumulate beyond the stable baseline across re-entry.
     await expect
       .poll(async () => {
         const current = await counts();
@@ -117,7 +118,8 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
           current !== null &&
           current.geometry > 0 &&
           current.geometry <= original!.geometry &&
-          current.texture === original!.texture
+          current.texture > 0 &&
+          current.texture <= original!.texture
         );
       })
       .toBe(true);

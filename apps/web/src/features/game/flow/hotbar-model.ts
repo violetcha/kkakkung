@@ -20,6 +20,21 @@ export type HotbarSlot = Readonly<{
 const EQUIPMENT_GLYPH: Record<EquipmentKind, string> = { sensor: '▣', trap: '▲' };
 const EQUIPMENT_LABEL: Record<EquipmentKind, string> = { sensor: '감지기', trap: '덫' };
 
+function completeFiveSlots(slots: readonly HotbarSlot[]): readonly HotbarSlot[] {
+  const locked = Array.from({ length: Math.max(0, 5 - slots.length) }, (_, index) => {
+    const position = slots.length + index + 1;
+    return Object.freeze({
+      id: `locked-${position}`,
+      key: String(position),
+      glyph: '·',
+      label: '빈 슬롯',
+      detail: null,
+      state: 'reserved' as const,
+    });
+  });
+  return Object.freeze([...slots, ...locked]);
+}
+
 export function hotbarSlots(input: {
   view: PrivateView | null;
   tick: number;
@@ -28,24 +43,26 @@ export function hotbarSlots(input: {
 }): readonly HotbarSlot[] | null {
   const equipment = equipmentPresenter(input.view, input.tick);
   if (equipment)
-    return (['sensor', 'trap'] as const).map((kind, index) =>
-      Object.freeze({
-        id: kind,
-        key: String(index + 1),
-        glyph: EQUIPMENT_GLYPH[kind],
-        label: EQUIPMENT_LABEL[kind],
-        detail: `${equipment.remaining[kind]}개`,
-        state:
-          equipment.remaining[kind] === 0 || equipment.locked
-            ? 'unavailable'
-            : input.selected === kind
-              ? 'selected'
-              : 'available',
-      }),
+    return completeFiveSlots(
+      (['sensor', 'trap'] as const).map((kind, index) =>
+        Object.freeze({
+          id: kind,
+          key: String(index + 1),
+          glyph: EQUIPMENT_GLYPH[kind],
+          label: EQUIPMENT_LABEL[kind],
+          detail: `${equipment.remaining[kind]}개`,
+          state:
+            equipment.remaining[kind] === 0 || equipment.locked
+              ? 'unavailable'
+              : input.selected === kind
+                ? 'selected'
+                : 'available',
+        }),
+      ),
     );
   const exchange = exchangePresenter(input.view, input.exchangeTarget ?? null, input.tick);
   if (!exchange) return null;
-  return [
+  return completeFiveSlots([
     Object.freeze({
       id: 'exchange',
       key: 'E',
@@ -67,5 +84,5 @@ export function hotbarSlots(input: {
       detail: '준비 중',
       state: 'reserved' as HotbarSlotState,
     }),
-  ];
+  ]);
 }
