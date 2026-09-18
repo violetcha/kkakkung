@@ -13,6 +13,7 @@ import type { DeviceStatus } from '../features/input/InteractionRuntime';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
 import { RenderPreview } from './RenderPreview';
+import { HudPreview } from './HudPreview';
 // S15P21C204-273. 장치 점검 캐러셀 검수용 합성 상태. 실제 장치를 켜지 않는다.
 const DEVICE_STAGES = {
   '점검 전': INITIAL_DEVICES,
@@ -42,6 +43,7 @@ const DEVICE_STAGES = {
 const views = [
   '로비',
   '장치 점검',
+  '경기 HUD',
   '미로',
   '장비',
   '교환',
@@ -134,6 +136,7 @@ export default function PreviewApp() {
           />
         </>
       )}
+      {screen === '경기 HUD' && <HudPreview />}
       {screen === '미로' && (
         <>
           <button onClick={() => setMounted(!mounted)}>

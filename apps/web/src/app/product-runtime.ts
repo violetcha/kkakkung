@@ -49,6 +49,7 @@ import {
 import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
+import { appendEvent, eventTextForCue, type MatchEvent } from '../features/game/flow/event-log';
 import {
   NO_MOTION_CHECK,
   observeMotionCheck,
@@ -130,6 +131,8 @@ export type ProductSnapshot = {
   endedSelf: PrivateView['self'];
   /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
   cueFlash?: { kind: FlashCue; id: number } | null;
+  /** S15P21C204-276. 좌하단 사건 로그에 그릴 최근 줄. 안내음이 울린 순간과 같다. */
+  events: readonly MatchEvent[];
 };
 export function bindProductRoom(
   room: ProductRoomPort,
@@ -161,6 +164,7 @@ export function bindProductRoom(
     requests: {},
     interaction: { selectedEquipment: 'sensor', mode: 'motion' },
     motionCheck: NO_MOTION_CHECK,
+    events: [],
     exchangeTarget: null,
     markers: [],
     exchangeNotice: null,
@@ -179,6 +183,7 @@ export function bindProductRoom(
   // 순서에 따라 자기 종료 안내음과 겹칠 수 있어 잠시 미뤄 두고, 자기 종료가 오면 버린다.
   let lastCueState: CueState | null = null;
   let flashId = 0;
+  let eventId = 0;
   let deferredProgress: { kinds: CueKind[]; at: number } | null = null;
   let microphoneWanted = false;
   let deviceAction = 0;
@@ -301,6 +306,12 @@ export function bindProductRoom(
   const playCue = (kind: CueKind) => {
     if (!active || snapshot.lost) return;
     bridge.runtime.playCue?.(kind);
+    // S15P21C204-276. 같은 순간을 화면 로그 한 줄로도 남긴다. 새 판정을 만들지 않는다.
+    const text = eventTextForCue(kind);
+    if (text)
+      publish({
+        events: appendEvent(snapshot.events, { id: ++eventId, text, atMs: deps.now() }),
+      });
     if (isFlashCue(kind)) publish({ cueFlash: { kind, id: ++flashId } });
   };
   const emitCues = () => {

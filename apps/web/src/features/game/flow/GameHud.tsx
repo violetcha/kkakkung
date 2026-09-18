@@ -47,6 +47,10 @@ export function GameHud({
     round.deadlineTick === null
       ? null
       : Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20));
+  const seconds = (until: number | null) =>
+    until === null ? null : Math.max(0, Math.ceil((until - round.serverTick) / 20));
+  const restraintSeconds = seconds(self.restraintUntilTick);
+  const immuneSeconds = seconds(self.restraintImmuneUntilTick);
   // 상태는 문구와 data-state를 함께 쓰고 색만으로 전달하지 않는다(V4).
   const [state, condition] =
     self.restraintUntilTick !== null && round.serverTick < self.restraintUntilTick
@@ -81,6 +85,17 @@ export function GameHud({
         <span className="hud-outcomes">
           <span data-outcome="escape">◇ 탈출 {round.counts.escaped}/2</span>
           <span data-outcome="capture">◆ 포획 {round.counts.captured}/2</span>
+          {/* S15P21C204-276. 구속·면역도 같은 상태 줄에 둔다. 별도 오버레이로 띄우지 않는다. */}
+          {restraintSeconds !== null && (
+            <span data-outcome="restraint">
+              ⛓ {restraintSeconds > 0 ? `구속 ${restraintSeconds}초` : '해제 확인 중'}
+            </span>
+          )}
+          {immuneSeconds !== null && (
+            <span data-outcome="immune">
+              ◈ {immuneSeconds > 0 ? `면역 ${immuneSeconds}초` : '면역 종료 확인 중'}
+            </span>
+          )}
         </span>
         <span data-state={state}>
           {mode === 'motion' ? '얼굴·상체 조작' : '키보드 조작'} · {condition}

@@ -146,7 +146,29 @@ MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12는 **이번 MVP 구현·필수 인수�
 안내(`DEVICE_LOADING_TIMEOUT` 등)를 같은 화면 안에서 보여 주며, 그때는 "자동으로 시작합니다"
 문구를 대신한다.
 
-근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts).
+### 4.4 경기 화면 배치
+
+경기 화면은 3D 가 무대 전체를 차지하고 나머지는 모두 그 위의 오버레이다. 옆 칸에 패널을 세우던
+배치는 없앴다. 자리는 3×3 격자로 잡아 오버레이끼리 겹칠 수 없게 하고, 오른쪽 가운데 칸은 캔버스
+안에서 그리는 든 도구(HeldTool) 자리라 비워 둔다.
+
+| 자리          | 내용                                                                              |
+| ------------- | --------------------------------------------------------------------------------- |
+| 위 전체 폭    | 상태 줄 — 역할, 남은 시간, ◇ 탈출·◆ 포획 누계, ⛓ 구속·◈ 면역, 조작 방식·현재 상태 |
+| 가운데        | 십자선                                                                            |
+| 왼쪽 위       | 접히는 오버레이 — 교환·도전·장치·소리·연습·데모                                   |
+| 왼쪽 아래     | 사건 로그 — 최근 4줄, 6초 뒤 스스로 사라짐                                        |
+| 아래 가운데   | 핫바 — 술래 [1 ▣ 감지기][2 ▲ 덫] · 도망자 [E ⇄ 지도 교환][2 ▢ 예약 슬롯]          |
+| 오른쪽 아래   | 미니맵                                                                            |
+| 오른쪽 가운데 | 비움(든 도구)                                                                     |
+
+핫바의 도망자 두 번째 칸은 도망자 아이템이 정해지기 전까지 잠긴 예약 슬롯으로 둔다. 자리를 미리
+잡아 두어 아이템이 생겨도 배치가 흔들리지 않는다. 사건 로그는 이미 울린 안내음(11.4)을 같은
+순간의 글줄로 바꾼 것이며 새 판정을 만들지 않는다. 접히는 오버레이는 팀 연습·탈출 도전·들어온
+교환 요청처럼 손이 필요한 일이 있을 때만 펼쳐진 채로 시작한다. 좁은 화면(400px)에서도 같은
+자리를 지키고 칸과 글줄만 줄인다.
+
+근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts), [핫바](../../apps/web/src/features/game/flow/hotbar-model.ts), [사건 로그](../../apps/web/src/features/game/flow/event-log.ts).
 
 ## 5. 경기 규칙과 시간
 

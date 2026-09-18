@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+import type { PrivateView } from '@kkakkung/protocol/game-schema';
+import { viewFixture } from '../../room/product-fixture';
+import { hotbarSlots } from './hotbar-model';
+import { appendEvent, eventTextForCue, visibleEvents, type MatchEvent } from './event-log';
+
+const TICK = 100;
+
+function asRole(role: 'runner' | 'tagger', patch: Record<string, unknown> = {}): PrivateView {
+  const base = viewFixture();
+  const self = base.self!;
+  if (self.status !== 'ACTIVE') throw new Error();
+  return { ...base, self: { ...self, role, ...patch } };
+}
+
+const slots = (view: PrivateView, selected: 'sensor' | 'trap' = 'sensor') =>
+  hotbarSlots({ view, tick: TICK, selected }) ?? [];
+
+describe('hotbarSlots', () => {
+  it('gives the tagger the two equipment slots with their counts and selection', () => {
+    const view = asRole('tagger', { equipment: { sensor: 2, trap: 1 } });
+    const bar = slots(view);
+    expect(bar.map((slot) => [slot.key, slot.label, slot.detail, slot.state])).toEqual([
+      ['1', '감지기', '2개', 'selected'],
+      ['2', '덫', '1개', 'available'],
+    ]);
+    expect(slots(view, 'trap')[1]?.state).toBe('selected');
+  });
+
+  it('marks an empty or locked equipment slot unavailable instead of hiding it', () => {
+    expect(slots(asRole('tagger', { equipment: { sensor: 0, trap: 1 } }))[0]?.state).toBe(
+      'unavailable',
+    );
+    const restrained = asRole('tagger', {
+      equipment: { sensor: 2, trap: 1 },
+      restraintUntilTick: TICK + 40,
+    });
+    expect(slots(restrained).map((slot) => slot.state)).toEqual(['unavailable', 'unavailable']);
+  });
+
+  it('gives the runner the map exchange and keeps the second slot reserved', () => {
+    const bar = slots(asRole('runner'));
+    expect(bar.map((slot) => [slot.key, slot.label, slot.state])).toEqual([
+      ['E', '지도 교환', 'unavailable'],
+      ['2', '예약 슬롯', 'reserved'],
+    ]);
+  });
+
+  it('lights the exchange slot once an ally is next to me', () => {
+    const view = asRole('runner');
+    const near: PrivateView = {
+      ...view,
+      visibleEntities: [
+        { id: 'ally', kind: 'player', cell: { x: 1, y: 0 }, dir: 2, action: null, role: 'runner' },
+      ],
+    };
+    expect(slots(near)[0]?.state).toBe('available');
+  });
+
+  it('has no hotbar for a view without an active self', () => {
+    expect(hotbarSlots({ view: null, tick: TICK, selected: 'sensor' })).toBeNull();
+  });
+});
+
+describe('event log', () => {
+  it('names the moments worth a line and leaves the per-second countdown out', () => {
+    expect(eventTextForCue('captured')).toBe('포획되었습니다');
+    expect(eventTextForCue('start')).toBe('경기 시작');
+    expect(eventTextForCue('countdown')).toBeNull();
+  });
+
+  it('keeps only the newest lines', () => {
+    let events: readonly MatchEvent[] = [];
+    for (let id = 1; id <= 6; id++) events = appendEvent(events, { id, text: `e${id}`, atMs: 0 });
+    expect(events.map((event) => event.id)).toEqual([3, 4, 5, 6]);
+  });
+
+  it('drops a line once its time is up', () => {
+    const events = [
+      { id: 1, text: '오래됨', atMs: 0 },
+      { id: 2, text: '최근', atMs: 5000 },
+    ];
+    expect(visibleEvents(events, 8000).map((event) => event.id)).toEqual([2]);
+    expect(visibleEvents(events, 20000)).toEqual([]);
+    expect(visibleEvents(events, 1000).map((event) => event.id)).toEqual([1, 2]);
+  });
+});
