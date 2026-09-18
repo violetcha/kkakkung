@@ -165,7 +165,7 @@ test('actual vision Worker and audio lifetime close on hidden-tab handling and r
 }) => {
   await localDevices(page);
   await enter(page);
-  await page.getByRole('button', { name: '카메라 켜고 모션 점검하기', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 점검하기', exact: true }).click();
   await expect(page.getByLabel('내 웹캠 미리보기').locator('video')).toBeVisible();
   await expect.poll(async () => (await resources(page)).workers).toBe(1);
   await expect(page.getByText('얼굴을 찾지 못했습니다.', { exact: false })).toBeVisible();
@@ -191,7 +191,7 @@ test('closing while permission is pending stops the late stream and does not reo
 }) => {
   await localDevices(page, true);
   await enter(page);
-  await page.getByRole('button', { name: '카메라 켜고 모션 점검하기', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 점검하기', exact: true }).click();
   await expect.poll(async () => (await resources(page)).live).toBe(1);
   await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
   await expect(page.getByLabel('닉네임')).toBeVisible();

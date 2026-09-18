@@ -498,6 +498,14 @@ export function ProductApp({
               }}
               onReady={(value) => runtime.current?.ready(value)}
               faceGuidance={snapshot.faceGuidance ?? null}
+              motion={snapshot.motionCheck}
+              onCalibrate={async () => {
+                await runtime.current?.calibrateMotion();
+              }}
+              onMicrophone={async (enabled) => {
+                await runtime.current?.setMicrophone(enabled);
+              }}
+              onTestTone={playTestTone}
             />
           )}
           {round && inResult && (

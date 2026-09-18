@@ -13,6 +13,7 @@ import {
 } from '../../input/InteractionRuntime';
 import { isSampleFresh } from '../../vision/sensor-types';
 import { INITIAL_DEVICES } from '../flow/device-readiness';
+import { NO_MOTION_CHECK, observeMotionCheck, type MotionCheck } from '../flow/motion-check';
 import { createPoseHold } from '../pose/pose-evaluator';
 import type { ChallengeKey } from '../pose/key-challenge';
 import { createSoloWorld } from './solo-world';
@@ -26,6 +27,8 @@ export function createSoloSession(
   let devices: DeviceStatus = INITIAL_DEVICES;
   let interaction: InteractionState = { mode: 'keyboard', selectedEquipment: 'sensor' };
   let sensors: SensorSnapshot | null = null;
+  // S15P21C204-273. 장치 점검 '자세' 단계 표시용. 조작 판정에는 쓰지 않는다.
+  let motionCheck: MotionCheck = NO_MOTION_CHECK;
   let pageActive = true;
   let disposed = false;
   let configuring = false;
@@ -33,7 +36,7 @@ export function createSoloSession(
   let bridge: ReturnType<typeof createInteractionBridge> | null = null;
   let deviceAttempt = 0;
   let commandSequence = 0;
-  const snapshot = () => ({ ...world.snapshot, devices, interaction });
+  const snapshot = () => ({ ...world.snapshot, devices, interaction, motionCheck });
   const emit = () => {
     if (!disposed) options.changed(snapshot());
   };
@@ -126,7 +129,13 @@ export function createSoloSession(
       onFaceTrack() {},
       onMediaStatus() {},
       onLocalPreview() {},
-      onMotionDebug: (state) => debugFeed.publishMotion(state), // 진단 오버레이(제거 가능)
+      onMotionDebug: (state) => {
+        debugFeed.publishMotion(state); // 진단 오버레이(제거 가능)
+        const next = observeMotionCheck(motionCheck, state);
+        if (next === motionCheck) return;
+        motionCheck = next;
+        emit();
+      },
     },
     factory,
   );
@@ -229,4 +238,5 @@ export function createSoloSession(
 export type SoloSnapshot = ReturnType<typeof createSoloWorld>['snapshot'] & {
   devices: DeviceStatus;
   interaction: InteractionState;
+  motionCheck: MotionCheck;
 };

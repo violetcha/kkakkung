@@ -154,8 +154,10 @@ test('microphone meter follows actual synthetic PCM and releases the borrowed so
   page,
 }) => {
   await setup(page);
-  await page.getByRole('checkbox', { name: '마이크도 점검 (선택)', exact: true }).check();
-  await page.getByRole('button', { name: '카메라 켜고 모션 점검하기', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 점검하기', exact: true }).click();
+  // S15P21C204-273. 마이크 선택은 장치 점검 캐러셀의 '소리' 단계에 있다.
+  await page.getByRole('button', { name: '3 소리', exact: true }).click();
+  await page.getByRole('checkbox', { name: '마이크 사용', exact: true }).check();
   await expect.poll(() => resources(page)).toMatchObject({ contexts: 1, tracks: 2, analysers: 1 });
   await expect
     .poll(async () =>

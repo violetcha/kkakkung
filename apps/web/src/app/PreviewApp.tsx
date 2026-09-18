@@ -9,9 +9,36 @@ import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
 import { INITIAL_DEVICES } from '../features/game/flow/device-readiness';
+import type { DeviceStatus } from '../features/input/InteractionRuntime';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
 import { RenderPreview } from './RenderPreview';
+// S15P21C204-273. 장치 점검 캐러셀 검수용 합성 상태. 실제 장치를 켜지 않는다.
+const DEVICE_STAGES = {
+  '점검 전': INITIAL_DEVICES,
+  '카메라 통과': { ...INITIAL_DEVICES, camera: 'ready', vision: 'ready' },
+  '자세 통과': {
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+  },
+  '소리 통과': {
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+    audioPlayback: 'ready',
+  },
+  '보정 실패': {
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'failed',
+    errorCode: 'CALIBRATION_NO_FACE',
+  },
+} as const satisfies Record<string, DeviceStatus>;
+
 const views = [
   '로비',
   '장치 점검',
@@ -29,6 +56,7 @@ const views = [
 export default function PreviewApp() {
   const [screen, setScreen] = useState<(typeof views)[number]>('로비');
   const [mounted, setMounted] = useState(true);
+  const [deviceStage, setDeviceStage] = useState<keyof typeof DEVICE_STAGES>('점검 전');
   const [quality, setQuality] = useState<QualityPreset>('medium');
   const view = viewFixture({
     visibleCells: [
@@ -71,13 +99,40 @@ export default function PreviewApp() {
         />
       )}
       {screen === '장치 점검' && (
-        <DeviceCheckScreen
-          status={INITIAL_DEVICES}
-          ready={false}
-          onStart={async () => {}}
-          onReady={() => {}}
-          previewHost={() => {}}
-        />
+        <>
+          <label>
+            검수 상태{' '}
+            <select
+              data-testid="device-stage"
+              value={deviceStage}
+              onChange={(event) =>
+                setDeviceStage(event.currentTarget.value as keyof typeof DEVICE_STAGES)
+              }
+            >
+              {Object.keys(DEVICE_STAGES).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <DeviceCheckScreen
+            key={deviceStage}
+            status={DEVICE_STAGES[deviceStage]}
+            ready={false}
+            onStart={async () => {}}
+            onReady={() => {}}
+            onCalibrate={async () => {}}
+            onMicrophone={async () => {}}
+            onTestTone={async () => 'played' as const}
+            motion={
+              DEVICE_STAGES[deviceStage].calibration === 'ready'
+                ? { lean: true, turn: true }
+                : { lean: false, turn: false }
+            }
+            previewHost={() => {}}
+          />
+        </>
       )}
       {screen === '미로' && (
         <>
