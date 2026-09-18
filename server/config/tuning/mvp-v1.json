@@ -1,9 +1,9 @@
 {
-  "tuningVersion": "mvp-v1",
+  "tuningVersion": "mvp-v2",
   "match": {
     "tickMs": 50,
-    "moveTicks": 9,
-    "turnTicks": 6,
+    "moveTicks": 12,
+    "turnTicks": 8,
     "roundTicks": 3600,
     "installationTicks": 10,
     "armTicks": 20,

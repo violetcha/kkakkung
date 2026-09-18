@@ -370,8 +370,8 @@ export type MatchLayout = Readonly<{
 export type MatchTuning = Readonly<{
   tuningVersion: string;
   tickMs: 50;
-  moveTicks: 9;
-  turnTicks: 6;
+  moveTicks: number;
+  turnTicks: number;
   roundTicks: 3600;
   installationTicks: 10;
   armTicks: 20;

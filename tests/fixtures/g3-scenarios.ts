@@ -6,6 +6,7 @@
 import type { CommandEnvelope, CommandOutcome } from '@kkakkung/protocol/game-messages';
 import {
   MATCH_TUNING_CONSTANTS,
+  MATCH_TUNING_DEFAULTS,
   matchCore,
   type MatchLayout,
   type MatchState,
@@ -50,6 +51,7 @@ export const G3_RULES_LANDED = Object.freeze({
 export const G3_TUNING: MatchTuning = Object.freeze({
   tuningVersion: 'g3-test-tuning',
   ...MATCH_TUNING_CONSTANTS,
+  ...MATCH_TUNING_DEFAULTS,
 });
 
 export const MATCH_ID = 'g3-match';

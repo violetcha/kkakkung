@@ -8,21 +8,21 @@ it('credits completed movement, quarter turns and an intentional neutral stop, n
   world.dispatch({ type: 'MOVE_INTENT', payload: { direction: 'forward' } });
   expect(world.snapshot.completed).toEqual([]);
   expect(world.snapshot.self.action?.to).toMatchObject({ x: 2, y: 2, dir: 0 });
-  clock = 450;
+  clock = 600;
   world.dispatch({ type: 'MOVE_INTENT', payload: { direction: null } }, true);
   expect(world.snapshot.completed).toEqual(['forward']);
-  clock = 950;
+  clock = 1100;
   world.poll();
   expect(world.snapshot.completed).toContain('neutral');
   world.dispatch({ type: 'MOVE_INTENT', payload: { direction: 'back' } });
-  clock += 450;
+  clock += 600;
   world.dispatch({ type: 'MOVE_INTENT', payload: { direction: null } }, true);
   world.dispatch({ type: 'TURN', payload: { direction: 'left' } });
-  clock += 300;
+  clock += 400;
   world.poll();
   expect(world.snapshot.self).toMatchObject({ cell: { x: 2, y: 3 }, dir: 3 });
   world.dispatch({ type: 'TURN', payload: { direction: 'right' } });
-  clock += 300;
+  clock += 400;
   world.poll();
   expect(world.snapshot.self.dir).toBe(0);
   expect(world.snapshot.completed).toEqual(
@@ -44,7 +44,7 @@ it('blocks walls and bounds a held action to one queued turn without catching up
   clock = 5000;
   world.poll();
   expect(world.snapshot.self.action?.to.dir).toBe(0);
-  clock = 5300;
+  clock = 5400;
   world.poll();
   expect(world.snapshot.self.action).toBeNull();
   expect(world.snapshot.self.cell).toEqual({ x: 2, y: 1 });

@@ -79,14 +79,14 @@ it('uses real runtime keyboard handlers and cleans their timers without loading 
   h.advance(500);
   expect(h.session.snapshot().completed).toContain('forward');
   expect(h.session.snapshot().completed).not.toContain('neutral');
-  h.advance(250);
+  h.advance(400);
   expect(h.session.snapshot().completed).toContain('neutral');
   h.key('keydown', 'KeyA');
   h.key('keydown', 'KeyA', true);
   h.advance(INPUT_TUNING.turnHoldMs);
   h.fire();
   h.key('keyup', 'KeyA');
-  h.advance(300);
+  h.advance(450);
   expect(h.session.snapshot().self.dir).toBe(3);
   const closing = h.session.dispose();
   expect(h.session.dispose()).toBe(closing);

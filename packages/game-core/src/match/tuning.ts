@@ -6,11 +6,12 @@ import type {
 } from './types.js';
 import type { TemplateIssue, TemplateValidation } from './map/types.js';
 
-/** Fixed first-implementation rule constants. The JSON must match these exactly. */
+/**
+ * Fixed first-implementation rule constants. The JSON must match these exactly.
+ * S15P21C204-270: move and turn durations left this set; they are ranged values below.
+ */
 export const MATCH_TUNING_CONSTANTS = Object.freeze({
   tickMs: 50,
-  moveTicks: 9,
-  turnTicks: 6,
   roundTicks: 3600,
   installationTicks: 10,
   armTicks: 20,
@@ -23,6 +24,20 @@ export const MATCH_TUNING_CONSTANTS = Object.freeze({
   exitExpiryTicks: 160,
   exitRetryTicks: 10,
 } as const);
+
+/**
+ * S15P21C204-270. Movement speed is a tuned value, not a constant: the JSON picks how many ticks
+ * one cell (`moveTicks`) and one quarter turn (`turnTicks`) take, inside these bounds, and a turn
+ * never takes longer than a step. Everything that renders or simulates an action reads the
+ * duration from the action's own start/end ticks, so changing the JSON moves every layer.
+ */
+export const MATCH_TUNING_RANGES = Object.freeze({
+  moveTicks: Object.freeze({ min: 4, max: 40 }),
+  turnTicks: Object.freeze({ min: 2, max: 40 }),
+});
+
+/** Default speed for fixtures that build a tuning in code: 12 ticks a cell, 8 a turn (600/400 ms). */
+export const MATCH_TUNING_DEFAULTS = Object.freeze({ moveTicks: 12, turnTicks: 8 });
 
 const LAYOUT_FIELDS: readonly (keyof LayoutConstraints)[] = [
   'minRunnerDistance',
@@ -68,6 +83,21 @@ export function validateTuning(raw: unknown): TemplateValidation<MatchTuningConf
         add('OUT_OF_RANGE', `match.${key}`, `must equal ${expected}`);
       }
     }
+    for (const [key, range] of Object.entries(MATCH_TUNING_RANGES)) {
+      const value = match[key];
+      if (
+        !Number.isInteger(value) ||
+        (value as number) < range.min ||
+        (value as number) > range.max
+      )
+        add('OUT_OF_RANGE', `match.${key}`, `must be an integer in ${range.min}..${range.max}`);
+    }
+    if (
+      Number.isInteger(match.moveTicks) &&
+      Number.isInteger(match.turnTicks) &&
+      (match.turnTicks as number) > (match.moveTicks as number)
+    )
+      add('OUT_OF_RANGE', 'match.turnTicks', 'must not exceed moveTicks');
   }
   if (!isRecord(layout)) add('INVALID_TYPE', 'layout', 'layout must be an object');
   else {
@@ -104,8 +134,8 @@ export function validateTuning(raw: unknown): TemplateValidation<MatchTuningConf
   const matchTuning: MatchTuning = Object.freeze({
     tuningVersion: tuningVersion as string,
     tickMs: m.tickMs as 50,
-    moveTicks: m.moveTicks as 9,
-    turnTicks: m.turnTicks as 6,
+    moveTicks: m.moveTicks as number,
+    turnTicks: m.turnTicks as number,
     roundTicks: m.roundTicks as 3600,
     installationTicks: m.installationTicks as 10,
     armTicks: m.armTicks as 20,

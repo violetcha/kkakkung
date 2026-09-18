@@ -151,12 +151,15 @@ export type LayoutSelectionResult =
   | Readonly<{ status: 'selected'; layout: MatchLayout; source: 'online' | 'fallback' }>
   | Readonly<{ status: 'unavailable'; code: 'LAYOUT_UNAVAILABLE' }>;
 
-/** Tick-based rule constants. The server injects these; core never reads files or clocks. */
+/**
+ * Tick-based rule constants. The server injects these; core never reads files or clocks.
+ * S15P21C204-270: `moveTicks`/`turnTicks` are tuned integers (see MATCH_TUNING_RANGES).
+ */
 export type MatchTuning = Readonly<{
   tuningVersion: string;
   tickMs: 50;
-  moveTicks: 9;
-  turnTicks: 6;
+  moveTicks: number;
+  turnTicks: number;
   roundTicks: 3600;
   installationTicks: 10;
   armTicks: 20;
