@@ -1,19 +1,17 @@
 /**
- * S15P21C204-268. Which look the product renderer draws. `block` is the decided direction
- * (Minecraft-like block forms and pixel textures, our own darkness and 3.5-cell sight); the
- * older `facility` corridor stays selectable so the demo room and existing inspections can be
- * compared side by side. Selection never reaches the server: it is a local rendering choice.
+ * Rendering stays local and never changes the server maze. The Backrooms facility is the product
+ * default; the older block look remains selectable for comparison and recovery.
  */
 export const SCENE_THEME_IDS = ['block', 'facility'] as const;
 export type SceneThemeId = (typeof SCENE_THEME_IDS)[number];
-export const DEFAULT_SCENE_THEME: SceneThemeId = 'block';
+export const DEFAULT_SCENE_THEME: SceneThemeId = 'facility';
 /** Query parameter and storage key share one name so `?theme=facility` can be bookmarked. */
 export const SCENE_THEME_KEY = 'theme';
 export const SCENE_THEME_STORAGE_KEY = 'kkakkung.scene-theme';
 
 export const SCENE_THEME_LABELS: Readonly<Record<SceneThemeId, string>> = Object.freeze({
   block: '어두운 블록',
-  facility: '시설 복도',
+  facility: '백룸 복도',
 });
 
 export function isSceneThemeId(value: unknown): value is SceneThemeId {

@@ -1,10 +1,12 @@
-import { useEffect, useMemo } from 'react';
-import { BoxGeometry, MeshStandardMaterial } from 'three';
+import { useEffect, useMemo, useState } from 'react';
+import { BoxGeometry, MeshStandardMaterial, TextureLoader, type Texture } from 'three';
 import type { Cell, Dir, WallFace } from '@kkakkung/protocol/game-schema';
 import { CHARACTER, cellPosition, directionYaw, wallKey, wallModel } from './scene-model';
-import { createFacilityResources, FACILITY } from './facility-theme';
+import { createFacilityResources, FACILITY, type BackroomsTextureSet } from './facility-theme';
 import { BLOCK, createBlockResources, isMossyFace } from './block-theme';
 import { DEFAULT_SCENE_THEME, type SceneThemeId } from './scene-theme';
+import type { QualityPreset } from './quality-presets';
+import { backroomsTexturePaths, configureBackroomsTexture } from './backrooms-textures';
 
 /** The scene owns these shared resources; children never dispose them. */
 export function ScenePrimitives({
@@ -12,11 +14,13 @@ export function ScenePrimitives({
   walls,
   players,
   theme = DEFAULT_SCENE_THEME,
+  quality = 'medium',
 }: {
   cells: readonly Cell[];
   walls: readonly WallFace[];
   players: readonly { id: string; cell: Cell; dir: Dir }[];
   theme?: SceneThemeId;
+  quality?: QualityPreset;
 }) {
   const resources = useMemo(
     () => ({
@@ -38,7 +42,7 @@ export function ScenePrimitives({
       {theme === 'block' ? (
         <BlockTerrain cells={cells} walls={walls} />
       ) : (
-        <FacilityTerrain cells={cells} walls={walls} />
+        <FacilityTerrain cells={cells} walls={walls} quality={quality} />
       )}
       {players.map((player) => (
         <group
@@ -90,8 +94,63 @@ function BlockTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonl
   );
 }
 
-function FacilityTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonly WallFace[] }) {
-  const facility = useMemo(createFacilityResources, []);
+function useBackroomsTextures(quality: QualityPreset): BackroomsTextureSet | undefined {
+  const [textures, setTextures] = useState<BackroomsTextureSet>();
+  useEffect(() => {
+    let active = true;
+    const owned = new Set<Texture>();
+    const loader = new TextureLoader();
+    const paths = backroomsTexturePaths(quality);
+    setTextures(undefined);
+    const load = (path: string | null, kind: 'color' | 'data') =>
+      path === null
+        ? Promise.resolve(null)
+        : new Promise<Texture | null>((resolve) => {
+            try {
+              loader.load(
+                path,
+                (texture) => {
+                  owned.add(texture);
+                  resolve(configureBackroomsTexture(texture, kind));
+                },
+                undefined,
+                () => resolve(null),
+              );
+            } catch {
+              resolve(null);
+            }
+          });
+    void Promise.all([
+      load(paths.color, 'color'),
+      load(paths.roughness, 'data'),
+      load(paths.normal, 'data'),
+    ]).then(([color, roughness, normal]) => {
+      if (!active || !color) return;
+      setTextures({
+        color,
+        ...(roughness ? { roughness } : {}),
+        ...(normal ? { normal } : {}),
+      });
+    });
+    return () => {
+      active = false;
+      owned.forEach((texture) => texture.dispose());
+    };
+  }, [quality]);
+  return textures;
+}
+
+function FacilityTerrain({
+  cells,
+  walls,
+  quality,
+}: {
+  cells: readonly Cell[];
+  walls: readonly WallFace[];
+  quality: QualityPreset;
+}) {
+  const textures = useBackroomsTextures(quality);
+  const facility = useMemo(() => createFacilityResources(textures, quality), [quality, textures]);
   useEffect(() => () => facility.dispose(), [facility]);
   return (
     <>
@@ -122,27 +181,32 @@ function FacilityTerrain({ cells, walls }: { cells: readonly Cell[]; walls: read
       ))}
       {walls.map((wall) => (
         <group key={wallKey(wall)} {...wallModel(wall)}>
-          <mesh geometry={facility.geometry.wall} material={facility.material.wall} />
           <mesh
-            geometry={facility.geometry.panel}
-            material={facility.material.panel}
-            position={[0, -0.4, 0.001]}
+            geometry={facility.geometry.wall}
+            material={facility.material.wall}
+            position={[0, FACILITY.wallLift, 0]}
           />
-          <mesh
-            geometry={facility.geometry.rail}
-            material={facility.material.trim}
-            position={[0, -0.21, 0.01]}
-          />
-          <mesh
-            geometry={facility.geometry.rail}
-            material={facility.material.housing}
-            position={[0, -0.58, 0.009]}
-          />
-          <mesh
-            geometry={facility.geometry.joint}
-            material={facility.material.trim}
-            position={[-0.493, 0, 0.004]}
-          />
+          {facility.geometry.panel && (
+            <mesh
+              geometry={facility.geometry.panel}
+              material={facility.material.panel}
+              position={[0, -0.52, 0.001]}
+            />
+          )}
+          {facility.geometry.rail && (
+            <mesh
+              geometry={facility.geometry.rail}
+              material={facility.material.trim}
+              position={[0, -0.51, 0.01]}
+            />
+          )}
+          {facility.geometry.joint && (
+            <mesh
+              geometry={facility.geometry.joint}
+              material={facility.material.trim}
+              position={[-0.493, FACILITY.wallLift, 0.004]}
+            />
+          )}
         </group>
       ))}
     </>

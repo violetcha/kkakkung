@@ -7,23 +7,26 @@ import {
   PlaneGeometry,
   RGBAFormat,
   SRGBColorSpace,
+  type Texture,
 } from 'three';
+import type { QualityPreset } from './quality-presets';
 
 export const FACILITY = Object.freeze({
-  wallHeight: 1.2,
-  ceilingHeight: 1.2,
-  background: '#080d10',
-  fogNear: 1.85,
-  fogFar: 3,
-  ambient: 0.28,
+  wallHeight: 1.9,
+  ceilingHeight: 1.9,
+  wallLift: 0.35,
+  background: '#211b0e',
+  fogNear: 1.7,
+  fogFar: 3.2,
+  ambient: 0.34,
 });
 
 /** 시선 방향 국소 조명과 바닥광. 근접 벽 과다 노출과 원거리 가독성의 균형은 facility-lighting.test가 고정한다. */
 export const LIGHTING = Object.freeze({
-  ambientColor: '#99b6bc',
-  hemisphere: { sky: '#b2c4c5', ground: '#2c3d41', intensity: 0.62 },
-  spot: { color: '#e5dcbb', intensity: 5.5, distance: 3.4, angle: 0.85, penumbra: 0.8, decay: 2 },
-  fill: { color: '#8bb8bd', intensity: 0.5, distance: 1.8, decay: 2 },
+  ambientColor: '#d2bd72',
+  hemisphere: { sky: '#d8c77d', ground: '#4b3b1f', intensity: 0.64 },
+  spot: { color: '#ffe29a', intensity: 5.2, distance: 3.5, angle: 0.88, penumbra: 0.82, decay: 2 },
+  fill: { color: '#d8b96a', intensity: 0.46, distance: 1.8, decay: 2 },
 });
 
 /** 장비·출구 표식 색. 상태는 형상으로도 구분하며 색은 HUD와 같은 규칙을 쓴다. */
@@ -43,22 +46,23 @@ export const EQUIPMENT_COLORS = Object.freeze({
   otherExitGlow: '#705c30',
 });
 
-/** Small deterministic textures authored here; no remote asset or server map seed. */
-function surfaceTexture(floor: boolean) {
+/** Small deterministic carpet/fallback textures; wall PBR maps are user-provided public assets. */
+function surfaceTexture(surface: 'wall' | 'floor') {
   const size = 128;
   const pixels = new Uint8Array(size * size * 4);
+  const floor = surface === 'floor';
   let random = floor ? 307 : 113;
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
       const noise = (random >>> 24) / 255;
       const seam = floor && (x < 2 || y < 2 || x > 125 || y > 125);
-      const streak = !floor && x % 31 < 2 ? -14 : !floor && y % 43 < 1 ? -8 : 0;
-      const shade = seam ? 20 : (floor ? 84 : 137) + noise * (floor ? 24 : 34) + streak;
+      const streak = !floor && x % 31 < 2 ? -12 : !floor && y % 43 < 1 ? -7 : 0;
+      const shade = seam ? 38 : (floor ? 69 : 155) + noise * (floor ? 23 : 28) + streak;
       const offset = (y * size + x) * 4;
-      pixels[offset] = shade * 0.9;
-      pixels[offset + 1] = shade;
-      pixels[offset + 2] = shade * 0.98;
+      pixels[offset] = floor ? shade * 0.92 : shade;
+      pixels[offset + 1] = floor ? shade * 0.82 : shade * 0.78;
+      pixels[offset + 2] = floor ? shade * 0.58 : shade * 0.34;
       pixels[offset + 3] = 255;
     }
   const texture = new DataTexture(pixels, size, size, RGBAFormat);
@@ -69,38 +73,55 @@ function surfaceTexture(floor: boolean) {
   return texture;
 }
 
-export function createFacilityResources() {
-  const wallTexture = surfaceTexture(false);
-  const floorTexture = surfaceTexture(true);
+export type BackroomsTextureSet = Readonly<{
+  color: Texture;
+  roughness?: Texture;
+  normal?: Texture;
+}>;
+
+export function createFacilityResources(
+  textures?: BackroomsTextureSet,
+  quality: QualityPreset = 'medium',
+) {
+  const wallFallback = surfaceTexture('wall');
+  const floorTexture = surfaceTexture('floor');
+  const detailed = quality === 'medium';
   const geometry = {
     floor: new PlaneGeometry(1, 1),
     wall: new PlaneGeometry(1, FACILITY.wallHeight),
-    panel: new PlaneGeometry(1, 0.37),
-    rail: new BoxGeometry(1, 0.025, 0.016),
-    joint: new BoxGeometry(0.012, FACILITY.wallHeight, 0.012),
+    panel: detailed ? new PlaneGeometry(1, 0.14) : null,
+    rail: detailed ? new BoxGeometry(1, 0.035, 0.022) : null,
+    joint: detailed ? new BoxGeometry(0.012, FACILITY.wallHeight, 0.012) : null,
     lamp: new BoxGeometry(0.5, 0.035, 0.16),
     tube: new BoxGeometry(0.39, 0.009, 0.06),
   };
   const material = {
-    wall: new MeshStandardMaterial({ map: wallTexture, roughness: 0.94 }),
-    floor: new MeshStandardMaterial({ map: floorTexture, roughness: 0.7, metalness: 0.1 }),
-    panel: new MeshStandardMaterial({ color: '#35514e', roughness: 0.82, metalness: 0.16 }),
-    trim: new MeshStandardMaterial({ color: '#566363', roughness: 0.62, metalness: 0.42 }),
-    ceiling: new MeshStandardMaterial({ color: '#33434a', roughness: 0.95 }),
-    housing: new MeshStandardMaterial({ color: '#142325', roughness: 0.7 }),
-    tube: new MeshBasicMaterial({ color: '#e8d39a', toneMapped: false }),
+    wall: new MeshStandardMaterial({
+      color: textures ? '#ffffff' : '#b18b36',
+      map: textures?.color ?? wallFallback,
+      roughnessMap: detailed ? (textures?.roughness ?? null) : null,
+      normalMap: detailed ? (textures?.normal ?? null) : null,
+      roughness: 0.96,
+      metalness: 0,
+    }),
+    floor: new MeshStandardMaterial({ map: floorTexture, roughness: 1, metalness: 0 }),
+    panel: new MeshStandardMaterial({ color: '#6d5530', roughness: 0.9, metalness: 0.02 }),
+    trim: new MeshStandardMaterial({ color: '#776342', roughness: 0.78, metalness: 0.08 }),
+    ceiling: new MeshStandardMaterial({ color: '#8e825e', roughness: 1 }),
+    housing: new MeshStandardMaterial({ color: '#6f694f', roughness: 0.72, metalness: 0.16 }),
+    tube: new MeshBasicMaterial({ color: '#fff2bd', toneMapped: false }),
   };
   let disposed = false;
   return {
     geometry,
     material,
-    textures: [wallTexture, floorTexture],
+    textures: [wallFallback, floorTexture],
     dispose() {
       if (disposed) return;
       disposed = true;
-      Object.values(geometry).forEach((resource) => resource.dispose());
+      Object.values(geometry).forEach((resource) => resource?.dispose());
       Object.values(material).forEach((resource) => resource.dispose());
-      wallTexture.dispose();
+      wallFallback.dispose();
       floorTexture.dispose();
     },
   };

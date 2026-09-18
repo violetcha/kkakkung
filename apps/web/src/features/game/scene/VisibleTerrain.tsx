@@ -8,6 +8,7 @@ import type { Texture } from 'three';
 import type { FaceTextures } from './face-textures';
 import type { OwnerNames } from './ExitOwnerLabel';
 import type { SceneThemeId } from './scene-theme';
+import type { QualityPreset } from './quality-presets';
 export function VisibleTerrain({
   view,
   ownerNames,
@@ -15,6 +16,7 @@ export function VisibleTerrain({
   standIn,
   renderTick,
   theme,
+  quality = 'medium',
 }: {
   view: PrivateView;
   ownerNames?: OwnerNames;
@@ -23,10 +25,11 @@ export function VisibleTerrain({
   standIn?: Texture | null;
   renderTick?(): number | null;
   theme?: SceneThemeId;
+  quality?: QualityPreset;
 }) {
   return (
     <>
-      <ScenePrimitives {...visibilityMask(view)} players={[]} theme={theme} />
+      <ScenePrimitives {...visibilityMask(view)} players={[]} theme={theme} quality={quality} />
       <VisibleExits view={view} ownerNames={ownerNames} />
       <EquipmentObjects view={view} />
       <FaceAvatars view={view} faces={faces} standIn={standIn} renderTick={renderTick} />

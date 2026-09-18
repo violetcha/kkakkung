@@ -18,5 +18,6 @@ it('lifts the floor level without flattening contrast', () => {
   expect(FACILITY.ambient).toBeGreaterThanOrEqual(0.28);
   expect(spotTerm(1)).toBeGreaterThan(3 * (LIGHTING.hemisphere.intensity + FACILITY.ambient));
   expect(FACILITY.fogNear).toBeLessThan(FACILITY.fogFar);
-  expect(FACILITY.fogFar).toBe(3);
+  expect(FACILITY.fogFar).toBeGreaterThanOrEqual(3);
+  expect(FACILITY.fogFar).toBeLessThanOrEqual(3.5);
 });

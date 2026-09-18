@@ -105,7 +105,7 @@ S15P21C204-279
 - Consumes: quality-specific `BackroomsTextureSet` from Task 1.
 - Produces: `createFacilityResources(textures, quality)`, elevated Backrooms geometry, and the default `facility` scene theme.
 
-- [ ] **Step 1: Add failing tests for default theme, tall corridor, and quality geometry**
+- [x] **Step 1: Add failing tests for default theme, tall corridor, and quality geometry**
 
 ```ts
 expect(DEFAULT_SCENE_THEME).toBe('facility');
@@ -113,26 +113,26 @@ expect(FACILITY.wallHeight).toBeGreaterThan(1.6);
 expect(createFacilityResources(undefined, 'low').geometry.panel).toBeNull();
 ```
 
-- [ ] **Step 2: Run the three scene tests and verify the assertions fail**
+- [x] **Step 2: Run the three scene tests and verify the assertions fail**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/scene/scene-theme.test.ts apps/web/src/features/game/scene/facility-rendering.test.ts apps/web/src/features/game/scene/facility-lighting.test.ts`
 
-- [ ] **Step 3: Implement the Backrooms geometry and quality-aware materials**
+- [x] **Step 3: Implement the Backrooms geometry and quality-aware materials**
 
 Use a `1 × wallHeight` wall, carpet floor, ceiling tile, fluorescent housing/tube, and optional low-cost trim. Apply `RepeatWrapping` and the correct color space through the texture helper; keep wall positions and server cells unchanged.
 
-- [ ] **Step 4: Pass `quality` through `VisibleTerrain` and `ScenePrimitives`**
+- [x] **Step 4: Pass `quality` through `VisibleTerrain` and `ScenePrimitives`**
 
 ```tsx
 <VisibleTerrain view={view} theme={theme} quality={quality} />
 ```
 
-- [ ] **Step 5: Run the targeted scene tests and web typecheck**
+- [x] **Step 5: Run the targeted scene tests and web typecheck**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/scene/*.test.ts`
 Run: `.\\node_modules\\.bin\\tsc.cmd --noEmit -p apps/web/tsconfig.json`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```text
 design: 미로를 좁은 백룸형 복도로 바꾼다

@@ -1,13 +1,38 @@
 import { expect, it } from 'vitest';
-import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import { Mesh, MeshBasicMaterial, Raycaster, Texture, Vector3 } from 'three';
 import { privateViewSchema } from '@kkakkung/protocol/game-messages';
-import { createFacilityResources } from './facility-theme';
+import { createFacilityResources, FACILITY } from './facility-theme';
 import { RENDER_SCENES, SELF_MOTIONS, renderFixture } from './render-fixture';
 import { sampleSelf } from './action-interpolation';
 import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
 import { wallModel } from './scene-model';
 import { visibleExitModel } from './visible-exit-model';
 import { visibilityMask } from './visibility-mask';
+
+it('builds a tall one-cell corridor and drops decorative wall layers on low quality', () => {
+  expect(FACILITY.wallHeight).toBeGreaterThanOrEqual(1.8);
+  expect(FACILITY.ceilingHeight).toBe(FACILITY.wallHeight);
+
+  const low = createFacilityResources(undefined, 'low');
+  try {
+    expect(low.geometry.panel).toBeNull();
+  } finally {
+    low.dispose();
+  }
+});
+
+it('connects medium quality colour, roughness and normal maps to the wall material', () => {
+  const textures = { color: new Texture(), roughness: new Texture(), normal: new Texture() };
+  const resources = createFacilityResources(textures, 'medium');
+  try {
+    expect(resources.material.wall.map).toBe(textures.color);
+    expect(resources.material.wall.roughnessMap).toBe(textures.roughness);
+    expect(resources.material.wall.normalMap).toBe(textures.normal);
+  } finally {
+    resources.dispose();
+    Object.values(textures).forEach((texture) => texture.dispose());
+  }
+});
 
 it('all inspection scenes obey the real recipient contract in every direction', () => {
   for (const scene of RENDER_SCENES)
@@ -37,6 +62,7 @@ it('facility walls and their raised panels face the passage on all four exit sid
       const exit = visibleExitModel(renderFixture('출구·장비', facing))[0]!;
       const model = wallModel(exit.wall);
       for (const geometry of [resources.geometry.wall, resources.geometry.panel]) {
+        if (!geometry) throw new Error('medium quality wall layers must exist');
         const mesh = new Mesh(geometry, material);
         mesh.position.fromArray(model.position);
         mesh.rotation.set(...model.rotation);
@@ -62,7 +88,7 @@ it('facility walls and their raised panels face the passage on all four exit sid
 it('each scene releases every shared GPU resource exactly once on repeated cleanup', () => {
   const resources = createFacilityResources();
   const owned = [
-    ...Object.values(resources.geometry),
+    ...Object.values(resources.geometry).filter((resource) => resource !== null),
     ...Object.values(resources.material),
     ...resources.textures,
   ];

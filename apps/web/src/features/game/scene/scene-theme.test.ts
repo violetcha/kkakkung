@@ -8,10 +8,10 @@ import {
 
 const storageOf = (value: string | null) => ({ getItem: () => value });
 
-it('defaults to the dark block theme', () => {
-  expect(DEFAULT_SCENE_THEME).toBe('block');
-  expect(resolveSceneTheme('', storageOf(null))).toBe('block');
-  expect(resolveSceneTheme(null, null)).toBe('block');
+it('defaults new and unknown viewers to the backrooms facility', () => {
+  expect(DEFAULT_SCENE_THEME).toBe('facility');
+  expect(resolveSceneTheme('', storageOf(null))).toBe('facility');
+  expect(resolveSceneTheme(null, null)).toBe('facility');
 });
 
 it('lets the URL pick a theme, then the saved choice, and ignores unknown values', () => {
@@ -19,7 +19,7 @@ it('lets the URL pick a theme, then the saved choice, and ignores unknown values
   expect(resolveSceneTheme('?theme=block', storageOf('facility'))).toBe('block');
   expect(resolveSceneTheme('?other=1', storageOf('facility'))).toBe('facility');
   expect(resolveSceneTheme('?theme=neon', storageOf('facility'))).toBe('facility');
-  expect(resolveSceneTheme('?theme=neon', storageOf('neon'))).toBe('block');
+  expect(resolveSceneTheme('?theme=neon', storageOf('neon'))).toBe('facility');
 });
 
 it('survives a storage that throws and remembers a choice when it can', () => {
@@ -31,7 +31,7 @@ it('survives a storage that throws and remembers a choice when it can', () => {
       throw new Error('blocked');
     },
   };
-  expect(resolveSceneTheme('', throwing)).toBe('block');
+  expect(resolveSceneTheme('', throwing)).toBe('facility');
   expect(() => rememberSceneTheme('facility', throwing)).not.toThrow();
   const written: Record<string, string> = {};
   rememberSceneTheme('facility', { setItem: (key, value) => void (written[key] = value) });
