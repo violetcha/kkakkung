@@ -47,16 +47,6 @@
   border: 1px solid #3a5556;
   border-radius: 16px;
 }
-.solo-position {
-  position: absolute;
-  bottom: 12px;
-  left: 16px;
-  padding: 5px 12px;
-  margin: 0;
-  border-radius: 6px;
-  background: #10191ee6;
-  color: #eaf6ed;
-}
 .solo-devices {
   display: grid;
   gap: 6px;
@@ -716,17 +706,20 @@
   background: #0b0a07;
   box-shadow: 0 16px 48px #000a;
 }
-.game-stage > .product-canvas {
+.game-stage > .product-canvas,
+.solo-stage > .product-canvas {
   position: absolute;
   inset: 0;
   height: 100%;
   z-index: 0;
 }
-.game-stage > *:not(.product-canvas) {
+.game-stage > *:not(.product-canvas),
+.solo-stage > *:not(.product-canvas) {
   z-index: 1;
   min-width: 0;
 }
-.game-stage > .camcorder-overlay {
+.game-stage > .camcorder-overlay,
+.solo-stage > .camcorder-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -806,7 +799,8 @@
   transform: translateX(-50%);
 }
 /* 2 중앙 십자선. 설치할 수 있는 칸이면 색이 바뀐다(S15P21C204-278). */
-.game-stage > .crosshair {
+.game-stage > .crosshair,
+.solo-stage > .crosshair {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -820,7 +814,8 @@
   filter: drop-shadow(0 1px 2px #000);
   transform: translate(-50%, -50%);
 }
-.game-stage > .crosshair[data-install='ready'] {
+.game-stage > .crosshair[data-install='ready'],
+.solo-stage > .crosshair[data-install='ready'] {
   width: 20px;
   height: 20px;
   opacity: 1;
@@ -828,11 +823,13 @@
     linear-gradient(var(--color-success), var(--color-success)) center / 2px 20px no-repeat,
     linear-gradient(var(--color-success), var(--color-success)) center / 20px 2px no-repeat;
 }
-.game-stage > .crosshair[data-install='blocked'] {
+.game-stage > .crosshair[data-install='blocked'],
+.solo-stage > .crosshair[data-install='blocked'] {
   opacity: 0.45;
 }
 /* 아래 가운데 핫바. 사건 기록은 숨은 접근성 레이어에만 둔다. */
-.game-stage > .hotbar {
+.game-stage > .hotbar,
+.solo-stage > .hotbar {
   position: absolute;
   bottom: 22px;
   left: 50%;
@@ -868,7 +865,8 @@
   border-color: #67d38ebd;
 }
 /* 5 우하단 미니맵 */
-.game-stage > .mini-map {
+.game-stage > .mini-map,
+.solo-stage > .mini-map {
   position: absolute;
   right: 28px;
   bottom: 28px;
@@ -1016,7 +1014,8 @@
   .camcorder-corner[data-corner='bottom-right'] {
     right: 14px;
   }
-  .game-stage > .hotbar {
+  .game-stage > .hotbar,
+  .solo-stage > .hotbar {
     bottom: 14px;
     gap: 4px;
     max-width: calc(100% - 24px);
@@ -1027,7 +1026,8 @@
     height: clamp(43px, 13vw, 50px);
     padding: 5px 2px;
   }
-  .game-stage > .mini-map {
+  .game-stage > .mini-map,
+  .solo-stage > .mini-map {
     right: 14px;
     bottom: 74px;
     width: 86px;

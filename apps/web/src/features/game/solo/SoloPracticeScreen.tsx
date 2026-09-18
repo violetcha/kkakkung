@@ -8,6 +8,7 @@ import { KeyChallenge } from '../pose/KeyChallenge';
 import { POSE_LABELS } from '../pose/PoseChallenge';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS } from './solo-world';
+import { SoloPracticeHud } from './SoloPracticeHud';
 // 진단 오버레이(제거 가능): 아래 두 import 와 DebugOverlay 마운트·토글·단축키만 지우면 된다.
 import { DebugOverlay } from '../../debug/DebugOverlay';
 import { debugFeed, installDebugShortcut, useDebugOverlayEnabled } from '../../debug/debug-feed';
@@ -24,6 +25,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const [busy, setBusy] = useState(false);
   const [microphone, setMicrophone] = useState(false);
   const [error, setError] = useState('');
+  const recordingStartedAtMs = useRef(Date.now());
   const readAudio = useCallback(() => session.current?.getLocalAudioStatus() ?? null, []);
   const changeAudio = useCallback(
     (value: AudioPreferences) => session.current?.setAudioPreferences(value),
@@ -142,6 +144,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
           <button
             disabled={closing}
             onClick={() => {
+              recordingStartedAtMs.current = Date.now();
               setSnapshot(null);
               setError('');
               setMicrophone(false);
@@ -156,16 +159,20 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
           <>
             <div className="solo-layout">
               <div className="solo-stage">
-                <WorldCanvas
+                <div className="product-canvas">
+                  <WorldCanvas
+                    view={snapshot.view}
+                    renderTick={renderTick}
+                    ownerNames={{ 'solo-self': '나' }}
+                    quality="low"
+                  />
+                </div>
+                <SoloPracticeHud
                   view={snapshot.view}
-                  renderTick={renderTick}
-                  ownerNames={{ 'solo-self': '나' }}
-                  quality="low"
+                  tick={snapshot.tick}
+                  selected={snapshot.interaction.selectedEquipment}
+                  startedAtMs={recordingStartedAtMs.current}
                 />
-                <p className="solo-position" aria-label="체험 위치">
-                  위치 {snapshot.self.cell.x}, {snapshot.self.cell.y} ·
-                  {['북쪽', '동쪽', '남쪽', '서쪽'][snapshot.self.dir]}
-                </p>
               </div>
               <div>
                 <LocalControls
