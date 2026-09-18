@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
-import { roundFixture, viewFixture } from '../features/room/product-fixture';
+import { roundFixture } from '../features/room/product-fixture';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { GameHud } from '../features/game/flow/GameHud';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
@@ -9,16 +9,12 @@ import { MiniMap } from '../features/game/map/MiniMap';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import type { EquipmentKind } from '@kkakkung/protocol/game-schema';
+import { renderFixture } from '../features/game/scene/render-fixture';
 
 const TICK = 100;
 
 function previewView(role: 'runner' | 'tagger'): PrivateView {
-  const base = viewFixture({
-    visibleCells: [
-      { x: 1, y: 1 },
-      { x: 1, y: 0 },
-    ],
-  });
+  const base = renderFixture('복도');
   const self = base.self!;
   if (self.status !== 'ACTIVE') throw new Error('fixture self must be active');
   return {

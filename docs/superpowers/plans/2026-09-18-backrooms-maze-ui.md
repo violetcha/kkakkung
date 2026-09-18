@@ -238,25 +238,25 @@ S15P21C204-279
 - Consumes: `.camcorder-overlay`, `.hotbar`, `.mini-map`, `.hud-drawer`, `.game-status-a11y`.
 - Produces: desktop and 400px layouts with no left-bottom HUD or horizontal overflow.
 
-- [ ] **Step 1: Rewrite the E2E assertions before CSS**
+- [x] **Step 1: Rewrite the E2E assertions before CSS**
 
 Assert that the camcorder frame fills the stage, the event log is absent, the hotbar has five slots at bottom center, and the minimap stays bottom right at desktop and 400px.
 
-- [ ] **Step 2: Run the E2E spec and verify it fails against the old layout**
+- [x] **Step 2: Run the E2E spec and verify it fails against the old layout**
 
 Run: `.\\node_modules\\.bin\\playwright.cmd test tests/e2e/game-hud-layout.spec.ts --project=chromium`
 
-- [ ] **Step 3: Implement glass/metal HUD CSS and responsive sizing**
+- [x] **Step 3: Implement glass/metal HUD CSS and responsive sizing**
 
 Use fluid slot sizes with `clamp()`, no pixel-art border radius, corner brackets via CSS borders, and a compact minimap. Hide hotbar labels/details below 700px while retaining accessible names.
 
-- [ ] **Step 4: Run the E2E spec and capture screenshots**
+- [x] **Step 4: Run the E2E spec and capture screenshots**
 
 Run: `.\\node_modules\\.bin\\playwright.cmd test tests/e2e/game-hud-layout.spec.ts --project=chromium`
 
 Save desktop and 400px screenshots under `artifacts/S15P21C204-279/` and inspect both.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 design: 백룸 경기 HUD를 반응형으로 배치한다
