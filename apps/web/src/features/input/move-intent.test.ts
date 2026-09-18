@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { INPUT_TUNING } from './input-tuning';
+import { INPUT_TUNING, SERVER_ACTION_MS } from './input-tuning';
 import { createMoveIntentController, MOVE_REFRESH_MS, type MoveIntent } from './move-intent';
 
 function harness() {
@@ -74,20 +74,75 @@ describe('createMoveIntentController', () => {
     expect(base.controller.current).toBeNull();
   });
 
-  it('refreshes the held intent every 100ms and stops on release', () => {
+  // S15P21C204-281. 짧게 기울였다 돌아오면 정확히 한 칸이다. 서버는 한 칸이 끝나는 Tick에만
+  // 유지 의도를 보므로, 의도를 보낸 뒤 해제하면 시작한 한 칸만 남고 다음 칸이 시작되지 않는다.
+  it('sends one cell for a tap and stops refreshing', () => {
     const base = harness();
     base.controller.updateMotion(FORWARD, 1000);
     base.controller.updateMotion(FORWARD, 1000 + INPUT_TUNING.forwardHoldMs);
     expect(base.sent).toEqual(['forward']);
+    expect(base.controller.phase).toBe('tap');
+
+    base.advance(MOVE_REFRESH_MS);
+    base.fire();
+    expect(base.sent).toEqual(['forward', null]);
+    expect(base.controller.phase).toBe('tap');
+
+    // 기울임을 풀면 더 보내지 않는다. 한 칸은 서버가 끝까지 옮긴다.
+    base.controller.updateMotion(0, 1000 + INPUT_TUNING.forwardHoldMs + MOVE_REFRESH_MS);
+    expect(base.sent).toEqual(['forward', null]);
+    expect(base.controller.phase).toBe('idle');
+    expect(base.timerCount).toBe(0);
+  });
+
+  it('upgrades to continuous movement when the lean is kept, then refreshes every 100ms', () => {
+    const base = harness();
+    const armedAt = 1000 + INPUT_TUNING.forwardHoldMs;
+    base.controller.updateMotion(FORWARD, 1000);
+    base.controller.updateMotion(FORWARD, armedAt);
+
+    base.advance(MOVE_REFRESH_MS);
+    base.fire();
+    expect(base.sent).toEqual(['forward', null]);
+
+    base.advance(INPUT_TUNING.holdToContinuousMs - MOVE_REFRESH_MS);
+    base.controller.updateMotion(FORWARD, armedAt + INPUT_TUNING.holdToContinuousMs);
+    expect(base.controller.phase).toBe('hold');
+    expect(base.sent).toEqual(['forward', null, 'forward']);
 
     base.fire();
     base.fire();
-    expect(base.sent).toEqual(['forward', 'forward', 'forward']);
+    expect(base.sent).toEqual(['forward', null, 'forward', 'forward', 'forward']);
     expect(MOVE_REFRESH_MS).toBe(100);
+    // 연속 전환은 서버 한 칸보다 먼저 끝나야 다음 칸이 끊기지 않는다.
+    expect(INPUT_TUNING.holdToContinuousMs).toBeLessThan(SERVER_ACTION_MS.move);
 
     base.controller.release();
     expect(base.sent.at(-1)).toBeNull();
     expect(base.timerCount).toBe(0);
+    expect(base.controller.phase).toBe('idle');
+  });
+
+  it('keeps the keyboard on the same tap and hold rule', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+    base.controller.setKey('forward', true);
+    expect(base.sent).toEqual([]);
+
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    expect(base.sent).toEqual(['forward']);
+    expect(base.controller.phase).toBe('tap');
+
+    base.advance(MOVE_REFRESH_MS);
+    base.fire();
+    expect(base.sent).toEqual(['forward', null]);
+
+    // 키를 계속 누르고 있으면 표본이 없어도 타이머가 연속으로 올린다.
+    base.advance(INPUT_TUNING.holdToContinuousMs);
+    base.fire();
+    expect(base.controller.phase).toBe('hold');
+    expect(base.sent).toEqual(['forward', null, 'forward']);
   });
 
   it('sends the null direction exactly once on release', () => {

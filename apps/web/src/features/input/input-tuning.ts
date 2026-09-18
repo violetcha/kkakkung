@@ -23,6 +23,12 @@ export type InputTuning = Readonly<{
   turnHoldMs: number;
   /** 중립 복귀로 인정하는 안정 구간. */
   neutralHoldMs: number;
+  /**
+   * S15P21C204-281. 이동 의도가 발동한 뒤 이만큼 더 유지하면 한 칸에서 연속 이동으로 바뀐다.
+   * 짧게 기울였다 돌아오면 정확히 한 칸만 가고, 계속 기울이면 끊김 없이 이어진다.
+   * 서버 한 칸(`SERVER_ACTION_MS.move`)보다 짧아야 다음 칸이 시작되기 전에 전환이 끝난다.
+   */
+  holdToContinuousMs: number;
   /** 보정에 필요한 신선한 서로 다른 표본 수와 허용 산포. */
   calibrationMinSamples: number;
   calibrationMaxSpreadRad: number;
@@ -46,6 +52,8 @@ export const INPUT_TUNING: InputTuning = Object.freeze({
   backHoldMs: 320,
   turnHoldMs: 150,
   neutralHoldMs: 150,
+  holdToContinuousMs: 400, // 임시값. S15P21C204-280 해제 지연 실측 뒤 확정한다
+
   calibrationMinSamples: 8,
   calibrationMaxSpreadRad: 0.1745, // 10도
   filterMinCutoffHz: 1,
