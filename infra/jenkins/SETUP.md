@@ -84,6 +84,8 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOUR
 
 **호스트 속도 (2026-09-16 추가)**: EC2 는 t3.xlarge(버스터블)라 CPU 크레딧이 바닥나면 steal 이 치솟고, SwiftShader 로 도는 Playwright e2e 가 먼저 무너진다(kkakkung-mr #171: `facility-rendering.spec.ts` 가 재시도 포함 2회 60초 초과, 다른 21개 e2e 는 평소 시간. 로컬 SwiftShader 강제 실행은 12초). Verify 단계는 앞뒤로 `host before-verify/after-verify: load=… steal_ticks=… idle_ticks=…` 줄을 남기므로, 두 줄의 steal_ticks 차이가 크면(수천 틱 이상) 호스트가 느렸던 것이고 코드 회귀가 아니다. 그 spec 은 예산 120초·5인 장면 스크린샷 분리·실패 시 단계별 소요(`step-timings-ms` 첨부)로 바꿨다(S15P21C204-264).
 
+**MR 빌드는 Replay 하지 않는다 (2026-09-18 추가)**: `kkakkung-mr` 는 GitLab 웹훅이 넘긴 `gitlabSourceBranch` 로 체크아웃한다. Jenkins UI 의 Replay/Rebuild 는 그 변수 없이 돌아 "Couldn't find any revision to build" 로 곧바로 실패한다(kkakkung-mr #187·#190·#192·#193, 9/17). 다시 검증하려면 그 브랜치에 커밋을 push 한다. 검증 중에 같은 브랜치에 또 push 하면 "체크아웃된 커밋이 GitLab 이 보낸 커밋과 다릅니다" 로 앞 빌드가 중단되고 새 빌드가 도는 것이 정상이다(#186).
+
 ## 7. 첫 빌드 전 확인 (완료, 2026-09-08)
 
 - EC2 에서 40번 Dockerfile 두 개 빌드 → `compose.production.yaml` 로 기동 → `/health/ready` 200, Origin 403/200 확인까지 마쳤습니다.

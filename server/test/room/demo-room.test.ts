@@ -126,6 +126,8 @@ async function fixture(demoRooms = true, strictProduct = false) {
   };
 }
 
+// The phase waits below are wider than the sibling tests: under a full parallel vitest run on a
+// 4-core host this match with five puppets took 15.9 s to reach PLAYING (2026-09-18, local).
 it('takes one operator through the real phases into a match with five puppets', async () => {
   const f = await fixture();
   try {
@@ -148,17 +150,17 @@ it('takes one operator through the real phases into a match with five puppets', 
     expect(JSON.stringify(rosters.at(-1))).not.toMatch(/runner|tagger/);
 
     // Practice: puppets report at once, so the operator's own report moves the room on.
-    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 5000 });
+    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 15_000 });
     expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
       'accepted',
     );
 
     // A real match: A's map selection, the 3:3 assignment and the operator's own exit.
-    await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
+    await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
     expect((await f.send(room, { type: 'LOAD_READY', payload: loadPayload(views) })).status).toBe(
       'accepted',
     );
-    await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 15_000 });
+    await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 30_000 });
     const self = views.at(-1)?.self;
     expect(self?.status === 'ACTIVE' && self.role).toBe('runner');
     // A real game instance with the round armed, not a practice instance.
