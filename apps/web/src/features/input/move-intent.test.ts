@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { INPUT_TUNING, SERVER_ACTION_MS } from './input-tuning';
-import { createMoveIntentController, MOVE_REFRESH_MS, type MoveIntent } from './move-intent';
+import {
+  createMoveIntentController,
+  MOVE_REFRESH_MS,
+  releaseLagStats,
+  type MoveIntent,
+} from './move-intent';
 
 function harness() {
   const sent: MoveIntent[] = [];
@@ -32,6 +37,17 @@ function harness() {
         timers.delete(handle);
         handler();
       }
+    },
+  };
+}
+
+/** 하네스의 advance 는 누적이다. 절대 시각으로 다루기 위해 현재 값을 들고 다닌다. */
+function stopwatch(base: ReturnType<typeof harness>) {
+  let at = 0;
+  return {
+    to(target: number) {
+      base.advance(target - at);
+      at = target;
     },
   };
 }
@@ -339,5 +355,71 @@ describe('createMoveIntentController', () => {
     }
 
     expect(base.sent).toEqual(['forward']);
+  });
+
+  // S15P21C204-280. 해제 지연은 "해제를 보인 표본의 시각"과 "그 표본을 받아 의도를 끊은 시각"의
+  // 차이다. 두 시각은 같은 시계(vision)를 쓰므로 추론·필터·전달에 걸린 시간만 남는다.
+  it('measures the lag between the releasing sample and the release', () => {
+    const base = harness();
+    expect(base.controller.releaseLag).toEqual({
+      lastMs: null,
+      medianMs: null,
+      maxMs: null,
+      samples: 0,
+    });
+
+    const clock = stopwatch(base);
+    const armedAt = 1000 + INPUT_TUNING.forwardHoldMs;
+    base.controller.updateMotion(FORWARD, 1000);
+    base.controller.updateMotion(FORWARD, armedAt);
+    // 표본은 armedAt + 40 에 찍혔고 우리는 그보다 25ms 뒤에 처리한다.
+    clock.to(armedAt + 40 + 25);
+    base.controller.updateMotion(0, armedAt + 40);
+
+    expect(base.controller.releaseLag).toMatchObject({ lastMs: 25, medianMs: 25, maxMs: 25 });
+    expect(base.controller.releaseLag.samples).toBe(1);
+  });
+
+  it('keeps only the last releases and reports the median and the largest', () => {
+    const base = harness();
+    const clock = stopwatch(base);
+    let sampleAt = 1000;
+    for (const lag of [10, 30, 20]) {
+      clock.to(sampleAt);
+      base.controller.updateMotion(FORWARD, sampleAt);
+      clock.to(sampleAt + INPUT_TUNING.forwardHoldMs);
+      base.controller.updateMotion(FORWARD, sampleAt + INPUT_TUNING.forwardHoldMs);
+      const releasedAt = sampleAt + INPUT_TUNING.forwardHoldMs + 40;
+      clock.to(releasedAt + lag);
+      base.controller.updateMotion(0, releasedAt);
+      sampleAt = releasedAt + 1000;
+    }
+    expect(base.controller.releaseLag).toMatchObject({ lastMs: 20, medianMs: 20, maxMs: 30 });
+    expect(base.controller.releaseLag.samples).toBe(3);
+  });
+
+  it('does not measure the keyboard, where no sample is involved', () => {
+    const base = harness();
+    base.controller.setMode('keyboard');
+    base.controller.setKey('forward', true);
+    base.advance(INPUT_TUNING.forwardHoldMs);
+    base.fire();
+    base.controller.setKey('forward', false);
+    expect(base.controller.releaseLag.samples).toBe(0);
+  });
+});
+
+describe('releaseLagStats', () => {
+  it('averages the middle pair for an even window', () => {
+    expect(releaseLagStats([10, 20, 30, 40])).toMatchObject({ medianMs: 25, maxMs: 40 });
+  });
+
+  it('is empty until a release is seen', () => {
+    expect(releaseLagStats([])).toEqual({
+      lastMs: null,
+      medianMs: null,
+      maxMs: null,
+      samples: 0,
+    });
   });
 });

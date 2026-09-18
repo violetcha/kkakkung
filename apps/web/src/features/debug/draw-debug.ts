@@ -174,6 +174,8 @@ const deg = (rad: number | null | undefined) =>
   rad === null || rad === undefined || !Number.isFinite(rad)
     ? '-'
     : `${((rad * 180) / Math.PI).toFixed(1)}°`;
+const ms = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(value) ? '-' : `${Math.round(value)}ms`;
 
 /** 상대 신호와 진입/해제 임계를 한 줄 게이지로 그린다. 중앙이 중립이다. */
 function gauge(
@@ -225,7 +227,12 @@ export function readoutLines(feed: DebugFeedState, nowMs: number): string[] {
     `좌우 yaw 상대 ${deg(m?.yawRelative)} (원시 ${deg(m?.yawRaw)}) · 회전 진입 ${deg(t?.turnEnter)} 해제 ${deg(t?.turnExit)}`,
   );
   lines.push(
-    `이동 ${m?.move ?? '-'}${m?.motionActive ? ' (모션)' : ''}${m?.leanGatedByYaw ? ' · 고개 돌림: 이동 차단' : ''} · 회전 latch ${m?.turnLatched ? '잠김' : '해제'}`,
+    `이동 ${m?.move ?? '-'}${m?.motionActive ? ' (모션)' : ''} · 단계 ${m?.movePhase ?? '-'}${m?.leanGatedByYaw ? ' · 고개 돌림: 이동 차단' : ''} · 회전 latch ${m?.turnLatched ? '잠김' : '해제'}`,
+  );
+  // S15P21C204-280. 해제 지연: 표본이 해제를 보인 뒤 의도를 끊기까지. 몸이 돌아오는 시간은 이 앞이다.
+  const lag = m?.releaseLag;
+  lines.push(
+    `해제 지연 최근 ${ms(lag?.lastMs)} · 중앙값 ${ms(lag?.medianMs)} · 최대 ${ms(lag?.maxMs)} (${lag?.samples ?? 0}회)`,
   );
   const gesture = s?.gesture && s.gesture.status === 'valid' ? s.gesture.data : null;
   const poseQ = s?.pose && s.pose.status === 'valid' ? s.pose.data.quality : 'missing';

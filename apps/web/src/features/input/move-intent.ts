@@ -17,6 +17,43 @@ export type MoveIntent = MoveDirection | null;
  */
 export type MovePhase = 'idle' | 'tap' | 'hold';
 
+/**
+ * S15P21C204-280. 해제 지연. 기울임이 해제 임계 아래로 내려온 **표본 시각**과 그 표본을 받아
+ * 의도를 실제로 끊은 시각의 차이다. 추론·필터·전달에 걸린 시간이며, 몸이 돌아오는 시간은 이
+ * 값에 들어 있지 않다(그 앞이다). 판정에는 쓰지 않고 진단 표시만 한다.
+ */
+export type ReleaseLagStats = Readonly<{
+  lastMs: number | null;
+  medianMs: number | null;
+  maxMs: number | null;
+  samples: number;
+}>;
+
+/** 최근 몇 번을 중앙값·최댓값으로 볼지. 한 번의 값으로 판단하지 않기 위한 창이다. */
+export const RELEASE_LAG_WINDOW = 10;
+
+const NO_RELEASE_LAG: ReleaseLagStats = Object.freeze({
+  lastMs: null,
+  medianMs: null,
+  maxMs: null,
+  samples: 0,
+});
+
+/** 짝수 개면 가운데 두 값의 평균. 창이 작아 정렬 비용은 무시할 수 있다. */
+export function releaseLagStats(window: readonly number[]): ReleaseLagStats {
+  if (window.length === 0) return NO_RELEASE_LAG;
+  const sorted = [...window].sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  const median =
+    sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  return {
+    lastMs: window[window.length - 1]!,
+    medianMs: median,
+    maxMs: sorted[sorted.length - 1]!,
+    samples: window.length,
+  };
+}
+
 /** 유지 중 의도를 다시 알리는 주기. 서버 행동 시간과 다른 값이다. */
 export const MOVE_REFRESH_MS = 100;
 
@@ -48,6 +85,8 @@ export interface MoveIntentController {
   readonly mode: InputMode;
   /** S15P21C204-281. 지금 한 칸(tap)인지 유지 이동(hold)인지. 시험과 디버그 표시가 읽는다. */
   readonly phase: MovePhase;
+  /** S15P21C204-280. 최근 해제 지연. 모션 모드에서만 쌓이며 판정에는 쓰지 않는다. */
+  readonly releaseLag: ReleaseLagStats;
 }
 
 export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentController {
@@ -74,6 +113,9 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
   let tapTimer: number | null = null;
   /** 계속 기울이고 있을 때 연속 이동으로 올리는 일회성 타이머(키보드는 표본이 오지 않아 필요). */
   let upgradeTimer: number | null = null;
+  /** S15P21C204-280. 해제를 보인 표본의 시각. 의도를 끊는 순간 지연으로 바꾸고 비운다. */
+  let releaseSampleAtMs: number | null = null;
+  const releaseLagWindow: number[] = [];
 
   const stopTimer = () => {
     if (timer === null) return;
@@ -179,7 +221,18 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     startTimer();
   };
 
+  /** 해제를 보인 표본과 지금 사이의 시간을 창에 넣는다. 음수(시계 역행)는 버린다. */
+  const recordReleaseLag = (nowMs: number) => {
+    if (releaseSampleAtMs === null) return;
+    const lag = nowMs - releaseSampleAtMs;
+    releaseSampleAtMs = null;
+    if (!Number.isFinite(lag) || lag < 0) return;
+    releaseLagWindow.push(lag);
+    if (releaseLagWindow.length > RELEASE_LAG_WINDOW) releaseLagWindow.shift();
+  };
+
   const toIdle = () => {
+    recordReleaseLag(deps.now());
     phase = 'idle';
     armedAt = null;
     armedDirection = null;
@@ -251,10 +304,16 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
 
   return {
     updateMotion(relativeLeanRad, nowMs) {
+      // S15P21C204-280. 이 표본이 해제를 처음 보이는 표본인지 알려면 직전 방향이 필요하다.
+      const before = mode === 'motion' ? desiredDirection(nowMs) : null;
+      const markRelease = () => {
+        if (before !== null && desiredDirection(nowMs) === null) releaseSampleAtMs = nowMs;
+      };
       // 키보드 모드에서는 모션 후보를 채택하지 않는다. 회전 컨트롤러와 같은 규칙이다.
       if (mode !== 'motion' || relativeLeanRad === null || !Number.isFinite(relativeLeanRad)) {
         // 보정 전이거나 표본이 없으면 모션 의도를 만들지 않는다.
         clearMotion();
+        markRelease();
         resolve();
         return;
       }
@@ -284,6 +343,7 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
         backSince ??= nowMs;
         backActive = nowMs - backSince >= tuning.backHoldMs;
       }
+      markRelease();
       resolve();
     },
 
@@ -355,6 +415,9 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     },
     get phase() {
       return phase;
+    },
+    get releaseLag() {
+      return releaseLagStats(releaseLagWindow);
     },
   };
 }
