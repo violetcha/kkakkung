@@ -1080,21 +1080,59 @@ it('locks COUNTDOWN, tab hide and socket close synchronously and cleans up once'
   expect(f.leave).toHaveBeenCalledOnce();
   expect(f.messages.size).toBe(0);
 });
-it('keeps Room for personal result but removes scene immediately and later leaves independently', async () => {
+it('keeps Room and media until the round result, then removes the scene and leaves independently', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });
   f.messages.get('private-view')!(
     viewFixture({ self: { playerId: 'self', role: 'runner', status: 'ESCAPED' } }),
   );
   await Promise.resolve();
-  expect(f.end).toHaveBeenCalledOnce();
+  expect(f.end).not.toHaveBeenCalled();
   expect(f.leave).not.toHaveBeenCalled();
-  expect(f.runtime.getSnapshot().view).toBeNull();
+  expect(f.runtime.getSnapshot().view).toMatchObject({
+    self: { playerId: 'self', role: 'runner', status: 'ESCAPED' },
+    knownTerrain: [],
+    visibleEntities: [],
+  });
   f.state({ stateVersion: 11, counts: { escaped: 2, captured: 0 }, phase: 'RESULT' });
   expect(f.runtime.getSnapshot().round?.counts.escaped).toBe(2);
+  await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
   await f.runtime.leave();
   expect(f.leave).toHaveBeenCalledOnce();
   expect(f.end).toHaveBeenCalledOnce();
+});
+it('keeps media and the projected view while spectating, then ends at the round result', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING', stateVersion: 11 });
+  f.messages.get('private-view')!(
+    viewFixture({
+      stateVersion: 11,
+      self: { playerId: 'self', role: 'runner', status: 'CAPTURED' },
+      spectating: {
+        targetId: 'runner-a',
+        cell: { x: 7, y: 8 },
+        dir: 2,
+        action: null,
+        candidates: ['runner-a', 'runner-b'],
+      },
+    }),
+  );
+  await Promise.resolve();
+
+  expect(f.end).not.toHaveBeenCalled();
+  expect(f.runtime.getSnapshot().view?.spectating?.targetId).toBe('runner-a');
+  expect(f.fake.setAudioOutputLock).toHaveBeenLastCalledWith('open');
+  expect(f.runtime.send({ type: 'SPECTATE', payload: { targetPlayerId: 'runner-b' } })).not.toBe(
+    '',
+  );
+  expect(f.runtime.send({ type: 'SPECTATE', payload: { targetPlayerId: 'foreign' } })).toBe('');
+  expect(f.send.mock.calls.filter(([channel]) => channel === 'command').at(-1)?.[1]).toMatchObject({
+    type: 'SPECTATE',
+    payload: { targetPlayerId: 'runner-b' },
+  });
+
+  f.state({ phase: 'RESULT', stateVersion: 12 });
+  await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
 });
 it('keeps local sound preferences across rematch, prunes departed players and resets on room loss', async () => {
   const f = fixture();

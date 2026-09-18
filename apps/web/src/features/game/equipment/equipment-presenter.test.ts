@@ -48,6 +48,31 @@ it('only renders recipient-visible equipment and uses non-owner sensor wall side
   expect(equipmentPresenter(v, 0)).toBeNull();
   expect(visibleEquipment({ ...v, visibleEntities: [] })).toEqual([]);
 });
+it('renders equipment from a watched runner projection', () => {
+  const active = viewFixture({
+    visibleEntities: [
+      {
+        id: 'sensor',
+        kind: 'sensor',
+        cell: { x: 2, y: 1 },
+        wall: { x: 2, y: 1, side: 3 },
+        state: 'ARMED',
+      },
+    ],
+  });
+  const spectator = {
+    ...active,
+    self: { playerId: 'self', role: 'runner', status: 'CAPTURED' } as const,
+    spectating: {
+      targetId: 'runner-a',
+      cell: { x: 1, y: 1 },
+      dir: 0 as const,
+      action: null,
+      candidates: ['runner-a'],
+    },
+  };
+  expect(visibleEquipment(spectator)).toEqual(active.visibleEntities);
+});
 
 it.each(['move', 'turn'] as const)(
   'locks installation throughout authoritative %s actions',

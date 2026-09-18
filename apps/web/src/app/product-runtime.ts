@@ -386,14 +386,14 @@ export function bindProductRoom(
         mediaViewContext = {
           matchId: view.matchId,
           gameScope: view.gameScope,
-          active: view.self?.status === 'ACTIVE',
+          active: view.self?.status === 'ACTIVE' || view.spectating !== undefined,
         };
       const oldScope = snapshot.view?.gameScope;
       if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
         publish({ markers: [], exchangeNotice: null });
       publish({ view });
       faces.visible(
-        view?.self?.status === 'ACTIVE'
+        view?.self?.status === 'ACTIVE' || view?.spectating
           ? view.visibleEntities
               .filter((p) => p.kind === 'player' && p.id !== session.playerId)
               .map((p) => p.id)
@@ -408,7 +408,6 @@ export function bindProductRoom(
       updateChallenge();
       if (view?.self && view.self.status !== 'ACTIVE') {
         publish({ endedSelf: view.self });
-        void participation.end().catch(failed('참가 종료 뒤 미디어 정리', null));
       }
       updateContext();
       updateLoading();
@@ -649,8 +648,13 @@ export function bindProductRoom(
       ...(own?.installation ? { installationId: own.installation.installationId } : {}),
     };
     bridge.setContext(context);
+    const receivingLiveView = own !== null || snapshot.view?.spectating !== undefined;
     bridge.runtime.setAudioOutputLock(
-      context.pageActive && (round.phase === 'PLAYING' || round.phase === 'TEAM_PRACTICE')
+      pageActive &&
+        participating &&
+        !snapshot.lost &&
+        receivingLiveView &&
+        (round.phase === 'PLAYING' || round.phase === 'TEAM_PRACTICE')
         ? 'open'
         : 'locked',
     );
@@ -699,6 +703,12 @@ export function bindProductRoom(
     const currentTick = clock.renderTick() ?? snapshot.round.serverTick;
     if (!permitsExchange(snapshot.view, command, currentTick)) return '';
     const own = snapshot.view?.self;
+    if (
+      command.type === 'SPECTATE' &&
+      (snapshot.round.phase !== 'PLAYING' ||
+        !snapshot.view?.spectating?.candidates.includes(command.payload.targetPlayerId))
+    )
+      return '';
     if (command.type === 'ROOM_LOCK' || command.type === 'ROOM_KICK') {
       if (
         !['LOBBY', 'DEVICE_CHECK'].includes(snapshot.round.phase) ||

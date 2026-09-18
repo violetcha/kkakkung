@@ -69,16 +69,17 @@ export function createProductView(deps: {
     acceptedVersion = view.stateVersion;
     deadline = null;
     pending = null;
-    current = ended
-      ? {
-          ...view,
-          knownTerrain: [],
-          knownActiveExits: [],
-          visibleCells: [],
-          visibleWallFaces: [],
-          visibleEntities: [],
-        }
-      : view;
+    current =
+      ended && !view.spectating
+        ? {
+            ...view,
+            knownTerrain: [],
+            knownActiveExits: [],
+            visibleCells: [],
+            visibleWallFaces: [],
+            visibleEntities: [],
+          }
+        : view;
     deps.changed(current);
     return true;
   };

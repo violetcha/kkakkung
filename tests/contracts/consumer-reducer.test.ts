@@ -4,8 +4,8 @@
 // consumes command outcomes. No fake consumer, no browser. What is proven: every published
 // view is accepted once and in order, re-delivered or stale views cause no second change, a
 // view ahead of the round waits and is released by the next round state, an ended player stays
-// ended, and an accepted command reaches exactly one terminal display and releases its pending
-// entry when the view catches up.
+// ended while a spectating projection remains visible, and an accepted command reaches exactly
+// one terminal display and releases its pending entry when the view catches up.
 import { describe, expect, it } from 'vitest';
 import type { CommandEnvelope } from '@kkakkung/protocol/game-messages';
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
@@ -101,7 +101,7 @@ describe('protocol private view → C createProductView', () => {
     expect(c.resyncs).toEqual([]);
   });
 
-  it('keeps a captured runner ended: minimal self, empty knowledge, no later revival', () => {
+  it('keeps a captured runner ended while accepting its spectating projection', () => {
     const v = createViewHarness();
     v.h.start();
     const c = viewConsumer(v);
@@ -117,15 +117,18 @@ describe('protocol private view → C createProductView', () => {
     expect(v.h.player('r1').status).toBe('CAPTURED');
     const ended = c.views.view!;
     expect(ended.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });
-    expect(ended.knownTerrain).toEqual([]);
-    expect(ended.visibleEntities).toEqual([]);
-    expect(ended.knownActiveExits).toEqual([]);
-    // Later real views keep the ended shape; nothing revives the player on the client.
+    expect(ended.spectating).toMatchObject({ targetId: 'r2', candidates: ['r2', 'r3'] });
+    const target = v.latestView(ended.spectating!.targetId);
+    expect(ended.knownTerrain).toEqual(target.knownTerrain);
+    expect(ended.visibleEntities).toEqual(target.visibleEntities);
+    expect(ended.knownActiveExits).toEqual(target.knownActiveExits);
+    // Later real views keep the ended self and refresh the target's projected world.
     v.h.move('t2');
     v.tickAndPublish(2);
     deliver(v, c, 'r1', seen);
     expect(c.views.view!.self?.status).toBe('CAPTURED');
-    expect(c.views.view!.visibleCells).toEqual([]);
+    expect(c.views.view!.spectating?.targetId).toBe('r2');
+    expect(c.views.view!.visibleCells).toEqual(v.latestView('r2').visibleCells);
     expect(c.resyncs).toEqual([]);
   });
 });

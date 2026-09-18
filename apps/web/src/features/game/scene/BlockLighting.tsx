@@ -1,8 +1,8 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group } from 'three';
-import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
-import { sampleSelf } from './action-interpolation';
+import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
+import { sampleActor } from './action-interpolation';
 import { BLOCK, BLOCK_LIGHTING } from './block-theme';
 
 /**
@@ -14,12 +14,12 @@ export function BlockLighting({
   self,
   renderTick,
 }: {
-  self: ActiveSelf;
+  self: { cell: Cell; dir: Dir; action?: Action | null };
   renderTick(): number | null;
 }) {
   const carrier = useRef<Group>(null);
   useFrame(() => {
-    const sample = sampleSelf(self, renderTick());
+    const sample = sampleActor(self, renderTick());
     carrier.current?.position.set(sample.x, 0, sample.z);
     carrier.current?.rotation.set(0, sample.yaw, 0);
   });

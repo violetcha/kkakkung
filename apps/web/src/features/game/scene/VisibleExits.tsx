@@ -3,6 +3,8 @@ import { visibleExitModel } from './visible-exit-model';
 import { wallModel } from './scene-model';
 import { EQUIPMENT_COLORS } from './facility-theme';
 import { ExitOwnerLabel, exitOwnerLabel, type OwnerNames } from './ExitOwnerLabel';
+export const exitPerspectivePlayerId = (view: PrivateView) =>
+  view.spectating?.targetId ?? view.self?.playerId;
 export function VisibleExits({
   view,
   ownerNames = {},
@@ -10,6 +12,7 @@ export function VisibleExits({
   view: PrivateView;
   ownerNames?: OwnerNames;
 }) {
+  const perspectivePlayerId = exitPerspectivePlayerId(view);
   return (
     <group>
       {visibleExitModel(view).map((exit) => {
@@ -21,7 +24,7 @@ export function VisibleExits({
         ];
         return (
           <group key={exit.exitId} position={position} rotation={model.rotation}>
-            <ExitOwnerLabel text={exitOwnerLabel(exit.ownerId, view.self?.playerId, ownerNames)} />
+            <ExitOwnerLabel text={exitOwnerLabel(exit.ownerId, perspectivePlayerId, ownerNames)} />
             <mesh>
               <planeGeometry args={[0.65, 0.95]} />
               <meshStandardMaterial color="#80928b" metalness={0.5} roughness={0.6} />
@@ -36,7 +39,7 @@ export function VisibleExits({
                 <meshStandardMaterial
                   color="#61756d"
                   emissive={
-                    exit.ownerId === view.self?.playerId
+                    exit.ownerId === perspectivePlayerId
                       ? EQUIPMENT_COLORS.ownExitGlow
                       : EQUIPMENT_COLORS.otherExitGlow
                   }
@@ -54,7 +57,7 @@ export function VisibleExits({
               <boxGeometry args={[0.14, 0.016, 0.01]} />
               <meshBasicMaterial
                 color={
-                  exit.ownerId === view.self?.playerId
+                  exit.ownerId === perspectivePlayerId
                     ? EQUIPMENT_COLORS.ownExit
                     : EQUIPMENT_COLORS.otherExit
                 }

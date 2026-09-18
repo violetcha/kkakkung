@@ -28,7 +28,7 @@ export function MiniMap({
       ctx.scale(dpr, dpr);
       ctx.fillStyle = '#181817';
       ctx.fillRect(0, 0, size, size);
-      const model = mapDrawModel(view);
+      const model = mapDrawModel(view, tick);
       if (!model) return;
       const unit = size / 32;
       ctx.lineWidth = Math.max(1, unit * 0.18);
@@ -55,15 +55,16 @@ export function MiniMap({
         }
       }
       for (const [index, exit] of model.exits.entries()) {
-        ctx.strokeStyle = exit.ownerId === view?.self?.playerId ? '#b8ebca' : '#dfbb79';
+        const perspectiveId = view?.spectating?.targetId ?? view?.self?.playerId;
+        ctx.strokeStyle = exit.ownerId === perspectiveId ? '#b8ebca' : '#dfbb79';
         ctx.strokeRect(exit.approach.x * unit, exit.approach.y * unit, unit, unit);
         ctx.fillStyle = '#fafaf3';
         ctx.font = '11px sans-serif';
         ctx.fillText(String(index + 1), (exit.approach.x + 1) * unit, exit.approach.y * unit);
       }
       ctx.save();
-      ctx.translate((model.self.cell.x + 0.5) * unit, (model.self.cell.y + 0.5) * unit);
-      ctx.rotate((model.self.dir * Math.PI) / 2);
+      ctx.translate((model.self.x + 0.5) * unit, (model.self.z + 0.5) * unit);
+      ctx.rotate(-model.self.yaw);
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.moveTo(0, -unit / 2);
@@ -95,9 +96,14 @@ export function MiniMap({
       <canvas ref={ref} aria-label="내가 탐색한 지도. 위쪽은 북쪽입니다." />
       <figcaption>탐색 지도 · 북쪽 고정</figcaption>
       {pastEventMarkers(view, markers, tick).length > 0 && <p>빈 원은 과거 사건 위치입니다.</p>}
-      {mapDrawModel(view)?.exits.map((exit, index) => (
+      {mapDrawModel(view, tick)?.exits.map((exit, index) => (
         <div key={exit.exitId}>
-          {index + 1}. {exitOwnerLabel(exit.ownerId, view?.self?.playerId, ownerNames)}
+          {index + 1}.{' '}
+          {exitOwnerLabel(
+            exit.ownerId,
+            view?.spectating?.targetId ?? view?.self?.playerId,
+            ownerNames,
+          )}
         </div>
       ))}
     </figure>

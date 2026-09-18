@@ -276,16 +276,23 @@ export function ProductApp({
   }
   const round = snapshot?.round;
   const view = snapshot?.view;
+  const activeSelf = view?.self?.status === 'ACTIVE' ? view.self : null;
+  const spectating = round?.phase === 'PLAYING' ? (view?.spectating ?? null) : null;
   const ended = snapshot?.endedSelf ?? (view?.self?.status !== 'ACTIVE' ? view?.self : null);
-  const inResult = !!round && (!!ended || ['RESULT', 'ABORTED'].includes(round.phase));
+  const inResult =
+    !!round && ((!spectating && !!ended) || ['RESULT', 'ABORTED'].includes(round.phase));
   const worldVisible =
     !!round &&
     !inResult &&
     ['PLAYING', 'TEAM_PRACTICE'].includes(round.phase) &&
-    view?.self?.status === 'ACTIVE';
+    (activeSelf !== null || spectating !== null);
+  const interactiveWorld = worldVisible && activeSelf !== null;
+  const playerNames = Object.fromEntries(
+    snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
+  );
   // 구속 중에는 화면 가장자리를 어둡게 유지한다(S15P21C204-261). 남은 시간은 RestraintHud 가 쓴다.
   const restrained =
-    worldVisible &&
+    interactiveWorld &&
     (restraintPresenter(view ?? null, runtime.current?.renderTick() ?? round?.serverTick ?? 0)
       ?.restraintSeconds ?? 0) > 0;
   const localControls =
@@ -514,18 +521,28 @@ export function ProductApp({
                 pending={snapshot.loadingPending}
               />
             )}
-          {worldVisible && round && view?.self?.status === 'ACTIVE' && (
-            <GameHud round={round} self={view.self} mode={snapshot.interaction.mode} />
+          {worldVisible && round && (
+            <GameHud
+              round={round}
+              {...(activeSelf
+                ? { self: activeSelf, mode: snapshot.interaction.mode }
+                : {
+                    spectating: spectating!,
+                    playerNames,
+                    onSpectate: (targetPlayerId: string) =>
+                      runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } }),
+                  })}
+            />
           )}
           <div className="game-workspace">
             <aside className="game-sidebar">
-              {worldVisible && localControls}
-              {worldVisible &&
+              {interactiveWorld && localControls}
+              {interactiveWorld &&
                 (round?.phase === 'TEAM_PRACTICE' || round?.phase === 'PLAYING') &&
                 view?.self?.status === 'ACTIVE' && (
                   <FaceGuidanceNotice notice={snapshot.faceGuidance} />
                 )}
-              {worldVisible && snapshot.demo && (
+              {interactiveWorld && snapshot.demo && (
                 <DemoPanel
                   demo={snapshot.demo}
                   onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
@@ -536,12 +553,10 @@ export function ProductApp({
                   view={view}
                   markers={snapshot.markers}
                   tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                  ownerNames={Object.fromEntries(
-                    snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
-                  )}
+                  ownerNames={playerNames}
                 />
               )}
-              {worldVisible && view && round?.phase === 'TEAM_PRACTICE' && (
+              {interactiveWorld && view && round?.phase === 'TEAM_PRACTICE' && (
                 <PracticeScreen
                   round={round}
                   view={view}
@@ -574,7 +589,7 @@ export function ProductApp({
                   }
                 />
               ) : (
-                worldVisible &&
+                interactiveWorld &&
                 round?.phase === 'PLAYING' &&
                 view && (
                   <PoseChallenge
@@ -586,7 +601,7 @@ export function ProductApp({
                   />
                 )
               )}
-              {worldVisible && view && (
+              {interactiveWorld && view && (
                 <ExchangePanel
                   view={view}
                   selected={snapshot.exchangeTarget}
@@ -600,16 +615,16 @@ export function ProductApp({
                   send={(command) => runtime.current?.send(command)}
                 />
               )}
-              {worldVisible && snapshot.exchangeNotice && (
+              {interactiveWorld && snapshot.exchangeNotice && (
                 <p role="status">{snapshot.exchangeNotice}</p>
               )}
-              {worldVisible && view && (
+              {interactiveWorld && view && (
                 <RestraintHud
                   view={view}
                   tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
                 />
               )}
-              {worldVisible && view && (
+              {interactiveWorld && view && (
                 <EquipmentHud
                   view={view}
                   tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
@@ -626,9 +641,7 @@ export function ProductApp({
                   <WorldCanvas
                     view={view}
                     faces={runtime.current?.faces}
-                    ownerNames={Object.fromEntries(
-                      snapshot.roster?.players.map((p) => [p.playerId, p.nickname]) ?? [],
-                    )}
+                    ownerNames={playerNames}
                     quality={snapshot.quality}
                     standIn={demoFace.current}
                     renderTick={() => runtime.current?.renderTick() ?? null}
