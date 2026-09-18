@@ -276,11 +276,11 @@ S15P21C204-279
 
 - Records: decided default theme, asset provenance, quality behavior, screenshots, and executed checks.
 
-- [ ] **Step 1: Update current product documentation**
+- [x] **Step 1: Update current product documentation**
 
 Replace the block-default description with the Backrooms corridor, PBR/low-quality split, camcorder overlay, five-slot hotbar, and responsive placement.
 
-- [ ] **Step 2: Run focused verification**
+- [x] **Step 2: Run focused verification**
 
 ```powershell
 .\node_modules\.bin\vitest.cmd run apps/web/src/features/game/scene apps/web/src/features/game/flow tests/contracts/asset-ledger.test.ts
@@ -289,11 +289,18 @@ Replace the block-default description with the Backrooms corridor, PBR/low-quali
 git diff --check
 ```
 
-- [ ] **Step 3: Record actual results and plan completion**
+- [x] **Step 3: Record actual results and plan completion**
 
 Mark only completed checkboxes in this plan. Do not claim `pnpm verify`, push, MR, Jira completion, or pipeline success.
 
-- [ ] **Step 4: Commit**
+Actual results on 2026-09-18:
+
+- Focused Vitest: 36 files, 155 tests passed.
+- Web and worker TypeScript checks: passed.
+- `git diff --check`: passed.
+- HUD layout E2E: desktop and 400px mobile cases passed; screenshots saved under `artifacts/S15P21C204-279/`.
+
+- [x] **Step 4: Commit**
 
 ```text
 docs: 백룸형 경기 UI 변경을 문서화한다
