@@ -55,12 +55,29 @@ const views = [
   '연결 상실',
   '렌더 검수',
 ] as const;
+/** 미니맵 검수용 통로. 가로 한 줄과 세로 한 줄이 꺾여 만난다. */
+const CORRIDOR = [
+  ...Array.from({ length: 4 }, (_, i) => ({ x: 1 + i, y: 1 })),
+  ...Array.from({ length: 4 }, (_, i) => ({ x: 4, y: 2 + i })),
+  ...Array.from({ length: 3 }, (_, i) => ({ x: 2 + i, y: 4 })),
+];
+
 export default function PreviewApp() {
   const [screen, setScreen] = useState<(typeof views)[number]>('로비');
   const [mounted, setMounted] = useState(true);
   const [deviceStage, setDeviceStage] = useState<keyof typeof DEVICE_STAGES>('점검 전');
   const [quality, setQuality] = useState<QualityPreset>('medium');
   const view = viewFixture({
+    // S15P21C204-277. 미니맵 검수용으로 통로 한 줄과 벽 몇 면을 알려 준 상태로 둔다.
+    knownTerrain: [
+      ...CORRIDOR.map((cell) => ({ ...cell, kind: 'floor' as const })),
+      { x: 1, y: 1, side: 3, kind: 'wall' as const },
+      { x: 1, y: 1, side: 0, kind: 'wall' as const },
+      { x: 4, y: 1, side: 0, kind: 'wall' as const },
+      { x: 4, y: 4, side: 1, kind: 'wall' as const },
+      { x: 4, y: 4, side: 2, kind: 'wall' as const },
+      { x: 2, y: 4, side: 2, kind: 'wall' as const },
+    ],
     visibleCells: [
       { x: 1, y: 1 },
       { x: 1, y: 0 },
