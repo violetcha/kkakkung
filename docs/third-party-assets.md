@@ -1,6 +1,6 @@
 # 제3자 자산
 
-2026-09-15 기준. 파일 출처·sha256·bytes·취득일·구성별 모델 카드와 SDK 번들 구성요소 목록의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json), 취득 경위는 [비전 자산 README](../apps/web/public/models/README.md)다. 권리 확인이 끝나지 않은 항목은 공개 차단 요인이다.
+2026-09-18 기준. 파일 출처·sha256·bytes·취득일·구성별 모델 카드와 SDK 번들 구성요소 목록의 원본은 [비전 자산 manifest](../apps/web/public/models/manifest.json), 취득 경위는 [비전 자산 README](../apps/web/public/models/README.md)다. 권리 확인이 끝나지 않은 항목은 공개 차단 요인이다.
 
 ## 비전 모델과 SDK
 
@@ -41,9 +41,49 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 - **손동작 2모델**(gesture_embedder.tflite, canned_gesture_classifier.tflite): pending 유지. 분류 모델 카드에 추출 가능한 라이선스 문구가 없고, 저장소 LICENSE·Model Maker 소스 헤더는 배포된 학습 바이너리를 범위로 명시하지 않는다. 대안 영향: 기능 축소가 가장 싸다(손동작은 출구 시작·취소와 교환만 만들고 같은 명령의 키보드 경로가 있다). 재학습은 임베더 위에 분류기만 얹으므로 한 건만 해소된다. 런타임 다운로드는 고정 해시 검사·CSP와 충돌한다.
 - **SDK 번들 고지**: 배포하는 파일에서 구성요소를 뽑아 manifest sdk.bundledComponents에 적었다(JS: Google LLC·Closure Library Apache-2.0 헤더 확인. WASM: TensorFlow Lite·OpenCV·Abseil·XNNPACK·ruy·Eigen·protobuf·FlatBuffers·gemmlowp·Emscripten libc++abi). 배포 wasm 3개에는 저작권·라이선스 문자열이 없고, XNNPACK(BSD-3-Clause)은 바이너리 재배포 시 고지 재현을 요구한다. 현재 제품 고지는 Apache-2.0 원문뿐이므로 공개 전에 고지 화면을 보완해야 한다. undledNoticesReview는 pending이다.
 
-## 코드로 만든 자산
+## 배포에 포함되는 자산 (S15P21C204-225)
 
-시설 렌더링의 벽·바닥 텍스처와 공간·캐릭터·장비 형상은 저장소 TypeScript 코드로 작성했다. 원본은 [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts), [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx)다. 발소리·감지기·덫 효과음 3종도 코드로 생성한 PCM이다. 외부 모델·텍스처·음원 파일을 새로 취득하지 않았으며 버전·무결성은 저장소 커밋으로 추적한다. 폰트는 아래의 갈무리 패키지만 추가했다. 렌더 자산·음원·폰트 대장 정리는 S15P21C204-225에서 이어간다.
+제품 빌드가 실제로 내보내는 파일은 `apps/web/public/` 아래가 전부다. 그 밖의 화면 요소(벽·바닥
+텍스처, 캐릭터·장비 형상, 효과음·안내음)는 파일이 아니라 저장소 TypeScript 코드가 실행 시점에
+만들어 내므로 제3자 권리가 붙지 않는다. 아래 두 표가 그 경계다.
+
+| 배포 경로                      | 자산                               | 출처·권리                                      | 고지 의무        |
+| ------------------------------ | ---------------------------------- | ---------------------------------------------- | ---------------- |
+| `models/` (모델 3·WASM 6·문서) | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending)       | 있음 — 고지 화면 |
+| `fonts/` (WOFF2 4·OFL 원문)    | 갈무리 픽셀 글꼴 4종               | Lee Minseo(quiple), SIL OFL 1.1                | 있음 — 고지 화면 |
+| `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득            | 고지 대상 자체   |
+| `brand/kkakkung-logo.svg`      | 까꿍 로고                          | 프로젝트 자체 제작(윤곽은 Galmuri11 Bold 변환) | 없음             |
+
+외부에서 받은 렌더 자산·음원 파일은 하나도 없다. 새 파일을 `public/` 에 넣으면 이 표에 줄을
+추가해야 하며, 빠뜨리면 `tests/contracts/asset-ledger.test.ts`가 실패한다.
+
+### 코드로 만드는 화면·소리
+
+파일이 아니라 코드다. 각 항목의 버전·무결성은 저장소 커밋으로 추적하고 별도 라이선스가 없다.
+
+| 만드는 것                                      | 원본                                                                                                                                                           |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 어두운 블록 테마 16×16 픽셀 타일 4종·재질(268) | [block-theme.ts](../apps/web/src/features/game/scene/block-theme.ts)                                                                                           |
+| 시설 복도 테마 벽·바닥 텍스처·재질             | [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts)                                                                                     |
+| 캐릭터 형상·역할 색·실루엣                     | [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [role-colors.ts](../apps/web/src/features/game/scene/role-colors.ts)                     |
+| 감지기·덫 형상과 치수                          | [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx), [equipment-model.ts](../apps/web/src/features/game/scene/equipment-model.ts) |
+| 1인칭 손·랜턴·든 도구(268)                     | [HeldTool.tsx](../apps/web/src/features/game/scene/HeldTool.tsx)                                                                                               |
+| 출구 문틀·표시등                               | [VisibleExits.tsx](../apps/web/src/features/game/scene/VisibleExits.tsx)                                                                                       |
+| 데모 방 인형의 대역 얼굴                       | [demo-face.ts](../apps/web/src/features/game/scene/demo-face.ts)                                                                                               |
+| 발소리·감지기·덫 효과음 3종                    | [effect-buffer.ts](../apps/web/src/features/media/effect-buffer.ts)                                                                                            |
+| 상태 안내음 13종(261)                          | [cue-buffer.ts](../apps/web/src/features/media/cue-buffer.ts)                                                                                                  |
+
+## 제품 고지 연결
+
+고지 의무가 있는 항목은 `/licenses/index.html`에 있고 제품 화면 하단의 "오픈소스 고지" 링크로
+연다. 비전 자산은 파일별 해시와 구성 모델 근거를 `/models/manifest.json`이, 글꼴은 동봉한
+`/fonts/OFL-1.1.txt`가 뒷받침한다. 고지 화면과 배포 파일의 일치는
+[vision-asset-notices.test.ts](../tests/contracts/vision-asset-notices.test.ts)와
+[asset-ledger.test.ts](../tests/contracts/asset-ledger.test.ts)가 검사한다.
+
+**공개 차단 요인으로 남은 것**은 위 "남은 권리 확인"의 두 건(손동작 2모델, SDK 번들 고지)이다.
+둘 다 고지 화면의 "추가 확인 중인 항목"에 그대로 적혀 있으며, 이 문서는 서비스 전체의 권리 검토
+완료를 뜻하지 않는다.
 
 ### 갈무리 폰트
 
