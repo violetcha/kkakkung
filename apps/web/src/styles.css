@@ -850,7 +850,11 @@
 .hotbar-hint {
   margin: 0;
   padding: 5px 9px;
-  font: 600 11px/1.2 Inter, Pretendard, system-ui, sans-serif;
+  font:
+    600 11px/1.2 Inter,
+    Pretendard,
+    system-ui,
+    sans-serif;
   color: #c7c7bf;
   white-space: nowrap;
   background: #070807d9;
