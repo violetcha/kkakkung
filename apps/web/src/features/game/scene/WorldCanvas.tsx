@@ -55,7 +55,14 @@ export function WorldCanvas({
   if (view) {
     const world = sceneWorld(theme);
     const self = view.self?.status === 'ACTIVE' ? view.self : null;
-    const tool = self ? (heldTool === undefined ? defaultHeldTool(self) : heldTool) : null;
+    const viewpoint = self ?? view.spectating ?? null;
+    const tool = self
+      ? heldTool === undefined
+        ? defaultHeldTool(self)
+        : heldTool
+      : view.spectating
+        ? 'map'
+        : null;
     return (
       <Canvas
         dpr={QUALITY_PRESETS[quality].dpr}
@@ -66,13 +73,13 @@ export function WorldCanvas({
       >
         <color attach="background" args={[world.background]} />
         <fog attach="fog" args={[world.background, world.fogNear, world.fogFar]} />
-        {self && (
+        {viewpoint && (
           <>
-            <FirstPersonCamera self={self} renderTick={renderTick} />
+            <FirstPersonCamera self={viewpoint} renderTick={renderTick} />
             {theme === 'block' ? (
-              <BlockLighting self={self} renderTick={renderTick} />
+              <BlockLighting self={viewpoint} renderTick={renderTick} />
             ) : (
-              <FacilityLighting self={self} renderTick={renderTick} quality={quality} />
+              <FacilityLighting self={viewpoint} renderTick={renderTick} quality={quality} />
             )}
             {theme === 'block' && <HeldTool tool={tool} />}
           </>

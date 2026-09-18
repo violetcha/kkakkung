@@ -69,3 +69,8 @@ test('픽셀 카드 토큰은 반투명 판과 간격·모서리·이중 선 규
     expect(css).toContain(declaration);
   }
 });
+
+test('HUD 역할 토큰은 블록 아바타 원본 색을 그대로 쓴다', () => {
+  expect(css).toContain('--role-tagger: #b8402f;');
+  expect(css).toContain('--role-runner: #2f9f96;');
+});

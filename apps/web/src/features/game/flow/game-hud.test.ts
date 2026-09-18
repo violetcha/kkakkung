@@ -49,3 +49,24 @@ it('marks escape, capture and the self state with shape and data attributes, not
   expect(restrained).toContain('data-state="restrained"');
   expect(restrained).toContain('구속 중');
 });
+
+it('shows the watched player and every candidate instead of active controls', () => {
+  const html = renderToStaticMarkup(
+    createElement(GameHud, {
+      round: roundFixture(),
+      spectating: {
+        targetId: 'runner-a',
+        cell: { x: 7, y: 8 },
+        dir: 2,
+        action: null,
+        candidates: ['runner-a', 'runner-b'],
+      },
+      playerNames: { 'runner-a': '유리', 'runner-b': '초록' },
+    }),
+  );
+
+  expect(html).toContain('관전 중 · 유리 시점');
+  expect(html).toContain('data-spectate-target="runner-a"');
+  expect(html).toContain('data-spectate-target="runner-b"');
+  expect(html).not.toContain('키보드 조작');
+});

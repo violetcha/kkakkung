@@ -53,6 +53,28 @@ it('rejects mismatched scope identity, buffers a single future view and prevents
   now = 2000;
   views.poll();
 });
+it('keeps the projected world when an ended runner is spectating', () => {
+  const views = createProductView({ now: () => 0, changed: vi.fn(), resync: vi.fn() });
+  views.round(roundFixture({ stateVersion: 11 }));
+  const projected = viewFixture({
+    stateVersion: 11,
+    self: { playerId: 'self', role: 'runner', status: 'CAPTURED' },
+    spectating: {
+      targetId: 'runner-a',
+      cell: { x: 7, y: 8 },
+      dir: 2,
+      action: null,
+      candidates: ['runner-a', 'runner-b'],
+    },
+  });
+
+  expect(views.receive(projected)).toBe(true);
+  expect(views.view).toMatchObject({
+    spectating: { targetId: 'runner-a', cell: { x: 7, y: 8 }, dir: 2 },
+    knownTerrain: projected.knownTerrain,
+    visibleCells: projected.visibleCells,
+  });
+});
 it('discards practice knowledge through none and game scopes without media-generation coupling', () => {
   const views = createProductView({ now: () => 0, changed: vi.fn(), resync: vi.fn() });
   const practice = viewFixture({

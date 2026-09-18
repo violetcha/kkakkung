@@ -27,7 +27,7 @@ export function equipmentPresenter(view: PrivateView | null, tick: number) {
   };
 }
 export function visibleEquipment(view: PrivateView) {
-  if (view.self?.status !== 'ACTIVE') return [];
+  if (view.self?.status !== 'ACTIVE' && !view.spectating) return [];
   return view.visibleEntities.filter(
     (entity) => entity.kind === 'sensor' || entity.kind === 'trap',
   );

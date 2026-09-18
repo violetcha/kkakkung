@@ -135,8 +135,10 @@
   --color-border-strong: #c4a46b;
   --color-seam: #3a2b22;
   --color-focus: #f0c674;
-  --color-tagger: #d4684f;
-  --color-runner: #6fb7a6;
+  --role-tagger: #b8402f;
+  --role-runner: #2f9f96;
+  --color-tagger: var(--role-tagger);
+  --color-runner: var(--role-runner);
   --color-success: #8dcf9f;
   --color-warning: #d8aa61;
   --color-danger: #d16d62;
@@ -363,6 +365,20 @@
 .game-hud p {
   margin: 0;
   font-size: var(--text-body);
+}
+.spectator-hud .spectator-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.spectator-targets button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+.spectator-targets button[aria-pressed='true'] {
+  color: var(--color-bg);
+  background: var(--role-runner);
+  opacity: 1;
 }
 .role-badge {
   border: 1px solid #789e88;
