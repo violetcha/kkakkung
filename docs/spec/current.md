@@ -180,6 +180,27 @@ MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12는 **이번 MVP 구현·필수 인수�
 
 근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts), [핫바](../../apps/web/src/features/game/flow/hotbar-model.ts), [설치 예고](../../apps/web/src/features/game/flow/install-hint.ts), [사건 로그](../../apps/web/src/features/game/flow/event-log.ts).
 
+### 4.5 미니맵 표시
+
+미니맵은 한 장에 세 가지를 서로 다른 **모양**으로 담아, 색을 못 가려도 구분되게 한다.
+
+| 상태            | 그리는 법                                               |
+| --------------- | ------------------------------------------------------- |
+| 안 가 본 칸     | 채우지 않고 옅은 격자선만(`--color-seam`)               |
+| 가 본 바닥      | 칸을 가득 채움(`--color-border`)                        |
+| 벽              | 그 칸의 해당 모서리에 두꺼운 밝은 띠(`--color-text`)    |
+| 내 위치         | 역할 색 삼각형 — 3D 옷 색(`role-colors.ts`)과 같은 hex  |
+| 내 출구·남 출구 | 칸 테두리와 번호(`--color-success` / `--color-warning`) |
+
+칸 크기는 항상 정수 픽셀이고 남는 여백은 반씩 나눠 가운데 둔다. 도트가 흐려지지 않게 배율도
+정수로 고르고 이미지 보간을 끈다. 칸이 6px 미만으로 작아지면(경기 화면 오버레이 크기) 격자를 네
+칸마다 성기게 그어 그물처럼 보이지 않게 하고, 벽 띠는 최소 2px 를 지켜 사라지지 않게 한다.
+
+지도 교환(8장)으로 알게 된 칸은 같은 규칙으로 바닥·벽이 채워진다. 교환 전후로 격자만 있던 자리가
+채워지는 것이 미니맵에서 그대로 보인다.
+
+근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts), [핫바](../../apps/web/src/features/game/flow/hotbar-model.ts), [사건 로그](../../apps/web/src/features/game/flow/event-log.ts), [미니맵 그리기](../../apps/web/src/features/game/map/minimap-render.ts).
+
 ## 5. 경기 규칙과 시간
 
 ### 5.1 인원과 승패
