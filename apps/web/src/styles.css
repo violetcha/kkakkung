@@ -582,7 +582,97 @@
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid #385059;
+  border-bottom: 1px solid var(--color-seam);
+}
+/* S15P21C204-273. 장치 점검 캐러셀. */
+.device-check-flow {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.device-check-dots {
+  display: flex;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.device-check-dots li {
+  flex: 1 1 0;
+}
+.device-check-dot {
+  width: 100%;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  padding: var(--space-2) var(--space-1);
+  font-family: var(--font-small);
+  font-size: var(--text-small);
+  color: var(--color-muted);
+  background: var(--color-panel);
+  border: 2px solid var(--color-seam);
+  border-radius: var(--radius-pixel);
+}
+.device-check-dot[data-state='done'] {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+.device-check-dot[data-state='busy'] {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+.device-check-dot[data-state='blocked'] {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.device-check-dot[aria-current='step'] {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--inset-highlight);
+}
+.device-check-dot:disabled {
+  opacity: 0.45;
+}
+.device-check-dot-label {
+  font-family: var(--font-control);
+  font-size: var(--text-control);
+}
+.device-check-step {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-panel);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-pixel);
+  box-shadow: var(--inset-highlight);
+}
+.device-check-step h3 {
+  margin: 0;
+  font-family: var(--font-display);
+}
+.device-check-motion {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-family: var(--font-control);
+  font-size: var(--text-control);
+  color: var(--color-muted);
+}
+.device-check-motion li[data-done='true'] {
+  color: var(--color-success);
+}
+.device-check-error {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--color-danger);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-pixel);
+}
+.device-check-nav {
+  display: flex;
+  gap: var(--space-2);
 }
 .preview-host {
   min-height: 260px;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocalControls } from '../flow/LocalControls';
+import { DeviceCheckScreen } from '../flow/DeviceCheckScreen';
 import { AudioControls } from '../flow/AudioControls';
 import type { AudioPreferences } from '../../media/audio-preferences';
 import { WorldCanvas } from '../scene/WorldCanvas';
@@ -10,26 +11,6 @@ import { LESSONS } from './solo-world';
 // 진단 오버레이(제거 가능): 아래 두 import 와 DebugOverlay 마운트·토글·단축키만 지우면 된다.
 import { DebugOverlay } from '../../debug/DebugOverlay';
 import { debugFeed, installDebugShortcut, useDebugOverlayEnabled } from '../../debug/debug-feed';
-
-const DEVICE_LABELS = {
-  camera: '카메라',
-  vision: '얼굴·상체 추적',
-  calibration: '중립 보정',
-  audioPlayback: '소리 재생',
-  microphone: '마이크 (선택)',
-} as const;
-const STATES: Record<string, string> = {
-  idle: '점검 전',
-  off: '사용 안 함',
-  ready: '준비됨',
-  locked: '권한 필요',
-  denied: '허용 안 됨',
-  failed: '다시 점검',
-  requesting: '권한 확인 중',
-  loading: '불러오는 중',
-  running: '보정 중',
-  closed: '종료됨',
-};
 
 export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const session = useRef<ReturnType<typeof createSoloSession> | null>(null);
@@ -121,12 +102,13 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
       session.current?.key(value, repeat),
     [],
   );
-  const start = async () => {
+  const start = async (wantMicrophone = microphone) => {
     const current = session.current;
+    setMicrophone(wantMicrophone);
     setBusy(true);
     setError('');
     try {
-      await current?.startDevices(microphone);
+      await current?.startDevices(wantMicrophone);
     } catch {
       if (session.current === current)
         setError('장치 점검을 마치지 못했습니다. 권한을 확인하고 다시 시도하세요.');
@@ -195,7 +177,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                   onMotion={async () => {
                     await session.current?.calibrateMotion();
                   }}
-                  onRecover={start}
+                  onRecover={() => start()}
                   onMicrophone={async (value) => {
                     setMicrophone(value);
                     await session.current?.microphone(value);
@@ -209,16 +191,20 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                   onTestTone={playTestTone}
                   canTestTone={!closing}
                 />
-                <dl className="solo-devices" aria-label="내 장치 상태">
-                  {Object.entries(DEVICE_LABELS).map(([name, label]) => (
-                    <div key={name}>
-                      <dt>{label}</dt>
-                      <dd>
-                        {STATES[snapshot.devices[name as keyof typeof DEVICE_LABELS]] ?? '점검 중'}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                <DeviceCheckScreen
+                  heading="체험 전 장치 점검"
+                  status={snapshot.devices}
+                  motion={snapshot.motionCheck}
+                  onStart={start}
+                  onCalibrate={async () => {
+                    await session.current?.calibrateMotion();
+                  }}
+                  onMicrophone={async (enabled) => {
+                    setMicrophone(enabled);
+                    await session.current?.microphone(enabled);
+                  }}
+                  onTestTone={playTestTone}
+                />
                 <p>
                   현재 조작:{' '}
                   <strong>
@@ -230,18 +216,6 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                     키보드로 계속 체험
                   </button>
                 )}
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={microphone}
-                    disabled={busy || snapshot.devices.camera === 'ready'}
-                    onChange={(event) => setMicrophone(event.target.checked)}
-                  />{' '}
-                  마이크도 점검 (선택)
-                </label>
-                <button disabled={busy || closing} onClick={() => void start()}>
-                  {busy ? '장치·추적·보정 준비 중…' : '카메라 켜고 모션 점검하기'}
-                </button>
                 <label>
                   <input
                     type="checkbox"

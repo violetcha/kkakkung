@@ -50,6 +50,11 @@ import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
 import {
+  NO_MOTION_CHECK,
+  observeMotionCheck,
+  type MotionCheck,
+} from '../features/game/flow/motion-check';
+import {
   createLoadingController,
   describePending,
   loadingDisplay,
@@ -107,6 +112,8 @@ export type ProductSnapshot = {
   request: RequestDisplay | null;
   requests: Partial<Record<CommandInput['type'], RequestDisplay>>;
   interaction: InteractionState;
+  /** S15P21C204-273. 장치 점검 '자세' 단계에서 본 기울이기·고개 돌리기 확인. 조작 판정과 무관하다. */
+  motionCheck: MotionCheck;
   exchangeTarget: string | null;
   markers: HunterMarker[];
   exchangeNotice: string | null;
@@ -153,6 +160,7 @@ export function bindProductRoom(
     request: null,
     requests: {},
     interaction: { selectedEquipment: 'sensor', mode: 'motion' },
+    motionCheck: NO_MOTION_CHECK,
     exchangeTarget: null,
     markers: [],
     exchangeNotice: null,
@@ -531,6 +539,12 @@ export function bindProductRoom(
           interaction = state;
           publish({ interaction });
           updateContext();
+        },
+        // S15P21C204-273. 장치 점검 화면의 동작 확인 표시. 임계값은 입력 층이 준 값을 그대로 쓴다.
+        onMotionDebug: (state) => {
+          if (!live()) return;
+          const next = observeMotionCheck(snapshot.motionCheck, state);
+          if (next !== snapshot.motionCheck) publish({ motionCheck: next });
         },
         onLocalPreview: () => {},
         onSensors: (value) => {
