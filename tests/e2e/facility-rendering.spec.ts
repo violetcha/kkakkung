@@ -103,9 +103,12 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   await expect.poll(counts).toEqual(original);
   mark('scene-cycle');
   for (const quality of ['low', 'medium']) {
-    const beforeQuality = await metrics.textContent();
     await page.getByRole('combobox', { name: '화면 품질' }).selectOption(quality);
-    const qualityResources = await settledAfter(beforeQuality);
+    const expectedTextures = quality === 'low' ? original!.texture - 2 : original!.texture;
+    await expect
+      .poll(async () => (await counts())?.texture ?? -1, { timeout: 15_000 })
+      .toBe(expectedTextures);
+    const qualityResources = await counts();
     await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
     await expect(page.locator('canvas')).toHaveCount(0);
     await expect(metrics).toHaveText('측정 대기');
@@ -120,7 +123,7 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
           current !== null &&
           current.geometry > 0 &&
           current.geometry <= qualityResources!.geometry &&
-          current.texture === qualityResources!.texture
+          current.texture === expectedTextures
         );
       })
       .toBe(true);
