@@ -199,26 +199,26 @@ S15P21C204-279
 - Produces: exactly five `HotbarSlot` values for every active runner or tagger.
 - Preserves: existing sensor, trap, and exchange selection behavior.
 
-- [ ] **Step 1: Change tests to require exactly five slots and three locked placeholders**
+- [x] **Step 1: Change tests to require exactly five slots and three locked placeholders**
 
 ```ts
 expect(slots).toHaveLength(5);
 expect(slots.slice(2).every((slot) => slot.state === 'reserved')).toBe(true);
 ```
 
-- [ ] **Step 2: Run the model test and verify the expected two-versus-five failure**
+- [x] **Step 2: Run the model test and verify the expected two-versus-five failure**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/flow/hotbar-model.test.ts`
 
-- [ ] **Step 3: Append immutable placeholder slots without adding runner equipment**
+- [x] **Step 3: Append immutable placeholder slots without adding runner equipment**
 
 Use IDs `locked-3`, `locked-4`, and `locked-5`, empty labels, and `reserved` state. Preserve the two existing role slots as positions 1 and 2.
 
-- [ ] **Step 4: Run hotbar model and markup tests**
+- [x] **Step 4: Run hotbar model and markup tests**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/flow/hotbar-model.test.ts apps/web/src/features/game/flow/game-hud.test.ts`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 design: 중앙 하단 핫바를 다섯 칸으로 정리한다
