@@ -16,6 +16,7 @@ import {
 } from './InteractionRuntime';
 import type { ReadinessStage, ReadinessTrace } from '../devices/readiness-trace';
 import { INPUT_TUNING } from './input-tuning';
+import { MOVE_REFRESH_MS } from './move-intent';
 import { POSE_KEY_POINTS } from '../vision/pose-sensor';
 
 function videoTrack() {
@@ -912,12 +913,14 @@ describe('createInteractionRuntime', () => {
       expect(moves()).toEqual([]);
       base.advance(20);
       base.fireTimers();
-      base.advance(100);
+      expect(moves()).toEqual([{ direction: 'forward' }]);
+      // S15P21C204-281. 첫 의도는 한 칸이라 곧 해제되고, 계속 누르고 있으면 연속으로 올라간다.
+      base.advance(MOVE_REFRESH_MS);
       base.fireTimers();
-      expect(moves().length).toBeGreaterThanOrEqual(2);
-      expect(
-        moves().every((payload) => 'direction' in payload && payload.direction === 'forward'),
-      ).toBe(true);
+      expect(moves().at(-1)).toEqual({ direction: null });
+      base.advance(INPUT_TUNING.holdToContinuousMs);
+      base.fireTimers();
+      expect(moves().at(-1)).toEqual({ direction: 'forward' });
     } finally {
       await base.runtime.dispose();
     }
