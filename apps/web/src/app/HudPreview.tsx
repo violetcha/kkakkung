@@ -3,7 +3,7 @@ import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { roundFixture, viewFixture } from '../features/room/product-fixture';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { GameHud } from '../features/game/flow/GameHud';
-import { EventLog } from '../features/game/flow/EventLog';
+import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
@@ -57,10 +57,6 @@ export function HudPreview() {
   const self = view.self;
   if (self?.status !== 'ACTIVE') throw new Error('preview self must be active');
   const round = roundFixture({ phase: 'PLAYING', serverTick: TICK, deadlineTick: TICK + 2400 });
-  const events = [
-    { id: 1, text: '경기 시작', atMs: Date.now() },
-    { id: 2, text: '상대 팀이 한 걸음 앞섰습니다', atMs: Date.now() },
-  ];
   return (
     <>
       <div className="actions" aria-label="검수 설정">
@@ -77,9 +73,12 @@ export function HudPreview() {
         <div className="product-canvas">
           <WorldCanvas view={view} quality="low" />
         </div>
-        <GameHud round={round} self={self} mode="motion" />
+        <GameStatusChrome
+          startedAtMs={0}
+          nowMs={4_000}
+          status={<GameHud round={round} self={self} mode="motion" />}
+        />
         <div className="crosshair" aria-hidden="true" />
-        <EventLog events={events} />
         <Hotbar
           view={view}
           tick={TICK}

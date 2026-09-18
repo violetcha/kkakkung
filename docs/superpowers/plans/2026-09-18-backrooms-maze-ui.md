@@ -154,7 +154,7 @@ S15P21C204-279
 - Produces: `formatRecordingTime(elapsedSeconds)` and `<CamcorderOverlay startedAtMs? nowMs?>`.
 - Consumes: no game-authoritative time.
 
-- [ ] **Step 1: Write failing formatting and markup tests**
+- [x] **Step 1: Write failing formatting and markup tests**
 
 ```ts
 expect(formatRecordingTime(4)).toBe('00:00:04');
@@ -162,23 +162,23 @@ expect(formatRecordingTime(3_661)).toBe('01:01:01');
 expect(html).toContain('aria-label="녹화 중 00:00:04"');
 ```
 
-- [ ] **Step 2: Run the test and verify the module is missing**
+- [x] **Step 2: Run the test and verify the module is missing**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/flow/camcorder-overlay.test.ts`
 
-- [ ] **Step 3: Implement the timer and overlay component**
+- [x] **Step 3: Implement the timer and overlay component**
 
 Use a one-second interval, clear it on unmount, and render four decorative corner spans plus a red REC indicator. Injected times keep the test deterministic.
 
-- [ ] **Step 4: Replace visible `GameHud` and `EventLog` placement**
+- [x] **Step 4: Replace visible `GameHud` and `EventLog` placement**
 
 Render `<CamcorderOverlay />` in `ProductApp` and a fixed four-second overlay in `HudPreview`. Keep `GameHud` in an `sr-only` container so authoritative state remains accessible.
 
-- [ ] **Step 5: Run the component tests**
+- [x] **Step 5: Run the component tests**
 
 Run: `.\\node_modules\\.bin\\vitest.cmd run apps/web/src/features/game/flow/camcorder-overlay.test.ts apps/web/src/features/game/flow/game-hud.test.ts`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```text
 design: 경기 화면에 캠코더 녹화 프레임을 적용한다
