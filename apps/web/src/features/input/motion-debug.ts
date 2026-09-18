@@ -2,7 +2,7 @@
 // 쓰지 않는다. 오버레이를 없앨 때 이 파일과 InteractionDeps.onMotionDebug 만 같이 지우면 된다.
 import type { NeutralReference } from './calibration';
 import { headTurnedForMove, type InputTuning } from './input-tuning';
-import type { MoveIntent } from './move-intent';
+import type { MoveIntent, MovePhase, ReleaseLagStats } from './move-intent';
 import { leanComponents, NO_LEAN, relativeLean, type LeanComponents } from './lean-signal';
 import type { PoseLandmark } from '../vision/pose-sensor';
 import {
@@ -34,6 +34,10 @@ export type MotionDebugState = Readonly<{
   leanGatedByYaw: boolean;
   move: MoveIntent;
   motionActive: boolean;
+  /** S15P21C204-281. 한 칸(tap)인지 유지 이동(hold)인지. */
+  movePhase: MovePhase;
+  /** S15P21C204-280. 해제를 보인 표본부터 의도를 끊기까지 걸린 시간. */
+  releaseLag: ReleaseLagStats;
   turnLatched: boolean;
   mode: 'motion' | 'keyboard' | null;
   /** 이 스냅샷이 실제로 이동/회전 판정에 들어갔는지(문맥·모드·폴백 조건). */
@@ -56,6 +60,8 @@ export function describeMotionDebug(input: {
   tuning: InputTuning;
   move: MoveIntent;
   motionActive: boolean;
+  movePhase: MovePhase;
+  releaseLag: ReleaseLagStats;
   turnLatched: boolean;
   mode: 'motion' | 'keyboard' | null;
   accepting: boolean;
@@ -102,6 +108,8 @@ export function describeMotionDebug(input: {
     leanGatedByYaw: headTurnedForMove(yawRelative, tuning),
     move: input.move,
     motionActive: input.motionActive,
+    movePhase: input.movePhase,
+    releaseLag: input.releaseLag,
     turnLatched: input.turnLatched,
     mode: input.mode,
     accepting: input.accepting,

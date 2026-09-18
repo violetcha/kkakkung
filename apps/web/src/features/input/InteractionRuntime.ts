@@ -1129,6 +1129,8 @@ export const createInteractionRuntime = (
           tuning,
           move: move.current,
           motionActive: move.motionActive,
+          movePhase: move.phase,
+          releaseLag: move.releaseLag,
           turnLatched: turn.latched,
           mode: context.get()?.mode ?? null,
           accepting:
