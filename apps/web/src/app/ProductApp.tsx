@@ -21,6 +21,8 @@ import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
+import { EventLog } from '../features/game/flow/EventLog';
+import { Hotbar } from '../features/game/flow/Hotbar';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
@@ -28,7 +30,6 @@ import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { PracticeScreen } from '../features/game/flow/PracticeScreen';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
-import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { createDemoFaceTexture } from '../features/game/scene/demo-face';
 import { restraintPresenter } from '../features/game/equipment/restraint-presenter';
 import { CueFlash } from '../features/game/flow/CueFlash';
@@ -290,6 +291,12 @@ export function ProductApp({
   const playerNames = Object.fromEntries(
     snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
   );
+  const renderTick = () => runtime.current?.renderTick() ?? round?.serverTick ?? 0;
+  // S15P21C204-276. 접히는 오버레이는 손이 필요한 일이 있을 때만 펼쳐진 채로 시작한다.
+  const drawerUrgent =
+    round?.phase === 'TEAM_PRACTICE' ||
+    (view?.self?.status === 'ACTIVE' &&
+      (view.self.challenge !== null || view.self.exchange?.direction === 'incoming'));
   // S15P21C204-275. 시작 전 대기는 한 화면이 덮는다. 준비 실패 안내도 그 화면 안에서 보여 준다.
   const loadingCovered =
     !!round && !inResult && ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase);
@@ -527,138 +534,139 @@ export function ProductApp({
           {round && loadingCovered && (
             <LoadingOverlay round={round} serverNow={clockTime} pending={snapshot.loadingPending} />
           )}
-          {worldVisible && round && (
-            <GameHud
-              round={round}
-              {...(activeSelf
-                ? { self: activeSelf, mode: snapshot.interaction.mode }
-                : {
-                    spectating: spectating!,
-                    playerNames,
-                    onSpectate: (targetPlayerId: string) =>
-                      runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } }),
-                  })}
-            />
-          )}
-          <div className="game-workspace">
-            <aside className="game-sidebar">
-              {interactiveWorld && localControls}
-              {interactiveWorld &&
-                (round?.phase === 'TEAM_PRACTICE' || round?.phase === 'PLAYING') &&
-                view?.self?.status === 'ACTIVE' && (
-                  <FaceGuidanceNotice notice={snapshot.faceGuidance} />
-                )}
-              {interactiveWorld && snapshot.demo && (
-                <DemoPanel
-                  demo={snapshot.demo}
-                  onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
-                />
-              )}
-              {worldVisible && view && (
-                <MiniMap
+          {worldVisible && view && (
+            <section className="game-stage" data-restrained={restrained || undefined}>
+              <div className="product-canvas">
+                <WorldCanvas
                   view={view}
-                  markers={snapshot.markers}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  faces={runtime.current?.faces}
                   ownerNames={playerNames}
+                  quality={snapshot.quality}
+                  standIn={demoFace.current}
+                  renderTick={() => runtime.current?.renderTick() ?? null}
+                  {...(metrics.current
+                    ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
+                    : {})}
                 />
-              )}
-              {interactiveWorld && view && round?.phase === 'TEAM_PRACTICE' && (
-                <PracticeScreen
+              </div>
+              {/* 1 상태 줄 */}
+              {round && (
+                <GameHud
                   round={round}
-                  view={view}
-                  devices={snapshot.devices}
-                  request={snapshot.requests.PRACTICE_READY}
-                  readyReported={snapshot.practiceReady}
-                  readSensors={readSensors}
-                  onReady={() =>
-                    runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
-                  }
+                  {...(activeSelf
+                    ? { self: activeSelf, mode: snapshot.interaction.mode }
+                    : {
+                        spectating: spectating!,
+                        playerNames,
+                        onSpectate: (targetPlayerId: string) =>
+                          runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } }),
+                      })}
                 />
               )}
-              {worldVisible &&
-              round?.phase === 'PLAYING' &&
-              view?.self?.status === 'ACTIVE' &&
-              view.self.challenge &&
-              snapshot.interaction.mode === 'keyboard' ? (
-                <KeyChallenge
-                  challenge={view.self.challenge}
-                  index={snapshot.keyIndex}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                  onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
-                  onCancel={() =>
-                    view.self?.status === 'ACTIVE' &&
-                    view.self.challenge &&
-                    runtime.current?.send({
-                      type: 'EXIT_CANCEL',
-                      payload: { challengeId: view.self.challenge.challengeId },
-                    })
-                  }
-                />
-              ) : (
-                interactiveWorld &&
-                round?.phase === 'PLAYING' &&
-                view && (
-                  <PoseChallenge
-                    view={view}
-                    tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                    progress={snapshot.poseProgress}
-                    starting={snapshot.exitStarting}
-                    send={(command) => runtime.current?.send(command)}
-                  />
-                )
-              )}
-              {interactiveWorld && view && (
-                <ExchangePanel
+              {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
+              {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
+              {interactiveWorld && <div className="crosshair" aria-hidden="true" />}
+              {/* 3 좌하단 사건 로그 */}
+              {interactiveWorld && <EventLog events={snapshot.events} />}
+              {/* 4 아래 가운데 핫바. 오른쪽은 든 도구(HeldTool)가 캔버스 안에 그리므로 비워 둔다. */}
+              {interactiveWorld && (
+                <Hotbar
                   view={view}
-                  selected={snapshot.exchangeTarget}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                  request={
-                    view.self?.status === 'ACTIVE' && view.self.exchange?.direction === 'incoming'
-                      ? snapshot.requests.EXCHANGE_ACCEPT
-                      : snapshot.requests.EXCHANGE_REQUEST
-                  }
-                  onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
-                  send={(command) => runtime.current?.send(command)}
-                />
-              )}
-              {interactiveWorld && snapshot.exchangeNotice && (
-                <p role="status">{snapshot.exchangeNotice}</p>
-              )}
-              {interactiveWorld && view && (
-                <RestraintHud
-                  view={view}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
-                />
-              )}
-              {interactiveWorld && view && (
-                <EquipmentHud
-                  view={view}
-                  tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  tick={renderTick()}
                   selected={snapshot.interaction.selectedEquipment}
-                  request={snapshot.requests.INSTALL}
-                  onSelect={(kind) => runtime.current?.selectEquipment(kind)}
-                  send={(command) => runtime.current?.send(command)}
+                  exchangeTarget={snapshot.exchangeTarget}
+                  onSelectEquipment={(kind) => runtime.current?.selectEquipment(kind)}
                 />
               )}
-            </aside>
-            {worldVisible && view && (
-              <section className="product-stage" data-restrained={restrained || undefined}>
-                <div className="product-canvas">
-                  <WorldCanvas
-                    view={view}
-                    faces={runtime.current?.faces}
-                    ownerNames={playerNames}
-                    quality={snapshot.quality}
-                    standIn={demoFace.current}
-                    renderTick={() => runtime.current?.renderTick() ?? null}
-                    {...(metrics.current
-                      ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
-                      : {})}
-                  />
-                </div>
-              </section>
-            )}
-          </div>
+              {/* 5 우하단 미니맵 */}
+              <MiniMap
+                view={view}
+                markers={snapshot.markers}
+                tick={renderTick()}
+                ownerNames={playerNames}
+              />
+              {/* 6 접히는 오버레이. 급한 일이 있을 때만 펼쳐진 채로 시작한다. */}
+              {interactiveWorld && (
+                <details className="hud-drawer" open={drawerUrgent}>
+                  <summary>교환 · 도전 · 장치 · 소리</summary>
+                  <div className="hud-drawer-body">
+                    {round?.phase === 'TEAM_PRACTICE' && (
+                      <PracticeScreen
+                        round={round}
+                        view={view}
+                        devices={snapshot.devices}
+                        request={snapshot.requests.PRACTICE_READY}
+                        readyReported={snapshot.practiceReady}
+                        readSensors={readSensors}
+                        onReady={() =>
+                          runtime.current?.send({
+                            type: 'PRACTICE_READY',
+                            payload: { ready: true },
+                          })
+                        }
+                      />
+                    )}
+                    {round?.phase === 'PLAYING' &&
+                      (view.self?.status === 'ACTIVE' &&
+                      view.self.challenge &&
+                      snapshot.interaction.mode === 'keyboard' ? (
+                        <KeyChallenge
+                          challenge={view.self.challenge}
+                          index={snapshot.keyIndex}
+                          tick={renderTick()}
+                          onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
+                          onCancel={() =>
+                            view.self?.status === 'ACTIVE' &&
+                            view.self.challenge &&
+                            runtime.current?.send({
+                              type: 'EXIT_CANCEL',
+                              payload: { challengeId: view.self.challenge.challengeId },
+                            })
+                          }
+                        />
+                      ) : (
+                        <PoseChallenge
+                          view={view}
+                          tick={renderTick()}
+                          progress={snapshot.poseProgress}
+                          starting={snapshot.exitStarting}
+                          send={(command) => runtime.current?.send(command)}
+                        />
+                      ))}
+                    <ExchangePanel
+                      view={view}
+                      selected={snapshot.exchangeTarget}
+                      tick={renderTick()}
+                      request={
+                        view.self?.status === 'ACTIVE' &&
+                        view.self.exchange?.direction === 'incoming'
+                          ? snapshot.requests.EXCHANGE_ACCEPT
+                          : snapshot.requests.EXCHANGE_REQUEST
+                      }
+                      onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
+                      send={(command) => runtime.current?.send(command)}
+                    />
+                    {snapshot.exchangeNotice && <p role="status">{snapshot.exchangeNotice}</p>}
+                    <EquipmentHud
+                      view={view}
+                      tick={renderTick()}
+                      selected={snapshot.interaction.selectedEquipment}
+                      request={snapshot.requests.INSTALL}
+                      onSelect={(kind) => runtime.current?.selectEquipment(kind)}
+                      send={(command) => runtime.current?.send(command)}
+                    />
+                    {snapshot.demo && (
+                      <DemoPanel
+                        demo={snapshot.demo}
+                        onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                      />
+                    )}
+                    {localControls}
+                  </div>
+                </details>
+              )}
+            </section>
+          )}
           <CueFlash flash={snapshot.cueFlash} />
           {/* 문구가 생기고 사라져도 페이지 높이가 바뀌지 않도록 자리를 항상 잡아 둔다 */}
           <p role="status" className="command-feedback">
