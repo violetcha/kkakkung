@@ -9,6 +9,14 @@ import type { InputMode } from './interaction-context';
 export type MoveDirection = 'forward' | 'back';
 export type MoveIntent = MoveDirection | null;
 
+/**
+ * S15P21C204-281. 이동 의도의 단계.
+ * `tap`은 한 칸만 가는 구간이고 `hold`는 유지 이동이다. 서버는 한 칸이 끝나는 Tick에만 유지
+ * 의도를 보므로(A `startQueuedActions`), 탭은 의도를 보낸 뒤 곧바로 해제해 그 한 칸만 남긴다.
+ * 이미 시작한 칸은 해제해도 끝까지 간다(기획서 5.2).
+ */
+export type MovePhase = 'idle' | 'tap' | 'hold';
+
 /** 유지 중 의도를 다시 알리는 주기. 서버 행동 시간과 다른 값이다. */
 export const MOVE_REFRESH_MS = 100;
 
@@ -38,6 +46,8 @@ export interface MoveIntentController {
   readonly current: MoveIntent;
   readonly motionActive: boolean;
   readonly mode: InputMode;
+  /** S15P21C204-281. 지금 한 칸(tap)인지 유지 이동(hold)인지. 시험과 디버그 표시가 읽는다. */
+  readonly phase: MovePhase;
 }
 
 export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentController {
@@ -56,6 +66,14 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
   let timer: number | null = null;
   /** 누른 키의 유지 시간이 차는 순간 다시 판정하기 위한 일회성 타이머. */
   let keyTimer: number | null = null;
+  /** S15P21C204-281. 탭·홀드 상태와 발동 시각·방향. */
+  let phase: MovePhase = 'idle';
+  let armedAt: number | null = null;
+  let armedDirection: MoveDirection | null = null;
+  /** 탭이 보낸 의도를 끊는 일회성 타이머. */
+  let tapTimer: number | null = null;
+  /** 계속 기울이고 있을 때 연속 이동으로 올리는 일회성 타이머(키보드는 표본이 오지 않아 필요). */
+  let upgradeTimer: number | null = null;
 
   const stopTimer = () => {
     if (timer === null) return;
@@ -67,6 +85,18 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     if (keyTimer === null) return;
     deps.clearTimer(keyTimer);
     keyTimer = null;
+  };
+
+  const stopTapTimer = () => {
+    if (tapTimer === null) return;
+    deps.clearTimer(tapTimer);
+    tapTimer = null;
+  };
+
+  const stopUpgradeTimer = () => {
+    if (upgradeTimer === null) return;
+    deps.clearTimer(upgradeTimer);
+    upgradeTimer = null;
   };
 
   const clearKeys = () => {
@@ -97,12 +127,81 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     timer = deps.setTimer(tick, MOVE_REFRESH_MS);
   };
 
-  const apply = (next: MoveIntent) => {
+  /** 값이 실제로 바뀔 때만 보낸다. 타이머는 부르는 쪽이 정한다. */
+  const emit = (next: MoveIntent) => {
     if (next === current) return;
     current = next;
     deps.send(next);
-    if (next === null) stopTimer();
-    else startTimer();
+  };
+
+  /**
+   * 한 칸. 의도를 한 번 보내고 `MOVE_REFRESH_MS` 뒤 해제해, 시작한 칸만 남기고 유지를 끊는다.
+   * 계속 기울이고 있으면 `holdToContinuousMs` 뒤 연속 이동으로 올라간다.
+   */
+  const beginTap = (direction: MoveDirection, nowMs: number) => {
+    phase = 'tap';
+    armedAt = nowMs;
+    armedDirection = direction;
+    stopTimer();
+    emit(direction);
+    stopTapTimer();
+    tapTimer = deps.setTimer(() => {
+      tapTimer = null;
+      if (phase === 'tap') emit(null);
+    }, MOVE_REFRESH_MS);
+    armUpgradeTimer(nowMs);
+  };
+
+  /**
+   * 남은 시간만큼만 기다렸다 다시 판정한다. 키보드는 키를 누르고 있는 동안 표본이 오지 않으므로
+   * 이 타이머가 연속 전환의 유일한 계기다. 타이머가 일찍 깨어도 시계로 다시 재 남은 만큼 잔다.
+   */
+  function armUpgradeTimer(nowMs: number): void {
+    stopUpgradeTimer();
+    if (armedAt === null) return;
+    const remaining = tuning.holdToContinuousMs - (nowMs - armedAt);
+    upgradeTimer = deps.setTimer(
+      () => {
+        upgradeTimer = null;
+        resolve();
+      },
+      Math.max(1, remaining),
+    );
+  }
+
+  /** 연속 이동. 유지 의도를 갱신 주기로 계속 알린다. */
+  const beginHold = (direction: MoveDirection) => {
+    phase = 'hold';
+    armedDirection = direction;
+    stopTapTimer();
+    stopUpgradeTimer();
+    emit(direction);
+    startTimer();
+  };
+
+  const toIdle = () => {
+    phase = 'idle';
+    armedAt = null;
+    armedDirection = null;
+    stopTapTimer();
+    stopUpgradeTimer();
+    stopTimer();
+    emit(null);
+  };
+
+  /** 지금 이 순간 기울임·키가 가리키는 방향. 단계 판정과 분리한다. */
+  const desiredDirection = (nowMs: number): MoveIntent => {
+    if (mode === 'keyboard') {
+      // 양방향 동시입력은 중립이다. 한 방향은 모션과 같은 유지 시간을 채운 뒤에만 의도가 된다.
+      if (keyForward && keyBack) return null;
+      const forwardHeld =
+        keyForward && keyForwardSince !== null && nowMs - keyForwardSince >= tuning.forwardHoldMs;
+      const backHeld =
+        keyBack && keyBackSince !== null && nowMs - keyBackSince >= tuning.backHoldMs;
+      return forwardHeld ? 'forward' : backHeld ? 'back' : null;
+    }
+    if (forwardActive && backActive) return null;
+    return forwardActive ? 'forward' : backActive ? 'back' : null;
   };
 
   /** 누른 키 중 아직 유지 시간을 채우지 못한 것이 있으면 그 시각에 다시 판정한다. */
@@ -124,29 +223,31 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     );
   };
 
-  const resolve = () => {
-    if (mode === 'keyboard') {
-      // 양방향 동시입력은 중립이다. 한 방향은 모션과 같은 유지 시간을 채운 뒤에만 의도가 된다.
-      if (keyForward && keyBack) {
-        stopKeyTimer();
-        apply(null);
+  function resolve(): void {
+    const nowMs = deps.now();
+    if (mode === 'keyboard') armKeyTimer(nowMs);
+    const desired = desiredDirection(nowMs);
+    if (desired === null) {
+      toIdle();
+      return;
+    }
+    if (phase === 'hold') {
+      // 유지 중 방향이 바뀌면 그대로 이어 간다. 다시 탭으로 내려가지 않는다.
+      if (desired !== current) beginHold(desired);
+      return;
+    }
+    if (phase === 'tap') {
+      if (desired !== armedDirection) {
+        beginTap(desired, nowMs);
         return;
       }
-      const nowMs = deps.now();
-      const forwardHeld =
-        keyForward && keyForwardSince !== null && nowMs - keyForwardSince >= tuning.forwardHoldMs;
-      const backHeld =
-        keyBack && keyBackSince !== null && nowMs - keyBackSince >= tuning.backHoldMs;
-      apply(forwardHeld ? 'forward' : backHeld ? 'back' : null);
-      armKeyTimer(nowMs);
+      // 같은 방향을 충분히 오래 유지했다. 다음 칸이 시작되기 전에 연속으로 올린다.
+      if (armedAt !== null && nowMs - armedAt >= tuning.holdToContinuousMs) beginHold(desired);
+      else if (upgradeTimer === null) armUpgradeTimer(nowMs);
       return;
     }
-    if (forwardActive && backActive) {
-      apply(null);
-      return;
-    }
-    apply(forwardActive ? 'forward' : backActive ? 'back' : null);
-  };
+    beginTap(desired, nowMs);
+  }
 
   return {
     updateMotion(relativeLeanRad, nowMs) {
@@ -219,6 +320,11 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     release() {
       clearMotion();
       clearKeys();
+      phase = 'idle';
+      armedAt = null;
+      armedDirection = null;
+      stopTapTimer();
+      stopUpgradeTimer();
       if (current !== null) {
         current = null;
         deps.send(null);
@@ -229,6 +335,11 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     reset() {
       clearMotion();
       clearKeys();
+      phase = 'idle';
+      armedAt = null;
+      armedDirection = null;
+      stopTapTimer();
+      stopUpgradeTimer();
       current = null;
       stopTimer();
     },
@@ -241,6 +352,9 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     },
     get mode() {
       return mode;
+    },
+    get phase() {
+      return phase;
     },
   };
 }
