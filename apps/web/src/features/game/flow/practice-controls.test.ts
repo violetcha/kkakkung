@@ -111,4 +111,10 @@ describe('PracticeScreen', () => {
     expect(render('runner')).toContain('출구에서 사용할 상체 포즈 연습');
     expect(render('tagger')).toContain('1·2로 장비');
   });
+
+  // S15P21C204-278. 첫 경기 전에 한 번은 실제로 놓아 보게 민다.
+  it('tells the tagger whether they have actually placed anything here yet', () => {
+    expect(render('tagger')).toContain('아직 설치해 보지 않았어요');
+    expect(render('runner')).not.toContain('아직 설치해 보지 않았어요');
+  });
 });

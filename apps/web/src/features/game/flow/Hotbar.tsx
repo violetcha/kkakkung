@@ -1,5 +1,6 @@
 import type { EquipmentKind, PrivateView } from '@kkakkung/protocol/game-schema';
 import { hotbarSlots } from './hotbar-model';
+import type { InstallHint } from './install-hint';
 
 /**
  * S15P21C204-276. 경기 화면 아래 가운데 핫바.
@@ -10,52 +11,62 @@ export function Hotbar({
   tick,
   selected,
   exchangeTarget,
+  hint,
   onSelectEquipment,
 }: {
   view: PrivateView | null;
   tick: number;
   selected: EquipmentKind;
   exchangeTarget?: string | null;
+  /** S15P21C204-278. 지금 설치할 수 있는지와 그 이유. 술래가 아니면 넘기지 않는다. */
+  hint?: InstallHint | null;
   onSelectEquipment?(kind: EquipmentKind): void;
 }) {
   const slots = hotbarSlots({ view, tick, selected, exchangeTarget });
   if (!slots) return null;
   return (
     <div className="hotbar" aria-label="빠른 선택">
-      {slots.map((slot) => {
-        const selectable =
-          onSelectEquipment && (slot.id === 'sensor' || slot.id === 'trap') ? slot.id : null;
-        const body = (
-          <>
-            <span className="hotbar-key" aria-hidden="true">
-              {slot.key}
-            </span>
-            <span className="hotbar-glyph" aria-hidden="true">
-              {slot.glyph}
-            </span>
-            <span className="hotbar-label">{slot.label}</span>
-            {slot.detail && <span className="hotbar-detail">{slot.detail}</span>}
-          </>
-        );
-        return selectable ? (
-          <button
-            key={slot.id}
-            type="button"
-            className="hotbar-slot"
-            data-slot={slot.id}
-            data-state={slot.state}
-            aria-pressed={slot.state === 'selected'}
-            disabled={slot.state === 'unavailable'}
-            onClick={() => onSelectEquipment?.(selectable as EquipmentKind)}
-          >
-            {body}
-          </button>
-        ) : (
-          <div key={slot.id} className="hotbar-slot" data-slot={slot.id} data-state={slot.state}>
-            {body}
-          </div>
-        );
-      })}
+      {hint && (
+        <p className="hotbar-hint" role="status" data-ready={hint.ready}>
+          {hint.text}
+        </p>
+      )}
+      <div className="hotbar-slots">
+        {slots.map((slot) => {
+          const selectable =
+            onSelectEquipment && (slot.id === 'sensor' || slot.id === 'trap') ? slot.id : null;
+          const body = (
+            <>
+              <span className="hotbar-key" aria-hidden="true">
+                {slot.key}
+              </span>
+              <span className="hotbar-glyph" aria-hidden="true">
+                {slot.glyph}
+              </span>
+              <span className="hotbar-label">{slot.label}</span>
+              {slot.detail && <span className="hotbar-detail">{slot.detail}</span>}
+            </>
+          );
+          return selectable ? (
+            <button
+              key={slot.id}
+              type="button"
+              className="hotbar-slot"
+              data-slot={slot.id}
+              data-state={slot.state}
+              aria-pressed={slot.state === 'selected'}
+              disabled={slot.state === 'unavailable'}
+              onClick={() => onSelectEquipment?.(selectable as EquipmentKind)}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={slot.id} className="hotbar-slot" data-slot={slot.id} data-state={slot.state}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

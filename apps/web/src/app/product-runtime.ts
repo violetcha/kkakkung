@@ -50,6 +50,7 @@ import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
 import { appendEvent, eventTextForCue, type MatchEvent } from '../features/game/flow/event-log';
+import { firstInstallPrompt } from '../features/game/flow/install-hint';
 import {
   NO_MOTION_CHECK,
   observeMotionCheck,
@@ -184,6 +185,8 @@ export function bindProductRoom(
   let lastCueState: CueState | null = null;
   let flashId = 0;
   let eventId = 0;
+  /** S15P21C204-278. 첫 설치 안내를 이미 낸 경기. 한 경기에 한 번만 낸다. */
+  let installPromptMatch: string | null = null;
   let deferredProgress: { kinds: CueKind[]; at: number } | null = null;
   let microphoneWanted = false;
   let deviceAction = 0;
@@ -308,11 +311,25 @@ export function bindProductRoom(
     bridge.runtime.playCue?.(kind);
     // S15P21C204-276. 같은 순간을 화면 로그 한 줄로도 남긴다. 새 판정을 만들지 않는다.
     const text = eventTextForCue(kind);
-    if (text)
-      publish({
-        events: appendEvent(snapshot.events, { id: ++eventId, text, atMs: deps.now() }),
-      });
+    if (text) logEvent(text);
     if (isFlashCue(kind)) publish({ cueFlash: { kind, id: ++flashId } });
+  };
+  const logEvent = (text: string) => {
+    publish({ events: appendEvent(snapshot.events, { id: ++eventId, text, atMs: deps.now() }) });
+  };
+  /** S15P21C204-278. 장비를 한 번도 놓지 않은 술래에게 놓을 수 있게 된 순간 한 번만 알린다. */
+  const promptFirstInstall = () => {
+    if (!active || snapshot.lost || snapshot.round?.phase !== 'PLAYING') return;
+    const matchId = snapshot.round.matchId;
+    if (installPromptMatch === matchId) return;
+    const text = firstInstallPrompt(
+      snapshot.view,
+      interaction.selectedEquipment,
+      clock.renderTick() ?? snapshot.round.serverTick,
+    );
+    if (!text) return;
+    installPromptMatch = matchId;
+    logEvent(text);
   };
   const emitCues = () => {
     if (!active || snapshot.lost) return;
@@ -1167,6 +1184,7 @@ export function bindProductRoom(
       updateChallenge();
       // 카운트다운 초가 바뀌는 시점과 미뤄 둔 누계 안내음은 여기서만 잡힌다.
       emitCues();
+      promptFirstInstall();
       flushProgressCues();
       // 대기 항목의 경과 시간을 갱신한다. 문자열이 바뀔 때만 발행하므로 초당 한 번 수준이다.
       if (snapshot.round?.phase === 'GAME_LOADING') updateLoading();
