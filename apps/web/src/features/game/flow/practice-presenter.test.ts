@@ -43,7 +43,8 @@ it.each(['runner', 'tagger'] as const)(
         onReady() {},
       }),
     );
-    expect(html).toContain('W/S로 전진·후진');
+    // S15P21C204-275. 조작 안내는 장치 점검이 맡고 연습방은 역할 행동만 남긴다.
+    expect(html).not.toContain('W/S로 전진·후진');
     if (role === 'runner') {
       expect(html).toContain('아군과 지도를 교환');
       expect(html).toContain('출구에서 사용할 상체 포즈 연습');

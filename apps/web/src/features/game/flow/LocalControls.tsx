@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DeviceStatus, InteractionState } from '../../input/InteractionRuntime';
 import { deviceFeedback } from './device-feedback';
+import { deviceLost } from './device-readiness';
 
 export function LocalControls({
   status,
@@ -12,6 +13,7 @@ export function LocalControls({
   onMicrophone,
   canRecover = true,
   compact = false,
+  variant = 'full',
 }: {
   status: DeviceStatus;
   mode: InteractionState['mode'];
@@ -22,9 +24,36 @@ export function LocalControls({
   onMicrophone(enabled: boolean): Promise<void>;
   canRecover?: boolean;
   compact?: boolean;
+  /**
+   * S15P21C204-275. 'quiet' 는 연습방용이다. 장치 점검에서 이미 읽은 조작 안내·자세 안내와
+   * 장치 단추를 다시 보여 주지 않고, 미리보기와 끊겼을 때의 복구 배너만 남긴다.
+   */
+  variant?: 'full' | 'quiet';
 }) {
   const [busy, setBusy] = useState(false);
   const calibrating = busy || status.calibration === 'running';
+  const recover = () => {
+    setBusy(true);
+    void onRecover().finally(() => setBusy(false));
+  };
+  if (variant === 'quiet')
+    return (
+      <aside className="local-controls local-controls-quiet" aria-label="내 카메라">
+        <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+        {deviceLost(status) && (
+          <div className="device-recovery" role="alert">
+            <p>
+              {status.errorCode
+                ? deviceFeedback(status.errorCode)
+                : '카메라 추적이 끊겼습니다. 연습과 경기는 키보드로 계속할 수 있습니다.'}
+            </p>
+            <button disabled={busy || !canRecover} onClick={recover}>
+              {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
+            </button>
+          </div>
+        )}
+      </aside>
+    );
   return (
     <aside className="local-controls" aria-label="내 카메라와 조작">
       <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
@@ -53,13 +82,7 @@ export function LocalControls({
           >
             {calibrating ? '추적 준비·보정 중…' : '보정 후 모션으로 조작'}
           </button>
-          <button
-            disabled={busy || !canRecover}
-            onClick={() => {
-              setBusy(true);
-              void onRecover().finally(() => setBusy(false));
-            }}
-          >
+          <button disabled={busy || !canRecover} onClick={recover}>
             {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
           </button>
           <button
