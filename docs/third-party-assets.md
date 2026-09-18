@@ -52,7 +52,7 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 | `models/` (모델 3·WASM 6·문서) | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending)       | 있음 — 고지 화면 |
 | `fonts/` (WOFF2 4·OFL 원문)    | 갈무리 픽셀 글꼴 4종               | Lee Minseo(quiple), SIL OFL 1.1                | 있음 — 고지 화면 |
 | `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득            | 고지 대상 자체   |
-| `brand/kkakkung-logo.svg`      | 까꿍 로고                          | 프로젝트 자체 제작(윤곽은 Galmuri11 Bold 변환) | 없음             |
+| `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산                | 없음             |
 
 외부에서 받은 렌더 자산·음원 파일은 하나도 없다. 새 파일을 `public/` 에 넣으면 이 표에 줄을
 추가해야 하며, 빠뜨리면 `tests/contracts/asset-ledger.test.ts`가 실패한다.
@@ -112,11 +112,11 @@ OFL 원문은 배포 의존성과 함께 보존하며, 사용자용 오픈소스
 
 ### 까꿍 로고
 
-`apps/web/public/brand/kkakkung-logo.svg`는 S15P21C204-271에서 프로젝트용으로 직접 만든
-원본 SVG이며 제3자 그림·상표·폰트 파일을 포함하지 않는다. 제작 주체는 S15P21C204 프로젝트,
-권리는 저장소 자체 제작물과 같은 조건으로 관리한다. 워드마크 윤곽은 동봉한 Galmuri11 Bold의
-두 글자를 SVG path로 변환해 플랫폼 설치 글꼴에 의존하지 않는다. 1,012bytes, SHA256
-`668680699db54aa79fd444676633448e07f5bda1960041ee4e8b48a70e471378`이다.
+`apps/web/public/brand/kkakkung-logo.png`는 S15P21C204-279에서 프로젝트 구성원이 제공한
+브랜드 자산이다. 프로젝트 화면과 브라우저 파비콘에 사용할 수 있도록 제공받았으며 권리는
+프로젝트 제공 자산과 같은 조건으로 관리한다. 원본 비율을 유지한 366×388 RGBA PNG이고,
+167,732bytes, SHA256
+`9ab237541afc01f03da4081fe3739bf12ac273a34e8cefc5d3ccdaed0bd10258`이다.
 
 ## 자산 추가 기록
 

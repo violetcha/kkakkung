@@ -305,7 +305,7 @@ E는 들어온 교환 수락 → 유효한 자기 출구 도전 → 선택 대�
 로비 명단은 이중 테두리, 점선 이음새, 계단형 그림자를 함께 써 봉제된 공포 게임 카드처럼
 보이게 한다. 상태와 역할은 색만으로 구분하지 않고 기존 문구·글리프·테두리를 함께 유지한다.
 
-근거: [입력 런타임](../../apps/web/src/features/input/InteractionRuntime.ts), [입력 튜닝](../../apps/web/src/features/input/input-tuning.ts), [장치 준비](../../apps/web/src/features/game/flow/device-readiness.ts), [장치 점검 단계](../../apps/web/src/features/game/flow/device-check-steps.ts), [공통 스타일](../../apps/web/src/styles.css), [브랜드 로고](../../apps/web/public/brand/kkakkung-logo.svg).
+근거: [입력 런타임](../../apps/web/src/features/input/InteractionRuntime.ts), [입력 튜닝](../../apps/web/src/features/input/input-tuning.ts), [장치 준비](../../apps/web/src/features/game/flow/device-readiness.ts), [장치 점검 단계](../../apps/web/src/features/game/flow/device-check-steps.ts), [공통 스타일](../../apps/web/src/styles.css), [브랜드 로고](../../apps/web/public/brand/kkakkung-logo.png).
 
 ## 7. 맵·시야·개인 지도
 

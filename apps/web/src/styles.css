@@ -173,7 +173,6 @@
   display: block;
   width: 184px;
   height: auto;
-  image-rendering: pixelated;
 }
 .product-shell h1 {
   letter-spacing: -0.03em;
