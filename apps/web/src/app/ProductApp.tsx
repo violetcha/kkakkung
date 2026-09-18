@@ -290,6 +290,9 @@ export function ProductApp({
   const playerNames = Object.fromEntries(
     snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
   );
+  // S15P21C204-275. 시작 전 대기는 한 화면이 덮는다. 준비 실패 안내도 그 화면 안에서 보여 준다.
+  const loadingCovered =
+    !!round && !inResult && ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase);
   // 구속 중에는 화면 가장자리를 어둡게 유지한다(S15P21C204-261). 남은 시간은 RestraintHud 가 쓴다.
   const restrained =
     interactiveWorld &&
@@ -314,6 +317,7 @@ export function ProductApp({
           }}
           canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
           compact={worldVisible}
+          variant={round.phase === 'TEAM_PRACTICE' ? 'quiet' : 'full'}
         />
         <AudioControls
           readStatus={readAudio}
@@ -448,7 +452,7 @@ export function ProductApp({
         />
       ) : (
         <>
-          {preparationFeedback(round?.preparationIssue) && (
+          {preparationFeedback(round?.preparationIssue) && !loadingCovered && (
             <p role="alert" className="notice">
               {preparationFeedback(round?.preparationIssue)}
             </p>
@@ -512,15 +516,9 @@ export function ProductApp({
               onRematch={(mode) => runtime.current?.send({ type: 'REMATCH', payload: { mode } })}
             />
           )}
-          {round &&
-            !inResult &&
-            ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase) && (
-              <LoadingOverlay
-                round={round}
-                serverNow={clockTime}
-                pending={snapshot.loadingPending}
-              />
-            )}
+          {round && loadingCovered && (
+            <LoadingOverlay round={round} serverNow={clockTime} pending={snapshot.loadingPending} />
+          )}
           {worldVisible && round && (
             <GameHud
               round={round}

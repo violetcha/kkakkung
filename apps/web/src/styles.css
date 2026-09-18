@@ -689,6 +689,48 @@
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
+/* S15P21C204-275. 시작 전 대기 한 화면의 진행표시와 복귀 안내. */
+.loading-steps {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  font-family: var(--font-control);
+  font-size: var(--text-control);
+  color: var(--color-muted);
+}
+.loading-steps li[data-state='done'] {
+  color: var(--color-success);
+}
+.loading-steps li[data-state='busy'] {
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+.loading-notice {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--color-danger);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-pixel);
+}
+/* S15P21C204-275. 연습방은 미리보기와 끊겼을 때의 복구 배너만 둔다. */
+.local-controls-quiet {
+  display: grid;
+  gap: var(--space-2);
+}
+.device-recovery {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  color: var(--color-warning);
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-pixel);
+}
+.device-recovery p {
+  margin: 0;
+}
 .result-screen {
   padding: 48px 0;
 }
