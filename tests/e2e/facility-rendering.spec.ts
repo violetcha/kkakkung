@@ -103,21 +103,24 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   await expect.poll(counts).toEqual(original);
   mark('scene-cycle');
   for (const quality of ['low', 'medium']) {
+    const beforeQuality = await metrics.textContent();
     await page.getByRole('combobox', { name: '화면 품질' }).selectOption(quality);
+    const qualityResources = await settledAfter(beforeQuality);
     await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
     await expect(page.locator('canvas')).toHaveCount(0);
     await expect(metrics).toHaveText('측정 대기');
     await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
     // A fresh Canvas has not uploaded the earlier corridor's cached avatar geometry yet.
-    // It may own fewer resources, but it must not accumulate more across re-entry.
+    // It may own fewer resources, but it must not accumulate more across re-entry. Texture counts
+    // are compared with the selected quality because low intentionally drops roughness/normal maps.
     await expect
       .poll(async () => {
         const current = await counts();
         return (
           current !== null &&
           current.geometry > 0 &&
-          current.geometry <= original!.geometry &&
-          current.texture === original!.texture
+          current.geometry <= qualityResources!.geometry &&
+          current.texture === qualityResources!.texture
         );
       })
       .toBe(true);
