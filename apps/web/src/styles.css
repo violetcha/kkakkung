@@ -805,6 +805,7 @@
   margin: 0;
   transform: translateX(-50%);
 }
+/* 2 중앙 십자선. 설치할 수 있는 칸이면 색이 바뀐다(S15P21C204-278). */
 .game-stage > .crosshair {
   position: absolute;
   top: 50%;
@@ -819,15 +820,50 @@
   filter: drop-shadow(0 1px 2px #000);
   transform: translate(-50%, -50%);
 }
+.game-stage > .crosshair[data-install='ready'] {
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  background:
+    linear-gradient(var(--color-success), var(--color-success)) center / 2px 20px no-repeat,
+    linear-gradient(var(--color-success), var(--color-success)) center / 20px 2px no-repeat;
+}
+.game-stage > .crosshair[data-install='blocked'] {
+  opacity: 0.45;
+}
+/* 아래 가운데 핫바. 사건 기록은 숨은 접근성 레이어에만 둔다. */
 .game-stage > .hotbar {
   position: absolute;
   bottom: 22px;
   left: 50%;
-  display: flex;
+  display: grid;
+  justify-items: center;
   gap: 7px;
   max-width: calc(100% - 240px);
   transform: translateX(-50%);
 }
+.hotbar-slots {
+  display: flex;
+  gap: 7px;
+}
+/* S15P21C204-278. 지금 설치할 수 있는지 한 줄로 알린다. 십자선 색과 같은 뜻이다. */
+.hotbar-hint {
+  margin: 0;
+  padding: 5px 9px;
+  font: 600 11px/1.2 Inter, Pretendard, system-ui, sans-serif;
+  color: #c7c7bf;
+  white-space: nowrap;
+  background: #070807d9;
+  border: 1px solid #a8aaa59c;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #0009;
+  backdrop-filter: blur(3px);
+}
+.hotbar-hint[data-ready='true'] {
+  color: #b9f5cf;
+  border-color: #67d38ebd;
+}
+/* 5 우하단 미니맵 */
 .game-stage > .mini-map {
   position: absolute;
   right: 28px;
@@ -897,14 +933,20 @@
   font-family: Inter, Pretendard, system-ui, sans-serif;
   backdrop-filter: blur(4px);
 }
+/* S15P21C204-278. 고른 칸은 테두리를 두껍게 하고 바탕을 올려 한눈에 잡히게 한다. */
 .product-shell .hotbar-slot[data-state='selected'] {
   color: #fff;
-  border-color: #f0f0e8;
+  border: 3px solid #f0f0e8;
   box-shadow:
     inset 0 0 0 2px #ffffff24,
     0 0 11px #fff5,
     0 4px 12px #000b;
   transform: translateY(-3px);
+}
+.product-shell .hotbar-slot[data-state='selected'] .hotbar-key {
+  color: #101111;
+  background: #f0f0e8;
+  border-color: #f0f0e8;
 }
 .product-shell .hotbar-slot[data-state='unavailable'],
 .product-shell .hotbar-slot[data-state='reserved'] {

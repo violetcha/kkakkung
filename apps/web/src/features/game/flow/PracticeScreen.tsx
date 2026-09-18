@@ -45,6 +45,10 @@ export function PracticeScreen({
     };
   }, [scope, kind, readSensors]);
   if (!model) return null;
+  // 연습 중 한 번이라도 놓아 봤는지. 설치가 끝나면 ownedEquipment 에 남는다.
+  const installed =
+    view.self?.status === 'ACTIVE' &&
+    (view.self.ownedEquipment.length > 0 || view.self.installation !== null);
   const submitted = readyReported && request?.status === 'applied';
   const pending = request?.status === 'pending' || request?.status === 'waiting-view';
   return (
@@ -58,7 +62,15 @@ export function PracticeScreen({
       {model.role === 'runner' ? (
         <p>가까이 보이는 도망자 아군과 지도를 교환하고 출구에서 사용할 포즈를 연습해 보세요.</p>
       ) : (
-        <p>1·2로 장비를 고르고 F를 한 번 눌러 설치하세요. 설치 중 F를 다시 누르면 취소합니다.</p>
+        <>
+          <p>1·2로 장비를 고르고 F를 한 번 눌러 설치하세요. 설치 중 F를 다시 누르면 취소합니다.</p>
+          {/* S15P21C204-278. 첫 경기 전에 한 번은 실제로 놓아 보게 한다. */}
+          <p role="status" data-installed={installed}>
+            {installed
+              ? '여기서 설치해 봤습니다. 경기에서도 같은 조작입니다.'
+              : '아직 설치해 보지 않았어요. 벽을 마주 보고 F를 눌러 감지기를 한 번 붙여 보세요.'}
+          </p>
+        </>
       )}
       <p>전원 준비 또는 최대 60초 후 서버가 다음 단계를 정합니다.</p>
       {model.role === 'runner' && (

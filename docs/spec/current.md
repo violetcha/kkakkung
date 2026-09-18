@@ -167,7 +167,18 @@ MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12는 **이번 MVP 구현·필수 인수�
 레이어와 기존 상호작용 오버레이에 남긴다. 좁은 화면(400px)에서는 핫바 칸과 미니맵을 줄이고 안전
 영역 안에서 같은 상대 위치를 지킨다.
 
-근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts), [캠코더 프레임](../../apps/web/src/features/game/flow/CamcorderOverlay.tsx), [핫바](../../apps/web/src/features/game/flow/hotbar-model.ts).
+**장비 발견성(W4).** 술래가 첫 경기에서 장비를 한 번도 안 쓰고 끝나지 않게, 쓸 수 있다는 것을
+화면이 먼저 알린다. 고른 칸은 테두리를 두껍게 하고 바탕과 키 표시를 올려 한눈에 잡히게 하고,
+지금 서 있는 칸에 선택한 장비를 놓을 수 있으면 십자선이 커지며 성공색으로 바뀐다. 핫바 위 한 줄은
+같은 것을 문구로 말하고, 막혀 있으면 이유 하나만 말한다(움직이는 중 · 설치 중 · 구속 중 · 남은
+개수 없음 · 벽을 안 봄 · 이미 장비 있음). 이 판정은 내 화면이 아는 것만 보는 예고이며 최종 판정은
+서버(EQ-01)가 한다. 시작 칸 금지처럼 화면이 모르는 조건은 확인하지 않는다.
+
+장비를 한 번도 놓지 않은 술래가 실제로 놓을 수 있게 된 순간에는 한 경기 한 번만 접근성 사건
+기록으로 안내한다. 화면에는 핫바 안내 줄만 남겨 왼쪽 아래 HUD를 다시 만들지 않는다. 팀 연습에서는
+술래에게 아직 설치해 보지 않았음을 알려 경기 전에 한 번 놓아 보게 한다.
+
+근거: [Room 흐름](../../server/src/rooms/KkakkungRoom.ts), [로비](../../server/src/rooms/LobbyCoordinator.ts), [연습](../../server/src/rooms/PracticeCoordinator.ts), [화면 조립](../../apps/web/src/app/ProductApp.tsx), [시작 전 대기 진행표시](../../apps/web/src/features/game/flow/loading-progress.ts), [캠코더 프레임](../../apps/web/src/features/game/flow/CamcorderOverlay.tsx), [핫바](../../apps/web/src/features/game/flow/hotbar-model.ts), [설치 예고](../../apps/web/src/features/game/flow/install-hint.ts), [사건 로그](../../apps/web/src/features/game/flow/event-log.ts).
 
 ### 4.5 미니맵 표시
 

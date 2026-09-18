@@ -21,8 +21,10 @@ import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
+import { EventLog } from '../features/game/flow/EventLog';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
+import { crosshairState, installHint } from '../features/game/flow/install-hint';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
@@ -292,6 +294,12 @@ export function ProductApp({
     snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
   );
   const renderTick = () => runtime.current?.renderTick() ?? round?.serverTick ?? 0;
+  // S15P21C204-278. 지금 이 칸에 선택한 장비를 놓을 수 있는지. 술래가 아니면 null 이다.
+  const equipmentHint = installHint(
+    view ?? null,
+    snapshot?.interaction.selectedEquipment ?? 'sensor',
+    renderTick(),
+  );
   // S15P21C204-276. 접히는 오버레이는 손이 필요한 일이 있을 때만 펼쳐진 채로 시작한다.
   const drawerUrgent =
     round?.phase === 'TEAM_PRACTICE' ||
@@ -552,33 +560,43 @@ export function ProductApp({
               <GameStatusChrome
                 status={
                   round ? (
-                    <GameHud
-                      round={round}
-                      {...(activeSelf
-                        ? { self: activeSelf, mode: snapshot.interaction.mode }
-                        : {
-                            spectating: spectating!,
-                            playerNames,
-                            onSpectate: (targetPlayerId: string) =>
-                              runtime.current?.send({
-                                type: 'SPECTATE',
-                                payload: { targetPlayerId },
-                              }),
-                          })}
-                    />
+                    <>
+                      <GameHud
+                        round={round}
+                        {...(activeSelf
+                          ? { self: activeSelf, mode: snapshot.interaction.mode }
+                          : {
+                              spectating: spectating!,
+                              playerNames,
+                              onSpectate: (targetPlayerId: string) =>
+                                runtime.current?.send({
+                                  type: 'SPECTATE',
+                                  payload: { targetPlayerId },
+                                }),
+                            })}
+                      />
+                      {interactiveWorld && <EventLog events={snapshot.events} />}
+                    </>
                   ) : null
                 }
               />
               {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
               {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
-              {interactiveWorld && <div className="crosshair" aria-hidden="true" />}
-              {/* 아래 가운데 핫바. 오른쪽은 든 도구(HeldTool)가 캔버스 안에 그리므로 비워 둔다. */}
+              {interactiveWorld && (
+                <div
+                  className="crosshair"
+                  aria-hidden="true"
+                  data-install={crosshairState(equipmentHint)}
+                />
+              )}
+              {/* 아래 가운데 핫바. 사건 기록은 접근성 레이어에만 남기고 시야를 가리지 않는다. */}
               {interactiveWorld && (
                 <Hotbar
                   view={view}
                   tick={renderTick()}
                   selected={snapshot.interaction.selectedEquipment}
                   exchangeTarget={snapshot.exchangeTarget}
+                  hint={equipmentHint}
                   onSelectEquipment={(kind) => runtime.current?.selectEquipment(kind)}
                 />
               )}

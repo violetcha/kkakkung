@@ -6,6 +6,7 @@ import { GameHud } from '../features/game/flow/GameHud';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { crosshairState, installHint } from '../features/game/flow/install-hint';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import type { EquipmentKind } from '@kkakkung/protocol/game-schema';
@@ -49,7 +50,19 @@ export function HudPreview() {
   const [role, setRole] = useState<'runner' | 'tagger'>('tagger');
   const [selected, setSelected] = useState<EquipmentKind>('sensor');
   const [drawer, setDrawer] = useState(false);
-  const view = previewView(role);
+  const [facingWall, setFacingWall] = useState(false);
+  const baseView = previewView(role);
+  const baseSelf = baseView.self;
+  if (baseSelf?.status !== 'ACTIVE') throw new Error('preview self must be active');
+  const view = facingWall
+    ? {
+        ...baseView,
+        visibleWallFaces: [
+          ...baseView.visibleWallFaces,
+          { x: baseSelf.cell.x, y: baseSelf.cell.y - 1, side: 2 as const },
+        ],
+      }
+    : baseView;
   const self = view.self;
   if (self?.status !== 'ACTIVE') throw new Error('preview self must be active');
   const round = roundFixture({ phase: 'PLAYING', serverTick: TICK, deadlineTick: TICK + 2400 });
@@ -64,6 +77,9 @@ export function HudPreview() {
         <button aria-pressed={drawer} onClick={() => setDrawer(!drawer)}>
           접히는 오버레이 {drawer ? '접기' : '펼치기'}
         </button>
+        <button aria-pressed={facingWall} onClick={() => setFacingWall(!facingWall)}>
+          설치 가능 칸 {facingWall ? '끄기' : '켜기'}
+        </button>
       </div>
       <section className="game-stage">
         <div className="product-canvas">
@@ -74,11 +90,16 @@ export function HudPreview() {
           nowMs={4_000}
           status={<GameHud round={round} self={self} mode="motion" />}
         />
-        <div className="crosshair" aria-hidden="true" />
+        <div
+          className="crosshair"
+          aria-hidden="true"
+          data-install={crosshairState(installHint(view, selected, TICK))}
+        />
         <Hotbar
           view={view}
           tick={TICK}
           selected={selected}
+          hint={installHint(view, selected, TICK)}
           onSelectEquipment={(kind) => setSelected(kind)}
         />
         <MiniMap view={view} tick={TICK} />
