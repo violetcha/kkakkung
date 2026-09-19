@@ -73,6 +73,30 @@ async function enter(page: Page) {
   await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
   await expect(page.getByRole('heading', { name: '혼자 준비해 볼까요?' })).toBeVisible();
 }
+
+test('solo camcorder HUD keeps the hotbar and minimap apart at desktop and mobile widths', async ({
+  page,
+}) => {
+  await enter(page);
+  for (const width of [944, 390]) {
+    await page.setViewportSize({ width, height: 940 });
+    const stage = await page.locator('.solo-stage').boundingBox();
+    const hotbar = await page.locator('.solo-stage > .hotbar').boundingBox();
+    const map = await page.locator('.solo-stage > .mini-map').boundingBox();
+    expect(stage).not.toBeNull();
+    expect(hotbar).not.toBeNull();
+    expect(map).not.toBeNull();
+    expect(hotbar!.x).toBeGreaterThanOrEqual(stage!.x);
+    expect(hotbar!.x + hotbar!.width).toBeLessThanOrEqual(stage!.x + stage!.width);
+    expect(map!.x).toBeGreaterThanOrEqual(stage!.x);
+    expect(map!.x + map!.width).toBeLessThanOrEqual(stage!.x + stage!.width);
+    const overlapWidth =
+      Math.min(hotbar!.x + hotbar!.width, map!.x + map!.width) - Math.max(hotbar!.x, map!.x);
+    const overlapHeight =
+      Math.min(hotbar!.y + hotbar!.height, map!.y + map!.height) - Math.max(hotbar!.y, map!.y);
+    expect(Math.min(overlapWidth, overlapHeight)).toBeLessThanOrEqual(0);
+  }
+});
 /**
  * 키를 유지 시간 동안 누른다. 앱의 유지 타이머는 페이지 시계로 돌므로 러너의 벽시계로 기다리면
  * 메인 스레드가 막힌 CI에서 keyup이 그 타이머보다 먼저 처리될 수 있다. 페이지 안에서 기다리면

@@ -90,6 +90,13 @@ describe('container nginx (web-proxy)', () => {
     expect(block(edge, 'location ^~ /models/mediapipe/ {')).toMatch(/immutable/);
     expect(block(edge, 'location ^~ /models/ {')).toMatch(/must-revalidate/);
   });
+  it('serves branding and font files as static assets ahead of the two-segment room route', () => {
+    for (const path of ['/brand/', '/fonts/']) {
+      const staticRoute = block(edge, `location ^~ ${path} {`);
+      expect(staticRoute).toMatch(/try_files \$uri =404;/);
+      expect(staticRoute).not.toMatch(/proxy_pass/);
+    }
+  });
   it('forwards client address headers for trust proxy', () => {
     expect(edge).toMatch(/proxy_set_header X-Forwarded-For\s+\$proxy_add_x_forwarded_for;/);
     expect(edge).toMatch(/proxy_set_header X-Forwarded-Proto \$http_x_forwarded_proto;/);
