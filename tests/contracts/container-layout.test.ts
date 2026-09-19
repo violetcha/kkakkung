@@ -55,7 +55,12 @@ describe('compose base + production override', () => {
     }
   });
   it('puts no secret values in compose or the env template', () => {
-    for (const name of ['LIVEKIT_API_SECRET', 'LIVEKIT_API_KEY', 'OPS_TOKEN']) {
+    for (const name of [
+      'LIVEKIT_API_SECRET',
+      'LIVEKIT_API_KEY',
+      'OPS_TOKEN',
+      'ALERT_WEBHOOK_URL',
+    ]) {
       expect(prod).not.toMatch(new RegExp(`${name}:\\s*\\S`));
       expect(base).not.toContain(name);
       expect(envExample).toMatch(new RegExp(`^${name}=$`, 'm'));

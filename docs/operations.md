@@ -32,7 +32,7 @@
 | `MAX_ROOMS` / `MAX_SLOTS`                  | `1` / `6`               | 스키마 상한 10방·60석, `MAX_SLOTS = MAX_ROOMS × 6`. 단계 부하 후 상향                         |
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                    |
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                               |
-| API 경보                                   | total 설정의 90%        | 180이면 162. 외부 알림 전달은 미구현                                                          |
+| API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                |
 | `DEMO_ROOMS`                               | `0`(꺼짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 하고 켜도 방 수 예산을 함께 쓴다                    |
 | `PRODUCT_MAP_TEMPLATE`                     | `master-v1`             | 본경기 맵. `maze-v1`은 통로 1칸(267). `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
@@ -100,11 +100,24 @@ docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.p
 
 운영 HTTP 순서: `GET /api/operations/status` → `POST /api/operations/commands {requestId, action}`(202는 접수) → `GET /api/operations/commands/<requestId>`로 종결 확인. 운영 토큰은 서버 신뢰 경로에서만 쓰고 브라우저로 넘기지 않는다.
 
+### 외부 알림
+
+| 경로                                               | 알리는 것                                                                                                                       | 시점                                                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 서버 → `ALERT_WEBHOOK_URL`                         | critical 경보: `READINESS_LOCKED`·`MEDIA_API_RATE_LIMITED`·`JOURNAL_NOT_WRITABLE`·`MEDIA_RETIREMENT_UNRESOLVED`·`TICK_OVERLOAD` | 발생 즉시. 해제는 60초 유지 뒤, 같은 경보 재발생은 5분 간격. 전달 전에 이미 풀린 경보는 "일시 경보"로 한 번                       |
+| Jenkins `kkakkung-watchdog` → `mattermost-webhook` | 서비스 무응답(컨테이너 없음·중지·unhealthy, `/health/live` 실패), 게임 서버 비정상 재시작, 복구                                 | 5분마다 확인. 무응답은 연속 2회부터, 지속 중에는 1시간마다 다시. 재시작은 같은 컨테이너의 RestartCount 증가만(배포는 새 컨테이너) |
+
+- warning 경보는 로그에만 남는다. 수동 해제 경보(회수 미확인·틱 과부하)는 서버에 해제 경로가 없어 발생 알림만 가고 재기동까지 켜져 있다.
+- 전달 실패는 `alert.notify.failed`(경보 id·코드만)로 남고 60초 뒤 다시 보낸다. 감시 잡은 전달에 실패하면 상태를 저장하지 않아 다음 회차에 다시 보낸다. 웹훅 URL은 메시지·오류·로그에 남지 않는다.
+- Docker는 unhealthy 컨테이너를 재시작하지 않는다. 멈춘 서버는 감시 알림을 받고 사람이 재시작한다.
+- 켜기: `kkakkung-production-env`에 `ALERT_WEBHOOK_URL`(선택 `ALERT_WEBHOOK_CHANNEL`)을 넣고 재배포한다. 비어 있으면 경보는 로그에만 남는다. 감시 잡은 [Jenkins 설정 11장](../infra/jenkins/SETUP.md#11-서비스-감시-잡-s15p21c204-288).
+- 호스트 자체가 죽으면 두 경로가 함께 멈춘다. 호스트 밖 감시는 없다.
+
 ## 7. 남은 운영 과제
 
 - 게스트 공개 대상(W07): ingress·배포 manifest가 같은 audience를 선택하고, 같은 이미지로 team→격리 public→team 리허설. 운영 도메인 제한은 유지.
 - 게스트 남용 방어(방 생성 IP 제한 외 추가 정책), LiveKit 월 사용량 경보.
-- 외부 장애 알림 수신(서버 사망·LOCKED·429·저널 실패·회수 미확인), 호스트 외부 백업과 실제 복원 훈련.
+- 호스트 외부 백업과 실제 복원 훈련. 호스트 자체 장애는 외부 알림도 함께 멈춘다(호스트 밖 감시 없음).
 - Docker 메모리·CPU·PID 상한이 없다. 실제 게임·미디어·CI 조건에서 상한과 회복을 검증한다.
 - 단일 모드의 공유 방 첫 예약 fsync와 첫 journal 기록 사이 종료 공백.
 - 준비 단계 30초 반복 실패(S15P21C204-231)의 원인 확정. 재경기 뒤 입장 503(S15P21C204-236)은 로컬에서 재현되지 않았다. 재발하면 `/api/sessions` 응답, matchmake 오류 코드, 운영 status의 readiness·admission, room phase를 같은 시각으로 남긴다([B 인계](handoffs/B.md)).
