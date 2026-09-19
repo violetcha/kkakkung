@@ -84,6 +84,14 @@ const environment = z.object({
   // Operator API token (E OP-07). Separate from session bearer tokens.
   OPS_TOKEN: nonEmpty,
 
+  // External alert delivery (S15P21C204-288). Critical alert transitions are posted to this
+  // incoming webhook; unset keeps alerts log-only. The URL carries its key, so it is a secret.
+  ALERT_WEBHOOK_URL: httpUrl,
+  ALERT_WEBHOOK_CHANNEL: z
+    .string()
+    .regex(/^@?[a-z0-9][a-z0-9._-]{0,63}$/)
+    .optional(),
+
   // Demo rooms (S15P21C204-258): an operator-only room with server-driven puppets, used to show
   // game situations without six people. Off unless explicitly enabled, and always behind OPS_TOKEN.
   DEMO_ROOMS: z.enum(['0', '1']).default('0'),
@@ -181,6 +189,13 @@ export function parseConfig(input: Record<string, string | undefined>) {
     throw new Error('ALLOWED_ORIGINS must contain exact HTTP origins');
   if (raw.MAX_SLOTS !== raw.MAX_ROOMS * 6)
     throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
+  if (raw.ALERT_WEBHOOK_CHANNEL !== undefined && raw.ALERT_WEBHOOK_URL === undefined)
+    throw new Error('ALERT_WEBHOOK_CHANNEL requires ALERT_WEBHOOK_URL');
+  if (raw.ALERT_WEBHOOK_URL !== undefined) {
+    const url = new URL(raw.ALERT_WEBHOOK_URL);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash)
+      throw new Error('ALERT_WEBHOOK_URL must be an https URL without credentials');
+  }
 
   const livekit = group(
     raw,
@@ -283,6 +298,9 @@ export function parseConfig(input: Record<string, string | undefined>) {
         }
       : null,
     opsToken: raw.OPS_TOKEN ?? null,
+    alertWebhook: raw.ALERT_WEBHOOK_URL
+      ? { url: raw.ALERT_WEBHOOK_URL, channel: raw.ALERT_WEBHOOK_CHANNEL ?? null }
+      : null,
     // The operator token is the only way in, so a demo room without it is never opened.
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,

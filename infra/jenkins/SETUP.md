@@ -156,3 +156,18 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 - `LOCKED`여도 경기·입장·저널·예산·회수 정리가 확인되면 drain은 완료할 수 있다. 기존 서버의 입장 잠금은 유지한다. 회수 미확인이나 기록 손상은 계속 차단한다.
 - 성공한 빌드는 저장소별 최근 5개 태그만 남긴다. 지금 태그, `last-good-tag`, 실행 중 컨테이너의 태그, 마지막 태그 시각이 1시간 이내인 태그는 지우지 않는다(`node scripts/prune-release-images.mjs --dry-run kkakkung-game kkakkung-web` 으로 미리 볼 수 있다).
 - 마지막 정상 이미지 ID가 이미 삭제됐다면 롤백은 `PREVIOUS_IMAGE_MISSING`으로 실패한다. 같은 소스를 재빌드한 이미지를 기존 digest의 대체물로 취급하거나 실패한 배포를 last-good으로 기록하지 않는다.
+
+## 11. 서비스 감시 잡 (S15P21C204-288)
+
+`kkakkung-watchdog` 잡이 5분마다 `scripts/watch-service.mjs` 를 호스트 Node 로 실행해 서비스 무응답·게임 서버 비정상 재시작·복구를 Mattermost 로 알린다. 무엇을 언제 알리는지는 [운영 6장 외부 알림](../../docs/operations.md#외부-알림).
+
+| 항목      | 값                                                                                                                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 잡 만들기 | 새로운 Item → 이름 `kkakkung-watchdog`, Pipeline → Pipeline script from SCM, Git 저장소·크리덴셜은 `kkakkung` 잡과 같게, 브랜치 `*/develop`, Script Path `infra/jenkins/watchdog.Jenkinsfile`, Lightweight checkout |
+| 첫 실행   | 저장 후 **지금 빌드** 한 번. 이때 5분 cron 과 `SEND_TEST` 파라미터가 등록된다. 이어서 **파라미터와 함께 빌드**에서 `SEND_TEST` 를 켜고 실행해 채널에 시험 메시지가 오는지 확인한다                                  |
+| 웹훅      | 9장의 `mattermost-webhook` 을 그대로 쓴다. 채널을 비우면 웹훅 기본 채널, 다른 채널은 Jenkinsfile `environment` 에 `WATCH_CHANNEL` 을 둔다                                                                           |
+| 상태      | `/opt/kkakkung/watchdog-state.json`(jenkins, 600). 지우면 다음 회차가 처음부터 센다(재시작 기준값도 새로 잡힌다)                                                                                                    |
+| 결과      | 서비스가 죽어 있어도 잡은 성공이다. 잡이 실패하면 알림을 못 보낸 것이다: 전달 실패·크리덴셜 없음·docker 에 물을 수 없음. 실패한 회차의 알림은 다음 회차가 다시 보낸다                                               |
+| 점검      | `WATCH_DRY_RUN=1 node scripts/watch-service.mjs --state /tmp/watch.json` 은 판정과 메시지만 출력하고 보내지도 저장하지도 않는다. 계약 시험 `tests/contracts/service-watch.test.ts`                                  |
+
+게임 서버 경보(LOCKED·429·저널·회수 미확인·틱 과부하)는 이 잡이 아니라 서버가 `ALERT_WEBHOOK_URL` 로 직접 보낸다. `kkakkung-production-env` 에 그 줄을 넣고 재배포해야 켜진다.

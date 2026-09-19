@@ -75,6 +75,6 @@ node scripts/run-cloud-check.mjs --case MC-01 --preflight .local/qa/cloud-prefli
 
 - [S15P21C204-251](https://ssafy.atlassian.net/browse/S15P21C204-251) 게임 단독 60클라이언트 30분 → 실제 Cloud 1→3→5→10방 단계 부하(약 1,710 참가자-분) → 운영 `MAX_ROOMS` 상향 배포. G2 “정상 API ≤ 600회/60초” 기준 조정 여부는 실측 후 결정.
 - readiness 남은 비용: `matchCachedInput` 누적 대조, 발급 중 캐시 miss, `MediaGenerationRegistry.observe`의 프레임 복제.
-- LiveKit 월 사용량 경보, 외부 장애 알림·백업 복원(F와 함께).
+- LiveKit 월 사용량 경보, 호스트 외부 백업·복원(F와 함께). 외부 장애 알림은 S15P21C204-288.
 - 단일 모드 공유 방 첫 예약 fsync와 첫 journal 기록 사이의 종료 공백.
 - [S15P21C204-195](https://ssafy.atlassian.net/browse/S15P21C204-195) Jira 상태 정리(복구 코드는 병합·배포됨).

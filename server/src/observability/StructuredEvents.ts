@@ -31,6 +31,7 @@ export const EVENT_NAMES = Object.freeze([
   'operations.checkpoint',
   'alert.raised',
   'alert.cleared',
+  'alert.notify.failed',
   'observability.dropped',
   'room.phase',
   'room.preparation_failed',

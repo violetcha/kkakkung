@@ -51,6 +51,7 @@ import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
 import { createHealthHandlers } from './health/HealthHandlers.js';
 import { createMetricRegistry, createProcessSampler } from './observability/MetricRegistry.js';
 import { createLogOptions, createStructuredEventLogger } from './observability/StructuredEvents.js';
+import { createAlertNotifier, createWebhookSender } from './observability/AlertNotifier.js';
 import { createAlertPolicy } from './observability/AlertPolicy.js';
 import { ProductSessionStore } from './session/ProductSessionStore.js';
 import { ProductHttpLimiter } from './session/ProductHttpLimiter.js';
@@ -131,9 +132,27 @@ export function createApplication<State = unknown>(
   const monotonicNow = product?.monotonicNow ?? (() => performance.now());
   const metrics = createMetricRegistry({ now: monotonicNow });
   const eventLogger = createStructuredEventLogger(logger);
+  // S15P21C204-288: critical transitions also leave the host when a webhook is configured.
+  const notifier = config.alertWebhook
+    ? createAlertNotifier({
+        now: monotonicNow,
+        service: config.namespace,
+        send: createWebhookSender(config.alertWebhook),
+        onFailure: (alert, code) =>
+          eventLogger.emit({
+            event: 'alert.notify.failed',
+            level: 'warn',
+            atMs: monotonicNow(),
+            fields: { alert, code },
+          }),
+      })
+    : null;
   const alerts = createAlertPolicy({
     now: monotonicNow,
-    onEvent: eventLogger.emit,
+    onEvent: (event) => {
+      eventLogger.emit(event);
+      notifier?.observe(event);
+    },
     mediaApiTotalLimit: product?.mediaConfig?.maxTotalApiCallsPer60s,
   });
   const histogram = monitorEventLoopDelay({ resolution: 20 });
@@ -600,6 +619,7 @@ export function createApplication<State = unknown>(
           logger.info({ metric: sample }, 'metric');
         }
         alerts.observeReadiness(readinessState());
+        notifier?.flush();
       }, 1000);
       metricsTimer.unref();
       ready = true;
