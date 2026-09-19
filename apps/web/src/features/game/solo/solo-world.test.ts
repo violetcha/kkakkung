@@ -2,6 +2,25 @@ import { expect, it } from 'vitest';
 import { createSoloWorld } from './solo-world';
 import { challengeKeys } from '../pose/key-challenge';
 
+it('builds a one-person-wide maze without any two-by-two open room', () => {
+  const world = createSoloWorld(() => 0);
+  const floors = new Set(
+    world.snapshot.view.knownTerrain
+      .filter((cell) => cell.kind === 'floor')
+      .map((cell) => `${cell.x},${cell.y}`),
+  );
+  expect(floors.size).toBe(15);
+  for (const key of floors) {
+    const [x, y] = key.split(',').map(Number);
+    expect(
+      floors.has(`${x + 1},${y}`) && floors.has(`${x},${y + 1}`) && floors.has(`${x + 1},${y + 1}`),
+    ).toBe(false);
+  }
+  expect(floors.has('2,2')).toBe(true);
+  expect(floors.has('1,2')).toBe(false);
+  expect(floors.has('3,2')).toBe(false);
+});
+
 it('credits completed movement, quarter turns and an intentional neutral stop, not command receipt', () => {
   let clock = 0;
   const world = createSoloWorld(() => clock);

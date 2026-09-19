@@ -35,17 +35,17 @@
 }
 .solo-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
 .solo-stage {
-  height: min(60vh, 540px);
-  min-height: 350px;
+  height: min(72dvh, 680px);
+  min-height: 420px;
   position: relative;
   overflow: hidden;
   border: 1px solid #3a5556;
-  border-radius: 16px;
+  border-radius: 4px;
 }
 .solo-devices {
   display: grid;

@@ -29,9 +29,13 @@ const STEPS = [
   [-1, 0],
 ] as const;
 const same = (a: Cell, b: Cell) => a.x === b.x && a.y === b.y;
-// Public, purpose-built 3 × 5 classroom. No production map, seed or game-core imports.
-const floors: Cell[] = [];
-for (let y = 1; y <= 5; y++) for (let x = 1; x <= 3; x++) floors.push({ x, y });
+// Public, purpose-built one-cell-wide practice maze. No production map, seed or game-core imports.
+// Keep the lesson spawn, exit approach and installation wall at their existing coordinates.
+const floors: Cell[] = [
+  ...[1, 2, 3, 4, 5].map((y) => ({ x: 2, y })),
+  ...[1, 3, 5].flatMap((y) => [3, 4, 5].map((x) => ({ x, y }))),
+  { x: 1, y: 3 },
+];
 const walls: WallFace[] = floors.flatMap((cell) =>
   STEPS.flatMap(([dx, dy], dir) => {
     const next = { x: cell.x + dx, y: cell.y + dy };
