@@ -73,6 +73,8 @@ type World = {
   gateStatus: number;
   liveStatus: number;
   anonymousOpsStatus: number;
+  /** What the public edge answers for the operations API (S15P21C204-290). 404 = blocked there. */
+  publicOpsStatus?: number;
   /** Per action, the snapshot sequence returned by successive polls (last one repeats). */
   drainSnapshots: Snapshot[];
   resumeSnapshots: Snapshot[];
@@ -157,6 +159,8 @@ function harness(w: World) {
       if (!local) {
         if (u.pathname === '/api/config') return { status: w.gateStatus, json: null };
         if (u.pathname === '/health/live') return { status: w.liveStatus, json: null };
+        if (u.pathname.startsWith('/api/operations'))
+          return { status: w.publicOpsStatus ?? 404, json: null };
         return { status: 404, json: null };
       }
       if (u.pathname === '/health/ready') {
@@ -386,6 +390,31 @@ describe('barrier before the swap', () => {
       result: 'BLOCKED',
       reason: 'OPERATIONS_UNAUTHENTICATED',
     });
+  });
+
+  it('a public release wants the app reachable and the operations API refused at the edge', async () => {
+    // S15P21C204-290. The same evidence step, judged against what the audience should look like.
+    const open = harness(world({ gateStatus: 200 }));
+    expect(await runRelease(open.input({ audience: 'public' }), open.adapters)).toMatchObject({
+      result: 'READY',
+    });
+
+    // Compose says public but the ingress still refuses: the two halves were not switched together.
+    const halfSwitched = harness(world({ gateStatus: 302 }));
+    expect(
+      await runRelease(halfSwitched.input({ audience: 'public' }), halfSwitched.adapters),
+    ).toMatchObject({ result: 'BLOCKED', reason: 'AUDIENCE_MISMATCH' });
+    expect(halfSwitched.calls.posts).toEqual([]);
+
+    // Reachable app, but the edge forwards the operations API to the internet.
+    const leaking = harness(world({ gateStatus: 200, publicOpsStatus: 200 }));
+    expect(await runRelease(leaking.input({ audience: 'public' }), leaking.adapters)).toMatchObject(
+      {
+        result: 'BLOCKED',
+        reason: 'OPERATIONS_PUBLICLY_REACHABLE',
+      },
+    );
+    expect(leaking.calls.posts).toEqual([]);
   });
 
   it('product profile without operations, token or preflight is BLOCKED', async () => {

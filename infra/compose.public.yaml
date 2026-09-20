@@ -1,0 +1,15 @@
+# S15P21C204-290. 공개 대상 overlay. 제품 overlay(continuous/product) 뒤에 얹혀 audience 만 바꾼다.
+# 배포 러너가 `--audience public` 일 때만 붙이므로, 이 파일이 없는 배포는 team 그대로다.
+#
+# 이 값만으로 공개가 되지는 않는다. 호스트 nginx 가 infra/nginx/audience-public.conf 를 쓰고
+# 있어야 실제로 로그인 없이 닿는다. 둘 중 하나만 바꾸면:
+#   - compose 만 public: 서버는 guest 를 받을 준비가 되지만 SSO 가 계속 막아 아무도 못 들어온다.
+#   - nginx 만 public: 로그인 없이 도달하지만 서버가 gitlab-sso 모드라 입장이 거절된다.
+# 둘을 함께 바꾸는 절차는 docs/operations.md 3장.
+services:
+  game-server:
+    environment:
+      # env.ts: public 은 guest 입장을 뜻하며, LiveKit 을 쓰는 public 은
+      # publisher-permissions 에서만 부팅한다(D-2026-09-15-01). 제품 overlay 가 이미 그 값이다.
+      SERVICE_AUDIENCE: public
+      SESSION_ADMISSION_MODE: guest

@@ -57,6 +57,37 @@ OPS_TOKEN=... node scripts/open-demo.mjs \
 - 배포 성공은 해당 실행의 `release.json=READY`, 실행 이미지 SHA, READY/OPEN, 미해결 회수 0을 대조해 확인한다. CI 성공·MR 병합·배포 성공은 각각 다르다.
 - 사전 검사: `node --import tsx scripts/product-release.mjs --check-only --operating-mode continuous --env-file /opt/kkakkung/production.env --evidence-dir /opt/kkakkung/runtime-evidence --sha "$RELEASE_SHA"`. `PREPARED`는 입력 검증일 뿐이다.
 
+### 공개 대상 전환 (team ↔ public)
+
+두 곳을 함께 바꿔야 한다. 호스트 nginx의 audience 조각과 배포의 `--audience`다. 하나만 바꾸면 compose만 public일 때는 SSO가 계속 막아 아무도 못 들어오고, nginx만 public일 때는 도달은 하지만 서버가 입장을 거절한다.
+
+**순서는 nginx가 먼저다.** 배포 장벽이 `--audience public`일 때 공개 URL의 `/api/config`가 200이기를 요구하기 때문에, 조각을 바꾸지 않고 배포하면 `AUDIENCE_MISMATCH`로 멈춘다. 그 사이 잠깐 로그인 없이 도달하지만 서버가 team 모드라 입장은 거절된다. **알리기 전에 끝내야 하는 이유가 이것이다.**
+
+```bash
+# 1) 공개로 연다
+sudo install -m 644 infra/nginx/audience-public.conf /etc/nginx/snippets/kkakkung-audience.conf
+sudo nginx -t && sudo systemctl reload nginx
+# 2) 현재 대상을 기록한다. 이후 Jenkins 자동 배포가 이 값을 따라간다(없으면 team 으로 되돌아간다)
+echo public | sudo tee /opt/kkakkung/audience
+# 3) 같은 이미지로 audience 만 바꿔 배포한다 (Jenkins 대신 호스트에서 직접)
+DEPLOY_PROFILE=product node --import tsx scripts/product-release.mjs \
+  --env-file /opt/kkakkung/production.env --evidence-dir /opt/kkakkung/runtime-evidence \
+  --preflight /opt/kkakkung/cloud-preflight.json --sha "$RELEASE_SHA" --audience public
+```
+
+되돌릴 때는 반대다. **문을 먼저 닫는다.** 조각을 team으로 되돌려 reload하고, `echo team | sudo tee /opt/kkakkung/audience` 로 기록을 바꾼 뒤 `--audience team`으로 다시 배포한다.
+
+`/opt/kkakkung/audience`는 배포가 대상을 잃지 않게 하는 유일한 장치다. 이 파일과 nginx 조각이 어긋나면 배포가 `AUDIENCE_MISMATCH`(조각이 team인데 public 배포) 또는 `ISOLATION_UNVERIFIED`(조각이 public인데 team 배포)로 멈춘다. 멈추는 쪽이 맞다.
+
+확인할 것 세 가지다. 공개 주소가 로그인 없이 열리고(`/api/config` 200), 공개 주소로 운영 API에 닿지 않고(`/api/operations/status` 404), 운영자는 loopback으로 여전히 닿는다.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://j15c204.p.ssafy.io/api/config
+curl -s -o /dev/null -w '%{http_code}\n' https://j15c204.p.ssafy.io/api/operations/status
+```
+
+운영 API는 **두 대상 모두** 바깥에서 404다. 운영자는 호스트에서 `127.0.0.1:8080`으로 쓴다.
+
 ## 4. 요청과 기록의 상한
 
 **HTTP 입구**(S15P21C204-204). JSON 파싱 전에 운영·미디어 경로를 분류해 제한한다. 거절은 `429/RATE_LIMITED`.

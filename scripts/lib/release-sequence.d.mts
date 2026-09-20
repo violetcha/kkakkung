@@ -62,6 +62,8 @@ export type ReleaseInput = Readonly<{
   localUrl: string;
   opsTokenPresent: boolean;
   smokePreflightPresent: boolean;
+  /** Who the release opens the service to. Absent means `team` (S15P21C204-290). */
+  audience?: 'team' | 'public';
   nowEpochMs: () => number;
   recoverFailedStartup?: boolean;
   deadlines?: Partial<

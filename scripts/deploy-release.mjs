@@ -32,6 +32,8 @@ const opt = {
   stateDir: '/opt/kkakkung',
   preflight: null,
   compose: 'infra/compose.yaml infra/compose.production.yaml',
+  // S15P21C204-290. 공개 대상. null 이면 호스트 기록(<state-dir>/audience)을 따르고, 그것도 없으면 team.
+  audience: null,
   deadlines: { ...DEFAULT_DEADLINES },
 };
 for (let i = 0; i < args.length; i++) {
@@ -43,6 +45,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--state-dir') opt.stateDir = args[++i];
   else if (a === '--preflight') opt.preflight = args[++i];
   else if (a === '--compose') opt.compose = args[++i];
+  else if (a === '--audience') opt.audience = args[++i];
   else if (a === '--recover-failed-startup') opt.recoverFailedStartup = args[++i];
   else if (a === '--drain-timeout-seconds') opt.deadlines.drainMs = Number(args[++i]) * 1000;
   else if (a === '--ready-timeout-seconds') opt.deadlines.readyMs = Number(args[++i]) * 1000;
@@ -51,6 +54,25 @@ for (let i = 0; i < args.length; i++) {
     console.error(`unknown argument ${a}`);
     process.exit(2);
   }
+}
+// S15P21C204-290. 대상을 주지 않으면 호스트에 기록된 현재 대상을 따른다. 공개 기간에 Jenkins 가
+// 기본값으로 배포해 서버만 team 으로 되돌리는 일을 막는다. 파일이 없으면 team 이다.
+if (opt.audience === null) {
+  let recorded;
+  try {
+    recorded = readFileSync(resolve(opt.stateDir, 'audience'), 'utf8').trim();
+  } catch {
+    recorded = null;
+  }
+  if (recorded !== null && !['team', 'public'].includes(recorded)) {
+    console.error(`recorded audience is not team or public: ${resolve(opt.stateDir, 'audience')}`);
+    process.exit(2);
+  }
+  opt.audience = recorded ?? 'team';
+}
+if (!['team', 'public'].includes(opt.audience)) {
+  console.error('--audience must be team or public');
+  process.exit(2);
 }
 if (
   !opt.manifest ||
@@ -175,12 +197,15 @@ const adapters = {
     const selectedFiles = composeFiles.filter(
       (file) => !['infra/compose.product.yaml', 'infra/compose.continuous.yaml'].includes(file),
     );
-    if (profile === 'product')
+    if (profile === 'product') {
       selectedFiles.push(
         operatingMode === 'continuous'
           ? 'infra/compose.continuous.yaml'
           : 'infra/compose.product.yaml',
       );
+      // S15P21C204-290: audience overlay last, so it overrides the product overlay's `team`.
+      if (opt.audience === 'public') selectedFiles.push('infra/compose.public.yaml');
+    }
     // Docker image IDs are immutable even if a human has moved the SHA tag.
     const exactImages = resolve(evidenceDir, `compose-${tag}-images.json`);
     writeFileSync(
@@ -286,6 +311,7 @@ const outcome = await runRelease(
     manifest,
     baseUrl: opt.baseUrl,
     localUrl: opt.localUrl,
+    audience: opt.audience,
     opsTokenPresent: token.length > 0,
     smokePreflightPresent: Boolean(opt.preflight && existsSync(opt.preflight)),
     nowEpochMs: () => Date.now(),
