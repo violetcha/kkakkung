@@ -4,6 +4,12 @@
 // 상대 단말의 녹화 불가능으로 설명하지 않는다. 문의 경로는 실제 담당·주소가
 // 정해지지 않아 넣지 않는다(임의 작성 금지).
 
+/**
+ * 동의를 받은 안내문의 판. 문장을 고치면 이 값을 올린다(S15P21C204-292). 올리면 이미 동의한
+ * 사람에게도 다시 묻는다. 사람이 읽고 동의한 것은 "그때 그 문장"이지 "안내문"이 아니다.
+ */
+export const PRIVACY_NOTICE_VERSION = '2026-09-20';
+
 export interface PrivacyNoticeSentence {
   /** 사용자에게 보이는 문장. */
   readonly text: string;
@@ -49,6 +55,19 @@ export const PRIVACY_NOTICE: readonly PrivacyNoticeSentence[] = [
       'apps/web/src/features/media/pending-tracks.ts',
       'apps/web/src/features/game/flow/AudioControls.tsx',
       'apps/web/src/features/game/flow/LocalControls.tsx',
+    ],
+  },
+  {
+    // D-2026-09-11 / D-2026-09-15-01: publisher-permissions 는 서버가 수신 대상을 정하고
+    // 송신 앱이 그것을 적용하는 방식이다. 서버는 미디어 바이트를 받지 않으므로 상대가 보낸
+    // 것이 실제로 가공된 얼굴인지 확인할 수 없고, 결정 기록이 이 위험을 명시적으로 수용했다.
+    // 기획서 §18.2 가 요구하는 "변조 송신 위험 명시"에 해당한다.
+    text: '가공은 각자의 기기에서 이뤄집니다. 서비스는 상대가 보낸 것이 실제로 가공된 얼굴인지 검사하지 못하므로, 변조된 프로그램을 쓰는 참가자는 가공되지 않은 영상을 보낼 수도 있습니다.',
+    evidence: [
+      'server/src/media/GrantIssuer.ts',
+      'server/src/media/CloudCapabilityProbe.ts',
+      'apps/web/src/features/media/track-publisher.ts',
+      'docs/spec/decisions.md',
     ],
   },
   {

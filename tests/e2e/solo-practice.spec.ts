@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedMediaConsent } from './consent';
 
 type Probe = {
   tracks: MediaStreamTrack[];
@@ -7,6 +8,7 @@ type Probe = {
   release: (() => void) | null;
 };
 async function localDevices(page: Page, delayPermission = false) {
+  await seedMediaConsent(page);
   await page.addInitScript(
     ({ delayed }) => {
       const probe: Probe = { tracks: [], workers: new Set(), audio: new Set(), release: null };
