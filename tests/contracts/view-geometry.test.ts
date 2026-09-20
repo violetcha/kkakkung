@@ -9,6 +9,8 @@ import { expect, it } from 'vitest';
 
 import { SERVER_VIEW_RANGE } from '../../apps/web/src/features/game/scene/block-theme';
 import { verticalFov } from '../../apps/web/src/features/game/scene/FirstPersonCamera';
+import { visibilityMask } from '../../apps/web/src/features/game/scene/visibility-mask';
+import { viewFixture } from '../../apps/web/src/features/room/product-fixture';
 import { FOV_HALF_DEGREES, VIEW_RANGE } from '../../packages/game-core/src/match/vision/visibility';
 
 /** Screen shapes the game actually meets: portrait phone, laptop, ultrawide, and a near-square. */
@@ -24,6 +26,23 @@ it('draws exactly as far as the core is willing to call visible', () => {
   // If the core widens its range and this copy stays behind, players are told about cells the
   // renderer fogs away; if it narrows, the renderer draws cells the server has already hidden.
   expect(SERVER_VIEW_RANGE).toBe(VIEW_RANGE);
+});
+
+it('draws every cell the core still calls visible', () => {
+  // Pinning the constant is not enough: the mask that decides what reaches the renderer carried
+  // its own radius and dropped cells the server had already sent (S15P21C204-289). A diagonal
+  // cell 3.16 away is inside the core range and outside the old hardcoded 3.
+  const origin = { x: 1, y: 1 };
+  const edge = { x: 2, y: 4 };
+  const beyond = { x: 1, y: 6 };
+  const distance = (cell: { x: number; y: number }) =>
+    Math.hypot(cell.x - origin.x, cell.y - origin.y);
+  expect(distance(edge)).toBeLessThanOrEqual(VIEW_RANGE);
+  expect(distance(edge)).toBeGreaterThan(3);
+  expect(distance(beyond)).toBeGreaterThan(VIEW_RANGE);
+
+  const mask = visibilityMask(viewFixture({ visibleCells: [origin, edge, beyond] }));
+  expect(mask.cells).toEqual([origin, edge]);
 });
 
 it.each(ASPECTS)('keeps the core cone horizontally at aspect %f', (aspect) => {
