@@ -262,6 +262,8 @@ export function ProductApp({
               ? '로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'
               : '유효한 초대 링크가 필요합니다.',
           CAPACITY: '방이 가득 찼습니다.',
+          TOO_MANY_ROOMS:
+            '이미 열어 둔 방이 있습니다. 쓰지 않는 방을 닫거나 잠시 뒤 다시 시도해 주세요.',
           ROOM_NOT_AVAILABLE: '입장할 수 없는 방입니다.',
           RATE_LIMITED: '잠시 기다린 뒤 다시 시도해 주세요.',
           ADMISSION_CLOSED: '지금은 입장을 받고 있지 않습니다.',

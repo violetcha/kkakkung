@@ -340,4 +340,26 @@ describe('GitLab team admission through the trusted ingress', () => {
     expect(await draining.json()).toEqual({ error: 'ADMISSION_CLOSED' });
     expect(deps.slots.totalOccupied()).toBe(0);
   });
+
+  // S15P21C204-293. 공개하면 탭 몇 개로 방 예산 전체를 가져갈 수 있었다.
+  it('caps how many rooms one guest origin holds and says so plainly', async () => {
+    deps = { ...deps, admissionMode: 'guest', slots: new SlotRegistry({ maxRooms: 5 }) };
+    const guest = { nickname: 'guest', createRoom: true };
+    expect((await post(guest)).status).toBe(201);
+    expect((await post(guest)).status).toBe(201);
+
+    // 서비스에 방이 세 개 남아 있어도 같은 출처는 더 열지 못한다.
+    const refused = await post(guest);
+    expect(refused.status).toBe(429);
+    // "가득 찼다"가 아니라 "네가 많이 열었다"라고 답해야 사용자가 무엇을 할지 안다.
+    expect(await refused.json()).toEqual({ error: 'TOO_MANY_ROOMS' });
+    expect(deps.slots.roomCodes().size).toBe(2);
+
+    // 팀(SSO) 생성은 이 상한의 대상이 아니다.
+    deps = { ...deps, admissionMode: 'gitlab-sso' };
+    expect((await post({ nickname: 'team', createRoom: true }, identity('member'))).status).toBe(
+      201,
+    );
+    expect(deps.slots.roomCodes().size).toBe(3);
+  });
 });

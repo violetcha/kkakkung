@@ -96,4 +96,36 @@ describe('SlotRegistry', () => {
     });
     expect(() => new SlotRegistry({ maxRooms: 0 })).toThrow('INVALID_MAX_ROOMS');
   });
+
+  // S15P21C204-293. 공개 서비스에서는 탭 몇 개로 전체 방 예산을 가져갈 수 있었다.
+  it('stops one owner from taking the whole room budget and frees the slot when a room closes', () => {
+    const slots = new SlotRegistry({ maxRooms: 10, maxRoomsPerOwner: 2 });
+    expect(slots.reserve('ROOM01', 'a1', 0, { create: true, openedBy: 'ip-a' })).toBe('reserved');
+    expect(slots.reserve('ROOM02', 'a2', 0, { create: true, openedBy: 'ip-a' })).toBe('reserved');
+    expect(slots.roomsOpenedBy('ip-a')).toBe(2);
+
+    // 세 번째는 서비스가 비어 있어도 거절된다. "가득 찼다"가 아니라 "네가 많이 열었다"이다.
+    expect(slots.reserve('ROOM03', 'a3', 0, { create: true, openedBy: 'ip-a' })).toBe(
+      'OWNER_LIMIT',
+    );
+    // 다른 출처는 영향을 받지 않는다.
+    expect(slots.reserve('ROOM03', 'b1', 0, { create: true, openedBy: 'ip-b' })).toBe('reserved');
+    // 주체가 없는 생성(팀 입장·데모)은 상한 대상이 아니다.
+    expect(slots.reserve('ROOM04', 'c1', 0, { create: true })).toBe('reserved');
+    expect(slots.reserve('ROOM05', 'c2', 0, { create: true, openedBy: null })).toBe('reserved');
+
+    // 열어 둔 방을 닫으면 곧바로 다시 열 수 있다.
+    slots.release('ROOM01', 'a1');
+    expect(slots.closeRoom('ROOM01')).toBe(true);
+    expect(slots.roomsOpenedBy('ip-a')).toBe(1);
+    expect(slots.reserve('ROOM06', 'a4', 0, { create: true, openedBy: 'ip-a' })).toBe('reserved');
+  });
+
+  it('refuses a nonsensical per-owner cap instead of defaulting quietly', () => {
+    expect(() => new SlotRegistry({ maxRooms: 1, maxRoomsPerOwner: 0 })).toThrow(
+      'INVALID_MAX_ROOMS_PER_OWNER',
+    );
+    // 주지 않으면 기본값이 있고, 그 값이 전역 상한을 대신하지 않는다.
+    expect(new SlotRegistry({ maxRooms: 10 }).maxRoomsPerOwner).toBe(2);
+  });
 });

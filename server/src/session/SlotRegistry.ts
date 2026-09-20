@@ -20,7 +20,7 @@ export type RoomOptions = Readonly<{
 }>;
 
 export type ReserveResult =
-  'reserved' | 'ROOM_FULL' | 'SERVICE_FULL' | 'ROOM_LIMIT' | 'ROOM_CLOSED';
+  'reserved' | 'ROOM_FULL' | 'SERVICE_FULL' | 'ROOM_LIMIT' | 'OWNER_LIMIT' | 'ROOM_CLOSED';
 
 type RoomEntry = {
   roomCode: string;
@@ -36,6 +36,11 @@ type RoomEntry = {
   closing: boolean;
   joinLocked: boolean;
   accessRevision: number;
+  /**
+   * 이 방을 연 주체(S15P21C204-293). 게스트 생성에만 붙는 불투명한 키이며 팀 입장은 null 이다.
+   * 한 주체가 방 예산 전체를 가져가지 못하게 세는 데만 쓰고 다른 판단에는 쓰지 않는다.
+   */
+  openedBy: string | null;
 };
 
 export const JOINABLE_PHASES: readonly Phase[] = ['LOBBY', 'DEVICE_CHECK'];
@@ -45,13 +50,23 @@ export class SlotRegistry {
   readonly roomCapacity: number;
   readonly serviceCapacity: number;
   readonly maxRooms: number;
+  /** 한 주체가 동시에 열어 둘 수 있는 방 수(S15P21C204-293). */
+  readonly maxRoomsPerOwner: number;
 
-  constructor(options: { roomCapacity?: number; serviceCapacity?: number; maxRooms: number }) {
+  constructor(options: {
+    roomCapacity?: number;
+    serviceCapacity?: number;
+    maxRooms: number;
+    maxRoomsPerOwner?: number;
+  }) {
     this.roomCapacity = options.roomCapacity ?? 6;
     this.serviceCapacity = options.serviceCapacity ?? 60;
     this.maxRooms = options.maxRooms;
+    this.maxRoomsPerOwner = options.maxRoomsPerOwner ?? 2;
     if (!Number.isSafeInteger(this.maxRooms) || this.maxRooms < 1)
       throw new Error('INVALID_MAX_ROOMS');
+    if (!Number.isSafeInteger(this.maxRoomsPerOwner) || this.maxRoomsPerOwner < 1)
+      throw new Error('INVALID_MAX_ROOMS_PER_OWNER');
   }
 
   roomCodes(): ReadonlySet<string> {
@@ -90,6 +105,13 @@ export class SlotRegistry {
     if (room.phase !== phase) room.phaseStartedAtMs = nowMs;
     room.phase = phase;
     room.lastActivityMs = nowMs;
+  }
+
+  /** 같은 주체가 지금 열어 두고 있는 방 수(S15P21C204-293). */
+  roomsOpenedBy(owner: string): number {
+    let count = 0;
+    for (const room of this.rooms.values()) if (room.openedBy === owner) count++;
+    return count;
   }
 
   touch(roomCode: string, nowMs: number) {
@@ -138,12 +160,16 @@ export class SlotRegistry {
     roomCode: string,
     playerId: string,
     nowMs: number,
-    options: { create?: boolean; demo?: { operatorRole: Role } } = {},
+    options: { create?: boolean; demo?: { operatorRole: Role }; openedBy?: string | null } = {},
   ): ReserveResult {
     let room = this.rooms.get(roomCode);
     if (!room) {
       if (!options.create) return 'ROOM_CLOSED';
       if (this.rooms.size >= this.maxRooms) return 'ROOM_LIMIT';
+      // 전역 예산을 한 주체가 다 가져가지 못하게 한다. 방이 닫히면 항목이 사라지므로 따로
+      // 정리할 계수기를 두지 않고 매번 센다(방은 최대 열 개다).
+      if (options.openedBy && this.roomsOpenedBy(options.openedBy) >= this.maxRoomsPerOwner)
+        return 'OWNER_LIMIT';
       room = {
         roomCode,
         phase: 'LOBBY',
@@ -159,6 +185,7 @@ export class SlotRegistry {
         closing: false,
         joinLocked: false,
         accessRevision: 0,
+        openedBy: options.openedBy ?? null,
       };
       this.rooms.set(roomCode, room);
     }
