@@ -99,6 +99,11 @@ export const SESSION_ERROR_CODES = [
   'RATE_LIMITED',
   'ADMISSION_CLOSED',
   'CAPACITY',
+  /**
+   * 이 호출자가 이미 상한만큼 방을 열어 두었다(S15P21C204-293). 서비스가 찬 `CAPACITY` 와는
+   * 다른 사실이라 따로 답한다: 여기서는 자기 방을 닫으면 바로 다시 열 수 있다.
+   */
+  'TOO_MANY_ROOMS',
 ] as const;
 export type SessionErrorCode = (typeof SESSION_ERROR_CODES)[number];
 

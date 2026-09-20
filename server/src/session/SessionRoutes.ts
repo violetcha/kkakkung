@@ -141,7 +141,8 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
     if (deps.admission() !== 'OPEN') return reject(503, 'ADMISSION_CLOSED');
     const invitation = deps.roomInvitations.rotate(session.roomCode);
     if (!invitation) return reject(503, 'INVITATION_UNAVAILABLE');
-    deps.slots.touch(session.roomCode, deps.monotonicNow());
+    // S15P21C204-293: 초대를 돌리는 것은 방을 쓰는 것이 아니다. 여기서 수명을 갱신하면 아무도
+    // 없는 방을 10분마다 회전 한 번으로 영원히 붙잡을 수 있다. 수명은 사람이 들어올 때만 는다.
     return void res.status(201).json(invitation);
   };
   router.post(ROOM_INVITATION_ROUTE, (req, res) => manageInvitation(req, res, false));
@@ -227,10 +228,18 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
             : { admissionDeadlineEpochMs: verified.expiresAt }),
         });
         playerId = issued.playerId;
-        const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs, { create: true });
+        // S15P21C204-293: 게스트 생성만 주체를 남긴다. 팀 입장은 사람이 식별되고 한 IP 뒤에
+        // 여러 명이 있을 수 있어 대상이 아니다.
+        const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs, {
+          create: true,
+          openedBy: guestLimiter,
+        });
         if (outcome !== 'reserved') {
           deps.sessions.invalidate(issued.sessionId);
-          return fail(res, 503, 'CAPACITY');
+          // "서비스가 찼다"와 "당신이 이미 여러 개 열어 두었다"는 다른 사실이라 다르게 답한다.
+          return outcome === 'OWNER_LIMIT'
+            ? fail(res, 429, 'TOO_MANY_ROOMS')
+            : fail(res, 503, 'CAPACITY');
         }
         if (body.inviteToken) deps.invites.bindCreatedRoom(verified.inviteId, roomCode);
       } else {
