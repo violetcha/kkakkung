@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedMediaConsent } from './consent';
 
 type AudioProbe = {
   contexts: AudioContext[];
@@ -8,6 +9,7 @@ type AudioProbe = {
   captures: number;
 };
 async function setup(page: Page) {
+  await seedMediaConsent(page);
   await page.addInitScript(() => {
     const probe: AudioProbe = {
       contexts: [],

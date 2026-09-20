@@ -1,9 +1,14 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { clearConsentedDevice, useConsentedDevice } from '../../room/consent-fixture';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import { DeviceCheckScreen } from './DeviceCheckScreen';
 import { INITIAL_DEVICES } from './device-readiness';
+
+// 장치 점검은 동의 게이트 뒤에 있다(S15P21C204-292). 여기서 보는 것은 그 뒤 화면이다.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 const render = (
   status: DeviceStatus,

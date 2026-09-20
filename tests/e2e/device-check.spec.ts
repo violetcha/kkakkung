@@ -1,14 +1,42 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedMediaConsent } from './consent';
 
 // S15P21C204-273. 장치 점검 캐러셀. /preview 의 합성 상태만 쓰고 실제 장치·방은 열지 않는다.
 async function openDeviceCheck(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  // 카메라를 켜기 전 동의는 S15P21C204-292 가 따로 본다. 여기서는 이미 동의한 기기로 시작한다.
+  await seedMediaConsent(page);
   await page.goto('/preview');
   await page.getByRole('button', { name: '장치 점검', exact: true }).click();
   await expect(page.getByRole('heading', { name: '플레이 전 장치 점검' })).toBeVisible();
   return errors;
 }
+
+// S15P21C204-292. 동의하지 않은 기기는 장치 점검 자체를 볼 수 없다.
+test('asks for media consent before the device check appears', async ({ page }) => {
+  await page.goto('/preview');
+  await page.getByRole('button', { name: '장치 점검', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: '카메라를 켜기 전에' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '플레이 전 장치 점검' })).toBeHidden();
+  const proceed = page.getByRole('button', { name: '동의하고 장치 점검으로' });
+  await expect(proceed).toBeDisabled();
+
+  // 하나만 켜도 통과하지 못한다.
+  await page.getByRole('checkbox', { name: '위 내용을 읽고 동의합니다.' }).check();
+  await expect(proceed).toBeDisabled();
+  await page.getByRole('checkbox', { name: '만 14세 이상입니다.' }).check();
+  await expect(proceed).toBeEnabled();
+
+  await proceed.click();
+  await expect(page.getByRole('heading', { name: '플레이 전 장치 점검' })).toBeVisible();
+
+  // 동의는 기기에 남아 다시 묻지 않는다.
+  await page.reload();
+  await page.getByRole('button', { name: '장치 점검', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '플레이 전 장치 점검' })).toBeVisible();
+});
 
 const stage = (page: Page, name: string) => page.getByTestId('device-stage').selectOption(name);
 const step = (page: Page, name: string) => page.getByRole('heading', { name });
