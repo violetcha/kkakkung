@@ -1567,7 +1567,9 @@ kbd {
 .product-stage {
   position: relative;
 }
-.product-stage[data-restrained]::after {
+/* S15P21C204-289: the product marks `data-restrained` on `section.game-stage`; `.product-stage`
+   is the preview shell and never carries it, so this rule used to match nothing. */
+.game-stage[data-restrained]::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -1582,7 +1584,7 @@ kbd {
 }
 @media (prefers-reduced-motion: reduce) {
   .cue-flash,
-  .product-stage[data-restrained]::after {
+  .game-stage[data-restrained]::after {
     animation: none;
   }
   .cue-flash {

@@ -74,3 +74,13 @@ test('HUD 역할 토큰은 블록 아바타 원본 색을 그대로 쓴다', () 
   expect(css).toContain('--role-tagger: #b8402f;');
   expect(css).toContain('--role-runner: #2f9f96;');
 });
+
+// S15P21C204-289. 선택자와 마크업이 갈라지면 규칙은 조용히 아무것도 안 그린다. 구속 비네트가
+// 그랬다: 제품은 section.game-stage 에 data-restrained 를 달고 CSS 는 .product-stage 를 봤다.
+test('구속 비네트 선택자가 제품이 실제로 표시하는 요소를 가리킨다', () => {
+  const app = readFileSync(new URL('./ProductApp.tsx', import.meta.url), 'utf8');
+  const marked = app.match(/className="([a-z-]+)"\s+data-restrained=/);
+  expect(marked?.[1]).toBeDefined();
+  expect(css).toContain(`.${marked![1]}[data-restrained]::after`);
+  expect(css).not.toContain('.product-stage[data-restrained]');
+});
