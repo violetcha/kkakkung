@@ -39,8 +39,11 @@ describe('host nginx (TLS edge)', () => {
   });
   it('gates the app behind GitLab SSO but leaves health, jenkins and oauth2 endpoints open', () => {
     const app = block(https(), 'location / {');
-    expect(app).toMatch(/auth_request \/oauth2\/auth;/);
-    expect(app).toMatch(/error_page 401 = @sso_signin;/);
+    // S15P21C204-290: the audience decides this, so the directives live in an included snippet.
+    expect(app).toContain('include /etc/nginx/snippets/kkakkung-audience.conf;');
+    const team = read('infra/nginx/audience-team.conf');
+    expect(team).toMatch(/auth_request \/oauth2\/auth;/);
+    expect(team).toMatch(/error_page 401 = @sso_signin;/);
     expect(block(host, 'location @sso_signin')).toMatch(/return 302 \/oauth2\/start\?rd=/);
     expect(block(host, 'location /health/ {')).not.toMatch(/auth_request/);
     expect(block(host, 'location /jenkins {')).not.toMatch(/auth_request/);
@@ -67,10 +70,12 @@ describe('host nginx (TLS edge)', () => {
     expect(host).not.toMatch(/kk_isolation|kk_operator|kk_block/);
   });
   it('replaces supplied SSO identity with the authenticated upstream identity only', () => {
-    const app = block(https(), 'location / {');
-    expect(app).toContain('auth_request_set $sso_user $upstream_http_x_auth_request_user;');
-    expect(app).toContain('proxy_set_header X-SSO-User $sso_user;');
-    expect(app).not.toContain('$http_x_sso_user');
+    const team = read('infra/nginx/audience-team.conf');
+    expect(team).toContain('auth_request_set $sso_user $upstream_http_x_auth_request_user;');
+    expect(team).toContain('proxy_set_header X-SSO-User $sso_user;');
+    expect(team).not.toContain('$http_x_sso_user');
+    // public has no login check, so the caller's own header is cleared instead of replaced.
+    expect(read('infra/nginx/audience-public.conf')).toContain('proxy_set_header X-SSO-User "";');
     expect(read('scripts/write-smoke-proxy.mjs')).toContain('proxy_set_header X-SSO-User "";');
     expect(read('infra/compose.yaml')).toContain('127.0.0.1:8080:80');
     expect(read('infra/compose.continuous.yaml')).toContain('SESSION_ADMISSION_MODE: gitlab-sso');

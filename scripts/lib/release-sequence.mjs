@@ -411,9 +411,24 @@ export async function runRelease(input, adapters) {
         fail('BLOCKED', 'SMOKE_PREFLIGHT_MISSING', 'DP-06 preflight');
     }
 
-    // 2. External isolation evidence (the SSO gate) and operator route authentication.
+    // 2. Entry evidence and operator route authentication. What the public URL must answer
+    //    depends on the audience (S15P21C204-290); the check is never skipped, only swapped.
+    //    team:   /api/config is refused by the SSO gate, so only members reach the app.
+    //    public: /api/config answers, and the edge itself refuses the operations API. A public
+    //            audience whose gate still refuses means the ingress was not switched with it.
+    const audience = input.audience ?? 'team';
     const gate = await http('GET', `${input.baseUrl}/api/config`);
-    if (!isolatedStatus(gate.status))
+    if (audience === 'public') {
+      if (gate.status !== 200)
+        fail(
+          'BLOCKED',
+          'AUDIENCE_MISMATCH',
+          `public audience but /api/config answered ${gate.status}`,
+        );
+      const exposed = await http('GET', `${input.baseUrl}/api/operations/status`);
+      if (exposed.status === 200)
+        fail('BLOCKED', 'OPERATIONS_PUBLICLY_REACHABLE', `public /api/operations/status 200`);
+    } else if (!isolatedStatus(gate.status))
       fail('BLOCKED', 'ISOLATION_UNVERIFIED', `public /api/config answered ${gate.status}`);
     const live = await http('GET', `${input.baseUrl}/health/live`);
     if (live.status !== 200)
@@ -422,7 +437,7 @@ export async function runRelease(input, adapters) {
     if (anonymous.status === 200) fail('BLOCKED', 'OPERATIONS_UNAUTHENTICATED');
     ok(
       'isolation',
-      `public gate ${gate.status}, live 200, anonymous operations ${anonymous.status}`,
+      `audience ${audience}, gate ${gate.status}, live 200, anonymous operations ${anonymous.status}`,
     );
 
     // 3. Operations availability decides the barrier depth.
@@ -521,7 +536,13 @@ export async function runRelease(input, adapters) {
     ok('last-good', `tag and digests recorded for ${manifest.tag}`);
     if (manifest.profile === 'product' || useOperations) {
       setPhase('READY');
-      record('isolation', 'INFO', 'SSO gate retained (DP-03 decision); no public release step');
+      record(
+        'isolation',
+        'INFO',
+        audience === 'public'
+          ? 'public audience: SSO gate removed at the edge, operations API refused publicly'
+          : 'SSO gate retained (DP-03 decision); no public release step',
+      );
       return finish('READY');
     }
     return finish(

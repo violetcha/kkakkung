@@ -6,7 +6,9 @@
 - `compose.production.yaml` — **EC2 운영 override.** 위에 덧씌워 이미지 태그·운영 env·재시작·로그 회전만 바꿉니다. 단독 실행 안 함.
 - `docker/` — 이미지 정의. 개발과 배포가 같은 Dockerfile 을 씁니다.
 - `nginx/default.conf` — web-proxy **컨테이너 안** nginx. 정적파일(캐시 헤더) + API + WebSocket 라우팅, X-Forwarded-* 전달.
-- `nginx/host.conf` — **EC2 호스트** nginx. TLS 종단, `/jenkins`, GitLab SSO 게이트(`auth_request`), 나머지는 컨테이너로.
+- `nginx/host.conf` — **EC2 호스트** nginx. TLS 종단, `/jenkins`, 운영 API 차단, 나머지는 컨테이너로. 공개 대상에 따라 달라지는 부분은 `/etc/nginx/snippets/kkakkung-audience.conf` 로 뺐습니다.
+- `nginx/audience-team.conf` / `nginx/audience-public.conf` — 그 조각의 두 벌. team 은 GitLab SSO 를 강제하고, public 은 로그인 없이 통과시키되 호출자가 보낸 `X-SSO-User` 를 지웁니다. 전환 절차는 [운영 3장](../docs/operations.md).
+- `compose.public.yaml` — 공개 대상 overlay. 배포 러너가 `--audience public` 일 때만 얹습니다. `SERVICE_AUDIENCE` 와 입장 방식만 바꿉니다.
 - `compose.sso.yaml` — **GitLab SSO 게이트**(oauth2-proxy). 앱 배포와 별개 프로젝트. 비밀은 `/opt/kkakkung/sso.env` (토대 `sso.env.example`).
 - `jenkins/SETUP.md` — Jenkins 설치·잡 생성 순서.
 

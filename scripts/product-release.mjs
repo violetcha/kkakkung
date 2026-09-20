@@ -20,6 +20,8 @@ const keys = {
   '--state-dir': 'stateDir',
   '--operating-mode': 'operatingMode',
   '--recover-failed-startup': 'recoverFailedStartup',
+  // S15P21C204-290. 공개 대상. 주지 않으면 team 이다.
+  '--audience': 'audience',
 };
 let stage = 'ARGUMENTS_OR_ENV';
 try {
@@ -132,6 +134,7 @@ try {
       state,
       '--preflight',
       runPreflightPath,
+      ...(opt.audience ? ['--audience', opt.audience] : []),
       ...(opt.recoverFailedStartup ? ['--recover-failed-startup', opt.recoverFailedStartup] : []),
     ]);
   }

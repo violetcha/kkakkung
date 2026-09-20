@@ -49,5 +49,5 @@ Node 24.19.0·pnpm 11.19.0, 이미지 컨텍스트 = 루트, 서버 엔트리 `s
 - QA-11/12 단계 구동기: 부하 프로브(위)는 있고, 브라우저마다 실제 제품 세션을 붙여 5→6→7→6→5 셀을 걷게 하고 구간별 `MediaStageInput`을 만드는 쪽이 없다. 두 Cloud 사례는 그 이유로 BLOCKED다.
 - 게임 단독 60클라이언트 30분 재실행(이전 10방 포화의 원인 F-REQ-12–15와 readiness 비용은 해소됨) → 실제 Cloud 단계 부하(S15P21C204-251과 함께).
 - 호스트 외부 백업과 복원 훈련, Docker 메모리·CPU·PID 상한, Trivy 결과의 차단·예외 기준.
-- W07 공개 대상: `infra/nginx/host.conf`·배포 manifest·`release-sequence`의 audience 선택과 동일 이미지 team→public→team 리허설.
+- W07 공개 대상: 선택 경로는 S15P21C204-290으로 들어왔다(nginx audience 조각, `compose.public.yaml`, 러너 `--audience`와 호스트 기록, 대상별 격리 검사). **남은 것은 실제 호스트에서 같은 이미지로 team→public→team 왕복 리허설**이다.
 - 실제 6대 5판 일정·장치 확보와 수집기 실행(G5).
