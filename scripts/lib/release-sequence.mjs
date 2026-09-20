@@ -29,7 +29,13 @@ export const RELEASE_RESULTS = Object.freeze([
 ]);
 
 export const DEFAULT_DEADLINES = Object.freeze({
-  drainMs: 120_000,
+  // S15P21C204-291. Drain ends only when matches, practices and pending admissions are all zero,
+  // and a match runs 180 s. At 120 s a deploy that met a single match timed out, failed and went
+  // down the rollback path, which closes admission again while it repeats drain/swap/ready/resume.
+  // Waiting is cheap: with no match running drain finishes at once, so ordinary deploys are
+  // unchanged. A rematch cannot stretch this indefinitely — startCountdown requires admission
+  // OPEN, so no new round begins once draining started (server/src/rooms/KkakkungRoom.ts).
+  drainMs: 300_000,
   readyMs: 120_000,
   recoverMs: 180_000,
   resumeMs: 60_000,

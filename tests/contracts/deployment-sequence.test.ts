@@ -786,7 +786,30 @@ describe('wiring: Jenkinsfile and infra/deploy.sh go through the runner only', (
 
   it('defaults are explicit: deadlines are bounded and the skeleton profile is a named choice', () => {
     expect(DEFAULT_DEADLINES.drainMs).toBeGreaterThan(0);
+    // S15P21C204-291: a deploy has to outlast a match (180 s) or it times out whenever one is
+    // running, fails, and closes admission again on the rollback path.
+    expect(DEFAULT_DEADLINES.drainMs).toBeGreaterThanOrEqual(240_000);
     expect(jenkinsfile).toContain("choices: ['product', 'skeleton']");
+  });
+
+  it('waits out a match instead of failing the deploy', async () => {
+    // The command stays pending while a match runs; drain succeeds once the room goes idle.
+    const h = harness(
+      world({
+        drainSnapshots: [
+          { status: 'pending' },
+          { status: 'pending' },
+          { status: 'pending' },
+          { status: 'succeeded', code: null },
+        ],
+      }),
+    );
+    const out = await runRelease(
+      h.input({ deadlines: { ...DEFAULT_DEADLINES, readyMs: 10_000, resumeMs: 10_000 } }),
+      h.adapters,
+    );
+    expect(out).toMatchObject({ result: 'READY' });
+    expect(h.calls.posts.map((p) => p.action)).toContain('drain');
   });
 });
 
