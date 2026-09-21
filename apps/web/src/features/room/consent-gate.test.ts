@@ -40,7 +40,7 @@ it('asks for both confirmations and keeps the button disabled until then', () =>
   expect(html).toContain('위 내용을 읽고 동의합니다');
   expect(html).toContain('만 14세 이상입니다');
   // 서버 렌더는 초기 상태다: 아직 아무것도 체크하지 않았으므로 버튼이 잠겨 있어야 한다.
-  expect(html).toMatch(/<button[^>]*disabled[^>]*>동의하고 장치 점검으로<\/button>/);
+  expect(html).toMatch(/<button[^>]*disabled[^>]*>동의합니다<\/button>/);
   expect(html).toContain(PRIVACY_NOTICE_VERSION);
 });
 

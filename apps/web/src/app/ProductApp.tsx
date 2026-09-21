@@ -26,7 +26,11 @@ import { GameHud } from '../features/game/flow/GameHud';
 import { EventLog } from '../features/game/flow/EventLog';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
+import { RoughDefs } from '../features/game/flow/RoughDefs';
+import { SettingsWindow } from '../features/game/flow/SettingsWindow';
+import { ControlsPane, DisplayPane, SoundPane } from '../features/game/flow/SettingsPanes';
 import { crosshairState, installHint } from '../features/game/flow/install-hint';
+import { interactPrompt } from '../features/game/flow/interact-prompt';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
@@ -47,6 +51,14 @@ import {
   type RuntimeMetrics,
 } from './runtime-metrics';
 import { BrandLogo } from './BrandLogo';
+import { MINIMAP_WINDOW_CELLS } from '../features/game/map/minimap-render';
+import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
+import { debugFeed, useDebugOverlayEnabled } from '../features/debug/debug-feed';
+import {
+  loadHomeSettings,
+  saveHomeSettings,
+  type HomeSettings,
+} from '../features/room/home-settings';
 
 export function ProductApp({
   invitation,
@@ -66,10 +78,29 @@ export function ProductApp({
   const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
   const [solo, setSolo] = useState(false);
-  const [backgroundPaused, setBackgroundPaused] = useState(false);
+  // S15P21C204-295. 홈 옵션. 이 기기에만 저장되고 입장할 때 런타임에 한 번 적용된다.
+  const [settings, setSettings] = useState<HomeSettings>(() => loadHomeSettings());
+  const updateSettings = useCallback((patch: Partial<HomeSettings>) => {
+    setSettings((previous) => {
+      const next = { ...previous, ...patch };
+      saveHomeSettings(next);
+      return next;
+    });
+  }, []);
+  const debugOverlay = useDebugOverlayEnabled();
+  const backgroundPaused = !settings.backgroundMotion;
   const [homePanel, setHomePanel] = useState<'title' | 'admission' | 'options'>(
     invitation || initialRoom ? 'admission' : 'title',
   );
+  // S15P21C204-295. 홈 옵션도 Esc 로 닫는다. 게임 안 설정 창과 같은 키다.
+  useEffect(() => {
+    if (homePanel !== 'options') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.repeat) setHomePanel('title');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [homePanel]);
   useEffect(() => {
     if (invitation || initialRoom) setHomePanel('admission');
   }, [invitation, initialRoom]);
@@ -254,6 +285,13 @@ export function ProductApp({
         ...(metrics.current ? { metrics: metrics.current } : {}),
       });
       runtime.current.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
+      // 홈 옵션을 이 입장에 적용한다. 경기 중 바꾼 값은 그 방에서만 유효하다.
+      runtime.current.quality(settings.quality);
+      runtime.current.setAudioPreferences({
+        ...DEFAULT_AUDIO_PREFERENCES,
+        volume: settings.volume,
+        muted: settings.muted,
+      });
       setSelfId(session.playerId);
       setCode(session.roomCode);
       setSessionCredential(session.sessionToken);
@@ -314,6 +352,12 @@ export function ProductApp({
     snapshot?.interaction.selectedEquipment ?? 'sensor',
     renderTick(),
   );
+  // S15P21C204-295. 지금 앞에 있는 것에 쓰는 키. 아이템 칸(핫바)과는 다른 줄로 나뉘어 있다.
+  const interact = interactPrompt({
+    view: view ?? null,
+    tick: renderTick(),
+    exchangeTarget: snapshot?.exchangeTarget,
+  });
   // S15P21C204-276. 접히는 오버레이는 손이 필요한 일이 있을 때만 펼쳐진 채로 시작한다.
   const drawerUrgent =
     round?.phase === 'TEAM_PRACTICE' ||
@@ -366,9 +410,12 @@ export function ProductApp({
           ? 'product-shell playing-shell'
           : !snapshot && !solo
             ? `product-shell home-shell home-${homePanel}`
-            : 'product-shell'
+            : !snapshot && solo
+              ? 'product-shell solo-shell'
+              : 'product-shell'
       }
     >
+      <RoughDefs />
       {!snapshot && !solo && <LobbyBackdrop paused={backgroundPaused} />}
       <header>
         <BrandLogo />
@@ -380,152 +427,239 @@ export function ProductApp({
       </header>
       {solo && !snapshot ? (
         <SoloPracticeScreen onExit={finishSolo} />
-      ) : !snapshot && homePanel === 'title' ? (
-        <nav className="title-menu" aria-label="메인 메뉴">
-          <button type="button" onClick={() => setHomePanel('admission')}>
-            시작하기
-          </button>
-          <button type="button" onClick={() => setHomePanel('options')}>
-            옵션
-          </button>
-        </nav>
-      ) : !snapshot && homePanel === 'options' ? (
-        <section className="admission home-options" aria-label="옵션">
-          <h2>옵션</h2>
-          <label className="background-option">
-            <span>배경 움직임 · 조명 깜빡임</span>
-            <input
-              type="checkbox"
-              checked={!backgroundPaused}
-              onChange={(event) => setBackgroundPaused(!event.target.checked)}
-            />
-          </label>
-          <p className="notice">기기의 동작 줄이기 설정을 따릅니다.</p>
-          <p>
-            <a className="asset-notices-link" href="/licenses/index.html">
-              오픈소스 고지
-            </a>
-          </p>
-          <button className="quiet home-back" type="button" onClick={() => setHomePanel('title')}>
-            돌아가기
-          </button>
-        </section>
-      ) : !snapshot ? (
-        <section className="admission">
-          <button
-            className="quiet home-back"
-            type="button"
-            disabled={joining}
-            onClick={() => setHomePanel('title')}
-          >
-            ← 돌아가기
-          </button>
-          <div className="home-specs">
-            <span>6인 멀티플레이</span>
-            <span>PC · 카메라 필수</span>
-          </div>
-          <form onSubmit={(event) => void join(event)}>
-            <label htmlFor="product-nickname">닉네임</label>
-            <input
-              id="product-nickname"
-              autoComplete="off"
-              maxLength={20}
-              placeholder="닉네임 입력"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              disabled={joining}
-              required
-            />
-            <fieldset disabled={joining}>
-              <legend>입장 방법</legend>
-              <label>
-                <input type="radio" checked={createRoom} onChange={() => setCreateRoom(true)} /> 새
-                방 만들기
-              </label>
-              <label>
-                <input type="radio" checked={!createRoom} onChange={() => setCreateRoom(false)} />{' '}
-                친구 방 참가
-              </label>
-            </fieldset>
-            {!createRoom && (
-              <>
-                <label htmlFor="room-code">방 코드</label>
-                <input
-                  id="room-code"
-                  value={roomCode}
-                  maxLength={6}
-                  onChange={(e) => setRoomCode(e.target.value)}
-                  required
-                  disabled={joining}
-                />
-              </>
-            )}
-            <button
-              disabled={
-                joining ||
-                (!invitation && access !== 'gitlab-sso' && !(access === 'guest' && createRoom))
-              }
-            >
-              {joining ? '입장 중…' : createRoom ? '방 만들기' : '방 참가'}
+      ) : !snapshot && (homePanel === 'title' || homePanel === 'options') ? (
+        <>
+          <nav className="title-menu" aria-label="메인 메뉴">
+            <button type="button" onClick={() => setHomePanel('admission')}>
+              시작하기
             </button>
-            {joining && (
-              <button type="button" className="quiet" onClick={() => void leave()}>
-                입장 취소
-              </button>
-            )}
-          </form>
-          <button
-            className="home-practice quiet"
-            type="button"
-            disabled={joining}
-            onClick={() => setSolo(true)}
-          >
-            <span>혼자 장치 점검·조작 체험</span>
-            <span aria-hidden="true">↗</span>
-          </button>
-          <details className="home-guide">
-            <summary>처음 오셨나요? 게임 방법</summary>
-            <p>PC 브라우저에서 6명이 함께합니다. 카메라 필수 · 마이크 선택.</p>
-            <ol>
-              <li>혼자 카메라와 조작을 먼저 점검해요.</li>
-              <li>{access === 'guest' ? '초대 링크' : '방 코드'}를 나누고 여섯 명이 모여요.</li>
-              <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
-            </ol>
-            <p>
-              도망자 2명이 탈출하면 도망자 팀이, 술래가 2명을 잡거나 3분을 버티면 술래 팀이
-              이깁니다.
-            </p>
-          </details>
-          {!invitation && access === 'checking' && <p className="notice">접속 상태 확인 중…</p>}
-          {!invitation && access === 'invitation' && (
-            <p className="notice">유효한 초대 링크로 열어 주세요.</p>
+            <button type="button" onClick={() => setHomePanel('options')}>
+              옵션
+            </button>
+          </nav>
+          {homePanel === 'options' && (
+            <aside className="settings-overlay" aria-label="옵션">
+              <SettingsWindow
+                variant="overlay"
+                eyebrow="설정"
+                title="옵션"
+                initialTab="display"
+                lead={{ label: '돌아가기', run: () => setHomePanel('title') }}
+                footer={
+                  <>
+                    <kbd>Esc</kbd> 눌러 돌아가기
+                    <a className="asset-notices-link" href="/licenses/index.html">
+                      오픈소스 고지
+                    </a>
+                  </>
+                }
+                tabs={[
+                  {
+                    id: 'display',
+                    label: '화면',
+                    content: (
+                      <DisplayPane
+                        settings={settings}
+                        onChange={updateSettings}
+                        debugOverlay={debugOverlay}
+                        onDebugOverlay={(value) => debugFeed.setEnabled(value)}
+                        applied="화면 품질은 다음 입장부터 적용됩니다. 배경은 기기의 동작 줄이기 설정을 따릅니다."
+                      />
+                    ),
+                  },
+                  {
+                    id: 'sound',
+                    label: '소리',
+                    content: <SoundPane settings={settings} onChange={updateSettings} />,
+                  },
+                  { id: 'controls', label: '조작', content: <ControlsPane /> },
+                  {
+                    id: 'device',
+                    label: '카메라 · 장치',
+                    locked:
+                      '카메라 점검은 방에 들어간 뒤 Esc 설정에서 합니다. 홈에서는 카메라를 켜지 않아요.',
+                    content: null,
+                  },
+                ]}
+              />
+            </aside>
           )}
-          {access === 'gitlab-sso' && (
-            <p className="notice">팀원 로그인이 확인됐습니다. 바로 방을 만들거나 참가하세요.</p>
-          )}
-          {access === 'guest' && (
-            <p className="notice">
-              {createRoom
-                ? '가입 없이 시작해요. 방을 만든 뒤 초대 링크를 공유하세요.'
-                : invitation
-                  ? '초대받은 방에 참가합니다. 링크가 만료됐다면 방장에게 새 링크를 받아 주세요.'
-                  : '친구 방은 방장이 보낸 초대 링크로 열어 주세요.'}
-            </p>
-          )}
-          {access === 'failed' && (
-            <p className="notice">
-              접속 상태를 확인하지 못했습니다. 로그인과 네트워크 상태를 확인해 주세요.{' '}
-              <button type="button" onClick={() => setAccessAttempt((attempt) => attempt + 1)}>
-                접속 상태 다시 확인
-              </button>
-            </p>
-          )}
-          <p className="notice">
-            <a className="asset-notices-link" href="/licenses/index.html">
-              오픈소스 고지
-            </a>
-          </p>
-        </section>
+        </>
+      ) : !snapshot ? (
+        <>
+          <nav className="title-menu" aria-label="메인 메뉴" aria-hidden="true" />
+          <aside className="settings-overlay" aria-label="입장">
+            <SettingsWindow
+              variant="overlay"
+              eyebrow="입장"
+              title="같이 할 준비"
+              initialTab="join"
+              lead={{ label: '돌아가기', disabled: joining, run: () => setHomePanel('title') }}
+              footer={
+                <>
+                  <span className="home-specs">
+                    <span>6인 멀티플레이</span>
+                    <span>PC · 카메라 필수</span>
+                  </span>
+                  <a className="asset-notices-link" href="/licenses/index.html">
+                    오픈소스 고지
+                  </a>
+                </>
+              }
+              tabs={[
+                {
+                  id: 'join',
+                  label: '방 잡기',
+                  content: (
+                    <>
+                      <h3>같이 할 준비</h3>
+                      <form onSubmit={(event) => void join(event)}>
+                        <dl className="settings-rows">
+                          <div>
+                            <dt>
+                              <label htmlFor="product-nickname">닉네임</label>
+                            </dt>
+                            <dd>
+                              <input
+                                id="product-nickname"
+                                autoComplete="off"
+                                maxLength={20}
+                                placeholder="닉네임 입력"
+                                value={nickname}
+                                onChange={(e) => setNickname(e.target.value)}
+                                disabled={joining}
+                                required
+                              />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt id="join-mode">입장 방법</dt>
+                            <dd>
+                              <fieldset className="join-mode" disabled={joining}>
+                                <legend>입장 방법</legend>
+                                <label>
+                                  <input
+                                    type="radio"
+                                    checked={createRoom}
+                                    onChange={() => setCreateRoom(true)}
+                                  />
+                                  새 방 만들기
+                                </label>
+                                <label>
+                                  <input
+                                    type="radio"
+                                    checked={!createRoom}
+                                    onChange={() => setCreateRoom(false)}
+                                  />
+                                  친구 방 참가
+                                </label>
+                              </fieldset>
+                            </dd>
+                          </div>
+                          {!createRoom && (
+                            <div>
+                              <dt>
+                                <label htmlFor="room-code">방 코드</label>
+                              </dt>
+                              <dd>
+                                <input
+                                  id="room-code"
+                                  value={roomCode}
+                                  maxLength={6}
+                                  onChange={(e) => setRoomCode(e.target.value)}
+                                  required
+                                  disabled={joining}
+                                />
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                        <div className="join-actions">
+                          <button
+                            className="join-submit"
+                            disabled={
+                              joining ||
+                              (!invitation &&
+                                access !== 'gitlab-sso' &&
+                                !(access === 'guest' && createRoom))
+                            }
+                          >
+                            {joining ? '입장 중…' : createRoom ? '방 만들기' : '방 참가'}
+                          </button>
+                          {joining && (
+                            <button type="button" onClick={() => void leave()}>
+                              입장 취소
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                      {!invitation && access === 'checking' && (
+                        <p className="pause-note">접속 상태 확인 중…</p>
+                      )}
+                      {!invitation && access === 'invitation' && (
+                        <p className="pause-note">유효한 초대 링크로 열어 주세요.</p>
+                      )}
+                      {access === 'gitlab-sso' && (
+                        <p className="pause-note">
+                          팀원 로그인이 확인됐습니다. 바로 방을 만들거나 참가하세요.
+                        </p>
+                      )}
+                      {access === 'guest' && (
+                        <p className="pause-note">
+                          {createRoom
+                            ? '가입 없이 시작해요. 방을 만든 뒤 초대 링크를 공유하세요.'
+                            : invitation
+                              ? '초대받은 방에 참가합니다. 링크가 만료됐다면 방장에게 새 링크를 받아 주세요.'
+                              : '친구 방은 방장이 보낸 초대 링크로 열어 주세요.'}
+                        </p>
+                      )}
+                      {access === 'failed' && (
+                        <p className="pause-note">
+                          접속 상태를 확인하지 못했습니다. 로그인과 네트워크 상태를 확인해 주세요.{' '}
+                          <button
+                            type="button"
+                            onClick={() => setAccessAttempt((attempt) => attempt + 1)}
+                          >
+                            접속 상태 다시 확인
+                          </button>
+                        </p>
+                      )}
+                    </>
+                  ),
+                },
+                {
+                  id: 'solo',
+                  label: '튜토리얼',
+                  run: () => setSolo(true),
+                  content: null,
+                },
+                {
+                  id: 'guide',
+                  label: '게임 방법',
+                  content: (
+                    <>
+                      <h3>처음 오셨나요?</h3>
+                      <p className="pause-note">
+                        PC 브라우저에서 6명이 함께합니다. 카메라 필수 · 마이크 선택.
+                      </p>
+                      <ol className="join-guide">
+                        <li>혼자 카메라와 조작을 먼저 점검해요.</li>
+                        <li>
+                          {access === 'guest' ? '초대 링크' : '방 코드'}를 나누고 여섯 명이 모여요.
+                        </li>
+                        <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
+                      </ol>
+                      <p className="pause-note">
+                        도망자 2명이 탈출하면 도망자 팀이, 술래가 2명을 잡거나 3분을 버티면 술래
+                        팀이 이깁니다.
+                      </p>
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </aside>
+        </>
       ) : snapshot.lost ? (
         <ConnectionLostScreen
           onLeave={() => void leave()}
@@ -627,6 +761,12 @@ export function ProductApp({
                 />
               </div>
               <GameStatusChrome
+                role={activeSelf?.role ?? null}
+                remainingSeconds={
+                  round && round.deadlineTick !== null
+                    ? Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20))
+                    : null
+                }
                 status={
                   round ? (
                     <>
@@ -658,6 +798,13 @@ export function ProductApp({
                   data-install={crosshairState(equipmentHint)}
                 />
               )}
+              {/* 십자선 아래 상호작용 줄. 아이템(핫바)과 달리 지금 앞에 있는 것에 쓰는 키다. */}
+              {interactiveWorld && interact && (
+                <p className="interact-prompt" role="status">
+                  <kbd>{interact.key}</kbd>
+                  {interact.label}
+                </p>
+              )}
               {/* 아래 가운데 핫바. 사건 기록은 접근성 레이어에만 남기고 시야를 가리지 않는다. */}
               {interactiveWorld && (
                 <Hotbar
@@ -675,6 +822,8 @@ export function ProductApp({
                 markers={snapshot.markers}
                 tick={renderTick()}
                 ownerNames={playerNames}
+                windowCells={MINIMAP_WINDOW_CELLS}
+                renderTick={renderTick}
               />
               {/* 6 접히는 오버레이. 급한 일이 있을 때만 펼쳐진 채로 시작한다. */}
               {interactiveWorld && (
