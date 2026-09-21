@@ -4,7 +4,10 @@ import { roundFixture, viewFixture } from '../../room/product-fixture';
 import {
   cueState,
   detectCues,
+  detectEffectFlashes,
+  EFFECT_FLASHES,
   FLASH_CUES,
+  isEffectFlash,
   isFlashCue,
   isProgressCue,
   type CueState,
@@ -149,5 +152,31 @@ describe('detectCues', () => {
     ]);
     expect(isFlashCue('countdown')).toBe(false);
     expect(isFlashCue('victory')).toBe(true);
+  });
+});
+
+describe('detectEffectFlashes', () => {
+  const effect = (eventId: string, kind: 'footstep' | 'sensor' | 'trap') => ({ eventId, kind });
+
+  it('flashes only the sensor and trap effects and leaves footsteps to sound', () => {
+    expect(EFFECT_FLASHES).toEqual(['sensor', 'trap']);
+    expect(isEffectFlash('footstep')).toBe(false);
+    expect(
+      detectEffectFlashes(
+        [effect('ev-1', 'footstep'), effect('ev-2', 'sensor'), effect('ev-3', 'trap')],
+        new Set(),
+      ),
+    ).toEqual([
+      { eventId: 'ev-2', kind: 'sensor' },
+      { eventId: 'ev-3', kind: 'trap' },
+    ]);
+  });
+
+  it('drops an eventId already shown, in the same policy or an earlier one', () => {
+    expect(detectEffectFlashes([effect('ev-2', 'sensor')], new Set(['ev-2']))).toEqual([]);
+    expect(
+      detectEffectFlashes([effect('ev-2', 'sensor'), effect('ev-2', 'sensor')], new Set()),
+    ).toEqual([{ eventId: 'ev-2', kind: 'sensor' }]);
+    expect(detectEffectFlashes([], new Set())).toEqual([]);
   });
 });

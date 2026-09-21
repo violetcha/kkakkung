@@ -1,5 +1,6 @@
 import type { PrivateView, PublicRoundState } from '@kkakkung/protocol/game-schema';
 import type { CueKind } from '../../media/cue-buffer';
+import type { AudioEffect } from '../../media/audio-policy';
 
 /**
  * S15P21C204-261. 안내음·화면 피드백 판정에 필요한 만큼만 추린 상태. 전부 내 화면에 이미 있는
@@ -112,3 +113,36 @@ export const FLASH_CUES = [
 export type FlashCue = (typeof FLASH_CUES)[number];
 export const isFlashCue = (kind: CueKind): kind is FlashCue =>
   (FLASH_CUES as readonly CueKind[]).includes(kind);
+
+/** 플래시 한 번의 길이. CSS 애니메이션(styles.css)과 같은 값이다. */
+export const CUE_FLASH_MS = 900;
+
+/**
+ * S15P21C204-307. 서버가 승인해 이미 소리로 도착한 위치 효과음 중 화면 플래시까지 내는 종류.
+ * 발소리는 한 칸마다 울려 화면이 번쩍이면 안 되므로 소리만 낸다. 로컬에서 거리를 새로 재지 않고
+ * 서버가 들려주기로 한 사건만 그대로 옮기므로 소리보다 더 많은 것을 알리지 않는다.
+ */
+export const EFFECT_FLASHES = ['sensor', 'trap'] as const satisfies readonly AudioEffect['kind'][];
+export type EffectFlash = (typeof EFFECT_FLASHES)[number];
+export const isEffectFlash = (kind: AudioEffect['kind']): kind is EffectFlash =>
+  (EFFECT_FLASHES as readonly AudioEffect['kind'][]).includes(kind);
+
+/** 화면 플래시 한 칸에 들어가는 종류. 자기 상태 안내음과 서버 효과음이 같은 자리를 쓴다. */
+export type FlashKind = FlashCue | EffectFlash;
+
+/**
+ * 이번 정책에서 아직 화면에 내지 않은 효과음을 고른다. 중복은 서버 eventId 로만 거른다(소리와
+ * 같은 기준). 정책은 같은 효과음을 여러 번 실어 보낼 수 있으므로 한 묶음 안에서도 한 번만 낸다.
+ */
+export function detectEffectFlashes(
+  effects: readonly Pick<AudioEffect, 'eventId' | 'kind'>[],
+  shown: ReadonlySet<string>,
+): readonly Readonly<{ eventId: string; kind: EffectFlash }>[] {
+  const picked: { eventId: string; kind: EffectFlash }[] = [];
+  for (const effect of effects) {
+    if (!isEffectFlash(effect.kind)) continue;
+    if (shown.has(effect.eventId) || picked.some((p) => p.eventId === effect.eventId)) continue;
+    picked.push({ eventId: effect.eventId, kind: effect.kind });
+  }
+  return picked;
+}
