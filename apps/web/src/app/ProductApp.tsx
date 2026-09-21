@@ -22,6 +22,7 @@ import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
+import { SpectatorBar } from '../features/game/flow/SpectatorBar';
 import { EventLog } from '../features/game/flow/EventLog';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
@@ -627,15 +628,7 @@ export function ProductApp({
                         round={round}
                         {...(activeSelf
                           ? { self: activeSelf, mode: snapshot.interaction.mode }
-                          : {
-                              spectating: spectating!,
-                              playerNames,
-                              onSpectate: (targetPlayerId: string) =>
-                                runtime.current?.send({
-                                  type: 'SPECTATE',
-                                  payload: { targetPlayerId },
-                                }),
-                            })}
+                          : {})}
                       />
                       {interactiveWorld && <EventLog events={snapshot.events} />}
                     </>
@@ -660,6 +653,16 @@ export function ProductApp({
                   exchangeTarget={snapshot.exchangeTarget}
                   hint={equipmentHint}
                   onSelectEquipment={(kind) => runtime.current?.selectEquipment(kind)}
+                />
+              )}
+              {/* 관전 오버레이. 핫바가 없는 관전자에게 아래 가운데를 그대로 쓴다(320). */}
+              {spectating && (
+                <SpectatorBar
+                  spectating={spectating}
+                  playerNames={playerNames}
+                  onSpectate={(targetPlayerId) =>
+                    runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } })
+                  }
                 />
               )}
               {/* 5 우하단 미니맵 */}

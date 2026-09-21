@@ -556,7 +556,7 @@
   margin: 0;
   font-size: var(--text-body);
 }
-.spectator-hud .spectator-targets {
+.spectator-bar .spectator-targets {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -1112,6 +1112,67 @@
   opacity: 0.45;
 }
 /* 아래 가운데 핫바. 사건 기록은 숨은 접근성 레이어에만 둔다. */
+/* S15P21C204-320. 관전 오버레이. 관전자에게는 핫바가 없어 같은 자리를 그대로 쓴다.
+   미니맵이 우하단에 있으므로 최대 너비를 줄여 겹치지 않게 한다. */
+.game-stage > .spectator-bar {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  max-width: calc(100% - 240px);
+  padding: 10px 16px;
+  text-align: center;
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  border: 1px solid var(--color-seam);
+  transform: translateX(-50%);
+}
+.spectator-bar .spectator-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 1.1rem;
+  /* 시점이 바뀌면 이 줄이 다시 마운트되어 한 번 더 돈다. 1인칭만 보고는 전환을 알기 어렵다. */
+  animation: spectator-handover 900ms ease-out;
+}
+.spectator-bar .spectator-target-name {
+  white-space: nowrap;
+}
+.spectator-bar .spectator-now strong {
+  color: var(--role-runner);
+}
+.spectator-bar .spectator-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+@keyframes spectator-handover {
+  from {
+    opacity: 0.2;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spectator-bar .spectator-now {
+    animation: none;
+  }
+}
+@media (max-width: 720px) {
+  .game-stage > .spectator-bar {
+    /* 미니맵이 우하단(bottom 74, 86px)에 있어 아래쪽에는 폭이 남지 않는다. 위로 올린다. */
+    bottom: 168px;
+    max-width: calc(100% - 28px);
+    padding: 8px 12px;
+  }
+}
 .game-stage > .hotbar,
 .solo-stage > .hotbar {
   position: absolute;

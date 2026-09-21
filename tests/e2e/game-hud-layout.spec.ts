@@ -140,3 +140,56 @@ test('the camcorder HUD keeps five slots and a minimap inside a 400px screen', a
 
   expect(errors).toEqual([]);
 });
+
+// S15P21C204-320. 관전은 279 개편에서 접근성 레이어에만 남아 화면에서 사라졌다. 관전 UI 는
+// 시각적 대체물이 없어 누구 시점인지도, 대상을 바꾸는 길도 없었다.
+test('a spectator sees the watched name and reachable switch buttons on the stage', async ({
+  page,
+}) => {
+  const errors = await openHud(page);
+  await page.getByRole('button', { name: '관전 켜기', exact: true }).click();
+
+  const stage = await box(page, '.game-stage');
+  const bar = await box(page, '.game-stage > .spectator-bar');
+  // 무대 안, 아래쪽 가운데. 활성 플레이어의 핫바와 같은 자리다.
+  expect(bar.x).toBeGreaterThanOrEqual(stage.x - 1);
+  expect(bar.x + bar.width).toBeLessThanOrEqual(stage.x + stage.width + 1);
+  expect(bar.y).toBeGreaterThan(stage.y + stage.height / 2);
+  expect(Math.abs(bar.x + bar.width / 2 - (stage.x + stage.width / 2))).toBeLessThan(3);
+
+  // 지금 보고 있는 대상의 이름이 화면에 있고, 다른 후보는 눌러서 옮길 수 있다.
+  await expect(page.locator('.spectator-bar .spectator-now')).toContainText('유리 시점');
+  const other = page.locator('.spectator-bar [data-spectate-target="preview-runner-b"]');
+  await expect(other).toBeVisible();
+  await expect(other).toBeEnabled();
+  await expect(
+    page.locator('.spectator-bar [data-spectate-target="preview-runner-a"]'),
+  ).toBeDisabled();
+
+  // 관전자에게는 조작 오버레이가 없다. 접근성 레이어에 같은 버튼이 중복으로 남지도 않는다.
+  await expect(page.locator('.game-stage > .hotbar')).toHaveCount(0);
+  await expect(page.locator('.game-stage > .crosshair')).toHaveCount(0);
+  await expect(page.locator('.game-status-a11y [data-spectate-target]')).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test('the spectator overlay stays inside a 400px screen', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 780 });
+  const errors = await openHud(page);
+  await page.getByRole('button', { name: '관전 켜기', exact: true }).click();
+
+  const stage = await box(page, '.game-stage');
+  const bar = await box(page, '.game-stage > .spectator-bar');
+  expect(bar.x).toBeGreaterThanOrEqual(stage.x - 1);
+  expect(bar.x + bar.width).toBeLessThanOrEqual(stage.x + stage.width + 1);
+  // 후보가 모두 닿아야 한다. 좁은 화면에서 잘리면 시점을 바꿀 수 없다.
+  for (const target of ['preview-runner-a', 'preview-runner-b'])
+    await expect(page.locator(`.spectator-bar [data-spectate-target="${target}"]`)).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  expect(errors).toEqual([]);
+});
