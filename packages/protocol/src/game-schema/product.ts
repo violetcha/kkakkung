@@ -29,6 +29,12 @@ export const PHASES = [
   'ABORTED',
 ] as const;
 export type Phase = (typeof PHASES)[number];
+/**
+ * S15P21C204-311. 방장이 로비에서 고르는 맵 크기. 화면 표기(16x16 등)와 실제 미로 격자는
+ * 다르며, 표기와 격자의 짝은 웹이 들고 있다. 계약은 어느 것을 골랐는지만 옮긴다.
+ */
+export const MAP_SIZES = ['small', 'medium', 'large'] as const;
+export type MapSize = (typeof MAP_SIZES)[number];
 export type EquipmentKind = 'sensor' | 'trap';
 export type PoseKind = 'left' | 'right' | 'y';
 export type Action = Readonly<{

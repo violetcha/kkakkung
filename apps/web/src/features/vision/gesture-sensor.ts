@@ -2,6 +2,7 @@
 // 두 손이 서로 다른 유효 제스처면 none, 같은 종류면 최고 score 하나만 고른다.
 // 손별 후보 배열은 이 모듈 밖으로 넘기지 않는다.
 import type { GestureKind, GestureSensor, ModelOutcome, NormalizedLandmark } from './sensor-types';
+import { isFiniteLandmark } from './sensor-types';
 
 /** SDK categoryName과 제품 제스처의 대응. 목록에 없는 이름은 사용하지 않는다. */
 export const GESTURE_CATEGORY_MAP: Readonly<Record<string, Exclude<GestureKind, 'none'>>> =
@@ -38,6 +39,39 @@ export function readHandLandmarks(
 }
 
 export const NONE_GESTURE: GestureSensor = Object.freeze({ kind: 'none', score: 0 });
+
+const FINGER_JOINTS = [
+  [6, 8],
+  [10, 12],
+  [14, 16],
+  [18, 20],
+] as const;
+
+const distanceSquared = (left: NormalizedLandmark, right: NormalizedLandmark) =>
+  (left.x - right.x) ** 2 + (left.y - right.y) ** 2 + (left.z - right.z) ** 2;
+
+/** 네 손가락 끝이 각 PIP보다 손목에 가까우면 주먹으로 판정한다. 엄지는 사용하지 않는다. */
+export function isClosedFist(hand: readonly NormalizedLandmark[]): boolean {
+  if (hand.length < 21) return false;
+  const wrist = hand[0]!;
+  if (!isFiniteLandmark(wrist)) return false;
+  return FINGER_JOINTS.every(([pipIndex, tipIndex]) => {
+    const pip = hand[pipIndex]!;
+    const tip = hand[tipIndex]!;
+    return (
+      isFiniteLandmark(pip) &&
+      isFiniteLandmark(tip) &&
+      distanceSquared(tip, wrist) < distanceSquared(pip, wrist)
+    );
+  });
+}
+
+/** 보이는 손 중 하나라도 주먹이면 잡기 입력으로 사용할 수 있다. */
+export function hasClosedFist(
+  hands: readonly (readonly NormalizedLandmark[])[] | undefined,
+): boolean {
+  return hands?.some(isClosedFist) ?? false;
+}
 
 type HandCandidate = Readonly<{ kind: Exclude<GestureKind, 'none'>; score: number }>;
 

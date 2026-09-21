@@ -8,6 +8,7 @@ import {
   roomRosterSchema,
   demoStateSchema,
   roomAccessSchema,
+  roomMapSchema,
   audioPolicySchema,
   mediaBindingsSchema,
   mediaGrantSchema,
@@ -16,9 +17,11 @@ import {
   ROOM_REMOVED_CLOSE_CODE,
   type SessionResponse,
   type DemoScenarioId,
+  type DemoScenarioOptions,
   type DemoStateMessage,
   type RoomRosterMessage,
   type RoomAccessMessage,
+  type RoomMapMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
@@ -65,6 +68,7 @@ import {
 import {
   cueState,
   CUE_FLASH_MS,
+  captureProgressFlash,
   detectCues,
   detectEffectFlashes,
   isFlashCue,
@@ -108,6 +112,8 @@ export type ProductSnapshot = {
   /** S15P21C204-260. Only an operator demo room sends this; player rooms never do. */
   demo?: DemoStateMessage | null;
   roomAccess?: RoomAccessMessage | null;
+  /** S15P21C204-311. 방이 고른 맵 크기. 방장만 바꾸고 모두가 같은 값을 본다. */
+  roomMap?: RoomMapMessage | null;
   devices: DeviceStatus;
   media: MediaStatus | null;
   /** GAME_LOADING 에서 내가 아직 못 낸 준비 항목. 보고를 보낸 뒤에는 빈 배열이다. */
@@ -135,6 +141,8 @@ export type ProductSnapshot = {
   endedSelf: PrivateView['self'];
   /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
   cueFlash?: { kind: FlashKind; id: number } | null;
+  /** 로컬 잡기 입력마다 증가한다. 서버 결과와 무관한 1인칭 손 연출 신호다. */
+  grabAnimationId: number;
   /** S15P21C204-276. 좌하단 사건 로그에 그릴 최근 줄. 안내음이 울린 순간과 같다. */
   events: readonly MatchEvent[];
 };
@@ -181,6 +189,7 @@ export function bindProductRoom(
     error: null,
     quality: 'medium',
     endedSelf: null,
+    grabAnimationId: 0,
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   // S15P21C204-261. 안내음은 이전 상태와의 차이로만 고른다. 누계 안내음은 라운드·개인 뷰 도착
@@ -374,7 +383,9 @@ export function bindProductRoom(
       countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
     });
     const cues = detectCues(lastCueState, next);
+    const progressFlash = captureProgressFlash(lastCueState, next);
     lastCueState = next;
+    if (progressFlash) flash(progressFlash);
     for (const kind of cues) {
       if (isProgressCue(kind)) {
         deferredProgress = {
@@ -796,6 +807,11 @@ export function bindProductRoom(
       )
         return '';
     }
+    if (
+      command.type === 'ROOM_MAP_SIZE' &&
+      (snapshot.round.phase !== 'LOBBY' || snapshot.roster?.hostId !== session.playerId)
+    )
+      return '';
     if (command.type === 'PRACTICE_READY') {
       if (
         snapshot.round.phase !== 'TEAM_PRACTICE' ||
@@ -862,13 +878,16 @@ export function bindProductRoom(
         'REMATCH',
         'ROOM_LOCK',
         'ROOM_KICK',
+        'ROOM_MAP_SIZE',
       ].includes(command.type)
     ) {
       const pending = commands.pending(command.type);
       if (pending) return pending;
     }
     if (
-      ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
+      ['MOVE_INTENT', 'TURN', 'GRAB_INTENT', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(
+        command.type,
+      ) &&
       (((!pageActive ||
         (interaction.mode === 'motion' && snapshot.devices.calibration === 'running')) &&
         !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||
@@ -879,7 +898,16 @@ export function bindProductRoom(
       startPending = { exitId: command.payload.exitId, requestId: '', until: null };
       publish({ exitStarting: true });
     }
-    return commands.send(command);
+    const requestId = commands.send(command);
+    if (
+      command.type === 'GRAB_INTENT' &&
+      requestId &&
+      own?.status === 'ACTIVE' &&
+      own.role === 'tagger' &&
+      snapshot.round.phase === 'PLAYING'
+    )
+      publish({ grabAnimationId: snapshot.grabAnimationId + 1 });
+    return requestId;
   }
   function queueRecovery(scope: MediaScope, reported: Promise<unknown>) {
     const key = JSON.stringify(scope);
@@ -1057,6 +1085,7 @@ export function bindProductRoom(
         view: null,
         roster: null,
         roomAccess: null,
+        roomMap: null,
         endedSelf: null,
         devices: INITIAL_DEVICES,
         media: null,
@@ -1140,6 +1169,15 @@ export function bindProductRoom(
       result.data.revision >= (snapshot.roomAccess?.revision ?? -1)
     )
       publish({ roomAccess: result.data });
+  });
+  on('room-map', (value) => {
+    const result = roomMapSchema.safeParse(value);
+    if (
+      result.success &&
+      result.data.matchId === snapshot.round?.matchId &&
+      result.data.revision >= (snapshot.roomMap?.revision ?? -1)
+    )
+      publish({ roomMap: result.data });
   });
   on('room-roster', (value) => {
     const result = roomRosterSchema.safeParse(value);
@@ -1328,9 +1366,18 @@ export function bindProductRoom(
     playTestTone: () => bridge.runtime.playTestTone(),
     quality: (value: QualityPreset) => quality.select(value),
     /** Asks the server to run a demo scenario. Ordinary rooms ignore the message. */
-    runDemoScenario(scenario: DemoScenarioId) {
+    runDemoScenario(scenario: DemoScenarioId, options?: DemoScenarioOptions) {
       if (!snapshot.round || !snapshot.demo) return;
-      send('demo-scenario', { matchId: snapshot.round.matchId, scenario });
+      send('demo-scenario', {
+        matchId: snapshot.round.matchId,
+        scenario,
+        ...(options ? { options } : {}),
+      });
+    },
+    /** Ends the current demo round without inventing a public failure reason. */
+    abortDemoRound() {
+      if (!snapshot.round || !snapshot.demo) return;
+      send('demo-control', { matchId: snapshot.round.matchId, action: 'abort-round' });
     },
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };

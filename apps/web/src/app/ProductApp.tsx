@@ -9,6 +9,7 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
+import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { useMediaConsent } from '../features/room/use-media-consent';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
@@ -693,6 +694,12 @@ export function ProductApp({
               lockRequest={snapshot.requests.ROOM_LOCK}
               kickRequest={snapshot.requests.ROOM_KICK}
               onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
+              mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
+              canChooseMapSize={round.phase === 'LOBBY'}
+              mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
+              onSelectMapSize={(size) =>
+                runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
+              }
               onKick={(targetPlayerId) =>
                 runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
               }
@@ -728,6 +735,14 @@ export function ProductApp({
               onTestTone={playTestTone}
               consented={consent.consented}
               onConsent={consent.accept}
+              demo={Boolean(snapshot.demo)}
+            />
+          )}
+          {snapshot.demo && round?.phase === 'DEVICE_CHECK' && (
+            <DemoPanel
+              demo={snapshot.demo}
+              phase={round.phase}
+              onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
             />
           )}
           {round && inResult && (
@@ -754,6 +769,7 @@ export function ProductApp({
                   ownerNames={playerNames}
                   quality={snapshot.quality}
                   standIn={demoFace.current}
+                  grabAnimationId={snapshot.grabAnimationId}
                   renderTick={() => runtime.current?.renderTick() ?? null}
                   {...(metrics.current
                     ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
@@ -789,6 +805,13 @@ export function ProductApp({
                   ) : null
                 }
               />
+              {snapshot.demo && (
+                <DemoPanel
+                  demo={snapshot.demo}
+                  phase={round.phase}
+                  onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                />
+              )}
               {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
               {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
               {interactiveWorld && (
@@ -895,12 +918,6 @@ export function ProductApp({
                       onSelect={(kind) => runtime.current?.selectEquipment(kind)}
                       send={(command) => runtime.current?.send(command)}
                     />
-                    {snapshot.demo && (
-                      <DemoPanel
-                        demo={snapshot.demo}
-                        onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
-                      />
-                    )}
                     {localControls}
                   </div>
                 </details>

@@ -7,6 +7,7 @@ const tuning: MatchTuning = {
   tickMs: 50,
   moveTicks: 9,
   turnTicks: 6,
+  grabTicks: 6,
   roundTicks: 3600,
   installationTicks: 10,
   armTicks: 20,

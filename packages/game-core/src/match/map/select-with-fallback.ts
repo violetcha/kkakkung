@@ -9,6 +9,7 @@ import type {
   SelectionProgress,
 } from '../types.js';
 import { createRng } from '../random.js';
+import { scaleLayoutConstraints } from '../tuning.js';
 import { attemptLayout, prepareSelection, sortRoster } from './select-layout.js';
 import { validateLayout } from './validate-layout.js';
 
@@ -142,13 +143,21 @@ export function* selectWithFallback(
   return certifyFallback(input, constraints);
 }
 
-/** Binds tuning to the EXEC-CONTRACT-3 LayoutSelectionPort signatures. */
+/**
+ * Binds tuning to the EXEC-CONTRACT-3 LayoutSelectionPort signatures.
+ *
+ * S15P21C204-321. The JSON floors are written for the 31 grid, so each input scales them by its
+ * own template size. A room playing a smaller map is then judged by that map's floors, and the
+ * committed fallback (generated with the same scaling) certifies.
+ */
 export function createLayoutSelector(
   config: Readonly<{ layout: LayoutConstraints; selection: SelectionBudget }>,
 ): LayoutSelectionPort {
+  const constraintsFor = (input: LayoutSelectionInput) =>
+    scaleLayoutConstraints(config.layout, input.template.topology.width);
   return Object.freeze({
-    certifyFallback: (input: LayoutSelectionInput) => certifyFallback(input, config.layout),
+    certifyFallback: (input: LayoutSelectionInput) => certifyFallback(input, constraintsFor(input)),
     selectWithFallback: (input: LayoutSelectionInput) =>
-      selectWithFallback(input, config.layout, config.selection.attemptsPerBatch),
+      selectWithFallback(input, constraintsFor(input), config.selection.attemptsPerBatch),
   });
 }

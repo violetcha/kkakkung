@@ -16,6 +16,8 @@ export function commandFeedback(request: RequestDisplay | undefined | null): str
   if (request.code === 'EXPIRED' || request.code === 'STALE_REQUEST')
     return '요청 시간이 지났습니다. 현재 상태를 확인하고 새로 요청해 주세요.';
   if (request.status === 'canceled') return '요청이 취소되었습니다.';
+  if (request.type === 'ROOM_MAP_SIZE')
+    return '맵 크기를 바꾸지 못했습니다. 방장인지와 대기방 단계인지 확인해 주세요.';
   if (request.type === 'ROOM_LOCK' || request.type === 'ROOM_KICK')
     return '방 관리를 처리하지 못했습니다. 현재 방장과 참가자, 대기 단계를 확인해 주세요.';
   if (request.type === 'EXCHANGE_REQUEST' || request.type === 'EXCHANGE_ACCEPT')

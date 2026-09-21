@@ -237,10 +237,11 @@ export type CommandPayloads = {
   EXCHANGE_CANCEL: { exchangeId: string };
   INSTALL: { kind: EquipmentKind };
   INSTALL_CANCEL: { installationId: string };
+  GRAB_INTENT: Record<string, never>;
   EXIT_START: { exitId: string };
   EXIT_CANCEL: { challengeId: string };
   EXIT_PROGRESS: { challengeId: string; method: 'pose' | 'keys'; completed: boolean };
-  REMATCH: { mode: 'same' | 'swap' | 'lobby' };
+  REMATCH: { mode: 'same' | 'swap' | 'lobby'; role?: 'runner' | 'tagger' };
 };
 export type CommandType = keyof CommandPayloads;
 export type CommandInput = {
@@ -502,6 +503,7 @@ const TURN_KEYS: Readonly<Record<string, 'left' | 'right'>> = Object.freeze({
 const ACTION_KEYS: Readonly<Record<string, GameKey>> = Object.freeze({
   KeyE: 'E',
   KeyF: 'F',
+  KeyG: 'G',
   Digit1: '1',
   Digit2: '2',
   Escape: 'Escape',

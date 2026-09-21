@@ -32,9 +32,11 @@ export {
   validateTemplate,
 } from './map/validate-template.js';
 export {
+  LAYOUT_BASE_SIZE,
   MATCH_TUNING_CONSTANTS,
   MATCH_TUNING_DEFAULTS,
   MATCH_TUNING_RANGES,
+  scaleLayoutConstraints,
   validateTuning,
 } from './tuning.js';
 

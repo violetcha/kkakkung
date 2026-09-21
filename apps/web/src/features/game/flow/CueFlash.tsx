@@ -5,6 +5,7 @@ import { CUE_FLASH_MS, type FlashKind } from './match-cues';
 export { CUE_FLASH_MS };
 
 export const CUE_FLASH_LABEL: Record<FlashKind, string> = {
+  'capture-success': '도망자 포획!',
   captured: '포획되었습니다',
   escaped: '탈출했습니다',
   'exit-failed': '탈출에 실패했습니다',

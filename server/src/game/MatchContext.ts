@@ -98,11 +98,11 @@ export class MatchContext {
     this.startAtValue = startAtMs;
   }
 
-  /** Fixes startTick/deadlineTick exactly once per match. Re-application is ignored. */
-  fixStart(startTick: number, roundTicks: number): boolean {
+  /** Fixes startTick/deadlineTick exactly once per match. A demo may omit the round deadline. */
+  fixStart(startTick: number, roundTicks: number | null): boolean {
     if (this.startTickValue !== null) return false;
     this.startTickValue = startTick;
-    this.deadlineTickValue = startTick + roundTicks;
+    this.deadlineTickValue = roundTicks === null ? null : startTick + roundTicks;
     return true;
   }
 

@@ -231,6 +231,33 @@ describe('drawMinimap', () => {
     expect(fillsOf(calls, MINIMAP_COLORS.background)).toHaveLength(1);
     expect(fillsOf(calls, MINIMAP_COLORS.floor)).toHaveLength(0);
   });
+
+  it('draws the demo operator exit as a distinct marker only when supplied', () => {
+    const ordinary = recorder();
+    drawMinimap(ordinary.ctx, { view: before(), size: 320 });
+    expect(ordinary.calls.some((call) => call.stroke === MINIMAP_COLORS.operatorExit)).toBe(false);
+
+    const demo = recorder();
+    drawMinimap(demo.ctx, {
+      view: before(),
+      size: 320,
+      operatorExit: { x: 1, y: 1 },
+    });
+    expect(
+      demo.calls.some((call) => call.op === 'arc' && call.stroke === MINIMAP_COLORS.operatorExit),
+    ).toBe(true);
+    expect(
+      demo.calls.some(
+        (call) => call.op === 'fillText' && call.fill === MINIMAP_COLORS.operatorExit,
+      ),
+    ).toBe(true);
+    // The operator marker replaces the regular square marker at that same cell.
+    expect(
+      demo.calls.some(
+        (call) => call.op === 'strokeRect' && call.stroke === MINIMAP_COLORS.exitMine,
+      ),
+    ).toBe(false);
+  });
 });
 
 // S15P21C204-295. 경기 화면의 근접 창: 내 주변 홀수 칸만 확대해 그리고 내 표식이 항상 가운데다.

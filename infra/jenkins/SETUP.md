@@ -63,18 +63,31 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 6. 파이프라인 잡 (2026-09-09 기준 두 개, 완료)
 
-| 잡            | 트리거                                                                                          | 하는 일                                                                                                                             |
-| ------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `kkakkung`    | develop 폴링 `H/2`                                                                              | Jenkinsfile 전체: 검증 → 이미지 → Trivy → **Deploy** → ready 확인 → last-good 기록. 실패 시 이전 태그로 롤백                        |
-| `kkakkung-mr` | GitLab 웹훅 **Merge request events** (열림·갱신·소스 push, 댓글 `Jenkins please retry a build`) | MR 소스 브랜치(`origin/${gitlabSourceBranch}`)만 검증·이미지 빌드. Deploy 는 develop 이 아니라 skip. 결과를 GitLab 커밋 상태로 게시 |
+| 잡            | 트리거                                                                                          | 하는 일                                                                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `kkakkung`    | GitLab 웹훅 **Push events** (develop). 웹훅이 끊겼을 때를 대비해 폴링 `H/15` 를 함께 둔다       | Jenkinsfile 전체: 검증 → 이미지 → **Deploy** → ready 확인 → last-good 기록. 실패 시 이전 태그로 롤백                             |
+| `kkakkung-mr` | GitLab 웹훅 **Merge request events** (열림·갱신·소스 push, 댓글 `Jenkins please retry a build`) | MR 소스 브랜치(`origin/${gitlabSourceBranch}`)만 검증. 이미지는 아래 조건일 때만, Deploy 는 skip. 결과를 GitLab 커밋 상태로 게시 |
 
 웹훅: GitLab 프로젝트 Settings → Webhooks, URL `https://j15c204.p.ssafy.io/jenkins/project/kkakkung-mr`, Secret token 은 잡 설정의 것과 동일(서버에서 생성, 문서에 적지 않음), Merge request events 만. Push events 를 켜면 모든 브랜치가 빌드되므로 끈다.
 
-MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOURCE_SHA` 로 받아 `scripts/ci-verify.mjs` 가 체크아웃 HEAD 와 대조한다(DP-04). develop 폴링 빌드는 이 값이 없어 대조를 생략한다.
+MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOURCE_SHA` 로 받아 `scripts/ci-verify.mjs` 가 체크아웃 HEAD 와 대조한다(DP-04). Push 웹훅 빌드는 `gitlabAfter` 로 같은 대조를 하고, 폴링으로 시작한 빌드는 이 값이 없어 대조를 생략한다.
+
+**develop 트리거 (2026-09-21 변경)**: `H/2` 폴링은 머지하고도 최대 2분을 기다리게 했다. GitLab 프로젝트 Settings → Webhooks 에 URL `https://j15c204.p.ssafy.io/jenkins/project/kkakkung`, **Push events** 에 브랜치 필터 `develop` 로 훅을 하나 더 만들고(Secret token 은 잡 설정의 것과 같게), 잡 설정에서 **Build when a change is pushed to GitLab** 을 켠다. 폴링은 `H/15` 로 낮춰 남겨 둔다 — 웹훅이 끊겨도 15분 안에 따라잡는다. 브랜치 필터를 비우면 모든 브랜치가 develop 잡을 돌리므로 반드시 채운다.
 
 브랜치에 Jenkinsfile 이 없으면(develop 미머지) MR 빌드가 "Jenkinsfile not found" 로 실패한다. 브랜치에 develop 을 한 번 merge 하면 해결된다.
 
-**동시 실행 (2026-09-14 변경)**: 컨트롤러 `numExecutors` 는 **2** 로 되돌렸다. 잡 안의 겹침은 Jenkinsfile 의 `disableConcurrentBuilds()`, 잡 사이(`kkakkung` ↔ `kkakkung-mr`)의 겹침은 **Verify·이미지 빌드·Trivy·배포** 단계가 같은 호스트 `flock /var/lib/jenkins/verify.lock` 을 잡아 직렬화한다(체크아웃·비밀 스캔만 겹침). Verify 만 잠갔을 때는 Verify 를 생략한 배포 빌드의 이미지 빌드·Trivy 가 다른 빌드의 vitest 와 겹쳐 tick 과부하 flake 가 재발했다(kkakkung-mr #139, 15:22~~15:28 ↔ kkakkung #125). 두 빌드의 vitest 가 겹치면 4 vCPU 가 모자라 서버 tick 이 250ms 를 넘어 6인 통합 시험이 깨졌기 때문이다(kkakkung-mr #70). 9/10~~9/14 사이 executor 1개로 운영했을 때는 MR 빌드가 develop 배포 뒤에 통째로 줄을 서서 한 빌드가 14분까지 걸렸다(#130: 대기 6분 + 파이프라인 8분). 잠금 플러그인(lockable-resources)은 설치돼 있지 않다. 성공 후 이미지 정리(`scripts/prune-release-images.mjs`)도 같은 flock 아래에서 돌고, 마지막으로 태그가 붙은 지 1시간이 안 된 태그는 건너뛴다. 정리가 `docker images` 순서(이미지 생성 시각)만 보던 때는 kkakkung-mr #167 의 정리가 kkakkung #140 이 막 만든 `kkakkung-web:c458e647`(캐시 재사용으로 25분 전 이미지에 붙은 태그)을 Trivy 1초 전에 지웠다.
+**동시 실행 (2026-09-14 변경)**: 컨트롤러 `numExecutors` 는 **2** 로 되돌렸다. 잡 안의 겹침은 Jenkinsfile 의 `disableConcurrentBuilds()`, 잡 사이(`kkakkung` ↔ `kkakkung-mr`)의 겹침은 **Verify·이미지 빌드·배포**, 그리고 야간 이미지 스캔이 같은 호스트 `flock /var/lib/jenkins/verify.lock` 을 잡아 직렬화한다(체크아웃·비밀 스캔만 겹침). Verify 만 잠갔을 때는 Verify 를 생략한 배포 빌드의 이미지 빌드·Trivy 가 다른 빌드의 vitest 와 겹쳐 tick 과부하 flake 가 재발했다(kkakkung-mr #139, 15:22~~15:28 ↔ kkakkung #125). 두 빌드의 vitest 가 겹치면 4 vCPU 가 모자라 서버 tick 이 250ms 를 넘어 6인 통합 시험이 깨졌기 때문이다(kkakkung-mr #70). 9/10~~9/14 사이 executor 1개로 운영했을 때는 MR 빌드가 develop 배포 뒤에 통째로 줄을 서서 한 빌드가 14분까지 걸렸다(#130: 대기 6분 + 파이프라인 8분). 잠금 플러그인(lockable-resources)은 설치돼 있지 않다. 성공 후 이미지 정리(`scripts/prune-release-images.mjs`)도 같은 flock 아래에서 돌고, 마지막으로 태그가 붙은 지 1시간이 안 된 태그는 건너뛴다. 정리가 `docker images` 순서(이미지 생성 시각)만 보던 때는 kkakkung-mr #167 의 정리가 kkakkung #140 이 막 만든 `kkakkung-web:c458e647`(캐시 재사용으로 25분 전 이미지에 붙은 태그)을 Trivy 1초 전에 지웠다.
+
+**결과를 바꿀 수 없는 단계 정리 (2026-09-21, S15P21C204-322)**: MR 빌드가 하던 일 중 그 MR 의 합격·불합격과 무관한 것을 걷어냈다.
+
+| 걷어낸 것          | 왜                                                                                                                                                                    | 지금                                                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MR 의 이미지 빌드  | MR 은 Deploy 를 건너뛰어 그 이미지를 아무도 쓰지 않았고, 태그가 커밋 SHA 라 머지 커밋이 재사용하지도 못했다. 소스가 깨지는 것은 Verify 의 `pnpm build` 가 이미 잡는다 | `scripts/needs-image-build.mjs` 가 판단한다. 배포 빌드는 항상, MR 은 Dockerfile·`infra/nginx/`·lockfile·`package.json` 등 이미지에 들어가는 파일을 건드렸을 때만. 판단이 안 되면(얕은 클론·없는 ref) 빌드한다 |
+| `Scan images`      | `--exit-code 0` 이라 HIGH/CRITICAL 이 나와도 막지 않으면서 잠금을 1~3분 쥐었다. MR 이 스캔하던 이미지는 배포되지도 않았다                                             | 야간 잡 `kkakkung-image-scan` (13장). 배포돼 있는 `last-good-tag` 이미지를 본다                                                                                                                               |
+| gitleaks 전체 스캔 | 매 빌드 844커밋·43MB 를 다시 읽었다. 그 커밋들은 이미 그때 스캔했다                                                                                                   | `scripts/secret-scan-range.mjs` 가 범위를 정한다. MR 은 `origin/develop..HEAD`, 배포는 last-good 이후. **범위를 못 정하면 전체를 읽는다** — 좁히지 못하는 것이 건너뛰는 이유가 되지 않는다                    |
+| `:latest` 태그     | 원격이 움직일 때마다 다시 받고, 어떤 판정으로 통과했는지 되짚을 수 없다                                                                                               | `GITLEAKS_IMAGE`(Jenkinsfile)·`TRIVY_IMAGE`(야간 잡) 에 버전을 박았다. 올릴 때 그 줄만 바꾼다                                                                                                                 |
+
+**건드리지 않은 것**: `flock` 직렬화, drain 300초, 배포 DP-06 smoke, `pnpm verify` 의 검사 항목. 앞의 둘은 여기 적힌 사고를 막고 있고, 뒤의 둘은 게이트 자체다.
 
 **Verify 생략 (2026-09-14)**: Verify 가 빌드 시간의 7~8분이다(vitest 약 4분 + 포맷·린트·타입 약 1.7분 + 빌드·e2e·자산 약 2.2분). MR 빌드가 성공하면 `scripts/verified-tree.mjs record` 가 `/opt/kkakkung/verified-trees/<tree>.json` 에 소스 **트리 해시**를 남기고, develop(배포) 빌드는 자기 트리가 기록돼 있으면 Verify 를 생략한다("Verify 생략: …" 로그). GitLab 머지 커밋은 커밋 id 는 다르지만 사이에 다른 MR 이 들어오지 않았으면 트리가 같다. 트리가 다르면(진짜 병합) 전부 다시 검증한다. 이미지 빌드·Trivy·배포는 그대로 돈다. 결과적으로 머지 → 배포가 약 1.5분이다.
 
@@ -83,6 +96,8 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을 `EXPECTED_SOUR
 두 잡과 크리덴셜(Secret file, GitLab API token)은 UI 로그인 없이 `jobs/<잡>/config.xml` 배치 + `init.groovy.d` 부트스트랩(실행 후 자기 삭제) + Jenkins 재시작으로 만들었다. 같은 방법으로 재현 가능.
 
 **호스트 속도 (2026-09-16 추가)**: EC2 는 t3.xlarge(버스터블)라 CPU 크레딧이 바닥나면 steal 이 치솟고, SwiftShader 로 도는 Playwright e2e 가 먼저 무너진다(kkakkung-mr #171: `facility-rendering.spec.ts` 가 재시도 포함 2회 60초 초과, 다른 21개 e2e 는 평소 시간. 로컬 SwiftShader 강제 실행은 12초). Verify 단계는 앞뒤로 `host before-verify/after-verify: load=… steal_ticks=… idle_ticks=…` 줄을 남기므로, 두 줄의 steal_ticks 차이가 크면(수천 틱 이상) 호스트가 느렸던 것이고 코드 회귀가 아니다. 그 spec 은 예산 120초·5인 장면 스크린샷 분리·실패 시 단계별 소요(`step-timings-ms` 첨부)로 바꿨다(S15P21C204-264).
+
+**MR 빌드는 Replay 하지 않는다 (2026-09-18 추가)**: `kkakkung-mr` 는 GitLab 웹훅이 넘긴 `gitlabSourceBranch` 로 체크아웃한다. Jenkins UI 의 Replay/Rebuild 는 그 변수 없이 돌아 "Couldn't find any revision to build" 로 곧바로 실패한다(kkakkung-mr #187·#190·#192·#193, 9/17). 다시 검증하려면 그 브랜치에 커밋을 push 한다. 검증 중에 같은 브랜치에 또 push 하면 "체크아웃된 커밋이 GitLab 이 보낸 커밋과 다릅니다" 로 앞 빌드가 중단되고 새 빌드가 도는 것이 정상이다(#186).
 
 ## 7. 첫 빌드 전 확인 (완료, 2026-09-08)
 
@@ -189,3 +204,15 @@ Analytics API는 LiveKit Cloud Scale 이상에서만 제공된다. 현재 프로
 | 복구      | API 401/403·429·timeout은 `BLOCKED`/실패로 남기고 잔량을 만들지 않는다. 대시보드에서 확인한 뒤 자격 증명·플랜·네트워크를 고치고 다음 30분 회차가 다시 성공하는지 확인한다.                                                    |
 
 LiveKit Cloud 웹훅은 `participant_joined/left` 같은 방 이벤트 전달용이며 계정 잔여 할당량을 제공하지 않는다. 전달 보장도 없으므로 이 잡의 Analytics API 결과를 공식 사용량으로 사용하고, 웹훅 이벤트는 미디어 상태 복구용으로만 취급한다.
+
+## 13. 이미지 취약점 스캔 잡 (S15P21C204-322)
+
+`kkakkung-image-scan` 잡이 하루 한 번 배포돼 있는 이미지(`/opt/kkakkung/last-good-tag`)를 Trivy 로 스캔한다. 예전에는 파이프라인의 `Scan images` 단계가 매 빌드 두 번 돌았는데, `--exit-code 0` 이라 아무것도 막지 않으면서 무거운 단계 잠금을 1~3분 쥐고 있었다. 취약점은 대부분 베이스 이미지(node·nginx)에서 오고 커밋마다 달라지지 않으므로 하루 한 번이면 같은 것을 본다.
+
+| 항목      | 값                                                                                                                                                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 잡 만들기 | 새로운 Item → 이름 `kkakkung-image-scan`, Pipeline → Pipeline script from SCM, Git 저장소·크리덴셜은 `kkakkung` 잡과 같게, 브랜치 `*/develop`, Script Path `infra/jenkins/image-scan.Jenkinsfile`, Lightweight checkout |
+| 첫 실행   | 저장 후 **지금 빌드** 한 번. 이때 cron 이 등록된다                                                                                                                                                                      |
+| 결과 해석 | HIGH/CRITICAL 이 나와도 **잡은 성공이다**(기록만). 잡이 실패하면 "스캔을 돌리지 못했다"는 뜻이다: `last-good-tag` 없음, 이미지가 정리됨, Trivy 를 띄우지 못함                                                           |
+| 버전      | `TRIVY_IMAGE` 에 태그를 박았다. 올릴 때 그 줄만 바꾼다. `:latest` 로 두면 원격이 움직일 때마다 다시 받고 어떤 DB 로 통과했는지 되짚을 수 없다                                                                           |
+| 차단 기준 | 아직 없다. 무엇을 막고 무엇을 예외로 둘지는 정해지지 않았다([운영](../../docs/operations.md))                                                                                                                           |

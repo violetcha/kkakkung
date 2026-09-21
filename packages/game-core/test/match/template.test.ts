@@ -245,6 +245,7 @@ describe('tuning data', () => {
     // session); the shipped values are the fixture defaults so code-built tunings match the JSON.
     expect(result.template.match.moveTicks).toBe(MATCH_TUNING_DEFAULTS.moveTicks);
     expect(result.template.match.turnTicks).toBe(MATCH_TUNING_DEFAULTS.turnTicks);
+    expect(result.template.match.grabTicks).toBe(MATCH_TUNING_DEFAULTS.grabTicks);
     expect(result.template.match.roundTicks).toBe(3600);
     expect(result.template.selection).toEqual({
       maxAttempts: 256,
@@ -265,6 +266,15 @@ describe('tuning data', () => {
     expect(speed(MATCH_TUNING_RANGES.moveTicks.max + 1, 8)).toBe(false);
     expect(speed(12, 13)).toBe(false);
     expect(speed(12.5, 8)).toBe(false);
+    const grab = (grabTicks: number) => {
+      const changed = clone(raw) as { match: Record<string, number> };
+      changed.match.grabTicks = grabTicks;
+      return validateTuning(changed).ok;
+    };
+    expect(grab(MATCH_TUNING_RANGES.grabTicks.min)).toBe(true);
+    expect(grab(MATCH_TUNING_RANGES.grabTicks.max)).toBe(true);
+    expect(grab(MATCH_TUNING_RANGES.grabTicks.min - 1)).toBe(false);
+    expect(grab(6.5)).toBe(false);
     // The remaining constants are still fixed.
     const changed = clone(raw) as { match: Record<string, number> };
     changed.match.roundTicks = 3000;

@@ -32,13 +32,19 @@ it('offers controls only to the host and disables them until authoritative acces
         onKick() {},
       }),
     );
-  expect(render('friend')).not.toContain('<button');
-  expect(render('host').match(/disabled=""/g)).toHaveLength(2);
+  const friend = render('friend');
+  expect(friend).not.toContain('입장 잠그기');
+  expect(friend).not.toContain('내보내기');
+  // 방 관리 버튼만 본다. 맵 크기 버튼은 자기 조건으로 잠기므로 여기서 세지 않는다.
+  const waiting = render('host');
+  expect(waiting).toContain('disabled="">입장 잠그기');
+  expect(waiting).toContain('disabled="">friend 내보내기');
   const html = render('host', { matchId: 'm', revision: 1, locked: true });
   expect(html).toContain('입장 잠금 해제');
   expect(html).toContain('friend 내보내기');
   expect(html).not.toContain('host 내보내기');
-  expect(html).not.toContain('disabled');
+  expect(html).not.toContain('disabled="">입장 잠금 해제');
+  expect(html).not.toContain('disabled="">friend 내보내기');
 });
 it('explains host removal separately from room expiry and keeps a return action', () => {
   const html = renderToStaticMarkup(

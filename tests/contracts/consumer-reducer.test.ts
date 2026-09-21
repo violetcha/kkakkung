@@ -109,7 +109,13 @@ describe('protocol private view → C createProductView', () => {
     deliver(v, c, 'r1', 0);
     let seen = v.viewsOf('r1').length;
     v.h.move('t1');
-    for (let i = 0; i < G3_TUNING.moveTicks + 1; i++) {
+    for (let i = 0; i < G3_TUNING.moveTicks - 1; i++) {
+      v.tickAndPublish(1);
+      deliver(v, c, 'r1', seen);
+      seen = v.viewsOf('r1').length;
+    }
+    v.h.grab('t1');
+    for (let i = 0; i < 2; i++) {
       v.tickAndPublish(1);
       deliver(v, c, 'r1', seen);
       seen = v.viewsOf('r1').length;

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { PrivateView } from '@kkakkung/protocol/game-schema';
+import type { Cell, PrivateView } from '@kkakkung/protocol/game-schema';
 import { mapDrawModel } from './map-draw-model';
 import { pastEventMarkers, type HunterMarker } from './past-event-markers';
 import { exitOwnerLabel, type OwnerNames } from '../scene/ExitOwnerLabel';
@@ -12,6 +12,7 @@ export function MiniMap({
   tick = 0,
   windowCells,
   renderTick,
+  operatorExit = null,
 }: {
   view: PrivateView | null;
   ownerNames?: OwnerNames;
@@ -21,17 +22,19 @@ export function MiniMap({
   windowCells?: number;
   /** 주면 창 모드에서 매 프레임 이 값으로 다시 그려 내 위치가 선형으로 흐른다. */
   renderTick?: () => number | null;
+  /** Only the operator demo supplies this; player rooms must leave it absent. */
+  operatorExit?: Cell | null;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const latest = useRef({ view, markers, tick, renderTick });
-  latest.current = { view, markers, tick, renderTick };
+  const latest = useRef({ view, markers, tick, renderTick, operatorExit });
+  latest.current = { view, markers, tick, renderTick, operatorExit };
   const continuous = windowCells !== undefined && renderTick !== undefined;
   useEffect(
     () => {
       const canvas = ref.current;
       if (!canvas) return;
       const draw = () => {
-        const { view, markers, tick, renderTick } = latest.current;
+        const { view, markers, tick, renderTick, operatorExit } = latest.current;
         // S15P21C204-277. 칸이 정수 픽셀에 앉도록 배율도 정수로 고른다.
         const dpr = Math.max(1, Math.min(Math.floor(window.devicePixelRatio || 1), 2));
         const size = canvas.clientWidth || 240;
@@ -46,6 +49,7 @@ export function MiniMap({
           size: size * dpr,
           tick: renderTick?.() ?? tick,
           markers,
+          operatorExit,
           ...(windowCells === undefined ? {} : { window: windowCells }),
         });
       };
@@ -66,7 +70,9 @@ export function MiniMap({
       };
       // 연속 모드는 프레임마다 latest 를 읽으므로 뷰·틱이 바뀔 때 다시 구독하지 않는다.
     },
-    continuous ? [windowCells, continuous] : [view, markers, tick, windowCells, continuous],
+    continuous
+      ? [windowCells, continuous]
+      : [view, markers, tick, windowCells, continuous, operatorExit],
   );
   return (
     <figure className={windowCells === undefined ? 'mini-map' : 'mini-map mini-map-window'}>
@@ -74,7 +80,7 @@ export function MiniMap({
         ref={ref}
         aria-label={
           windowCells === undefined
-            ? '내가 탐색한 지도. 위쪽은 북쪽입니다. 채운 칸은 가 본 바닥, 두꺼운 띠는 벽, 옅은 격자는 아직 안 가 본 곳입니다.'
+            ? `내가 탐색한 지도. 위쪽은 북쪽입니다. 채운 칸은 가 본 바닥, 두꺼운 띠는 벽, 옅은 격자는 아직 안 가 본 곳입니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
             : `내 주변 ${windowCells}칸 지도. 가운데 흰 점이 나, 점에서 퍼지는 부채꼴이 내가 보는 방향이고 위쪽이 북쪽입니다.`
         }
       />
@@ -82,8 +88,10 @@ export function MiniMap({
         {windowCells === undefined
           ? '탐색 지도 · 북쪽 고정 · 옅은 격자는 안 가 본 곳'
           : '내 주변 · 흰 점 = 나 · 부채꼴 = 시선 · N = 북쪽'}
+        {operatorExit && <span className="mini-map-operator-exit"> · ◇ 운영자 출구</span>}
       </figcaption>
       {pastEventMarkers(view, markers, tick).length > 0 && <p>빈 원은 과거 사건 위치입니다.</p>}
+      {operatorExit && <p aria-label="운영자 출구">O 운영자 출구</p>}
       {mapDrawModel(view, tick)?.exits.map((exit, index) => (
         <div key={exit.exitId}>
           {index + 1}.{' '}

@@ -6,9 +6,12 @@
 import { expect, it } from 'vitest';
 import type { GameSubject, Topology } from '../../src/game/ports.js';
 import {
+  DEMO_SCENARIOS,
+  SCENARIO_OPTIONS,
   STEP_TIMEOUT_TICKS,
   availableScenarios,
   createDemoRunner,
+  type DemoOperatorState,
   type DemoWorld,
   type PuppetCommand,
 } from '../../src/rooms/DemoScenarios.js';
@@ -419,4 +422,368 @@ it('releases every forward intent on the next tick so a puppet walks exactly one
       expect(sent[index + 1]).toEqual({ type: 'MOVE_INTENT', payload: { direction: null } });
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// S15P21C204-317. 관리자가 주도하는 대본과 선택지.
+//
+// 여기서 보는 것은 "대본이 무엇을 요구하는가"다. 그 요구가 구속·포획·탈출로 이어지는지는
+// 실제 코어를 도는 방 시험이 본다.
+// ---------------------------------------------------------------------------
+
+/** 관리자 상태를 채운 세계. 없으면 관리자 주도 대본은 전부 거절된다. */
+function operatorState(over: Partial<DemoOperatorState> = {}): DemoOperatorState {
+  return { installations: [], challengeId: null, exchangeId: null, exit: null, ...over };
+}
+
+const OPERATOR_EXIT = {
+  exitId: 'exit-operator',
+  ownerId: 'operator',
+  approach: { x: 3, y: 1 },
+  wall: { x: 3, y: 0 },
+};
+
+/** 대본을 돌리며 요청된 배치를 모은다. 코어가 하는 일을 시험 안에서 흉내낸다. */
+function runWithPlacement(
+  runner: ReturnType<typeof createDemoRunner>,
+  build: (tick: number) => DemoWorld,
+  ticks: number,
+) {
+  const placed: { actor: string; cell: { x: number; y: number }; dir: number }[] = [];
+  for (let tick = 1; tick <= ticks; tick++) {
+    runner.advance(build(tick), {
+      send: () => true,
+      place: (actor, cell, dir) => {
+        placed.push({ actor, cell, dir });
+        return true;
+      },
+    });
+  }
+  return placed;
+}
+
+it('받지 않는 선택지는 거절한다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  // `capture` 는 선택지를 하나도 읽지 않는다. 켜 두면 무시되는 설정처럼 보이므로 거절한다.
+  expect(runner.start('capture', world([operator, tagger]), { distance: 2 })).toBe(
+    'UNSUPPORTED_OPTION',
+  );
+  expect(runner.start('approach', world([operator, tagger]), { distance: 9 as 1 })).toBe(
+    'UNSUPPORTED_OPTION',
+  );
+  expect(runner.status.scenario).toBeNull();
+});
+
+it('관리자 상태가 없으면 관리자 주도 대본을 시작하지 않는다', () => {
+  // 방(S15P21C204-318)이 채우기 전이다. 반쯤 도는 버튼을 보여 주지 않는다.
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const puppets = [
+    player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } }),
+    player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 3 } }),
+  ];
+  const now = world([operator, ...puppets]);
+  expect(runner.start('place-me-at-exit', now)).toBe('NO_OPERATOR_STATE');
+  expect(runner.start('caught-in-my-challenge', now)).toBe('NO_OPERATOR_STATE');
+  expect(runner.start('accept-my-exchange', now)).toBe('NO_OPERATOR_STATE');
+});
+
+it('내 출구 앞으로 관리자를 세우고 출구 벽을 보게 한다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const build = (tick: number) =>
+    world([operator], { tick, operator: operatorState({ exit: OPERATOR_EXIT }) });
+  expect(runner.start('place-me-at-exit', build(0))).toBeNull();
+  expect(runWithPlacement(runner, build, 2)[0]).toEqual({
+    actor: 'operator',
+    cell: { x: 3, y: 1 },
+    dir: 0,
+  });
+});
+
+it('출구가 없거나 술래면 배치 대본을 거절한다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  expect(runner.start('place-me-at-exit', world([operator], { operator: operatorState() }))).toBe(
+    'NO_OPERATOR_EXIT',
+  );
+  const tagger = player({ playerId: 'operator', role: 'tagger' });
+  expect(runner.start('place-me-at-exit', world([tagger], { operator: operatorState() }))).toBe(
+    'OPERATOR_MUST_BE_RUNNER',
+  );
+});
+
+it('인형을 고른 방향·거리에 세우고 나를 보게 한다', () => {
+  const runner = createDemoRunner();
+  // (2,2) 에서 북쪽을 본다. 뒤 한 칸은 (2,3).
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 2 }, dir: 0 });
+  const puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 1 } });
+  const build = (tick: number) => world([operator, puppet], { tick, operator: operatorState() });
+  expect(runner.start('place-puppet', build(0), { side: 'back', distance: 1 })).toBeNull();
+  expect(runWithPlacement(runner, build, 2)[0]).toEqual({
+    actor: 'puppet-tagger',
+    cell: { x: 2, y: 3 },
+    dir: 0,
+  });
+});
+
+it('등지게 세우면 반대 방향을 본다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 2 }, dir: 0 });
+  const puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 1 } });
+  const build = (tick: number) => world([operator, puppet], { tick, operator: operatorState() });
+  expect(
+    runner.start('place-puppet', build(0), { side: 'back', distance: 1, facing: 'away' }),
+  ).toBeNull();
+  expect(runWithPlacement(runner, build, 2)[0]?.dir).toBe(2);
+});
+
+it('세울 자리가 벽이면 거절한다', () => {
+  const runner = createDemoRunner();
+  // (1,1) 에서 북쪽 한 칸은 격자 밖이다.
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 }, dir: 0 });
+  const puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  expect(
+    runner.start('place-puppet', world([operator, puppet], { operator: operatorState() }), {
+      side: 'front',
+      distance: 1,
+    }),
+  ).toBe('CELL_UNAVAILABLE');
+});
+
+it('배치를 할 수 없는 방에서는 그 단계가 실패한다', () => {
+  // `place` 콜백이 없는 방이다. 기다리지 않고 바로 포기한다.
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const build = (tick: number) =>
+    world([operator], { tick, operator: operatorState({ exit: OPERATOR_EXIT }) });
+  expect(runner.start('place-me-at-exit', build(0))).toBeNull();
+  runner.advance(build(1), { send: () => true });
+  expect(runner.status.failure).toBe('place-at-exit:FAILED');
+});
+
+it('다가오기는 역할과 거리를 고를 수 있다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  // 기본이면 반대 역할을 부르지만, 같은 역할 인형도 부를 수 있다.
+  expect(
+    runner.start('approach', world([operator, puppet]), { role: 'runner', distance: 2 }),
+  ).toBeNull();
+  for (let tick = 1; tick <= 60 && runner.status.scenario; tick++) {
+    runner.advance(world([operator, puppet], { tick }), (actor, command) => {
+      expect(actor).toBe('puppet-runner');
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  // 고른 거리에서 멈춘다. 가까이 붙이려면 distance 를 1 로 고르면 된다.
+  expect(
+    Math.abs(puppet.cell.x - operator.cell.x) + Math.abs(puppet.cell.y - operator.cell.y),
+  ).toBe(2);
+  expect(runner.status.failure).toBeNull();
+});
+
+it('내가 장비를 무장할 때까지 기다렸다가 인형이 들어온다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  const armedAt = { x: 2, y: 2 };
+  let armed = false;
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      operator: operatorState({
+        installations: armed ? [{ kind: 'trap', cell: armedAt, state: 'ARMED' }] : [],
+      }),
+    });
+  expect(runner.start('trap', build(0), { installer: 'me' })).toBeNull();
+  // 무장 전에는 인형이 한 칸도 움직이지 않는다.
+  for (let tick = 1; tick <= 10; tick++) {
+    runner.advance(build(tick), () => {
+      throw new Error('puppet moved before the operator armed anything');
+    });
+  }
+  armed = true;
+  for (let tick = 11; tick <= 80 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  expect(puppet.cell).toEqual(armedAt);
+});
+
+it('내가 끝내 설치하지 않으면 그 이유로 끝난다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  const puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  const build = (tick: number) => world([operator, puppet], { tick, operator: operatorState() });
+  expect(runner.start('trap', build(0), { installer: 'me' })).toBeNull();
+  runner.advance(build(STEP_TIMEOUT_TICKS + 1), () => true);
+  // 밋밋한 TIMEOUT 이 아니라 관리자가 무엇을 안 했는지 말한다.
+  expect(runner.status.failure).toBe('operator-installs:NO_INSTALL_FROM_OPERATOR');
+});
+
+it('설치자를 나로 두려면 술래여야 한다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  expect(
+    runner.start('trap', world([operator, puppet], { operator: operatorState() }), {
+      installer: 'me',
+    }),
+  ).toBe('OPERATOR_MUST_BE_TAGGER');
+});
+
+it('내가 요청하면 인형이 수락을 보낸다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 2 } });
+  let requested = false;
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      operator: operatorState(),
+      exchanges: requested ? { 'puppet-runner': 'exchange-1' } : {},
+    });
+  expect(runner.start('accept-my-exchange', build(0))).toBeNull();
+  const sent: PuppetCommand[] = [];
+  for (let tick = 1; tick <= 30 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      sent.push(command);
+      puppet = apply(puppet, command);
+      return true;
+    });
+    if (tick === 10) requested = true;
+  }
+  expect(sent).toContainEqual({ type: 'EXCHANGE_ACCEPT', payload: { exchangeId: 'exchange-1' } });
+  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+});
+
+it('내가 요청하지 않으면 교환 대본이 그 이유로 끝난다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 2 } });
+  const build = (tick: number) => world([operator, puppet], { tick, operator: operatorState() });
+  expect(runner.start('accept-my-exchange', build(0))).toBeNull();
+  for (let tick = 1; tick <= 20 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  runner.advance(build(STEP_TIMEOUT_TICKS + 40), () => true);
+  expect(runner.status.failure).toBe('operator-requests:NO_REQUEST_FROM_OPERATOR');
+});
+
+it('내가 도전을 시작할 때까지 술래 인형이 옆에서 기다린다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 3, y: 1 } });
+  let puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 3 } });
+  let challenging = false;
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      operator: operatorState({
+        exit: OPERATOR_EXIT,
+        challengeId: challenging ? 'challenge-1' : null,
+      }),
+    });
+  expect(runner.start('caught-in-my-challenge', build(0))).toBeNull();
+  for (let tick = 1; tick <= 60 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  const waitingAt = puppet.cell;
+  expect(runner.status.step).toBe('operator-starts-challenge');
+  for (let tick = 61; tick <= 90; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  // 도전이 시작되기 전에는 한 칸도 더 가지 않는다.
+  expect(puppet.cell).toEqual(waitingAt);
+
+  challenging = true;
+  for (let tick = 91; tick <= 160 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  expect(puppet.cell).toEqual(operator.cell);
+});
+
+it('덫 두 개를 먼 칸부터 놓아 설치자가 앞 칸을 밟지 않는다', () => {
+  const runner = createDemoRunner();
+  // (2,1) 에서 남쪽을 본다. 앞 두 칸은 (2,2)·(2,3).
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 1 }, dir: 2 });
+  let puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 3 } });
+  const build = (tick: number) => world([operator, puppet], { tick });
+  expect(runner.start('double-trap-immunity', build(0))).toBeNull();
+  const installs: { x: number; y: number }[] = [];
+  for (let tick = 1; tick <= 600 && runner.status.scenario; tick++) {
+    runner.advance(build(tick), (_actor, command) => {
+      if (command.type === 'INSTALL') installs.push(puppet.cell);
+      puppet = apply(puppet, command);
+      return true;
+    });
+  }
+  expect(runner.status.failure).toBeNull();
+  expect(installs).toEqual([
+    { x: 2, y: 3 },
+    { x: 2, y: 2 },
+  ]);
+});
+
+it('덫 두 칸이 나오지 않으면 거절한다', () => {
+  const runner = createDemoRunner();
+  // (1,3) 에서 남쪽 한 칸은 격자 밖이다.
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 3 }, dir: 2 });
+  const puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  expect(runner.start('double-trap-immunity', world([operator, puppet]))).toBe(
+    'NO_ROOM_FOR_TWO_TRAPS',
+  );
+});
+
+it('관전 대본은 내가 잡힌 뒤에야 두 번째 술래가 움직인다', () => {
+  const runner = createDemoRunner();
+  let operator = player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 2 } });
+  const first = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 1 } });
+  const second = player({ playerId: 'puppet-tagger-2', role: 'tagger', cell: { x: 3, y: 3 } });
+  const prey = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 3 } });
+  const puppetIds = ['puppet-tagger', 'puppet-tagger-2', 'puppet-runner'];
+  const build = (tick: number) => world([operator, first, second, prey], { tick, puppetIds });
+  expect(runner.start('spectate-then-capture', build(0))).toBeNull();
+  const movers = new Set<string>();
+  for (let tick = 1; tick <= 20; tick++) {
+    runner.advance(build(tick), (actor) => {
+      movers.add(actor);
+      return true;
+    });
+  }
+  // 아직 내가 ACTIVE 다. 두 번째 술래는 관전이 열릴 때까지 대기한다.
+  expect(movers.has('puppet-tagger')).toBe(true);
+  expect(movers.has('puppet-tagger-2')).toBe(false);
+
+  operator = { ...operator, status: 'CAPTURED' };
+  for (let tick = 21; tick <= 40; tick++) {
+    runner.advance(build(tick), (actor) => {
+      movers.add(actor);
+      return true;
+    });
+  }
+  expect(movers.has('puppet-tagger-2')).toBe(true);
+});
+
+it('모든 시나리오가 선택지 목록을 갖는다', () => {
+  // 웹이 버튼마다 어떤 설정을 보여 줄지 이 표에서 읽는다. 빠지면 그 버튼만 설정이 사라진다.
+  for (const scenario of DEMO_SCENARIOS) expect(SCENARIO_OPTIONS[scenario]).toBeDefined();
+  expect(Object.keys(SCENARIO_OPTIONS)).toHaveLength(DEMO_SCENARIOS.length);
 });

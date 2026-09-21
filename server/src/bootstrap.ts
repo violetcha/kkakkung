@@ -10,7 +10,7 @@ import {
   mediaGrantRequestSchema,
   mediaStatusReportSchema,
 } from '@kkakkung/protocol/game-messages';
-import type { Cell } from '@kkakkung/protocol/game-schema';
+import type { Cell, MapSize } from '@kkakkung/protocol/game-schema';
 import {
   PROTOCOL_VERSION,
   PRODUCT_PROTOCOL_VERSION,
@@ -103,6 +103,13 @@ export type ProductProfile<State = unknown> = Readonly<{
     fallbackPath: string;
     templateId: string;
     templateVersion: string;
+    /** S15P21C204-321. 로비에서 고른 크기별 템플릿. 없는 크기는 위 기본값으로 간다. */
+    bySize?: Partial<
+      Record<
+        MapSize,
+        { masterPath: string; fallbackPath: string; templateId: string; templateVersion: string }
+      >
+    >;
   } | null;
   emitMetric?: EmitMetric;
   /** Releases product configuration watchers/resources after coordinator shutdown. */
@@ -402,6 +409,7 @@ export function createApplication<State = unknown>(
                   slots,
                   authorize,
                   monotonicNow,
+                  demoAdmissionTtlMs: config.demoAdmissionTtlMs,
                   cleanupReservations,
                 })
               : createDemoUnavailableRoutes(authorize),

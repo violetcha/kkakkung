@@ -61,14 +61,34 @@ describe('assembly: A matchCore through B driver', () => {
     expect(h.outcomes.every((o) => o.outcome.result === 'applied')).toBe(true);
     expect(h.player('t1').action?.kind).toBe('move');
   });
+
+  it('진짜 경기는 데모 배치 제어를 받지 않는다', () => {
+    // S15P21C204-316. `PLACE_PLAYER` 는 데모 하네스 전용이다. 실제 방이 쓰는 드라이버 경로로
+    // 넣어도 위치가 바뀌지 않아야 한다. 코어 단독 시험(`demo-controls`)과 달리 여기서는
+    // 서버가 실제로 제어를 흘려보내는 조립에서 확인한다.
+    const h = createG3Harness();
+    h.start();
+    const before = h.player('r1');
+    const destination = { x: before.cell.x, y: before.cell.y + 1 };
+    h.driver.enqueueControl(h.instance.gameInstanceId, {
+      type: 'PLACE_PLAYER',
+      playerId: 'r1',
+      cell: destination,
+      dir: 2,
+    });
+    h.tick();
+    expect(h.player('r1').cell).toEqual(before.cell);
+    expect(h.player('r1').dir).toBe(before.dir);
+    expect(h.state().deadline).toBe('round');
+    expect(h.integrityFailures).toEqual([]);
+  });
 });
 
 describe('G3-A personal end and connection loss', () => {
   it('a contact capture fixes the runner once, closes its exit and keeps the match running', () => {
     const h = createG3Harness();
     h.start();
-    h.move('t1');
-    h.ticks(MOVE + 1);
+    h.capture('t1');
     const r1 = h.player('r1');
     expect(r1.status).toBe('CAPTURED');
     expect(h.frame().counts).toEqual({ escaped: 0, captured: 1 });
@@ -96,7 +116,9 @@ describe('G3-A personal end and connection loss', () => {
     const h = createG3Harness();
     h.start();
     h.move('t1');
-    h.ticks(MOVE);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.tick();
     // The tagger's move completes on the next tick; the socket closes in that same tick.
     h.lost('r1');
     h.tick();
@@ -140,8 +162,7 @@ describe('G3-A personal end and connection loss', () => {
 
     const ended = createG3Harness();
     ended.start();
-    ended.move('t1');
-    ended.ticks(MOVE + 1);
+    ended.capture('t1');
     expect(ended.player('r1').status).toBe('CAPTURED');
     ended.lost('r1');
     ended.tick();
@@ -154,7 +175,10 @@ describe('G3-A personal end and connection loss', () => {
     h.start();
     h.move('t1');
     h.move('t2');
-    h.ticks(MOVE + 1);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.grab('t2');
+    h.ticks(2);
     expect(h.frame().counts).toEqual({ escaped: 0, captured: 2 });
     expect(h.frame().phase).toBe('RESULT');
     expect(h.frame().result).toEqual({ winner: 'taggers', reason: 'two-captured' });
@@ -277,7 +301,9 @@ describe(`G3-A escape (${G3_RULES_LANDED.escape})`, () => {
     h.until(challenge.minSuccessTick);
     // The tagger's last step completes on the very tick the report is processed.
     h.move('t1');
-    h.ticks(MOVE);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.tick();
     h.accept('r1', h.envelope('r1', 'EXIT_PROGRESS', progress('ch-1')));
     h.tick();
     expect(h.player('t1').cell).toEqual({ x: 5, y: 3 });
@@ -570,8 +596,14 @@ describe('fixture order does not change the authoritative result', () => {
     reversed.move('t3');
     reversed.turn('r2', 'right');
     reversed.move('t1');
-    given.ticks(MOVE + 2);
-    reversed.ticks(MOVE + 2);
+    given.ticks(MOVE - 1);
+    reversed.ticks(MOVE - 1);
+    given.grab('t1');
+    given.grab('t3');
+    reversed.grab('t1');
+    reversed.grab('t3');
+    given.ticks(2);
+    reversed.ticks(2);
     expect(frameDigest(reversed)).toEqual(frameDigest(given));
     expect(frameDigest(given).counts.captured).toBe(2);
   });

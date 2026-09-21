@@ -3,6 +3,8 @@ import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { roundFixture, viewFixture } from '../../room/product-fixture';
 import {
   cueState,
+  captureProgressFlash,
+  CAPTURE_PROGRESS_FLASHES,
   detectCues,
   detectEffectFlashes,
   EFFECT_FLASHES,
@@ -107,6 +109,15 @@ describe('detectCues', () => {
     expect(detectCues(tagger, capturedOne(tagger))).toEqual(['ally-progress']);
     expect(isProgressCue('ally-progress')).toBe(true);
     expect(isProgressCue('captured')).toBe(false);
+  });
+  it('shows a confirmed capture only to an active tagger during play', () => {
+    const tagger = state({ self: active({ role: 'tagger' }) });
+    const runner = state();
+    expect(captureProgressFlash(tagger, { ...tagger, captured: 1 })).toBe('capture-success');
+    expect(captureProgressFlash(runner, { ...runner, captured: 1 })).toBeNull();
+    expect(captureProgressFlash(tagger, { ...tagger, captured: 0 })).toBeNull();
+    expect(captureProgressFlash(tagger, { ...tagger, phase: 'RESULT', captured: 2 })).toBeNull();
+    expect(CAPTURE_PROGRESS_FLASHES).toEqual(['capture-success']);
   });
   it('decides victory, defeat or abort once and suppresses count cues in the same transition', () => {
     const playing = state();

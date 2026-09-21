@@ -14,7 +14,16 @@ import type { ExchangeSessions } from './exchange/session.js';
 import type { PendingTraces } from './exchange/trace.js';
 import type { ExitRegistry } from './exits/registry.js';
 import type { PriorityOrder } from './priority.js';
-import type { Cell, Dir, MatchLayout, Phase, PlayerStatus, MatchTuning, Role } from './types.js';
+import type {
+  Cell,
+  DeadlineMode,
+  Dir,
+  MatchLayout,
+  Phase,
+  PlayerStatus,
+  MatchTuning,
+  Role,
+} from './types.js';
 
 /** Single-shot next action waiting for the current action to finish (RL-03). */
 export type PendingTurn = Readonly<{ direction: 'left' | 'right'; sequence: number }>;
@@ -32,6 +41,8 @@ export type PlayerRecord = Readonly<{
   nextAction: PendingTurn | null;
   heldMove: HeldMove | null;
   connected: boolean;
+  /** Exclusive end tick of the tagger's active capture window. */
+  grabUntilTick: number | null;
   restraintUntilTick: number | null;
   restraintImmuneUntilTick: number | null;
   equipment: Readonly<{ sensor: number; trap: number }>;
@@ -65,6 +76,13 @@ export type MatchState = Readonly<{
   tuning: MatchTuning;
   layout: MatchLayout;
   phase: Phase;
+  /**
+   * S15P21C204-316. Whether this match runs to the tuned round length. `'none'` is the demo
+   * harness: `START_PLAYING` leaves `deadlineTick` null so the round ends only by two captures,
+   * two escapes or an abort. It is also the flag that admits `PLACE_PLAYER`; an ordinary match
+   * is always `'round'` and refuses that control.
+   */
+  deadline: DeadlineMode;
   /** Last processed tick, or null before the first step. */
   tick: number | null;
   startTick: number | null;
