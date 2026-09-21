@@ -65,6 +65,14 @@ export type WallFace = Cell & Readonly<{ side: Dir }>;
 
 export type PlayerStatus = 'ACTIVE' | 'ESCAPED' | 'CAPTURED';
 
+/**
+ * S15P21C204-316. `'round'` is every real match: the tuned `roundTicks` decides a timeout.
+ * `'none'` is the operator demo harness, where a round must not end while a feature is being
+ * shown. Nothing else changes: captures, escapes and aborts are judged exactly the same, and
+ * it is the only flag that admits the `PLACE_PLAYER` control.
+ */
+export type DeadlineMode = 'round' | 'none';
+
 export type Phase =
   | 'LOBBY'
   | 'DEVICE_CHECK'
