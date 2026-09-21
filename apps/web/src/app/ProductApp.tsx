@@ -9,7 +9,7 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
-import { DEFAULT_MAP_SIZE, type MapSizeId } from '../features/room/map-size';
+import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { useMediaConsent } from '../features/room/use-media-consent';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
@@ -67,9 +67,6 @@ export function ProductApp({
   const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
   const [solo, setSolo] = useState(false);
-  // S15P21C204-311. 화면만 먼저 만든 단계라 고른 맵이 아직 서버로 가지 않는다. 방 상태가
-  // 맵을 갖게 되면 이 지역 상태를 그 값으로 바꾼다.
-  const [mapSize, setMapSize] = useState<MapSizeId>(DEFAULT_MAP_SIZE);
   const [backgroundPaused, setBackgroundPaused] = useState(false);
   const [homePanel, setHomePanel] = useState<'title' | 'admission' | 'options'>(
     invitation || initialRoom ? 'admission' : 'title',
@@ -563,9 +560,12 @@ export function ProductApp({
               lockRequest={snapshot.requests.ROOM_LOCK}
               kickRequest={snapshot.requests.ROOM_KICK}
               onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
-              mapSize={mapSize}
+              mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
               canChooseMapSize={round.phase === 'LOBBY'}
-              onSelectMapSize={setMapSize}
+              mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
+              onSelectMapSize={(size) =>
+                runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
+              }
               onKick={(targetPlayerId) =>
                 runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
               }

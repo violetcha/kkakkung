@@ -4,6 +4,7 @@
  * Undecided item content has no command, enum or placeholder in this file.
  */
 import { z } from 'zod';
+import { MAP_SIZES } from '../game-schema/product.js';
 
 export const MAX_COMMAND_BYTES = 4096;
 
@@ -24,6 +25,8 @@ export const PRODUCT_SERVER_MESSAGES = {
   requestStatusResult: 'request-status-result',
   roomRoster: 'room-roster',
   roomAccess: 'room-access',
+  /** S15P21C204-311. 방이 고른 맵 크기. */
+  roomMap: 'room-map',
   privateView: 'private-view',
   privateEvent: 'private-event',
   heartbeat: 'game-heartbeat',
@@ -71,6 +74,8 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
   envelope('READY', { ready: z.boolean() }),
   envelope('ROOM_LOCK', { locked: z.boolean() }),
   envelope('ROOM_KICK', { targetPlayerId: playerIdSchema }),
+  /** S15P21C204-311. 방장이 로비에서 맵 크기를 고른다. */
+  envelope('ROOM_MAP_SIZE', { size: z.enum(MAP_SIZES) }),
   envelope('PRACTICE_READY', { ready: z.boolean() }),
   envelope('LOAD_READY', {
     loadId: opaqueIdSchema,
@@ -107,6 +112,7 @@ export const PHASE_COMMAND_TYPES = [
   'READY',
   'ROOM_LOCK',
   'ROOM_KICK',
+  'ROOM_MAP_SIZE',
   'PRACTICE_READY',
   'LOAD_READY',
   'REMATCH',

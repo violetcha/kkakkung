@@ -16,6 +16,7 @@ export function LobbyScreen({
   onKick,
   mapSize = DEFAULT_MAP_SIZE,
   canChooseMapSize = false,
+  mapSizeRequest,
   onSelectMapSize,
 }: {
   roster: RoomRosterMessage;
@@ -30,11 +31,12 @@ export function LobbyScreen({
   mapSize?: MapSizeId;
   /** 방장이고 아직 바꿀 수 있는 단계(LOBBY)일 때만 true. */
   canChooseMapSize?: boolean;
+  mapSizeRequest?: RequestDisplay;
   onSelectMapSize?(size: MapSizeId): void;
 }) {
   const [removalId, setRemovalId] = useState<string | null>(null);
   const host = roster.hostId === selfId;
-  const busy = [lockRequest, kickRequest].some(
+  const busy = [lockRequest, kickRequest, mapSizeRequest].some(
     (request) => request && ['pending', 'waiting-view'].includes(request.status),
   );
   const removal = roster.players.find(
@@ -109,7 +111,7 @@ export function LobbyScreen({
         </div>
       )}
       {busy && <p role="status">방 관리를 처리하고 있습니다.</p>}
-      {[lockRequest, kickRequest].map((request, index) =>
+      {[lockRequest, kickRequest, mapSizeRequest].map((request, index) =>
         commandFeedback(request) ? (
           <p role="status" key={index}>
             {commandFeedback(request)}

@@ -8,6 +8,7 @@ import {
   roomRosterSchema,
   demoStateSchema,
   roomAccessSchema,
+  roomMapSchema,
   audioPolicySchema,
   mediaBindingsSchema,
   mediaGrantSchema,
@@ -19,6 +20,7 @@ import {
   type DemoStateMessage,
   type RoomRosterMessage,
   type RoomAccessMessage,
+  type RoomMapMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
@@ -108,6 +110,8 @@ export type ProductSnapshot = {
   /** S15P21C204-260. Only an operator demo room sends this; player rooms never do. */
   demo?: DemoStateMessage | null;
   roomAccess?: RoomAccessMessage | null;
+  /** S15P21C204-311. 방이 고른 맵 크기. 방장만 바꾸고 모두가 같은 값을 본다. */
+  roomMap?: RoomMapMessage | null;
   devices: DeviceStatus;
   media: MediaStatus | null;
   /** GAME_LOADING 에서 내가 아직 못 낸 준비 항목. 보고를 보낸 뒤에는 빈 배열이다. */
@@ -796,6 +800,11 @@ export function bindProductRoom(
       )
         return '';
     }
+    if (
+      command.type === 'ROOM_MAP_SIZE' &&
+      (snapshot.round.phase !== 'LOBBY' || snapshot.roster?.hostId !== session.playerId)
+    )
+      return '';
     if (command.type === 'PRACTICE_READY') {
       if (
         snapshot.round.phase !== 'TEAM_PRACTICE' ||
@@ -862,6 +871,7 @@ export function bindProductRoom(
         'REMATCH',
         'ROOM_LOCK',
         'ROOM_KICK',
+        'ROOM_MAP_SIZE',
       ].includes(command.type)
     ) {
       const pending = commands.pending(command.type);
@@ -1057,6 +1067,7 @@ export function bindProductRoom(
         view: null,
         roster: null,
         roomAccess: null,
+        roomMap: null,
         endedSelf: null,
         devices: INITIAL_DEVICES,
         media: null,
@@ -1140,6 +1151,15 @@ export function bindProductRoom(
       result.data.revision >= (snapshot.roomAccess?.revision ?? -1)
     )
       publish({ roomAccess: result.data });
+  });
+  on('room-map', (value) => {
+    const result = roomMapSchema.safeParse(value);
+    if (
+      result.success &&
+      result.data.matchId === snapshot.round?.matchId &&
+      result.data.revision >= (snapshot.roomMap?.revision ?? -1)
+    )
+      publish({ roomMap: result.data });
   });
   on('room-roster', (value) => {
     const result = roomRosterSchema.safeParse(value);

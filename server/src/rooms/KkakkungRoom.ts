@@ -36,6 +36,7 @@ import {
   type Cell,
   type LoadingView,
   type Phase,
+  type MapSize,
   type Role,
 } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
@@ -183,6 +184,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly limiter = new CommandLimiter();
     private readonly inboundLimiter = new CommandLimiter({ capacity: 90, refillPerSecond: 45 });
     private closing = false;
+    // S15P21C204-311. 방장이 로비에서 고른 맵 크기. 제품 기본값 maze-v1(31x31)과 같은 large 로
+    // 시작한다. 실제 템플릿 선택은 크기별 맵이 생긴 뒤에 붙인다.
+    private roomMapSize: MapSize = 'large';
+    private roomMapRevision = 0;
     private readonly heartbeat = new HeartbeatTracker({ serverEpoch: deps.serverEpoch });
     private readonly clockSync = new ClockSync({
       serverEpoch: deps.serverEpoch,
@@ -747,13 +752,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         READY: ['DEVICE_CHECK'],
         ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
+        ROOM_MAP_SIZE: ['LOBBY'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
         SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
-      if ((type === 'ROOM_LOCK' || type === 'ROOM_KICK') && playerId !== this.lobby.host)
+      if (
+        (type === 'ROOM_LOCK' || type === 'ROOM_KICK' || type === 'ROOM_MAP_SIZE') &&
+        playerId !== this.lobby.host
+      )
         return 'NOT_ALLOWED';
       if (type === 'REMATCH') {
         const gate = gateFor(this.demo);
@@ -816,6 +825,18 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             deps.onKickRoom?.(this.roomCode);
             this.removeConnection(target);
             target.leave(ROOM_REMOVED_CLOSE_CODE, 'REMOVED_BY_HOST');
+          }
+          this.broadcastRoster();
+          return { result: 'applied', code: null };
+        }
+        case 'ROOM_MAP_SIZE': {
+          // 실행 시점에 다시 본다. 받아들인 뒤에 방장이나 단계가 바뀌었을 수 있다.
+          if (this.phase !== 'LOBBY') return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (command.payload.size !== this.roomMapSize) {
+            this.roomMapSize = command.payload.size;
+            this.roomMapRevision += 1;
           }
           this.broadcastRoster();
           return { result: 'applied', code: null };
@@ -1935,6 +1956,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           { matchId: this.context.matchId, ...access },
           { afterNextPatch: true },
         );
+      this.broadcast(
+        PRODUCT_SERVER_MESSAGES.roomMap,
+        { matchId: this.context.matchId, revision: this.roomMapRevision, size: this.roomMapSize },
+        { afterNextPatch: true },
+      );
       // The client must observe a new match before its roster; old-match data is rejected.
       this.broadcast(
         PRODUCT_SERVER_MESSAGES.roomRoster,
