@@ -112,7 +112,8 @@ describe('map exchange cancel and concurrent requests', () => {
       command('r-b', 'MOVE_INTENT', { direction: 'back' }),
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    for (let tick = 103; tick <= 110; tick += 1) state = step(state, tick).state;
+    for (let tick = 103; tick <= 109; tick += 1) state = step(state, tick).state;
+    state = step(state, 110, [command('t-a', 'GRAB_INTENT', {})]).state;
     // Both actions complete at tick 111; the accept arrives in that same tick.
     const contact = step(state, 111, [command('r-b', 'EXCHANGE_ACCEPT', { exchangeId: 'xch-1' })]);
     expect(player(contact.state, 'r-b').status).toBe('CAPTURED');

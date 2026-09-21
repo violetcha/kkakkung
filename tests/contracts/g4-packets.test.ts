@@ -37,7 +37,9 @@ describe('taggers: exits, unexplored terrain and out-of-sight coordinates never 
     v.publish('initial');
     // t1 walks north toward the runners for a while; views are published after every tick.
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     v.h.stop('t1');
     v.tickAndPublish(3);
     for (const id of TAGGERS) {
@@ -164,7 +166,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.h.start();
     v.publish('initial');
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     expect(v.h.player('r1').status).toBe('CAPTURED');
     const ended = parseView(v.latestView('r1'));
     expect(ended.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });
@@ -204,7 +208,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.h.start();
     v.publish('initial');
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     expect(v.h.player('r1').status).toBe('CAPTURED');
     v.spectate('r1', 'r3');
     v.publish('change');
@@ -220,7 +226,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.spectate('r1', 'r3');
     v.publish('change');
     v.h.move('t3');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t3');
+    v.tickAndPublish(2);
     expect(v.h.player('r3').status).toBe('CAPTURED');
     // Two captures end the round; the spectate view is gone with PLAYING.
     expect(v.publicState().phase).toBe('RESULT');

@@ -50,7 +50,8 @@ describe('team result and deadline', () => {
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    for (let tick = 3692; tick <= 3699; tick += 1) state = step(state, tick).state;
+    for (let tick = 3692; tick <= 3698; tick += 1) state = step(state, tick).state;
+    state = step(state, 3699, [command('t-a', 'GRAB_INTENT', {})]).state;
     const deadline = step(state, 3700);
     expect(player(deadline.state, 'r-a').status).toBe('CAPTURED');
     expect(deadline.state.result).toEqual({ winner: 'taggers', reason: 'two-captured' });

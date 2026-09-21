@@ -47,6 +47,7 @@ export type EquipmentKind = 'sensor' | 'trap';
 export type CoreCommandPayloads = {
   MOVE_INTENT: { direction: 'forward' | 'back' | null };
   TURN: { direction: 'left' | 'right' };
+  GRAB_INTENT: Record<string, never>;
   EXCHANGE_REQUEST: { targetPlayerId: string };
   EXCHANGE_ACCEPT: { exchangeId: string };
   EXCHANGE_CANCEL: { exchangeId: string };

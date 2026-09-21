@@ -73,6 +73,7 @@ const envelope = <T extends string, P extends z.ZodRawShape>(type: T, payload: P
 export const commandEnvelopeSchema = z.discriminatedUnion('type', [
   envelope('MOVE_INTENT', { direction: z.enum(['forward', 'back']).nullable() }),
   envelope('TURN', { direction: z.enum(['left', 'right']) }),
+  envelope('GRAB_INTENT', {}),
   envelope('READY', { ready: z.boolean() }),
   envelope('ROOM_LOCK', { locked: z.boolean() }),
   envelope('ROOM_KICK', { targetPlayerId: playerIdSchema }),

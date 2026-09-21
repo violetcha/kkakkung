@@ -168,6 +168,7 @@ export type MatchTuning = Readonly<{
   tickMs: 50;
   moveTicks: number;
   turnTicks: number;
+  grabTicks: number;
   roundTicks: 3600;
   installationTicks: 10;
   armTicks: 20;

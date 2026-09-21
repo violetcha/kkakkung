@@ -30,6 +30,7 @@ describe('product command envelope', () => {
       [
         'MOVE_INTENT',
         'TURN',
+        'GRAB_INTENT',
         'READY',
         'ROOM_LOCK',
         'ROOM_KICK',

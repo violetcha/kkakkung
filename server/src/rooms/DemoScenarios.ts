@@ -171,6 +171,7 @@ export type DemoWorld = Readonly<{
 export type PuppetCommand =
   | Readonly<{ type: 'MOVE_INTENT'; payload: { direction: 'forward' | 'back' | null } }>
   | Readonly<{ type: 'TURN'; payload: { direction: 'left' | 'right' } }>
+  | Readonly<{ type: 'GRAB_INTENT'; payload: Record<string, never> }>
   | Readonly<{ type: 'INSTALL'; payload: { kind: 'sensor' | 'trap' } }>
   | Readonly<{ type: 'EXIT_START'; payload: { exitId: string } }>
   | Readonly<{ type: 'EXCHANGE_ACCEPT'; payload: { exchangeId: string } }>
@@ -1122,7 +1123,7 @@ function build(
   }
 }
 
-/** Puppet taggers each walk onto a puppet runner; the capture itself is the rules' verdict. */
+/** Puppet taggers approach, arm their grab, then take the final step onto a runner. */
 function captureTracks(
   taggers: readonly GameSubject[],
   runners: readonly GameSubject[],
@@ -1134,6 +1135,19 @@ function captureTracks(
     .filter((pair): pair is { tagger: GameSubject; prey: GameSubject } => pair.prey !== undefined);
   if (pairs.length < count) return count === 1 ? 'NEED_ONE_PAIR' : 'NEED_TWO_PAIRS';
   return pairs.map(({ tagger, prey }) => [
+    {
+      kind: 'walk' as const,
+      actor: tagger.playerId,
+      target: (now: DemoWorld) => subject(now, prey.playerId)?.cell ?? null,
+      adjacent: true,
+      label: `approach-${prey.playerId}`,
+    },
+    {
+      kind: 'send' as const,
+      actor: tagger.playerId,
+      command: () => ({ type: 'GRAB_INTENT' as const, payload: {} }),
+      label: `grab-${prey.playerId}`,
+    },
     {
       kind: 'walk' as const,
       actor: tagger.playerId,

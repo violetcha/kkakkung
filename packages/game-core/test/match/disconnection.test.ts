@@ -44,7 +44,8 @@ describe('connection loss policy', () => {
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    for (let tick = 102; tick <= 109; tick += 1) state = step(state, tick).state;
+    for (let tick = 102; tick <= 108; tick += 1) state = step(state, tick).state;
+    state = step(state, 109, [command('t-a', 'GRAB_INTENT', {})]).state;
     const result = step(state, 110, [], [{ type: 'CONNECTION_LOST', playerId: 'r-a' }]);
     expect(player(result.state, 'r-a')).toMatchObject({ status: 'CAPTURED', connected: false });
     expect(result.state.counts.captured).toBe(1);

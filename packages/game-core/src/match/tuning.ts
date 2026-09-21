@@ -34,10 +34,11 @@ export const MATCH_TUNING_CONSTANTS = Object.freeze({
 export const MATCH_TUNING_RANGES = Object.freeze({
   moveTicks: Object.freeze({ min: 4, max: 40 }),
   turnTicks: Object.freeze({ min: 2, max: 40 }),
+  grabTicks: Object.freeze({ min: 1, max: 20 }),
 });
 
-/** Default speed for fixtures that build a tuning in code: 12 ticks a cell, 8 a turn (600/400 ms). */
-export const MATCH_TUNING_DEFAULTS = Object.freeze({ moveTicks: 12, turnTicks: 8 });
+/** Defaults for fixtures: 600ms move, 400ms turn, and a 300ms grab window. */
+export const MATCH_TUNING_DEFAULTS = Object.freeze({ moveTicks: 12, turnTicks: 8, grabTicks: 6 });
 
 const LAYOUT_FIELDS: readonly (keyof LayoutConstraints)[] = [
   'minRunnerDistance',
@@ -136,6 +137,7 @@ export function validateTuning(raw: unknown): TemplateValidation<MatchTuningConf
     tickMs: m.tickMs as 50,
     moveTicks: m.moveTicks as number,
     turnTicks: m.turnTicks as number,
+    grabTicks: m.grabTicks as number,
     roundTicks: m.roundTicks as 3600,
     installationTicks: m.installationTicks as 10,
     armTicks: m.armTicks as 20,

@@ -101,6 +101,18 @@ export const PROGRESS_CUE_DELAY_MS = 300;
 export const PROGRESS_CUES: readonly CueKind[] = ['ally-progress', 'enemy-progress'];
 export const isProgressCue = (kind: CueKind) => PROGRESS_CUES.includes(kind);
 
+/** 술래 팀의 공개 포획 누계가 오른 순간에만 내는 서버 확정 화면 피드백. */
+export const CAPTURE_PROGRESS_FLASHES = ['capture-success'] as const;
+export type CaptureProgressFlash = (typeof CAPTURE_PROGRESS_FLASHES)[number];
+export function captureProgressFlash(
+  prev: CueState | null,
+  next: CueState,
+): CaptureProgressFlash | null {
+  if (!prev || prev.matchId !== next.matchId) return null;
+  if (next.phase !== 'PLAYING' || next.role !== 'tagger' || next.status !== 'ACTIVE') return null;
+  return next.captured > prev.captured ? 'capture-success' : null;
+}
+
 /** 화면 플래시를 함께 내는 안내음. 나머지는 소리만 낸다. */
 export const FLASH_CUES = [
   'captured',
@@ -128,7 +140,7 @@ export const isEffectFlash = (kind: AudioEffect['kind']): kind is EffectFlash =>
   (EFFECT_FLASHES as readonly AudioEffect['kind'][]).includes(kind);
 
 /** 화면 플래시 한 칸에 들어가는 종류. 자기 상태 안내음과 서버 효과음이 같은 자리를 쓴다. */
-export type FlashKind = FlashCue | EffectFlash;
+export type FlashKind = FlashCue | EffectFlash | CaptureProgressFlash;
 
 /**
  * 이번 정책에서 아직 화면에 내지 않은 효과음을 고른다. 중복은 서버 eventId 로만 거른다(소리와
