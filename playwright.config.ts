@@ -12,6 +12,12 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:5173',
     browserName: 'chromium',
+    // CI renders with SwiftShader. The home backdrop (S15P21C204-294) animates an 80-cell corridor
+    // continuously unless the OS asks for reduced motion; on software WebGL that starved every
+    // spec that passes the home screen (kkakkung-mr #226: e2e 9.2 min, two 30 s timeouts). With
+    // reduced motion emulated the backdrop draws one frame and stops, which is what the product
+    // does for such users anyway. Locally under forced SwiftShader: 151 s → 60 s for the 12 home specs.
+    reducedMotion: 'reduce',
     launchOptions: { args: ['--enable-unsafe-swiftshader'] },
     trace: 'off',
     screenshot: 'only-on-failure',
