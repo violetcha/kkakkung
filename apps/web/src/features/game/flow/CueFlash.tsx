@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
-import type { FlashCue } from './match-cues';
+import { CUE_FLASH_MS, type FlashKind } from './match-cues';
 
-/** 플래시 한 번의 길이. CSS 애니메이션과 같은 값이며 끝나면 DOM 에서 지운다. */
-export const CUE_FLASH_MS = 900;
+/** 플래시 한 번의 길이. 끝나면 DOM 에서 지운다. */
+export { CUE_FLASH_MS };
 
-export const CUE_FLASH_LABEL: Record<FlashCue, string> = {
+export const CUE_FLASH_LABEL: Record<FlashKind, string> = {
   captured: '포획되었습니다',
   escaped: '탈출했습니다',
   'exit-failed': '탈출에 실패했습니다',
   restrained: '덫에 걸렸습니다',
   victory: '승리',
   defeat: '패배',
+  // S15P21C204-307. 서버가 들려준 장비 발동. 누가 밟았는지는 말하지 않는다.
+  sensor: '감지기가 울렸습니다',
+  trap: '덫이 작동했습니다',
 };
 
 /**
@@ -22,7 +25,7 @@ export function CueFlash({
   flash,
   durationMs = CUE_FLASH_MS,
 }: {
-  flash: { kind: FlashCue; id: number } | null | undefined;
+  flash: { kind: FlashKind; id: number } | null | undefined;
   durationMs?: number;
 }) {
   const [shownId, setShownId] = useState<number | null>(flash?.id ?? null);

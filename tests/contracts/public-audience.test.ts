@@ -44,8 +44,15 @@ describe('ingress', () => {
     expect(host).toContain('location @sso_signin');
   });
 
-  it('refuses the operations API at the edge for every audience', () => {
-    expect(host).toMatch(/location \^~ \/api\/operations\/ \{ return 404; \}/);
+  it('refuses the operations API at the edge for every audience, whatever the spelling', () => {
+    // S15P21C204-296. 접두·정확 일치는 대소문자를 가리는데 Express 는 가리지 않는다. 차단은
+    // 대소문자를 무시하는 정규식이어야 하고, 슬래시 없는 bare 접두까지 덮어야 한다.
+    expect(host).toMatch(/location ~\* \^\/api\/operations\s+\{ return 404; \}/);
+    expect(host).not.toMatch(/location \^~ \/api\/operations/);
+    expect(host).toMatch(/location ~\* \^\/api\/dev-sessions\s+\{ return 404; \}/);
+    expect(host).toMatch(/location ~\* \^\/\(monitor\|playground\) \{ return 404; \}/);
+    // 정확 일치는 정규식보다 먼저 잡히므로 webhook 은 그대로 지난다.
+    expect(host).toContain('location = /api/livekit/webhook');
   });
 
   it('has two snippets that are actual opposites', () => {

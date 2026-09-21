@@ -64,13 +64,16 @@ import {
 } from '../features/game/flow/loading-controller';
 import {
   cueState,
+  CUE_FLASH_MS,
   detectCues,
+  detectEffectFlashes,
   isFlashCue,
   isProgressCue,
   PROGRESS_CUE_DELAY_MS,
   type CueState,
-  type FlashCue,
+  type FlashKind,
 } from '../features/game/flow/match-cues';
+import type { AudioEffect } from '../features/media/audio-policy';
 import type { CueKind } from '../features/media/cue-buffer';
 import type { FaceConditionNotice } from '../features/media/face-condition';
 import type { ReadinessTrace } from '../features/devices/readiness-trace';
@@ -131,7 +134,7 @@ export type ProductSnapshot = {
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
   /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
-  cueFlash?: { kind: FlashCue; id: number } | null;
+  cueFlash?: { kind: FlashKind; id: number } | null;
   /** S15P21C204-276. 좌하단 사건 로그에 그릴 최근 줄. 안내음이 울린 순간과 같다. */
   events: readonly MatchEvent[];
 };
@@ -184,6 +187,11 @@ export function bindProductRoom(
   // 순서에 따라 자기 종료 안내음과 겹칠 수 있어 잠시 미뤄 두고, 자기 종료가 오면 버린다.
   let lastCueState: CueState | null = null;
   let flashId = 0;
+  /** 마지막 플래시 시각. S15P21C204-307 효과음 플래시가 더 구체적인 자기 상태 플래시를 덮지 않게 한다. */
+  let lastFlashAt: number | null = null;
+  /** S15P21C204-307. 화면에 이미 낸 효과음. 소리와 같은 서버 eventId 로만 거른다. */
+  const shownEffects = new Set<string>();
+  let shownEffectsMatch: string | null = null;
   let eventId = 0;
   /** S15P21C204-278. 첫 설치 안내를 이미 낸 경기. 한 경기에 한 번만 낸다. */
   let installPromptMatch: string | null = null;
@@ -306,13 +314,37 @@ export function bindProductRoom(
   const MEDIA_REPORT_NOTICE = '미디어 상태를 서버에 알리지 못했습니다. 연결 상태를 확인해 주세요.';
   const DEVICE_NOTICE =
     '카메라·마이크를 시작하지 못했습니다. 브라우저의 장치 권한과 다른 앱의 카메라 사용을 확인해 주세요.';
+  const flash = (kind: FlashKind) => {
+    lastFlashAt = deps.now();
+    publish({ cueFlash: { kind, id: ++flashId } });
+  };
   const playCue = (kind: CueKind) => {
     if (!active || snapshot.lost) return;
     bridge.runtime.playCue?.(kind);
     // S15P21C204-276. 같은 순간을 화면 로그 한 줄로도 남긴다. 새 판정을 만들지 않는다.
     const text = eventTextForCue(kind);
     if (text) logEvent(text);
-    if (isFlashCue(kind)) publish({ cueFlash: { kind, id: ++flashId } });
+    if (isFlashCue(kind)) flash(kind);
+  };
+  /**
+   * S15P21C204-307. 이미 소리로 도착한 감지기·덫을 화면으로도 알린다. 서버가 들려주기로 한
+   * 효과음만 그대로 옮기고(발소리는 소리만 낸다) 로컬에서 거리를 새로 재지 않는다. 자기 상태
+   * 플래시(구속·포획…)가 아직 떠 있는 동안에는 더 구체적인 그 문구를 덮지 않는다.
+   */
+  const flashEffects = (
+    matchId: string,
+    effects: readonly Pick<AudioEffect, 'eventId' | 'kind'>[],
+  ) => {
+    if (!active || snapshot.lost) return;
+    if (shownEffectsMatch !== matchId) {
+      shownEffects.clear();
+      shownEffectsMatch = matchId;
+    }
+    for (const effect of detectEffectFlashes(effects, shownEffects)) {
+      shownEffects.add(effect.eventId);
+      if (lastFlashAt !== null && deps.now() - lastFlashAt < CUE_FLASH_MS) continue;
+      flash(effect.kind);
+    }
   };
   const logEvent = (text: string) => {
     publish({ events: appendEvent(snapshot.events, { id: ++eventId, text, atMs: deps.now() }) });
@@ -1151,8 +1183,10 @@ export function bindProductRoom(
       result.data.matchId === snapshot.round?.matchId &&
       participating &&
       sameMediaScope(result.data)
-    )
+    ) {
       bridge.runtime.applyAudioPolicy(result.data);
+      flashEffects(result.data.matchId, result.data.effects);
+    }
   });
   try {
     sync(room.state);

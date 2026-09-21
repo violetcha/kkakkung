@@ -1532,3 +1532,60 @@ it('plays state cues once, defers count cues behind my own ending and flashes th
   });
   expect(played()).toHaveLength(5);
 });
+
+it('flashes server-approved sensor and trap effects once without touching footsteps or my own cues', async () => {
+  const f = await mediaFixture();
+  f.state({ phase: 'GAME_LOADING', stateVersion: 11 });
+  f.messages.get('private-view')!(viewFixture({ stateVersion: 11 }));
+  await vi.waitFor(() => expect(f.fake.publishMedia).toHaveBeenCalledTimes(2));
+  f.state({ phase: 'PLAYING', stateVersion: 12 });
+  f.messages.get('private-view')!(viewFixture({ stateVersion: 12 }));
+  const media = f.runtime.getSnapshot().media!;
+  let policyRevision = 0;
+  const effect = (eventId: string, kind: 'footstep' | 'sensor' | 'trap') => ({
+    eventId,
+    kind,
+    gain: 0.5,
+    azimuthRad: 0,
+    lowpassHz: 8000,
+    tick: 100,
+  });
+  const policy = (effects: ReturnType<typeof effect>[]) =>
+    f.messages.get('audio-policy')!({
+      matchId: media.matchId,
+      mediaInstanceId: media.mediaInstanceId,
+      receiverGeneration: media.receiverGeneration,
+      policyRevision: ++policyRevision,
+      bindingRevision: 1,
+      stateVersion: 12,
+      voices: [],
+      effects,
+    });
+  const flash = () => f.runtime.getSnapshot().cueFlash ?? null;
+  // 발소리는 소리만 낸다. 한 칸마다 화면이 번쩍이면 안 된다.
+  policy([effect('ev-1', 'footstep')]);
+  expect(flash()).toBeFalsy();
+  // 감지기는 화면으로도 알리고, 같은 eventId 가 다시 와도 한 번만 낸다.
+  policy([effect('ev-2', 'sensor')]);
+  expect(flash()).toMatchObject({ kind: 'sensor' });
+  const sensorFlashId = flash()!.id;
+  policy([effect('ev-2', 'sensor'), effect('ev-1', 'footstep')]);
+  expect(flash()!.id).toBe(sensorFlashId);
+  // 자기 구속 플래시는 더 구체적이므로 같은 순간의 덫 효과음이 덮지 않는다.
+  f.time(2000);
+  f.state({ phase: 'PLAYING', stateVersion: 13 });
+  f.messages.get('private-view')!({
+    ...viewFixture({ stateVersion: 13 }),
+    self: { ...viewFixture().self!, restraintUntilTick: 140 },
+  });
+  expect(flash()).toMatchObject({ kind: 'restrained' });
+  const restrainedFlashId = flash()!.id;
+  policy([effect('ev-3', 'trap')]);
+  expect(flash()!.id).toBe(restrainedFlashId);
+  // 플래시가 지나간 뒤의 새 발동은 다시 화면으로 알린다.
+  f.time(4000);
+  policy([effect('ev-4', 'trap')]);
+  expect(flash()).toMatchObject({ kind: 'trap' });
+  expect(flash()!.id).toBeGreaterThan(restrainedFlashId);
+  await f.runtime.leave();
+});

@@ -57,7 +57,7 @@ import { ProductSessionStore } from './session/ProductSessionStore.js';
 import { ProductHttpLimiter } from './session/ProductHttpLimiter.js';
 import { createReservationCleanup } from './session/ReservationCleanup.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
-import { clientIp, createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
+import { clientOrigin, createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
 import { SessionStore } from './session/SessionStore.js';
 import { SlotRegistry } from './session/SlotRegistry.js';
 import { readFile } from 'node:fs/promises';
@@ -75,6 +75,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   epochNow?: () => number;
   random?: () => number;
   maxRooms: number;
+  /** 한 출처가 동시에 열어 둘 수 있는 방 수(S15P21C204-300). 생략하면 레지스트리 기본값. */
+  maxRoomsPerOrigin?: number;
   inviteMaxTtlMs: number | null;
   publicWindow:
     | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
@@ -168,7 +170,14 @@ export function createApplication<State = unknown>(
   const epochNow = product?.epochNow ?? (() => Date.now());
   const serverEpoch = product?.serverEpoch ?? createServerEpoch();
   const productSessions = new ProductSessionStore({ now: epochNow });
-  const slots = product ? new SlotRegistry({ maxRooms: product.maxRooms }) : null;
+  const slots = product
+    ? new SlotRegistry({
+        maxRooms: product.maxRooms,
+        ...(product.maxRoomsPerOrigin === undefined
+          ? {}
+          : { maxRoomsPerOwner: product.maxRoomsPerOrigin }),
+      })
+    : null;
   const directory = new RoomDirectory();
   const coordinator = new RoomTickCoordinator({
     now: monotonicNow,
@@ -279,7 +288,7 @@ export function createApplication<State = unknown>(
   const httpLimiter = product
     ? new ProductHttpLimiter({
         now: monotonicNow,
-        clientIp: (request) => clientIp(request, product.trustProxy),
+        clientIp: (request) => clientOrigin(request, product.trustProxy),
         authorize: (header) => authorize?.(header) === true,
         sessionId: (token) => productSessions.authenticate(token)?.sessionId ?? null,
       })
@@ -584,7 +593,7 @@ export function createApplication<State = unknown>(
             return (
               entryLimiter.attempt(
                 {
-                  inviteId: clientIp(request, product?.trustProxy ?? false) ?? 'unknown-peer',
+                  inviteId: clientOrigin(request, product?.trustProxy ?? false) ?? 'unknown-peer',
                   ip: null,
                 },
                 monotonicNow(),

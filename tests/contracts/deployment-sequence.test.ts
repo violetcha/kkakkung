@@ -75,6 +75,8 @@ type World = {
   anonymousOpsStatus: number;
   /** What the public edge answers for the operations API (S15P21C204-290). 404 = blocked there. */
   publicOpsStatus?: number;
+  /** S15P21C204-296. Per exact path, so a half-blocked edge can be modelled spelling by spelling. */
+  publicOpsByPath?: Record<string, number>;
   /** Per action, the snapshot sequence returned by successive polls (last one repeats). */
   drainSnapshots: Snapshot[];
   resumeSnapshots: Snapshot[];
@@ -159,8 +161,13 @@ function harness(w: World) {
       if (!local) {
         if (u.pathname === '/api/config') return { status: w.gateStatus, json: null };
         if (u.pathname === '/health/live') return { status: w.liveStatus, json: null };
-        if (u.pathname.startsWith('/api/operations'))
-          return { status: w.publicOpsStatus ?? 404, json: null };
+        // S15P21C204-296. 가장자리가 어느 철자를 막았는지 흉내낸다. `publicOpsByPath` 를 주면
+        // 그 경로만 다르게 답해, 소문자 하나만 막아 둔 ingress 를 표현할 수 있다.
+        if (u.pathname.toLowerCase().startsWith('/api/operations'))
+          return {
+            status: w.publicOpsByPath?.[u.pathname] ?? w.publicOpsStatus ?? 404,
+            json: null,
+          };
         return { status: 404, json: null };
       }
       if (u.pathname === '/health/ready') {
@@ -415,6 +422,49 @@ describe('barrier before the swap', () => {
       },
     );
     expect(leaking.calls.posts).toEqual([]);
+  });
+
+  it('refuses a release whose edge blocks only one spelling of the operations path', async () => {
+    // S15P21C204-296. 소문자 하나만 막아 둔 가장자리. 대문자는 SSO 로 넘어가고(팀) 공개에서는
+    // 그대로 앱까지 간다. 한 경로만 두드리면 통과로 보이므로 대표 변형을 모두 본다.
+    for (const audience of ['team', 'public'] as const) {
+      const half = harness(
+        world({
+          gateStatus: audience === 'public' ? 200 : 302,
+          publicOpsByPath: { '/api/operations/status': 404, '/API/OPERATIONS/status': 200 },
+        }),
+      );
+      expect(await runRelease(half.input({ audience }), half.adapters)).toMatchObject({
+        result: 'BLOCKED',
+        reason: 'OPERATIONS_PUBLICLY_REACHABLE',
+      });
+      expect(half.calls.posts).toEqual([]);
+    }
+  });
+
+  it('refuses a release whose edge misses the bare operations prefix', async () => {
+    // 옛 `^~ /api/operations/` 는 슬래시가 있어야 걸렸다. `/api/operations` 는 그대로 앱으로 갔다.
+    const bare = harness(world({ gateStatus: 200, publicOpsByPath: { '/api/operations': 503 } }));
+    expect(await runRelease(bare.input({ audience: 'public' }), bare.adapters)).toMatchObject({
+      result: 'BLOCKED',
+      reason: 'OPERATIONS_PUBLICLY_REACHABLE',
+    });
+  });
+
+  it('accepts a team release only when every operations spelling is refused at the edge', async () => {
+    // 팀 대상도 같은 기준이다. SSO 리다이렉트는 차단이 아니다 — 404 여야 한다.
+    const blocked = harness(world({ gateStatus: 302 }));
+    expect(await runRelease(blocked.input({ audience: 'team' }), blocked.adapters)).toMatchObject({
+      result: 'READY',
+    });
+
+    const ssoOnly = harness(
+      world({ gateStatus: 302, publicOpsByPath: { '/API/OPERATIONS/status': 302 } }),
+    );
+    expect(await runRelease(ssoOnly.input({ audience: 'team' }), ssoOnly.adapters)).toMatchObject({
+      result: 'BLOCKED',
+      reason: 'OPERATIONS_PUBLICLY_REACHABLE',
+    });
   });
 
   it('product profile without operations, token or preflight is BLOCKED', async () => {

@@ -53,8 +53,8 @@ describe('host nginx (TLS edge)', () => {
     expect(auth).toMatch(/proxy_pass_request_body off;/);
   });
   it('blocks diagnostics at the edge and forwards the rest to the web-proxy container only', () => {
-    expect(host).toMatch(/location \^~ \/monitor\s+\{ return 404; \}/);
-    expect(host).toMatch(/location \^~ \/playground \{ return 404; \}/);
+    // S15P21C204-296. 대소문자를 무시해야 한다. 뒤의 앱은 `/MONITOR` 도 같은 곳으로 보낸다.
+    expect(host).toMatch(/location ~\* \^\/\(monitor\|playground\) \{ return 404; \}/);
     const app = block(https(), 'location / {');
     expect(app).toMatch(/proxy_pass http:\/\/127\.0\.0\.1:8080;/);
     expect(host).not.toMatch(/proxy_pass http:\/\/127\.0\.0\.1:2567/);

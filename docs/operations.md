@@ -30,6 +30,7 @@
 | `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                     |
 | `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                       |
 | `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                     |
+| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                     |
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                               |
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
@@ -80,14 +81,18 @@ DEPLOY_PROFILE=product node --import tsx scripts/product-release.mjs \
 
 `/opt/kkakkung/audience`는 배포가 대상을 잃지 않게 하는 유일한 장치다. 이 파일과 nginx 조각이 어긋나면 배포가 `AUDIENCE_MISMATCH`(조각이 team인데 public 배포) 또는 `ISOLATION_UNVERIFIED`(조각이 public인데 team 배포)로 멈춘다. 멈추는 쪽이 맞다.
 
-확인할 것 세 가지다. 공개 주소가 로그인 없이 열리고(`/api/config` 200), 공개 주소로 운영 API에 닿지 않고(`/api/operations/status` 404), 운영자는 loopback으로 여전히 닿는다.
+확인할 것 세 가지다. 공개 주소가 로그인 없이 열리고(`/api/config` 200), 공개 주소로 운영 API에 **어떤 철자로도** 닿지 않고, 운영자는 loopback으로 여전히 닿는다.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://j15c204.p.ssafy.io/api/config
-curl -s -o /dev/null -w '%{http_code}\n' https://j15c204.p.ssafy.io/api/operations/status
+for p in /api/operations/status /API/OPERATIONS/status /api/operations; do
+  curl -s -o /dev/null -w "$p %{http_code}\n" "https://j15c204.p.ssafy.io$p"
+done
 ```
 
 운영 API는 **두 대상 모두** 바깥에서 404다. 운영자는 호스트에서 `127.0.0.1:8080`으로 쓴다.
+
+세 줄이 모두 404여야 한다. 셋을 다 두드리는 이유는 nginx와 Express가 경로를 다르게 읽기 때문이다(S15P21C204-296). nginx의 접두·정확 일치 location은 대소문자를 가리는데 Express는 가리지 않아, `^~ /api/operations/` 하나로는 `/API/OPERATIONS/status`와 슬래시 없는 `/api/operations`가 그대로 앱까지 갔다. 지금은 대소문자를 무시하는 정규식으로 막는다. 배포 장벽도 같은 세 경로를 두드려 하나라도 404가 아니면 `OPERATIONS_PUBLICLY_REACHABLE`로 멈춘다.
 
 ## 4. 요청과 기록의 상한
 
