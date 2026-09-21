@@ -11,6 +11,7 @@ import { ABORT_REASONS, type PublicMatchState } from '@kkakkung/protocol/game-sc
 import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/version';
 import { bindProductRoom } from '../../apps/web/src/app/product-runtime';
 import { productRoomPort } from '../../apps/web/src/features/room/product-session';
+import { markConsented } from '../../apps/web/src/features/room/consent';
 import {
   createDeploymentInteractionFactory,
   type DeploymentMediaProbe,
@@ -87,6 +88,9 @@ export async function runDeploymentSmoke(
       throw new Error('DP06_CLOUD_TARGET_OR_EXECUTION_POLICY_INVALID');
   }
   if (!options.opsToken) throw new Error('DP06_OPERATOR_TOKEN_MISSING');
+  // 합성 참가자들도 실제 web 런타임을 쓴다. 그 런타임은 동의 전에는 장치에 닿지 않으므로
+  // (S15P21C204-292) 동의한 사람 자리에 선다고 선언한다. 여기에는 브라우저 저장소가 없다.
+  markConsented();
   const report: DeploymentSmokeReport = {
     evidenceScope:
       options.mode === 'cloud' ? 'SYNTHETIC_CLOUD_DEPLOYMENT_SMOKE' : 'LOCAL_CONTRACT_ONLY',

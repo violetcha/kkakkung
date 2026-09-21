@@ -1,5 +1,6 @@
-import { expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
+import { clearConsentedDevice, useConsentedDevice } from '../features/room/consent-fixture';
 import {
   createInteractionRuntime,
   type InteractionContext,
@@ -13,6 +14,11 @@ import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
 import { createRuntimeMetrics, type RuntimeMetrics } from './runtime-metrics';
 import { INPUT_TUNING } from '../features/input/input-tuning';
+
+// 장치를 켜는 시험들이다. 동의 없이는 다리가 장치에 닿지 않으므로(S15P21C204-292) 이미 동의한
+// 기기에서 시작한다. 동의가 없을 때 닿지 않는다는 사실 자체는 consent-bypass 시험이 본다.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 /** S15P21C204-265. 키보드는 모션과 같은 유지 시간을 채워야 하므로 시계와 타이머를 손으로 돈다. */
 function manualVision() {

@@ -11,6 +11,7 @@ export function LocalControls({
   onMotion,
   onRecover,
   onMicrophone,
+  consented,
   canRecover = true,
   compact = false,
   variant = 'full',
@@ -22,6 +23,11 @@ export function LocalControls({
   onMotion(): Promise<void>;
   onRecover(): Promise<void>;
   onMicrophone(enabled: boolean): Promise<void>;
+  /**
+   * S15P21C204-292. 개인정보 동의를 받았는지. 이 화면은 장치 점검과 나란히 놓이는데 동의
+   * 화면에 가리지 않으므로, 동의 전에는 카메라·마이크를 켜는 단추를 아예 그리지 않는다.
+   */
+  consented: boolean;
   canRecover?: boolean;
   compact?: boolean;
   /**
@@ -47,9 +53,11 @@ export function LocalControls({
                 ? deviceFeedback(status.errorCode)
                 : '카메라 추적이 끊겼습니다. 연습과 경기는 키보드로 계속할 수 있습니다.'}
             </p>
-            <button disabled={busy || !canRecover} onClick={recover}>
-              {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
-            </button>
+            {consented && (
+              <button disabled={busy || !canRecover} onClick={recover}>
+                {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
+              </button>
+            )}
           </div>
         )}
       </aside>
@@ -71,30 +79,43 @@ export function LocalControls({
           <button disabled={mode === 'keyboard'} onClick={onKeyboard}>
             키보드로 조작
           </button>
-          <button
-            disabled={
-              calibrating || !canRecover || status.camera !== 'ready' || status.vision === 'failed'
-            }
-            onClick={() => {
-              setBusy(true);
-              void onMotion().finally(() => setBusy(false));
-            }}
-          >
-            {calibrating ? '추적 준비·보정 중…' : '보정 후 모션으로 조작'}
-          </button>
-          <button disabled={busy || !canRecover} onClick={recover}>
-            {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
-          </button>
-          <button
-            disabled={busy || !canRecover}
-            onClick={() => {
-              setBusy(true);
-              void onMicrophone(status.microphone !== 'ready').finally(() => setBusy(false));
-            }}
-          >
-            {status.microphone === 'ready' ? '마이크 끄기' : '마이크 연결·재시도'}
-          </button>
+          {consented && (
+            <>
+              <button
+                disabled={
+                  calibrating ||
+                  !canRecover ||
+                  status.camera !== 'ready' ||
+                  status.vision === 'failed'
+                }
+                onClick={() => {
+                  setBusy(true);
+                  void onMotion().finally(() => setBusy(false));
+                }}
+              >
+                {calibrating ? '추적 준비·보정 중…' : '보정 후 모션으로 조작'}
+              </button>
+              <button disabled={busy || !canRecover} onClick={recover}>
+                {busy ? '장치 점검 중…' : '장치 다시 연결·점검'}
+              </button>
+              <button
+                disabled={busy || !canRecover}
+                onClick={() => {
+                  setBusy(true);
+                  void onMicrophone(status.microphone !== 'ready').finally(() => setBusy(false));
+                }}
+              >
+                {status.microphone === 'ready' ? '마이크 끄기' : '마이크 연결·재시도'}
+              </button>
+            </>
+          )}
         </div>
+        {!consented && (
+          <p role="status">
+            카메라와 마이크는 장치 점검 화면에서 개인정보 처리에 동의한 뒤에 켤 수 있습니다. 그
+            전까지는 키보드로 조작합니다.
+          </p>
+        )}
         {status.camera !== 'ready' && (
           <p role="status">
             장치를 다시 연결해 점검할 수 있습니다. 연습·경기에서는 키보드로 계속 조작할 수 있습니다.

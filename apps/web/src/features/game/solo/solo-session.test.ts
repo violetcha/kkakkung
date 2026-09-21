@@ -1,10 +1,16 @@
-import { expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createSoloSession } from './solo-session';
+import { clearConsentedDevice, useConsentedDevice } from '../../room/consent-fixture';
 import {
   createInteractionRuntime,
   type InteractionRuntimeOptions,
 } from '../../input/InteractionRuntime';
 import { INPUT_TUNING } from '../../input/input-tuning';
+
+// 개인 체험도 같은 다리를 쓴다. 동의 없이는 장치에 닿지 않으므로(S15P21C204-292) 이미 동의한
+// 기기에서 시작한다.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 function setup(options: InteractionRuntimeOptions = {}) {
   let now = 0;

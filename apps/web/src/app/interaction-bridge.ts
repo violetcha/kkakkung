@@ -8,10 +8,19 @@ import {
   type DeviceStatus,
 } from '../features/input/InteractionRuntime';
 import { deviceReady, INITIAL_DEVICES } from '../features/game/flow/device-readiness';
+import { consentGiven } from '../features/room/consent';
 
 export function createInteractionBridge(
   deps: InteractionDeps,
   factory: (deps: InteractionDeps) => InteractionRuntime = createInteractionRuntime,
+  /**
+   * S15P21C204-292. 동의 전에는 카메라·마이크를 켜지 않는다.
+   *
+   * 화면마다 막지 않고 여기서 막는 이유: 장치를 켜는 길은 결국 아래 두 개뿐인데, 그 단추를
+   * 그리는 화면은 여럿이고 앞으로 더 늘어난다. 실제로 292 는 장치 점검 화면만 가렸다가
+   * `LocalControls` 의 복구·마이크 단추를 놓쳤다. 화면을 하나 더 만들어도 이 검사는 지난다.
+   */
+  consented: () => boolean = consentGiven,
 ) {
   let disposed = false;
   let context: InteractionContext | null = null;
@@ -103,7 +112,7 @@ export function createInteractionBridge(
       attach();
     },
     async startDevices(microphone: boolean) {
-      if (!canCheckDevices()) return;
+      if (!consented() || !canCheckDevices()) return;
       const run = ++deviceRun;
       const initialContext = context;
       await runtime.startDevices({ microphone });
@@ -116,7 +125,7 @@ export function createInteractionBridge(
         await runtime.calibrate();
     },
     async updateMicrophone(microphone: boolean) {
-      if (!canCheckDevices()) return;
+      if (!consented() || !canCheckDevices()) return;
       await runtime.setMicrophone(microphone);
     },
     ready(value: boolean) {

@@ -5,6 +5,7 @@ import { MiniMap } from '../features/game/map/MiniMap';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { viewFixture, roundFixture } from '../features/room/product-fixture';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
+import { useMediaConsent } from '../features/room/use-media-consent';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
@@ -67,6 +68,7 @@ export default function PreviewApp() {
   const [mounted, setMounted] = useState(true);
   const [deviceStage, setDeviceStage] = useState<keyof typeof DEVICE_STAGES>('점검 전');
   const [quality, setQuality] = useState<QualityPreset>('medium');
+  const consent = useMediaConsent();
   const view = viewFixture({
     // S15P21C204-277. 미니맵 검수용으로 통로 한 줄과 벽 몇 면을 알려 준 상태로 둔다.
     knownTerrain: [
@@ -135,6 +137,7 @@ export default function PreviewApp() {
               ))}
             </select>
           </label>
+          {/* 합성 미리보기라도 실제 진입 계약과 같은 동의 게이트를 거친다. */}
           <DeviceCheckScreen
             key={deviceStage}
             status={DEVICE_STAGES[deviceStage]}
@@ -144,6 +147,8 @@ export default function PreviewApp() {
             onCalibrate={async () => {}}
             onMicrophone={async () => {}}
             onTestTone={async () => 'played' as const}
+            consented={consent.consented}
+            onConsent={consent.accept}
             motion={
               DEVICE_STAGES[deviceStage].calibration === 'ready'
                 ? { lean: true, turn: true }

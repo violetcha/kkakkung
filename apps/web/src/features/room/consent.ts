@@ -88,3 +88,30 @@ export function browserConsentStorage(): ConsentStorage | null {
     return null;
   }
 }
+
+/**
+ * 이 페이지에서 동의 화면을 지났는지. 저장소가 막혀 있어도(사생활 보호 모드·쿠키 차단) 이번
+ * 진행은 막지 않기 위해 기억에도 남긴다. 새로고침하면 사라지므로 그때는 다시 묻는다.
+ *
+ * 저장된 동의만 보면 저장에 실패한 사람은 동의하고도 장치를 못 켠다. 기억만 보면 다음 방문에
+ * 다시 묻지 못한다. 둘 다 본다.
+ */
+let sessionConsent = false;
+
+/** 동의 화면을 통과했다고 알린다. 저장 성공 여부와 무관하게 이번 페이지에서는 유효하다. */
+export function markConsented(): void {
+  sessionConsent = true;
+}
+
+/** 지금 카메라·마이크를 켜도 되는지. 장치를 켜는 쪽은 이 답만 보면 된다. */
+export function consentGiven(
+  storage: ConsentStorage | null | undefined = browserConsentStorage(),
+  version = PRIVACY_NOTICE_VERSION,
+): boolean {
+  return sessionConsent || hasConsented(storage, version);
+}
+
+/** 시험용. 페이지를 새로 연 것과 같은 상태로 되돌린다. */
+export function forgetSessionConsent(): void {
+  sessionConsent = false;
+}

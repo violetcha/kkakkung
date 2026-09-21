@@ -7,7 +7,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, it } from 'vitest';
 import { ConsentGate } from './ConsentGate';
-import { CONSENT_STORAGE_KEY } from './consent';
+import { CONSENT_STORAGE_KEY, consentGiven, forgetSessionConsent } from './consent';
 import { PRIVACY_NOTICE, PRIVACY_NOTICE_VERSION } from './privacy-notice';
 import { DeviceCheckScreen } from '../game/flow/DeviceCheckScreen';
 import type { DeviceStatus } from '../input/InteractionRuntime';
@@ -32,6 +32,7 @@ function withStoredConsent(raw: string | null) {
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, 'localStorage');
+  forgetSessionConsent();
 });
 
 it('asks for both confirmations and keeps the button disabled until then', () => {
@@ -51,29 +52,33 @@ it('shows every notice sentence, including the tampering risk', () => {
   expect(html).not.toContain('익명');
 });
 
-it('replaces the device controls until the notice is accepted', () => {
-  withStoredConsent(null);
-  const gated = renderToStaticMarkup(
-    createElement(DeviceCheckScreen, { status, onStart: async () => {} }),
+const screen = (consented: boolean) =>
+  renderToStaticMarkup(
+    createElement(DeviceCheckScreen, {
+      status,
+      onStart: async () => {},
+      consented,
+      onConsent() {},
+    }),
   );
+
+it('replaces the device controls until the notice is accepted', () => {
+  const gated = screen(false);
   expect(gated).toContain('개인정보 처리 동의');
   // 장치를 켜는 화면 자체가 없다.
   expect(gated).not.toContain('aria-label="장치 점검"');
 
-  withStoredConsent(
-    JSON.stringify({ version: PRIVACY_NOTICE_VERSION, atMs: 1, ageConfirmed: true }),
-  );
-  const open = renderToStaticMarkup(
-    createElement(DeviceCheckScreen, { status, onStart: async () => {} }),
-  );
+  const open = screen(true);
   expect(open).toContain('aria-label="장치 점검"');
   expect(open).not.toContain('개인정보 처리 동의');
 });
 
 it('asks again when the notice version moved on', () => {
+  // 판정은 화면이 아니라 `consentGiven` 이 한다(S15P21C204-292). 옛 판에 눌린 동의는 동의가 아니다.
   withStoredConsent(JSON.stringify({ version: 'older', atMs: 1, ageConfirmed: true }));
-  const html = renderToStaticMarkup(
-    createElement(DeviceCheckScreen, { status, onStart: async () => {} }),
+  expect(consentGiven()).toBe(false);
+  withStoredConsent(
+    JSON.stringify({ version: PRIVACY_NOTICE_VERSION, atMs: 1, ageConfirmed: true }),
   );
-  expect(html).toContain('개인정보 처리 동의');
+  expect(consentGiven()).toBe(true);
 });
