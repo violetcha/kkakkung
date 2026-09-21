@@ -234,6 +234,15 @@ describe('createGestureIntentController', () => {
     expect(base.sent.at(-1)).toEqual({ type: 'INSTALL', payload: { kind: 'trap' } });
   });
 
+  it('keeps the number keys out of the runner interactions', () => {
+    // 핫바는 아이템 칸이고 지도 교환·탈출 도전은 E 에만 있다. 숫자 키로는 절대 일어나지 않는다.
+    const near = harness({ ...runner, targetPlayerId: 'runner-2', exitId: 'exit-1' });
+    expect(near.controller.pressKey('1')).toBeNull();
+    expect(near.controller.pressKey('2')).toBeNull();
+    expect(near.sent).toEqual([]);
+    expect(near.controller.pressKey('E')).toBe('exit-start');
+  });
+
   it('makes no selection or install for a runner or an unassigned role', () => {
     const asRunner = harness(runner);
     expect(asRunner.controller.pressKey('1')).toBeNull();

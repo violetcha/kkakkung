@@ -24,6 +24,8 @@ export function Hotbar({
 }) {
   const slots = hotbarSlots({ view, tick, selected, exchangeTarget });
   if (!slots) return null;
+  // 게임 핫바처럼 칸 안에는 글리프·번호·개수만 두고, 이름은 고른 칸의 것만 바 위에 한 줄로 띄운다.
+  const current = slots.find((slot) => slot.state === 'selected') ?? slots[0]!;
   return (
     <div className="hotbar" aria-label="빠른 선택">
       {hint && (
@@ -31,6 +33,10 @@ export function Hotbar({
           {hint.text}
         </p>
       )}
+      <p className="hotbar-name" aria-hidden="true">
+        {current.label}
+        {current.detail && <span>{current.detail}</span>}
+      </p>
       <div className="hotbar-slots">
         {slots.map((slot) => {
           const selectable =
@@ -43,6 +49,12 @@ export function Hotbar({
               <span className="hotbar-glyph" aria-hidden="true">
                 {slot.glyph}
               </span>
+              {slot.count !== null && (
+                <span className="hotbar-count" aria-hidden="true">
+                  {slot.count}
+                </span>
+              )}
+              {/* 이름·개수는 바 위 한 줄에 있다. 여기 글자는 보조 기술을 위해 남긴다. */}
               <span className="hotbar-label">{slot.label}</span>
               {slot.detail && <span className="hotbar-detail">{slot.detail}</span>}
             </>

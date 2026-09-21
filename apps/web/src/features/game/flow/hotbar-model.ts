@@ -8,10 +8,12 @@ export type HotbarSlotState = 'selected' | 'available' | 'unavailable' | 'reserv
 
 export type HotbarSlot = Readonly<{
   id: string;
-  /** 누르는 키. 화면 단추에도 같은 글자를 적는다. */
+  /** 칸 번호(1~5). 게임 핫바처럼 자리마다 늘 같은 숫자가 보인다. */
   key: string;
   glyph: string;
   label: string;
+  /** 칸 오른쪽 아래의 남은 개수. 개수 개념이 없는 칸은 null 이다. */
+  count: number | null;
   detail: string | null;
   state: HotbarSlotState;
 }>;
@@ -28,6 +30,7 @@ function completeFiveSlots(slots: readonly HotbarSlot[]): readonly HotbarSlot[] 
       key: String(position),
       glyph: '·',
       label: '빈 슬롯',
+      count: null,
       detail: null,
       state: 'reserved' as const,
     });
@@ -50,6 +53,7 @@ export function hotbarSlots(input: {
           key: String(index + 1),
           glyph: EQUIPMENT_GLYPH[kind],
           label: EQUIPMENT_LABEL[kind],
+          count: equipment.remaining[kind],
           detail: `${equipment.remaining[kind]}개`,
           state:
             equipment.remaining[kind] === 0 || equipment.locked
@@ -60,29 +64,9 @@ export function hotbarSlots(input: {
         }),
       ),
     );
+  // 도망자 아이템(J7)이 정해지면 채운다. 지도 교환·탈출 도전은 아이템이 아니라 상호작용이므로
+  // 핫바에 두지 않는다(interact-prompt). 자리만 비워 두어 두 역할의 배치가 같다.
   const exchange = exchangePresenter(input.view, input.exchangeTarget ?? null, input.tick);
   if (!exchange) return null;
-  return completeFiveSlots([
-    Object.freeze({
-      id: 'exchange',
-      key: 'E',
-      glyph: '⇄',
-      label: '지도 교환',
-      detail: exchange.canAccept ? '수락 대기' : exchange.canRequest ? '가까이 있음' : null,
-      state: (exchange.canAccept
-        ? 'selected'
-        : exchange.canRequest
-          ? 'available'
-          : 'unavailable') as HotbarSlotState,
-    }),
-    // 도망자 아이템(J7)이 정해지면 채운다. 자리를 미리 잡아 두어 핫바 배치가 나중에 흔들리지 않는다.
-    Object.freeze({
-      id: 'reserved',
-      key: '2',
-      glyph: '▢',
-      label: '예약 슬롯',
-      detail: '준비 중',
-      state: 'reserved' as HotbarSlotState,
-    }),
-  ]);
+  return completeFiveSlots([]);
 }
