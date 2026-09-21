@@ -154,6 +154,12 @@ const ABORTABLE_PHASES: readonly Phase[] = [
   'COUNTDOWN',
   'PLAYING',
 ];
+const PRE_GAME_DEPARTURE_PHASES: readonly Phase[] = [
+  'TEAM_PRACTICE',
+  'MAP_FINALIZING',
+  'GAME_LOADING',
+  'COUNTDOWN',
+];
 
 export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
   const random = deps.random ?? Math.random;
@@ -613,6 +619,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private removeConnection(client: Client, heartbeatLost = false) {
+      const phaseAtLeave = this.phase;
       const auth = this.playersByConnection.get(client.sessionId);
       this.playersByConnection.delete(client.sessionId);
       this.limiter.forget(client.sessionId);
@@ -625,13 +632,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.lobby.setConnected(auth.playerId, false);
       this.spectateChoices.delete(auth.playerId);
       if (control || heartbeatLost) this.handleConnectionLost(auth.playerId);
-      if (this.phase === 'LOBBY' || this.phase === 'DEVICE_CHECK') {
-        this.lobby.remove(auth.playerId);
-        this.queue.forgetActor(auth.playerId);
-        this.dispatcher.forget(auth.playerId);
-        deps.sessions.invalidate(auth.sessionId);
+      // Reconnect is intentionally unsupported. Invalidate the single-use session for every
+      // departure so a late onAuth/onJoin cannot resurrect a participant or its old scope.
+      this.lobby.remove(auth.playerId);
+      this.queue.forgetActor(auth.playerId);
+      this.dispatcher.forget(auth.playerId);
+      deps.sessions.invalidate(auth.sessionId);
+      if (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK') {
         this.releaseSeat(auth.playerId, 'connection-lost');
         this.evaluateWaiting();
+      } else if (PRE_GAME_DEPARTURE_PHASES.includes(phaseAtLeave)) {
+        this.returnToLobbyAfterDeparture('PLAYER_LEFT_DURING_PREPARATION');
       }
       this.broadcastRoster();
       this.syncPublic();
@@ -742,6 +753,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
       if ((type === 'ROOM_LOCK' || type === 'ROOM_KICK') && playerId !== this.lobby.host)
         return 'NOT_ALLOWED';
+      if (type === 'REMATCH') {
+        const gate = gateFor(this.demo);
+        if (gate && !gate()) return 'NOT_READY';
+      }
       return null;
     }
 
@@ -1037,7 +1052,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           const request = this.rematch.pending;
           if (
             request &&
-            this.rematch.canStart({ mediaRetirementConfirmed: !this.hasUnresolvedMedia() })
+            this.rematch.canStart({ mediaRetirementConfirmed: !this.hasUnresolvedMedia() }) &&
+            (gateFor(this.demo)?.() ?? true)
           )
             this.startNewRound();
           return;
@@ -1236,6 +1252,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.blockedReason = 'NOT_READY';
         return;
       }
+      // A previous practice/loading scope may still be retiring after a departure or timeout.
+      // Do not overlap a new media generation with that unresolved scope; keep the room in
+      // device check until the old resource is confirmed released.
+      if (this.hasUnresolvedMedia()) {
+        this.blockedReason = 'PRACTICE_MEDIA_NOT_READY';
+        return;
+      }
       const now = deps.monotonicNow();
       if (!deps.core || !deps.practice || !deps.tuning) {
         this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
@@ -1290,6 +1313,85 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.practice.stop();
       if (next === 'to-map-finalizing') this.setPhase('MAP_FINALIZING');
       else this.setPhase('DEVICE_CHECK');
+    }
+
+    /**
+     * A preparation-stage departure invalidates the whole pending round. The phase is room-wide,
+     * so keeping five people in a half-finished practice/loading scope would either wait for a
+     * player who can no longer report or accidentally create a five-player game.
+     */
+    private returnToLobbyAfterDeparture(diagnostic: string) {
+      if (this.closing || this.disposed) return;
+      this.reportPreparationFailure('DEVICE_CHECK', diagnostic, null);
+      this.invalidateLayout();
+      this.blockedReason = diagnostic;
+      this.driver.cancelAllPending('ROUND_ENDED');
+      for (const instance of this.driver.attached())
+        this.retireInstance(instance.gameInstanceId, 'phase-change');
+      this.loading.invalidate();
+      this.countdown.cancel();
+      this.practice.stop();
+      this.finalizing = null;
+      this.pendingLayout = null;
+      this.startRequestedTick = null;
+      this.roles.clear();
+      this.spectateChoices.clear();
+      this.context.setRolePlan(null);
+      this.lobby.clearReady();
+      if (this.phase !== 'LOBBY') this.setPhase('LOBBY');
+    }
+
+    /** Reclaims only stalled device-check participants; connected players keep the room. */
+    private recoverDeviceCheckTimeout() {
+      const stalled = this.lobby
+        .list()
+        .filter((participant) => participant.connected && !participant.ready);
+      const reserved = deps.slots
+        .members(this.roomCode)
+        .filter((member) => member.state === 'RESERVED');
+      this.emitEvent('room.preparation_failed', 'warn', {
+        phase: this.phase,
+        outcome: 'DEVICE_CHECK',
+        reason: 'DEVICE_CHECK_TIMEOUT',
+        code: null,
+        total: this.lobby.list().length,
+        reported: this.lobby.list().filter((participant) => participant.ready).length,
+        faceConfirmed: null,
+        unresolvedMedia: this.hasUnresolvedMedia(),
+        count: this.clientsByPlayer.size,
+      });
+      this.blockedReason = 'DEVICE_CHECK_TIMEOUT';
+
+      // A reservation can outlive its socket. It belongs to this expired check and must not
+      // keep the room or the service capacity occupied.
+      for (const member of reserved) {
+        const session = deps.sessions.getByPlayer(member.playerId);
+        if (session) deps.sessions.invalidate(session.sessionId);
+        deps.slots.release(this.roomCode, member.playerId);
+      }
+
+      for (const participant of stalled) {
+        const client = this.clientsByPlayer.get(participant.playerId);
+        if (!client) continue;
+        this.removeConnection(client);
+        client.leave(ROOM_REMOVED_CLOSE_CODE, 'DEVICE_CHECK_TIMEOUT');
+      }
+
+      // If nobody was stalled, the service gate was the thing preventing progress (for example
+      // a drain). Do not reset this forever: close the waiting room and let admission recover it.
+      if (stalled.length === 0 && reserved.length === 0) {
+        this.closing = true;
+        deps.slots.beginClose(this.roomCode);
+        deps.sessions.invalidateRoom(this.roomCode);
+        void this.disconnect(ROOM_EXPIRED_CLOSE_CODE);
+        return;
+      }
+      this.lobby.clearReady();
+      if (this.phase === 'DEVICE_CHECK') {
+        this.setPhase('LOBBY');
+        this.evaluateWaiting();
+      }
+      this.syncPublic();
     }
 
     private startFinalizing() {
@@ -1775,6 +1877,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         phaseStartedAtMs: deps.slots.phaseStartedAt(this.roomCode) ?? now,
         nowMs: now,
       });
+      if (decision === 'recover-device-check') {
+        this.recoverDeviceCheckTimeout();
+        return;
+      }
       if (decision === 'keep') return;
       this.closing = true;
       deps.slots.beginClose(this.roomCode);
