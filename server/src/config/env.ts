@@ -44,11 +44,12 @@ const environment = z.object({
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
   PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
   // S15P21C204-267. Which certified template under PRODUCT_CONTENT_DIR the product room plays:
-  // maps/<id>.json with placements/<id>-fallback.json. The open grid stays the default.
+  // maps/<id>.json with placements/<id>-fallback.json. S15P21C204-302 made the corridor maze the
+  // default; the open grid master-v1 stays certified and selectable for load and regression runs.
   PRODUCT_MAP_TEMPLATE: z
     .string()
     .regex(/^[a-z0-9-]+$/)
-    .default('master-v1'),
+    .default('maze-v1'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(2567),
   ALLOWED_ORIGINS: z

@@ -87,11 +87,14 @@ describe('real product profile assembly without Cloud', () => {
     }
   });
 
-  // S15P21C204-267. The corridor maze is selected by PRODUCT_MAP_TEMPLATE and goes through the
-  // same hash, variant and fallback certification as the open grid; the default stays master-v1.
-  it('selects the maze template by configuration and plays it through the same loader', async () => {
-    expect((await loadProductProfile(config())).layouts!.templateId).toBe('master-v1');
-    const profile = await loadProductProfile(config({ PRODUCT_MAP_TEMPLATE: 'maze-v1' }));
+  // S15P21C204-267/302. The corridor maze is the default and goes through the same hash, variant
+  // and fallback certification as the open grid, which PRODUCT_MAP_TEMPLATE still selects.
+  it('plays the default maze template through the loader and keeps the open grid selectable', async () => {
+    expect((await loadProductProfile(config())).layouts!.templateId).toBe('maze-v1');
+    expect(
+      (await loadProductProfile(config({ PRODUCT_MAP_TEMPLATE: 'master-v1' }))).layouts!.templateId,
+    ).toBe('master-v1');
+    const profile = await loadProductProfile(config());
     const maps = profile.layouts!;
     expect(maps.templateId).toBe('maze-v1');
     expect(maps.masterPath.endsWith('maze-v1.json')).toBe(true);

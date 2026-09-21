@@ -68,8 +68,16 @@ const DIRECTIONS: readonly { dx: number; dy: number }[] = [
   { dx: 0, dy: 1 },
   { dx: -1, dy: 0 },
 ];
-/** A step that cannot finish is abandoned rather than left blocking the room. */
-const STEP_TIMEOUT_TICKS = 1200;
+/**
+ * A step that cannot finish is abandoned rather than left blocking the room.
+ *
+ * S15P21C204-302. 1200 was calibrated on the open grid, where a puppet reaches the operator in
+ * 332-520 ticks. On the corridor maze that is now the default the same walk costs 368-1072 ticks
+ * and a tagger's chase up to 1136, so the old budget failed 'exchange' with come-closer:TIMEOUT
+ * on the long variants. 2400 keeps more than twice the worst measured optimal path and still
+ * reports a genuinely stuck puppet well inside the 3600-tick round.
+ */
+export const STEP_TIMEOUT_TICKS = 2400;
 /** Installation (10) plus arming (20) with room to spare: the device must be live to be shown. */
 const ARM_WAIT_TICKS = 60;
 /** The rules require the pose to stand for two seconds before a report can succeed. */

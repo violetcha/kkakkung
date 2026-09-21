@@ -23,7 +23,7 @@ describe('isolated product server IPC boundary', () => {
         namespace: PRODUCT_SERVER_IPC,
         id: 1,
         ok: true,
-        result: { port: 2567, pid: 1, strictProduct: true },
+        result: { port: 2567, pid: 1, strictProduct: true, mapTemplate: 'master-v1' },
       }).success,
     ).toBe(true);
   });

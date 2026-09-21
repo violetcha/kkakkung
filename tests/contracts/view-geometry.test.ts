@@ -35,10 +35,11 @@ it('서버가 보낸 셀을 렌더러로 가는 길에 하나도 버리지 않�
   // `server-sight-fidelity.test.ts` 가 여섯 사례로 본다.
   const origin = { x: 1, y: 1 };
   const diagonal = { x: 2, y: 4 };
-  const farther = { x: 1, y: 6 };
+  const farther = { x: 1, y: 7 };
   const distance = (cell: { x: number; y: number }) =>
     Math.hypot(cell.x - origin.x, cell.y - origin.y);
-  // 예전 하드코딩 3 과 코어 범위 사이에 있던 셀, 그리고 정수 거리로는 범위 밖인 셀.
+  // 예전 하드코딩 3 과 코어 범위 사이에 있던 셀, 그리고 코어 범위 밖인 셀(302 에서 거리
+  // 상한이 3.5 에서 5.0 으로 올라 바깥 표본을 다시 잡았다).
   expect(distance(diagonal)).toBeLessThanOrEqual(VIEW_RANGE);
   expect(distance(diagonal)).toBeGreaterThan(3);
   expect(distance(farther)).toBeGreaterThan(VIEW_RANGE);

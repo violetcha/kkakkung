@@ -121,6 +121,17 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
         SESSION_ATTEMPTS_PER_INVITE: '30',
         SESSION_ATTEMPTS_PER_IP: String(Math.max(60, rooms * 6 * 3)),
         ROOM_IDLE_TTL_MS: '600000',
+        // S15P21C204-302. This process carries the deployment and media wiring contracts, not
+        // map behaviour, and its positive in-game audio evidence comes from six synthetic clients
+        // wandering into earshot of each other. On the corridor maze that became a coin flip, and
+        // deliberately walking them together did not fix it, so the cause is not distance. Pinned
+        // to the open grid until S15P21C204-308 makes that evidence map-independent and
+        // S15P21C204-309 answers whether corridor audibility is a product problem. The product
+        // default stays maze-v1 and the real Cloud DP-06 still runs on it.
+        //
+        // The pin belongs here and not in the spawned environment: this config is a literal and
+        // never reads process.env, so an env var set by the parent is silently ignored.
+        PRODUCT_MAP_TEMPLATE: 'master-v1',
         OPS_OPERATING_MODE: request.operatingMode,
         ...(request.audience ? { SERVICE_AUDIENCE: request.audience, TRUST_PROXY_HOPS: '1' } : {}),
         ...(window && !('mode' in window)
@@ -163,7 +174,12 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
     });
     const port = await application.listen();
     endpoint = `http://127.0.0.1:${port}`;
-    return { port, pid: process.pid, strictProduct: profile.strictProduct === true };
+    return {
+      port,
+      pid: process.pid,
+      strictProduct: profile.strictProduct === true,
+      mapTemplate: config.mapTemplate,
+    };
   }
   if (request.action === 'close') {
     await close();

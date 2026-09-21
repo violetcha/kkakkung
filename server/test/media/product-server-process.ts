@@ -151,6 +151,7 @@ export async function startProductServerProcess(
       endpoint: `http://127.0.0.1:${started.port}`,
       pid: started.pid,
       strictProduct: started.strictProduct,
+      mapTemplate: started.mapTemplate,
       async inspect(roomCode?: string): Promise<ProductServerInspection> {
         const result = await request({ action: 'inspect', ...(roomCode ? { roomCode } : {}) });
         if (!('participantCount' in result))

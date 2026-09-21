@@ -12,22 +12,28 @@ import {
  * S15P21C204-268. The dark block theme: block forms and 16×16 pixel tiles borrowed from the
  * Minecraft reference, everything else ours. No sky, no directional light; the only light is
  * the lantern the player carries plus a faint ambient, and the fog ends inside the server's
- * 3.5-cell sight so the picture never shows more than the rules do. The palette is the logo's:
+ * sight so the picture never shows more than the rules do. The palette is the logo's:
  * black, cracked bone-grey stone, dark brown seams.
+ *
+ * S15P21C204-302 scaled both fog distances by the same factor as the server sight (3.5 -> 5.0), so
+ * the corridor fades on the same curve as before and the extra range is actually visible.
  */
 export const BLOCK = Object.freeze({
   wallHeight: 1.2,
   ceilingHeight: 1.2,
   background: '#030303',
-  fogNear: 1.5,
-  fogFar: 3.2,
+  fogNear: 2.1,
+  fogFar: 4.6,
   ambient: 0.16,
   /** Pixel tile edge; every texture in this theme is this many texels square. */
   tile: 16,
 });
 
-/** The server never shows farther than this (spec 7.2). Kept here because apps/web must not import game-core. */
-export const SERVER_VIEW_RANGE = 3.5;
+/**
+ * The server never shows farther than this (spec 7.2). Kept here because apps/web must not import
+ * game-core; `tests/contracts/view-geometry.test.ts` fixes it against the core's `VIEW_RANGE`.
+ */
+export const SERVER_VIEW_RANGE = 5.0;
 
 /**
  * The carried lantern lights the scene. Its reach ends with the fog so nothing lit is hidden
@@ -36,7 +42,7 @@ export const SERVER_VIEW_RANGE = 3.5;
  */
 export const BLOCK_LIGHTING = Object.freeze({
   ambientColor: '#6d7a8c',
-  lantern: { color: '#ffd9a1', intensity: 3.2, distance: 3.4, decay: 1.8 },
+  lantern: { color: '#ffd9a1', intensity: 3.2, distance: 4.8, decay: 1.8 },
   /** Where the lantern hangs in the player's own frame: right hand, slightly forward. */
   lanternOffset: [0.28, 0.62, -0.12] as const,
 });

@@ -149,8 +149,24 @@ describe('과거 지식은 현재 시야로 새지 않는다', () => {
   it('누적 지도가 넓어도 현재 시야만 그린다', () => {
     // `knownTerrain` 은 프로토콜에서 분리된 필드다. 마스크는 그것을 읽지 않는다.
     let state = startedMatch(100);
-    state = step(state, 101, [command('r-a', 'MOVE_INTENT', { direction: 'back' })]).state;
-    for (let tick = 102; tick <= 130; tick += 1) state = step(state, tick).state;
+    // S15P21C204-302 이후 시야가 5.0셀이라 두어 칸으로는 지금 보이는 것이 기억한 것을 거의
+    // 다 덮는다. 방향을 바꿔 가며 더 걸어야 아래 전제가 성립한다.
+    let tick = 101;
+    const hold = (direction: 'back' | null, ticks: number) => {
+      state = step(state, tick, [command('r-a', 'MOVE_INTENT', { direction })]).state;
+      for (let n = 0; n < ticks; n += 1) state = step(state, (tick += 1)).state;
+      tick += 1;
+    };
+    const turn = (direction: 'left' | 'right') => {
+      state = step(state, tick, [command('r-a', 'TURN', { direction })]).state;
+      for (let n = 0; n < 10; n += 1) state = step(state, (tick += 1)).state;
+      tick += 1;
+    };
+    hold('back', 60);
+    hold(null, 2);
+    turn('right');
+    hold('back', 60);
+    hold(null, 2);
 
     const knowledge = getPlayerKnowledge(state, 'r-a');
     const surfaces = getVisibleSurfaces(state, 'r-a');
