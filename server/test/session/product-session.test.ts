@@ -88,6 +88,36 @@ describe('ProductSessionStore', () => {
     expect(h.sessions.size).toBe(1);
   });
 
+  it('allows the demo flow to keep an unclaimed session for its dedicated admission TTL', () => {
+    const h = store();
+    const demo = h.sessions.issue({
+      nickname: 'operator',
+      inviteId: 'demo',
+      roomCode: 'DEMO01',
+      admissionTtlMs: 10 * 60_000,
+    });
+    expect(demo.admissionExpiresAt).toBe(h.now() + 10 * 60_000);
+
+    h.advance(SESSION_LIMITS.admissionTtlMs);
+    expect(h.sessions.authenticate(demo.sessionToken)).not.toBeNull();
+
+    h.advance(9 * 60_000);
+    expect(h.sessions.authenticate(demo.sessionToken)).toBeNull();
+    expect(h.sessions.claimConnection(demo.sessionId, 'late')).toBe('invalid');
+  });
+
+  it('rejects a per-session admission TTL that could outlive the session lifetime', () => {
+    const h = store();
+    expect(() =>
+      h.sessions.issue({
+        nickname: 'operator',
+        inviteId: 'demo',
+        roomCode: 'DEMO01',
+        admissionTtlMs: SESSION_LIMITS.maxLifetimeMs + 1,
+      }),
+    ).toThrow('INVALID_ADMISSION_TTL');
+  });
+
   it('invalidates sessions on room end and refuses rejoin with the old token', () => {
     const h = store();
     const a = h.sessions.issue({ nickname: 'a', inviteId: 'inv', roomCode: 'ABC234' });
