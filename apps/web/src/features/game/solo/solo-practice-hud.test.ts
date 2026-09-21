@@ -20,6 +20,7 @@ describe('SoloPracticeHud', () => {
     expect(html).toContain('aria-label="녹화 중 00:00:04"');
     expect(html).toContain('class="crosshair"');
     expect(html.match(/class="hotbar-slot"/g)).toHaveLength(5);
-    expect(html).toContain('class="mini-map"');
+    // 혼자 연습도 경기와 같은 근접 창 미니맵을 쓴다(S15P21C204-295).
+    expect(html).toContain('class="mini-map mini-map-window"');
   });
 });
