@@ -28,21 +28,24 @@ it('draws exactly as far as the core is willing to call visible', () => {
   expect(SERVER_VIEW_RANGE).toBe(VIEW_RANGE);
 });
 
-it('draws every cell the core still calls visible', () => {
-  // Pinning the constant is not enough: the mask that decides what reaches the renderer carried
-  // its own radius and dropped cells the server had already sent (S15P21C204-289). A diagonal
-  // cell 4.24 away is inside the core range and outside any integer radius the mask might keep.
+it('서버가 보낸 셀을 렌더러로 가는 길에 하나도 버리지 않는다', () => {
+  // 289 는 마스크가 들고 있던 반지름을 코어 상수에 맞췄지만, 거리를 재는 방법이 달라
+  // 누락이 남았다(301). 코어는 카메라에서 셀의 샘플점까지, 마스크는 정수 좌표끼리 쟀다.
+  // 이제 마스크는 아예 자르지 않는다. 실제 코어 출력과의 대조는
+  // `server-sight-fidelity.test.ts` 가 여섯 사례로 본다.
   const origin = { x: 1, y: 1 };
-  const edge = { x: 4, y: 4 };
-  const beyond = { x: 1, y: 8 };
+  const diagonal = { x: 2, y: 4 };
+  const farther = { x: 1, y: 7 };
   const distance = (cell: { x: number; y: number }) =>
     Math.hypot(cell.x - origin.x, cell.y - origin.y);
-  expect(distance(edge)).toBeLessThanOrEqual(VIEW_RANGE);
-  expect(distance(edge)).toBeGreaterThan(4);
-  expect(distance(beyond)).toBeGreaterThan(VIEW_RANGE);
+  // 예전 하드코딩 3 과 코어 범위 사이에 있던 셀, 그리고 코어 범위 밖인 셀(302 에서 거리
+  // 상한이 3.5 에서 5.0 으로 올라 바깥 표본을 다시 잡았다).
+  expect(distance(diagonal)).toBeLessThanOrEqual(VIEW_RANGE);
+  expect(distance(diagonal)).toBeGreaterThan(3);
+  expect(distance(farther)).toBeGreaterThan(VIEW_RANGE);
 
-  const mask = visibilityMask(viewFixture({ visibleCells: [origin, edge, beyond] }));
-  expect(mask.cells).toEqual([origin, edge]);
+  const cells = [origin, diagonal, farther];
+  expect(visibilityMask(viewFixture({ visibleCells: cells })).cells).toEqual(cells);
 });
 
 it.each(ASPECTS)('keeps the core cone horizontally at aspect %f', (aspect) => {
