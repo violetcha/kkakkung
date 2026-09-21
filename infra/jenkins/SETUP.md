@@ -172,3 +172,20 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 | 점검      | `WATCH_DRY_RUN=1 node scripts/watch-service.mjs --state /tmp/watch.json` 은 판정과 메시지만 출력하고 보내지도 저장하지도 않는다. 계약 시험 `tests/contracts/service-watch.test.ts`                                  |
 
 게임 서버 경보(LOCKED·429·저널·회수 미확인·틱 과부하)는 이 잡이 아니라 서버가 `ALERT_WEBHOOK_URL` 로 직접 보낸다. `kkakkung-production-env` 에 그 줄을 넣고 재배포해야 켜진다.
+
+## 12. LiveKit 사용량 잡 (S15P21C204-304)
+
+`kkakkung-livekit-usage` 잡은 30분마다 LiveKit Cloud Analytics API를 읽어 현재 월의 참가자-분을 세고, 임계치를 넘을 때 Mattermost로 알린다. 이 잡은 게임 컨테이너 밖에서 실행되므로 서버가 멈춰도 마지막 성공 시각과 API 장애를 별도로 확인할 수 있다.
+
+Analytics API는 LiveKit Cloud Scale 이상에서만 제공된다. 현재 프로젝트가 Build라면 잡은 사용량을 추정하거나 성공으로 꾸미지 않고 `ANALYTICS_UNAUTHORIZED`로 실패 알림을 보낸다. Build에서는 공개 전에 대시보드의 현재 월 사용량을 확인하고, 이 잡을 활성화하려면 프로젝트 플랜과 아래 자격 증명을 먼저 확인한다.
+
+| 항목      | 값                                                                                                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 잡 만들기 | 새로운 Item → 이름 `kkakkung-livekit-usage`, Pipeline → Pipeline script from SCM, Git 저장소·크리덴셜은 `kkakkung` 잡과 같게, 브랜치 `*/develop`, Script Path `infra/jenkins/livekit-usage.Jenkinsfile`, Lightweight checkout |
+| 크리덴셜  | Secret text `livekit-api-key`, `livekit-api-secret`, `livekit-project-id`, `livekit-usage-baseline-minutes`, 기존 `mattermost-webhook`                                                                                        |
+| 기준값    | 첫 실행의 `livekit-usage-baseline-minutes`는 해당 월 LiveKit Cloud 대시보드의 참가자-분 사용량이다. `5000/4000/4500`은 Build 5,000분 기준의 예시일 뿐이며 프로젝트 Settings → Project 값과 일치하는지 확인한다.               |
+| 상태      | `/opt/kkakkung/livekit-usage-state.json`(jenkins, 600). 삭제하면 첫 실행으로 돌아가 새 대시보드 기준값을 요구한다.                                                                                                            |
+| 시험      | 파라미터와 함께 빌드에서 `SEND_TEST`를 켜고 실행한다. `LIVEKIT_USAGE_DRY_RUN=1`은 전송·저장을 하지 않는 로컬 판정 시험이다.                                                                                                   |
+| 복구      | API 401/403·429·timeout은 `BLOCKED`/실패로 남기고 잔량을 만들지 않는다. 대시보드에서 확인한 뒤 자격 증명·플랜·네트워크를 고치고 다음 30분 회차가 다시 성공하는지 확인한다.                                                    |
+
+LiveKit Cloud 웹훅은 `participant_joined/left` 같은 방 이벤트 전달용이며 계정 잔여 할당량을 제공하지 않는다. 전달 보장도 없으므로 이 잡의 Analytics API 결과를 공식 사용량으로 사용하고, 웹훅 이벤트는 미디어 상태 복구용으로만 취급한다.
