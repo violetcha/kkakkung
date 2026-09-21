@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { privateViewSchema, commandOutcomeSchema } from '@kkakkung/protocol/game-messages';
 import { matchCore } from '@kkakkung/game-core/match';
 import { projectPrivateBody } from '../../server/src/game/PlayerProjection.ts';
-import { G3_TUNING, createG3Harness, type G3Harness } from '../fixtures/g3-scenarios.ts';
+import { createG3Harness, type G3Harness } from '../fixtures/g3-scenarios.ts';
 
 function viewFor(h: G3Harness, playerId: string) {
   const body = projectPrivateBody(matchCore, h.state(), playerId, null);
@@ -46,8 +46,7 @@ describe('A state → B projection → protocol private view', () => {
   it('an ended runner gets the minimal self and empty knowledge, and its outcome message validates', () => {
     const h = createG3Harness();
     h.start();
-    h.move('t1');
-    h.ticks(G3_TUNING.moveTicks + 1);
+    h.capture('t1');
     expect(h.player('r1').status).toBe('CAPTURED');
     const view = privateViewSchema.parse(viewFor(h, 'r1'));
     expect(view.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });

@@ -67,8 +67,7 @@ describe('G3-A personal end and connection loss', () => {
   it('a contact capture fixes the runner once, closes its exit and keeps the match running', () => {
     const h = createG3Harness();
     h.start();
-    h.move('t1');
-    h.ticks(MOVE + 1);
+    h.capture('t1');
     const r1 = h.player('r1');
     expect(r1.status).toBe('CAPTURED');
     expect(h.frame().counts).toEqual({ escaped: 0, captured: 1 });
@@ -96,7 +95,9 @@ describe('G3-A personal end and connection loss', () => {
     const h = createG3Harness();
     h.start();
     h.move('t1');
-    h.ticks(MOVE);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.tick();
     // The tagger's move completes on the next tick; the socket closes in that same tick.
     h.lost('r1');
     h.tick();
@@ -140,8 +141,7 @@ describe('G3-A personal end and connection loss', () => {
 
     const ended = createG3Harness();
     ended.start();
-    ended.move('t1');
-    ended.ticks(MOVE + 1);
+    ended.capture('t1');
     expect(ended.player('r1').status).toBe('CAPTURED');
     ended.lost('r1');
     ended.tick();
@@ -154,7 +154,10 @@ describe('G3-A personal end and connection loss', () => {
     h.start();
     h.move('t1');
     h.move('t2');
-    h.ticks(MOVE + 1);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.grab('t2');
+    h.ticks(2);
     expect(h.frame().counts).toEqual({ escaped: 0, captured: 2 });
     expect(h.frame().phase).toBe('RESULT');
     expect(h.frame().result).toEqual({ winner: 'taggers', reason: 'two-captured' });
@@ -277,7 +280,9 @@ describe(`G3-A escape (${G3_RULES_LANDED.escape})`, () => {
     h.until(challenge.minSuccessTick);
     // The tagger's last step completes on the very tick the report is processed.
     h.move('t1');
-    h.ticks(MOVE);
+    h.ticks(MOVE - 1);
+    h.grab('t1');
+    h.tick();
     h.accept('r1', h.envelope('r1', 'EXIT_PROGRESS', progress('ch-1')));
     h.tick();
     expect(h.player('t1').cell).toEqual({ x: 5, y: 3 });
@@ -570,8 +575,14 @@ describe('fixture order does not change the authoritative result', () => {
     reversed.move('t3');
     reversed.turn('r2', 'right');
     reversed.move('t1');
-    given.ticks(MOVE + 2);
-    reversed.ticks(MOVE + 2);
+    given.ticks(MOVE - 1);
+    reversed.ticks(MOVE - 1);
+    given.grab('t1');
+    given.grab('t3');
+    reversed.grab('t1');
+    reversed.grab('t3');
+    given.ticks(2);
+    reversed.ticks(2);
     expect(frameDigest(reversed)).toEqual(frameDigest(given));
     expect(frameDigest(given).counts.captured).toBe(2);
   });

@@ -32,6 +32,8 @@ export type PlayerRecord = Readonly<{
   nextAction: PendingTurn | null;
   heldMove: HeldMove | null;
   connected: boolean;
+  /** Exclusive end tick of the tagger's active capture window. */
+  grabUntilTick: number | null;
   restraintUntilTick: number | null;
   restraintImmuneUntilTick: number | null;
   equipment: Readonly<{ sensor: number; trap: number }>;

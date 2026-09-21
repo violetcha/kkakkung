@@ -23,6 +23,15 @@ function place(
 }
 
 describe('contact and crossing capture', () => {
+  it('does not capture on contact when the tagger has no active grab window', () => {
+    const base = place(startedMatch(100), {
+      'r-a': { x: 10, y: 2 },
+      't-a': { x: 10, y: 2 },
+    });
+
+    expect(detectCaptures(base.players, base.players, 101)).toEqual([]);
+  });
+
   it('captures when a tagger and a runner swap cells in the same tick', () => {
     // Open row y=2: runner at (10,2) facing east, tagger at (11,2) facing west.
     const base = place(startedMatch(100), {
@@ -34,7 +43,8 @@ describe('contact and crossing capture', () => {
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]);
     let state = result.state;
-    for (let tick = 102; tick <= 109; tick += 1) state = step(state, tick).state;
+    for (let tick = 102; tick <= 108; tick += 1) state = step(state, tick).state;
+    state = step(state, 109, [command('t-a', 'GRAB_INTENT', {})]).state;
     result = step(state, 110);
     expect(player(result.state, 'r-a').status).toBe('CAPTURED');
     expect(player(result.state, 't-a').cell).toEqual({ x: 10, y: 2 });
@@ -59,7 +69,7 @@ describe('contact and crossing capture', () => {
     expect(player(state, 't-a').cell).toEqual({ x: 11, y: 3 });
     // Diagonal: runner (10,2), tagger (11,3) -> no capture.
     const diagonal = place(startedMatch(100), { 'r-a': { x: 10, y: 2 }, 't-a': { x: 11, y: 3 } });
-    expect(detectCaptures(diagonal.players, diagonal.players)).toEqual([]);
+    expect(detectCaptures(diagonal.players, diagonal.players, 110)).toEqual([]);
   });
 
   it('captures once when two taggers reach the same runner cell, independent of iteration order', () => {
@@ -72,24 +82,25 @@ describe('contact and crossing capture', () => {
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
       command('t-b', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    for (let tick = 102; tick <= 109; tick += 1) state = step(state, tick).state;
+    for (let tick = 102; tick <= 108; tick += 1) state = step(state, tick).state;
+    state = step(state, 109, [command('t-a', 'GRAB_INTENT', {})]).state;
     const result = step(state, 110);
     expect(player(result.state, 'r-a').status).toBe('CAPTURED');
     expect(result.state.counts.captured).toBe(1);
     expect(result.mediaIntents.filter((m) => m.type === 'RETIRE_PLAYER')).toHaveLength(1);
     // Reversed map order yields the same detection.
     const reversed = new Map([...result.state.players.entries()].reverse());
-    expect(detectCaptures(state.players, result.state.players)).toEqual(
-      detectCaptures(state.players, reversed),
+    expect(detectCaptures(state.players, result.state.players, 110)).toEqual(
+      detectCaptures(state.players, reversed, 110),
     );
   });
 
   it('never captures teammates or through walls', () => {
     // Two taggers on one cell: no capture; runner and tagger separated by wall column x=6.
     const teammates = place(startedMatch(100), { 't-a': { x: 10, y: 2 }, 't-b': { x: 10, y: 2 } });
-    expect(detectCaptures(teammates.players, teammates.players)).toEqual([]);
+    expect(detectCaptures(teammates.players, teammates.players, 101)).toEqual([]);
     const wall = place(startedMatch(100), { 'r-a': { x: 5, y: 10 }, 't-a': { x: 7, y: 10 } });
-    expect(detectCaptures(wall.players, wall.players)).toEqual([]);
+    expect(detectCaptures(wall.players, wall.players, 101)).toEqual([]);
   });
 
   it("cancels the captured runner's later commands in the same step and rejects afterwards", () => {
@@ -101,7 +112,8 @@ describe('contact and crossing capture', () => {
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    for (let tick = 102; tick <= 109; tick += 1) state = step(state, tick).state;
+    for (let tick = 102; tick <= 108; tick += 1) state = step(state, tick).state;
+    state = step(state, 109, [command('t-a', 'GRAB_INTENT', {})]).state;
     const captureTick = step(state, 110, [
       command('r-a', 'TURN', { direction: 'left' }, { requestId: 'late' }),
     ]);

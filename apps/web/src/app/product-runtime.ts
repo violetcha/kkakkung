@@ -868,7 +868,9 @@ export function bindProductRoom(
       if (pending) return pending;
     }
     if (
-      ['MOVE_INTENT', 'TURN', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(command.type) &&
+      ['MOVE_INTENT', 'TURN', 'GRAB_INTENT', 'INSTALL', 'EXCHANGE_REQUEST', 'EXIT_START'].includes(
+        command.type,
+      ) &&
       (((!pageActive ||
         (interaction.mode === 'motion' && snapshot.devices.calibration === 'running')) &&
         !(command.type === 'MOVE_INTENT' && command.payload.direction === null)) ||

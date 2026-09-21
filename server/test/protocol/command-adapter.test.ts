@@ -32,6 +32,18 @@ describe('CommandAdapter', () => {
     expect(ready).toMatchObject({ status: 'accepted', kind: 'phase' });
   });
 
+  it('accepts an empty grab intent as a core command', () => {
+    const result = toProductCommand({ ...move, type: 'GRAB_INTENT', payload: {} }, context);
+    expect(result.status).toBe('accepted');
+    if (result.status !== 'accepted' || result.kind !== 'core') throw new Error('expected core');
+    expect(toCoreCommand('tagger-1', result.command)).toEqual({
+      ...move,
+      type: 'GRAB_INTENT',
+      payload: {},
+      actorId: 'tagger-1',
+    });
+  });
+
   it.each([
     {
       name: 'seq only',

@@ -128,6 +128,7 @@ export type MatchTuning = Readonly<{
   /** S15P21C204-270. Tuned per profile inside the core's ranges; no longer literal. */
   moveTicks: number;
   turnTicks: number;
+  grabTicks: number;
   roundTicks: 3600;
   installationTicks: 10;
   armTicks: 20;

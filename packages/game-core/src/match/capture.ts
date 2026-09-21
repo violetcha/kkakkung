@@ -6,20 +6,25 @@ import type { PlayerRecord } from './state.js';
  * before completion (`before`) and after all completions (`after`); no player is
  * evaluated against another player's partially updated position.
  *
- * A runner is captured when, after completion, an active tagger shares its cell,
- * or when the runner and a tagger swapped cells in the same tick. Adjacent,
- * diagonal, or wall-separated players never capture; teammates never capture.
- * Each runner appears at most once regardless of how many taggers touched it.
+ * A runner is captured when, after completion, a tagger with an active grab window
+ * shares its cell, or when the runner and that tagger swapped cells in the same tick.
+ * Adjacent, diagonal, or wall-separated players never capture; teammates never
+ * capture. Each runner appears at most once regardless of how many taggers touched it.
  */
 export function detectCaptures(
   before: ReadonlyMap<string, PlayerRecord>,
   after: ReadonlyMap<string, PlayerRecord>,
+  tick: number,
 ): readonly string[] {
   const taggers: PlayerRecord[] = [];
   const runners: PlayerRecord[] = [];
   for (const player of after.values()) {
     if (player.status !== 'ACTIVE') continue;
-    (player.role === 'tagger' ? taggers : runners).push(player);
+    if (player.role === 'tagger') {
+      if (player.grabUntilTick !== null && tick < player.grabUntilTick) taggers.push(player);
+    } else {
+      runners.push(player);
+    }
   }
   const captured = new Set<string>();
   for (const runner of runners) {

@@ -88,6 +88,7 @@ function initialPlayer(entry: RosterEntry, input: CreateMatchInput): PlayerRecor
     nextAction: null,
     heldMove: null,
     connected: true,
+    grabUntilTick: null,
     restraintUntilTick: null,
     restraintImmuneUntilTick: null,
     // Runner items stay at zero until the product decision (D-2026-09-08-01).
@@ -509,6 +510,20 @@ function handleInstall(ctx: StepContext, command: CoreCommand<'INSTALL'>): void 
   return outcome(ctx, command, 'applied', null);
 }
 
+function handleGrabIntent(ctx: StepContext, command: CoreCommand<'GRAB_INTENT'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  if (ctx.state.mode !== 'game' || ctx.state.phase !== 'PLAYING') {
+    return outcome(ctx, command, 'rejected', 'INVALID_PHASE');
+  }
+  const actor = ctx.state.players.get(command.actorId)!;
+  if (actor.role !== 'tagger') return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+  ctx.state = withPlayers(ctx.state, [
+    { ...actor, grabUntilTick: ctx.tick + ctx.state.tuning.grabTicks + 1 },
+  ]);
+  return outcome(ctx, command, 'applied', null);
+}
+
 function handleInstallCancel(ctx: StepContext, command: CoreCommand<'INSTALL_CANCEL'>): void {
   const code = actorCheck(ctx, command);
   if (code) return outcome(ctx, command, 'rejected', code);
@@ -699,6 +714,8 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleMoveIntent(ctx, command);
     case 'TURN':
       return handleTurn(ctx, command);
+    case 'GRAB_INTENT':
+      return handleGrabIntent(ctx, command);
     case 'EXCHANGE_REQUEST':
       return handleExchangeRequest(ctx, command);
     case 'EXCHANGE_ACCEPT':
@@ -794,7 +811,7 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   completeDueActions(ctx);
   if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
     // Capture is committed before equipment or pose stages; ended runners leave later stages.
-    for (const runnerId of detectCaptures(before, ctx.state.players)) {
+    for (const runnerId of detectCaptures(before, ctx.state.players, ctx.tick)) {
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }

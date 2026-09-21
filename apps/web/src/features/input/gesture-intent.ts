@@ -13,7 +13,7 @@ import type {
 export const GESTURE_HOLD_MS = 600;
 
 /** D만 등록하는 게임 단축키. */
-export type GameKey = 'E' | 'F' | '1' | '2' | 'Escape';
+export type GameKey = 'E' | 'F' | 'G' | '1' | '2' | 'Escape';
 
 export type CommandInput =
   | { type: 'EXCHANGE_REQUEST'; payload: { targetPlayerId: string } }
@@ -21,6 +21,7 @@ export type CommandInput =
   | { type: 'EXCHANGE_CANCEL'; payload: { exchangeId: string } }
   | { type: 'INSTALL'; payload: { kind: EquipmentKind } }
   | { type: 'INSTALL_CANCEL'; payload: { installationId: string } }
+  | { type: 'GRAB_INTENT'; payload: Record<string, never> }
   | { type: 'EXIT_START'; payload: { exitId: string } }
   | { type: 'EXIT_CANCEL'; payload: { challengeId: string } };
 
@@ -38,6 +39,7 @@ export type GestureAction =
   | 'exit-start'
   | 'install'
   | 'install-cancel'
+  | 'grab'
   | 'exit-cancel'
   | 'select-equipment'
   | null;
@@ -210,6 +212,12 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
         return 'select-equipment';
       }
       if (key === 'E') return resolveExchangeOrExit(true);
+      if (key === 'G') {
+        if (context.role !== 'tagger' || context.phase !== 'PLAYING') return null;
+        dispatch({ type: 'GRAB_INTENT', payload: {} });
+        clearHold();
+        return 'grab';
+      }
       // 도망자의 F에는 제품 행동을 배정하지 않는다.
       if (key === 'F') return resolveInstall();
       return null;

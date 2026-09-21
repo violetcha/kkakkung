@@ -234,6 +234,20 @@ describe('createGestureIntentController', () => {
     expect(base.sent.at(-1)).toEqual({ type: 'INSTALL', payload: { kind: 'trap' } });
   });
 
+  it('sends a grab intent only for an active tagger in the playing phase', () => {
+    const active = harness(tagger);
+    expect(active.controller.pressKey('G')).toBe('grab');
+    expect(active.sent).toEqual([{ type: 'GRAB_INTENT', payload: {} }]);
+
+    const asRunner = harness(runner);
+    expect(asRunner.controller.pressKey('G')).toBeNull();
+    expect(asRunner.sent).toEqual([]);
+
+    const practice = harness({ ...tagger, phase: 'TEAM_PRACTICE' });
+    expect(practice.controller.pressKey('G')).toBeNull();
+    expect(practice.sent).toEqual([]);
+  });
+
   it('makes no selection or install for a runner or an unassigned role', () => {
     const asRunner = harness(runner);
     expect(asRunner.controller.pressKey('1')).toBeNull();
