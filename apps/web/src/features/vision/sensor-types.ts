@@ -21,7 +21,7 @@ export type GestureKind = 'palm' | 'victory' | 'none';
 export type GestureSensor = Readonly<{
   kind: GestureKind;
   score: number;
-  /** 손별 21점 landmarks. 진단 오버레이 표시용이며 판정에는 쓰지 않는다. 손이 없으면 생략. */
+  /** 손별 21점 landmarks. 진단 표시와 주먹 기하 판정에 쓰며 손이 없으면 생략한다. */
   hands?: readonly (readonly NormalizedLandmark[])[];
 }>;
 

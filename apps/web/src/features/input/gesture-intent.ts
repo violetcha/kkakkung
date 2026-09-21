@@ -2,6 +2,7 @@
 // C가 주입한 sendCommand만 호출하고 반환된 requestId는 식별자로만 보관한다.
 // 반환값을 envelope나 접수/실행 성공으로 해석하지 않는다.
 import { GESTURE_MAX_AGE_MS, isSampleFresh, type SensorSnapshot } from '../vision/sensor-types';
+import { hasClosedFist } from '../vision/gesture-sensor';
 import type {
   ContextStore,
   EquipmentKind,
@@ -11,6 +12,9 @@ import type {
 
 /** 같은 손동작을 이만큼 유지해야 한 번 발동한다. */
 export const GESTURE_HOLD_MS = 600;
+
+/** 주먹을 유지하는 동안 서버의 300ms 잡기 창을 이 간격으로 갱신한다. */
+export const GRAB_RESEND_MS = 200;
 
 /** D만 등록하는 게임 단축키. */
 export type GameKey = 'E' | 'F' | 'G' | '1' | '2' | 'Escape';
@@ -68,10 +72,15 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
   let lastObservedAt: number | null = null;
   let observedGeneration: number | null = null;
   let latchedKind: 'palm' | 'victory' | null = null;
+  let lastGrabSentAt: number | null = null;
 
   const clearHold = () => {
     heldKind = null;
     heldSince = null;
+  };
+
+  const clearGrab = () => {
+    lastGrabSentAt = null;
   };
 
   const dispatch = (command: CommandInput): string => {
@@ -132,6 +141,7 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
     observe(snapshot, nowMs, runtimeGeneration) {
       if (snapshot.runtimeGeneration !== runtimeGeneration) {
         clearHold();
+        clearGrab();
         return null;
       }
       if (observedGeneration !== runtimeGeneration) {
@@ -139,6 +149,7 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
         lastFrameId = lastSampleAt = lastObservedAt = null;
         latchedKind = null;
         clearHold();
+        clearGrab();
       }
       const sample = snapshot.gesture;
       if (
@@ -148,6 +159,7 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
       ) {
         // 관측 공백은 시간 누적을 끊지만 물리 해제의 증거는 아니다.
         clearHold();
+        clearGrab();
         return null;
       }
       if (lastFrameId !== null && sample.frameId <= lastFrameId) return null;
@@ -160,12 +172,35 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
       lastFrameId = sample.frameId;
       lastSampleAt = sample.sampledAtMs;
       lastObservedAt = nowMs;
-      if (
-        !isSampleFresh(sample, 'gesture', nowMs) ||
-        sample.status !== 'valid' ||
-        sample.data.kind === 'none'
-      ) {
-        // 신선한 미검출/none만 이전 손동작을 해제한다.
+      if (!isSampleFresh(sample, 'gesture', nowMs) || sample.status !== 'valid') {
+        // 누락되거나 오래된 관측은 hold와 잡기 갱신을 모두 끊는다.
+        latchedKind = null;
+        clearHold();
+        clearGrab();
+        return null;
+      }
+
+      const context = deps.context.get();
+      const fist = hasClosedFist(sample.data.hands);
+      const canGrab =
+        deps.context.acceptsInput &&
+        !blockedByChallenge() &&
+        mode === 'motion' &&
+        context?.role === 'tagger' &&
+        context.phase === 'PLAYING';
+      if (fist && canGrab) {
+        clearHold();
+        if (lastGrabSentAt === null || sample.sampledAtMs - lastGrabSentAt >= GRAB_RESEND_MS) {
+          lastGrabSentAt = sample.sampledAtMs;
+          dispatch({ type: 'GRAB_INTENT', payload: {} });
+          return 'grab';
+        }
+        return null;
+      }
+      clearGrab();
+
+      if (sample.data.kind === 'none') {
+        // 신선한 none은 기존 손동작 latch를 물리적으로 해제한다.
         latchedKind = null;
         clearHold();
         return null;
@@ -227,6 +262,7 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
       if (next === mode) return; // 같은 값 재적용은 callback을 반복하지 않는다.
       mode = next;
       clearHold();
+      clearGrab();
       publishState();
     },
 
@@ -238,6 +274,7 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
 
     reset() {
       clearHold();
+      clearGrab();
     },
 
     get selectedEquipment() {

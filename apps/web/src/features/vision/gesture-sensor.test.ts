@@ -5,14 +5,30 @@ import {
   combineHands,
   GESTURE_CATEGORY_MAP,
   GESTURE_MIN_SCORE,
+  hasClosedFist,
+  isClosedFist,
   NONE_GESTURE,
   pickHandGesture,
   readGestureSensor,
 } from './gesture-sensor';
-import { isSampleFresh } from './sensor-types';
+import { isSampleFresh, type NormalizedLandmark } from './sensor-types';
 
 const category = (name: string, score: number) => ({ categoryName: name, score, index: -1 });
 const NAMES: Record<string, string> = { palm: 'Open_Palm', victory: 'Victory' };
+
+function fistHand(openTip?: 8 | 12 | 16 | 20): NormalizedLandmark[] {
+  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+  for (const [pip, tip] of [
+    [6, 8],
+    [10, 12],
+    [14, 16],
+    [18, 20],
+  ] as const) {
+    hand[pip] = { x: 0.4, y: 0, z: 0 };
+    hand[tip] = { x: tip === openTip ? 0.6 : 0.2, y: 0, z: 0 };
+  }
+  return hand;
+}
 
 describe('readGestureSensor', () => {
   it('reports none when the two hands show different valid gestures', () => {
@@ -83,6 +99,22 @@ describe('combineHands', () => {
   it('returns none for no hands', () => {
     expect(combineHands([])).toEqual(NONE_GESTURE);
     expect(combineHands([null, null])).toEqual(NONE_GESTURE);
+  });
+});
+
+describe('closed fist geometry', () => {
+  it('requires every fingertip to be closer to the wrist than its PIP joint', () => {
+    expect(isClosedFist(fistHand())).toBe(true);
+    expect(isClosedFist(fistHand(12))).toBe(false);
+  });
+
+  it('rejects incomplete or non-finite hands and accepts either hand', () => {
+    expect(isClosedFist(fistHand().slice(0, 20))).toBe(false);
+    const invalid = fistHand();
+    invalid[8] = { x: Number.NaN, y: 0, z: 0 };
+    expect(isClosedFist(invalid)).toBe(false);
+    expect(hasClosedFist([fistHand(8), fistHand()])).toBe(true);
+    expect(hasClosedFist([fistHand(8)])).toBe(false);
   });
 });
 

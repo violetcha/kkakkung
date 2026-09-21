@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { SensorSnapshot } from '../vision/sensor-types';
+import type { NormalizedLandmark, SensorSnapshot } from '../vision/sensor-types';
 import {
   createGestureIntentController,
+  GRAB_RESEND_MS,
   GESTURE_HOLD_MS,
   type CommandInput,
 } from './gesture-intent';
@@ -30,7 +31,11 @@ function gestureSnapshot(
   frameId: number,
   atMs: number,
   kind: 'palm' | 'victory' | 'none',
-  options: { missing?: boolean; generation?: number } = {},
+  options: {
+    missing?: boolean;
+    generation?: number;
+    hands?: readonly (readonly NormalizedLandmark[])[];
+  } = {},
 ): SensorSnapshot {
   return {
     runtimeGeneration: options.generation ?? GENERATION,
@@ -44,9 +49,23 @@ function gestureSnapshot(
           sampledAtMs: atMs,
           receivedAtMs: atMs,
           status: 'valid',
-          data: { kind, score: 0.9 },
+          data: { kind, score: 0.9, ...(options.hands ? { hands: options.hands } : {}) },
         },
   };
+}
+
+function fistHand(open = false): NormalizedLandmark[] {
+  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+  for (const [pip, tip] of [
+    [6, 8],
+    [10, 12],
+    [14, 16],
+    [18, 20],
+  ] as const) {
+    hand[pip] = { x: 0.4, y: 0, z: 0 };
+    hand[tip] = { x: open && tip === 8 ? 0.6 : 0.2, y: 0, z: 0 };
+  }
+  return hand;
 }
 
 function harness(context: InteractionContext) {
@@ -246,6 +265,79 @@ describe('createGestureIntentController', () => {
     const practice = harness({ ...tagger, phase: 'TEAM_PRACTICE' });
     expect(practice.controller.pressKey('G')).toBeNull();
     expect(practice.sent).toEqual([]);
+  });
+
+  it('sends immediately for a fist and refreshes only after the resend interval', () => {
+    const base = harness(tagger);
+    const fist = [fistHand()];
+
+    expect(
+      base.controller.observe(gestureSnapshot(1, 1000, 'none', { hands: fist }), 1000, GENERATION),
+    ).toBe('grab');
+    expect(
+      base.controller.observe(
+        gestureSnapshot(2, 1000 + GRAB_RESEND_MS - 1, 'none', { hands: fist }),
+        1000 + GRAB_RESEND_MS - 1,
+        GENERATION,
+      ),
+    ).toBeNull();
+    expect(
+      base.controller.observe(
+        gestureSnapshot(3, 1000 + GRAB_RESEND_MS, 'none', { hands: fist }),
+        1000 + GRAB_RESEND_MS,
+        GENERATION,
+      ),
+    ).toBe('grab');
+    expect(base.sent).toEqual([
+      { type: 'GRAB_INTENT', payload: {} },
+      { type: 'GRAB_INTENT', payload: {} },
+    ]);
+  });
+
+  it('rearms fist grabbing after an open, missing or stale observation', () => {
+    for (const interruption of ['open', 'missing', 'stale'] as const) {
+      const base = harness(tagger);
+      base.controller.observe(
+        gestureSnapshot(1, 1000, 'none', { hands: [fistHand()] }),
+        1000,
+        GENERATION,
+      );
+      const snapshot =
+        interruption === 'missing'
+          ? gestureSnapshot(2, 1100, 'none', { missing: true })
+          : gestureSnapshot(2, 1100, 'none', { hands: [fistHand(true)] });
+      base.controller.observe(snapshot, interruption === 'stale' ? 1501 : 1100, GENERATION);
+      const resumedAt = interruption === 'stale' ? 1510 : 1110;
+      expect(
+        base.controller.observe(
+          gestureSnapshot(3, resumedAt, 'none', { hands: [fistHand()] }),
+          resumedAt,
+          GENERATION,
+        ),
+      ).toBe('grab');
+      expect(base.sent).toHaveLength(2);
+    }
+  });
+
+  it('does not turn a fist into a grab outside the active motion tagger context', () => {
+    const contexts = [runner, { ...tagger, phase: 'TEAM_PRACTICE' as const }];
+    for (const context of contexts) {
+      const base = harness(context);
+      base.controller.observe(
+        gestureSnapshot(1, 1000, 'none', { hands: [fistHand()] }),
+        1000,
+        GENERATION,
+      );
+      expect(base.sent).toEqual([]);
+    }
+    const keyboard = harness(tagger);
+    keyboard.controller.setMode('keyboard');
+    keyboard.controller.observe(
+      gestureSnapshot(1, 1000, 'none', { hands: [fistHand()] }),
+      1000,
+      GENERATION,
+    );
+    expect(keyboard.sent).toEqual([]);
   });
 
   it('makes no selection or install for a runner or an unassigned role', () => {
