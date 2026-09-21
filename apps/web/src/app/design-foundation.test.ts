@@ -20,22 +20,22 @@ test('갈무리 네 글꼴을 로컬 WOFF2로 제공한다', () => {
   }
 });
 
-test('제품 글꼴은 갈무리14와 시스템 한글 글꼴로 순서대로 대체된다', () => {
+test('제품 글꼴은 픽셀 글꼴 대신 시스템 고딕을 사용한다', () => {
   expect(css).toContain(
-    "--font-body: Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;",
+    "--font-body: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;",
   );
   expect(css).toContain(
-    "--font-control: Galmuri11, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;",
+    "--font-control: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;",
   );
   expect(css).toContain(
-    "--font-small: Galmuri9, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;",
+    "--font-small: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;",
   );
-  expect(css).toContain('--text-small: 9px;');
-  expect(css).toContain('--text-control: 11px;');
+  expect(css).toContain('--text-small: 12px;');
+  expect(css).toContain('--text-control: 14px;');
   expect(css).toContain('--text-body: 14px;');
   expect(css).toContain('--text-heading: 28px;');
   expect(css).toContain('--text-hero: 56px;');
-  expect(css).toContain('-webkit-font-smoothing: none;');
+  expect(css).toContain('-webkit-font-smoothing: antialiased;');
 });
 
 test('제품 공지와 사건 플래시는 정수 도트 배율만 사용한다', () => {

@@ -15,12 +15,14 @@ export function ScenePrimitives({
   players,
   theme = DEFAULT_SCENE_THEME,
   quality = 'medium',
+  fixtures = true,
 }: {
   cells: readonly Cell[];
   walls: readonly WallFace[];
   players: readonly { id: string; cell: Cell; dir: Dir }[];
   theme?: SceneThemeId;
   quality?: QualityPreset;
+  fixtures?: boolean;
 }) {
   const resources = useMemo(
     () => ({
@@ -42,7 +44,7 @@ export function ScenePrimitives({
       {theme === 'block' ? (
         <BlockTerrain cells={cells} walls={walls} />
       ) : (
-        <FacilityTerrain cells={cells} walls={walls} quality={quality} />
+        <FacilityTerrain cells={cells} walls={walls} quality={quality} fixtures={fixtures} />
       )}
       {players.map((player) => (
         <group
@@ -110,6 +112,11 @@ function useBackroomsTextures(quality: QualityPreset): BackroomsTextureSet | und
               loader.load(
                 path,
                 (texture) => {
+                  if (!active) {
+                    texture.dispose();
+                    resolve(null);
+                    return;
+                  }
                   owned.add(texture);
                   resolve(configureBackroomsTexture(texture, kind));
                 },
@@ -144,10 +151,12 @@ function FacilityTerrain({
   cells,
   walls,
   quality,
+  fixtures,
 }: {
   cells: readonly Cell[];
   walls: readonly WallFace[];
   quality: QualityPreset;
+  fixtures: boolean;
 }) {
   const textures = useBackroomsTextures(quality);
   const facility = useMemo(() => createFacilityResources(textures, quality), [quality, textures]);
@@ -167,16 +176,20 @@ function FacilityTerrain({
             position={[0, FACILITY.ceilingHeight, 0]}
             rotation={[Math.PI / 2, 0, 0]}
           />
-          <mesh
-            geometry={facility.geometry.lamp}
-            material={facility.material.housing}
-            position={[0, FACILITY.ceilingHeight - 0.02, 0]}
-          />
-          <mesh
-            geometry={facility.geometry.tube}
-            material={facility.material.tube}
-            position={[0, FACILITY.ceilingHeight - 0.043, 0]}
-          />
+          {fixtures && (
+            <>
+              <mesh
+                geometry={facility.geometry.lamp}
+                material={facility.material.housing}
+                position={[0, FACILITY.ceilingHeight - 0.02, 0]}
+              />
+              <mesh
+                geometry={facility.geometry.tube}
+                material={facility.material.tube}
+                position={[0, FACILITY.ceilingHeight - 0.043, 0]}
+              />
+            </>
+          )}
         </group>
       ))}
       {walls.map((wall) => (

@@ -96,6 +96,7 @@ async function setup(page: Page) {
     route.fulfill({ json: { method: 'gitlab-sso' } }),
   );
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
   await expect(page.getByLabel('소리 설정')).toBeVisible();
 }

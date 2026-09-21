@@ -8,6 +8,7 @@ import {
 } from '../features/room/product-session';
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
+import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
@@ -61,6 +62,13 @@ export function ProductApp({
   const [createRoom, setCreateRoom] = useState(!initialRoom);
   const [joining, setJoining] = useState(false);
   const [solo, setSolo] = useState(false);
+  const [backgroundPaused, setBackgroundPaused] = useState(false);
+  const [homePanel, setHomePanel] = useState<'title' | 'admission' | 'options'>(
+    invitation || initialRoom ? 'admission' : 'title',
+  );
+  useEffect(() => {
+    if (invitation || initialRoom) setHomePanel('admission');
+  }, [invitation, initialRoom]);
   const finishSolo = useCallback(() => setSolo(false), []);
   const [error, setError] = useState('');
   const [access, setAccess] = useState<'checking' | SessionAccessResponse['method'] | 'failed'>(
@@ -347,7 +355,16 @@ export function ProductApp({
       </>
     ) : null;
   return (
-    <main className={worldVisible ? 'product-shell playing-shell' : 'product-shell'}>
+    <main
+      className={
+        worldVisible
+          ? 'product-shell playing-shell'
+          : !snapshot && !solo
+            ? `product-shell home-shell home-${homePanel}`
+            : 'product-shell'
+      }
+    >
+      {!snapshot && !solo && <LobbyBackdrop paused={backgroundPaused} />}
       <header>
         <BrandLogo />
         {snapshot && (
@@ -358,36 +375,57 @@ export function ProductApp({
       </header>
       {solo && !snapshot ? (
         <SoloPracticeScreen onExit={finishSolo} />
+      ) : !snapshot && homePanel === 'title' ? (
+        <nav className="title-menu" aria-label="메인 메뉴">
+          <button type="button" onClick={() => setHomePanel('admission')}>
+            시작하기
+          </button>
+          <button type="button" onClick={() => setHomePanel('options')}>
+            옵션
+          </button>
+        </nav>
+      ) : !snapshot && homePanel === 'options' ? (
+        <section className="admission home-options" aria-label="옵션">
+          <h2>옵션</h2>
+          <label className="background-option">
+            <span>배경 움직임 · 조명 깜빡임</span>
+            <input
+              type="checkbox"
+              checked={!backgroundPaused}
+              onChange={(event) => setBackgroundPaused(!event.target.checked)}
+            />
+          </label>
+          <p className="notice">기기의 동작 줄이기 설정을 따릅니다.</p>
+          <p>
+            <a className="asset-notices-link" href="/licenses/index.html">
+              오픈소스 고지
+            </a>
+          </p>
+          <button className="quiet home-back" type="button" onClick={() => setHomePanel('title')}>
+            돌아가기
+          </button>
+        </section>
       ) : !snapshot ? (
         <section className="admission">
-          <h2>흑백 미로에서 만나요.</h2>
-          <p>
-            세 명의 도망자, 세 명의 술래.
-            <br />
-            {access === 'gitlab-sso'
-              ? '방을 만들고 친구들에게 방 코드를 알려 주세요.'
-              : access === 'guest'
-                ? '닉네임으로 방을 만들고 친구들에게 초대 링크를 보내 주세요.'
-                : '초대받은 친구들과 함께 시작하세요.'}
-          </p>
-          <p>
-            PC 브라우저에서 6명이 함께하는 게임입니다. 카메라 필수 · 마이크 선택. 도망자 2명이
-            탈출하면 도망자 팀이, 술래가 2명을 잡거나 시간을 버티면 술래 팀이 이깁니다.
-          </p>
-          <ol>
-            <li>혼자 카메라와 조작을 먼저 점검해요.</li>
-            <li>{access === 'guest' ? '초대 링크' : '방 코드'}를 나누고 여섯 명이 모여요.</li>
-            <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
-          </ol>
-          <button type="button" disabled={joining} onClick={() => setSolo(true)}>
-            혼자 장치 점검·조작 체험
+          <button
+            className="quiet home-back"
+            type="button"
+            disabled={joining}
+            onClick={() => setHomePanel('title')}
+          >
+            ← 돌아가기
           </button>
+          <div className="home-specs">
+            <span>6인 멀티플레이</span>
+            <span>PC · 카메라 필수</span>
+          </div>
           <form onSubmit={(event) => void join(event)}>
             <label htmlFor="product-nickname">닉네임</label>
             <input
               id="product-nickname"
               autoComplete="off"
               maxLength={20}
+              placeholder="닉네임 입력"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               disabled={joining}
@@ -431,6 +469,28 @@ export function ProductApp({
               </button>
             )}
           </form>
+          <button
+            className="home-practice quiet"
+            type="button"
+            disabled={joining}
+            onClick={() => setSolo(true)}
+          >
+            <span>혼자 장치 점검·조작 체험</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+          <details className="home-guide">
+            <summary>처음 오셨나요? 게임 방법</summary>
+            <p>PC 브라우저에서 6명이 함께합니다. 카메라 필수 · 마이크 선택.</p>
+            <ol>
+              <li>혼자 카메라와 조작을 먼저 점검해요.</li>
+              <li>{access === 'guest' ? '초대 링크' : '방 코드'}를 나누고 여섯 명이 모여요.</li>
+              <li>장치 점검과 팀 연습 후 추격전을 시작해요.</li>
+            </ol>
+            <p>
+              도망자 2명이 탈출하면 도망자 팀이, 술래가 2명을 잡거나 3분을 버티면 술래 팀이
+              이깁니다.
+            </p>
+          </details>
           {!invitation && access === 'checking' && <p className="notice">접속 상태 확인 중…</p>}
           {!invitation && access === 'invitation' && (
             <p className="notice">유효한 초대 링크로 열어 주세요.</p>

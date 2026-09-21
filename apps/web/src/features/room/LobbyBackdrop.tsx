@@ -1,0 +1,130 @@
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { PointLight, MeshBasicMaterial } from 'three';
+import type { Cell, WallFace } from '@kkakkung/protocol/game-schema';
+import { ScenePrimitives } from '../game/scene/primitives';
+
+// A decorative set, not a match map. No private terrain or session is needed on the home screen.
+const cells: Cell[] = [];
+for (let y = -80; y <= 3; y++) {
+  for (let x = -1; x <= 1; x++) cells.push({ x, y });
+  if (y % 9 === -5 || y % 9 === -6) for (const x of [-4, -3, -2, 2, 3, 4]) cells.push({ x, y });
+}
+const occupied = new Set(cells.map(({ x, y }) => `${x}:${y}`));
+const walls: WallFace[] = [];
+for (const cell of cells) {
+  for (const [dx, dy, side] of [
+    [0, -1, 2],
+    [1, 0, 3],
+    [0, 1, 0],
+    [-1, 0, 1],
+  ] as const) {
+    const x = cell.x + dx;
+    const y = cell.y + dy;
+    if (y >= -80 && !occupied.has(`${x}:${y}`)) walls.push({ x, y, side });
+  }
+}
+
+function CorridorLight({ z, phase, still }: { z: number; phase: number; still: boolean }) {
+  const light = useRef<PointLight>(null);
+  const tube = useRef<MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    const t = (clock.elapsedTime + phase) % 13;
+    // Occasional brownout, not a rapid full-screen strobe. Light and tube share the same dip.
+    const intensity = still ? 1 : t > 9.1 && t < 9.65 ? 0.16 : t > 10.1 && t < 10.45 ? 0.45 : 1;
+    if (light.current) light.current.intensity = intensity * 2.3;
+    const glow = intensity * (z < -20 ? 0.35 : 1);
+    tube.current?.color.setRGB(glow, glow * 0.92, glow * 0.68);
+  });
+  return (
+    <group>
+      {z >= -20 && (
+        <pointLight
+          ref={light}
+          position={[0, 1.67, z]}
+          color="#e8d9a0"
+          intensity={2.3}
+          distance={6}
+          decay={1.7}
+        />
+      )}
+      <mesh position={[0, 1.87, z]}>
+        <boxGeometry args={[0.9, 0.035, 0.22]} />
+        <meshStandardMaterial color="#4c4b3e" />
+      </mesh>
+      <mesh position={[0, 1.845, z]}>
+        <boxGeometry args={[0.78, 0.01, 0.12]} />
+        <meshBasicMaterial ref={tube} color="#fff1b8" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function Corridor({ still }: { still: boolean }) {
+  useFrame(({ camera, clock }) => {
+    const t = still ? 0 : clock.elapsedTime;
+    camera.position.set(-1.28 + Math.sin(t * 0.13) * 0.025, 0.88, 2.3);
+    camera.lookAt(0.7 + Math.sin(t * 0.09) * 0.1, 0.94, -8);
+    camera.rotation.z = -0.025;
+  });
+  return (
+    <>
+      <color attach="background" args={['#090a07']} />
+      <ambientLight intensity={0.12} color="#adac88" />
+      <ScenePrimitives
+        cells={cells}
+        walls={walls}
+        players={[]}
+        theme="facility"
+        quality="medium"
+        fixtures={false}
+      />
+      {Array.from({ length: 19 }, (_, index) => -index * 4).map((z, index) => (
+        <CorridorLight key={z} z={z} phase={index * 2.7} still={still} />
+      ))}
+    </>
+  );
+}
+
+class BackdropBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+export function LobbyBackdrop({ paused }: { paused: boolean }) {
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  const [hidden, setHidden] = useState(document.hidden);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const changed = () => setReduced(media.matches);
+    const visibility = () => setHidden(document.hidden);
+    media.addEventListener('change', changed);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      media.removeEventListener('change', changed);
+      document.removeEventListener('visibilitychange', visibility);
+    };
+  }, []);
+  const still = paused || reduced;
+  return (
+    <div className="lobby-backdrop" aria-hidden="true">
+      <BackdropBoundary>
+        <Canvas
+          dpr={[1, 1.5]}
+          gl={{ antialias: true, powerPreference: 'low-power' }}
+          frameloop={hidden || still ? 'demand' : 'always'}
+          camera={{ position: [-0.45, 0.9, 2.3], fov: 58, near: 0.05, far: 100 }}
+        >
+          <Corridor still={still} />
+        </Canvas>
+      </BackdropBoundary>
+    </div>
+  );
+}
