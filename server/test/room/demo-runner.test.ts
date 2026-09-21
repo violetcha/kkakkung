@@ -6,6 +6,7 @@
 import { expect, it } from 'vitest';
 import type { GameSubject, Topology } from '../../src/game/ports.js';
 import {
+  STEP_TIMEOUT_TICKS,
   availableScenarios,
   createDemoRunner,
   type DemoWorld,
@@ -106,8 +107,10 @@ it('gives up a step that cannot finish instead of blocking the room', () => {
     cell: { x: 3, y: 3 },
   });
   expect(runner.start('capture', world([operator, tagger]))).toBeNull();
-  // The puppet never moves, so the step runs out of its budget and the scenario stops.
-  for (let tick = 1; tick <= 1300; tick++)
+  // The puppet never moves, so the step runs out of its budget and the scenario stops. The bound
+  // follows the constant: S15P21C204-302 raised the budget for the corridor maze and a hardcoded
+  // 1300 silently stopped reaching it.
+  for (let tick = 1; tick <= STEP_TIMEOUT_TICKS + 100; tick++)
     runner.advance(world([operator, tagger], { tick }), () => true);
   expect(runner.status.scenario).toBeNull();
   expect(runner.status.failure).toBe('chase-operator:TIMEOUT');

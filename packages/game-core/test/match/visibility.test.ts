@@ -39,14 +39,14 @@ describe('wall face observation', () => {
     expect(surfaces.visibleWallFaces.every((f) => f.y === 2 || f.y === 4)).toBe(true);
   });
 
-  it('applies the 40 degree horizontal boundary within the three cell range', () => {
+  it('applies the 40 degree horizontal boundary within the five cell range', () => {
     const topology = topologyFromRows(
       Array.from({ length: 12 }, (_, y) => (y === 0 || y === 11 ? '############' : '#..........#')),
     );
     const surfaces = computeVisibility(topology, { x: 5.5, y: 8.5, heading: { x: 0, y: -1 } });
-    // Straight ahead: 3 cells (y=7,6,5) visible, y=4 is beyond 3.5.
-    expect(has(surfaces.visibleCells, 5, 5)).toBe(true);
-    expect(has(surfaces.visibleCells, 5, 4)).toBe(false);
+    // Straight ahead: 5 cells (y=7..3) visible; (5,3) sits at exactly 5.0 and (5,2) is past it.
+    expect(has(surfaces.visibleCells, 5, 3)).toBe(true);
+    expect(has(surfaces.visibleCells, 5, 2)).toBe(false);
     // (7,6): center offset (2, -2.5) -> ~38.7 degrees from the heading -> visible.
     expect(has(surfaces.visibleCells, 7, 6)).toBe(true);
     // (8,7): center offset (3, -1.5) -> ~63 degrees -> outside the cone; even its corners are > 40.

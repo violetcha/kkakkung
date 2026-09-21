@@ -199,4 +199,5 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
   } finally {
     await server.close();
   }
-}, 180_000);
+  // S15P21C204-302: the harness now allows 240s plus a 30s cleanup on the corridor maze.
+}, 330_000);

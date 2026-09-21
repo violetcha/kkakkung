@@ -29,21 +29,31 @@ export async function startProductServerProcess(
     cwd: root,
     windowsHide: true,
     // Do not inherit LiveKit/Jenkins/operator credentials or NODE_OPTIONS from the host.
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(([key]) =>
-        [
-          'path',
-          'systemroot',
-          'windir',
-          'temp',
-          'tmp',
-          'home',
-          'userprofile',
-          'appdata',
-          'localappdata',
-        ].includes(key.toLowerCase()),
+    env: {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) =>
+          [
+            'path',
+            'systemroot',
+            'windir',
+            'temp',
+            'tmp',
+            'home',
+            'userprofile',
+            'appdata',
+            'localappdata',
+          ].includes(key.toLowerCase()),
+        ),
       ),
-    ),
+      // S15P21C204-302. These processes carry the deployment and media wiring contracts, not
+      // map behaviour, and their positive in-game audio evidence comes from six synthetic
+      // clients wandering into earshot of each other. On the corridor maze that became a coin
+      // flip: deliberately walking them together did not fix it, so the cause is not distance.
+      // Pinned to the open grid until S15P21C204-308 makes the evidence map-independent and
+      // S15P21C204-309 answers whether corridor audibility is a product problem. The product
+      // default stays maze-v1 and the real Cloud DP-06 still runs on it.
+      PRODUCT_MAP_TEMPLATE: 'master-v1',
+    },
     // Child errors use a fixed IPC code. Raw logs and payloads cannot expose grant/credential data.
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });

@@ -31,14 +31,14 @@ it('draws exactly as far as the core is willing to call visible', () => {
 it('draws every cell the core still calls visible', () => {
   // Pinning the constant is not enough: the mask that decides what reaches the renderer carried
   // its own radius and dropped cells the server had already sent (S15P21C204-289). A diagonal
-  // cell 3.16 away is inside the core range and outside the old hardcoded 3.
+  // cell 4.24 away is inside the core range and outside any integer radius the mask might keep.
   const origin = { x: 1, y: 1 };
-  const edge = { x: 2, y: 4 };
-  const beyond = { x: 1, y: 6 };
+  const edge = { x: 4, y: 4 };
+  const beyond = { x: 1, y: 8 };
   const distance = (cell: { x: number; y: number }) =>
     Math.hypot(cell.x - origin.x, cell.y - origin.y);
   expect(distance(edge)).toBeLessThanOrEqual(VIEW_RANGE);
-  expect(distance(edge)).toBeGreaterThan(3);
+  expect(distance(edge)).toBeGreaterThan(4);
   expect(distance(beyond)).toBeGreaterThan(VIEW_RANGE);
 
   const mask = visibilityMask(viewFixture({ visibleCells: [origin, edge, beyond] }));

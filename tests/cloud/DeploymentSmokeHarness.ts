@@ -102,11 +102,16 @@ export async function runDeploymentSmoke(
     cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false },
     durationMs: 0,
   };
+  // The local contract run is capped so a broken harness cannot hang `pnpm verify`; the real
+  // Cloud run uses the preflight's own budget. S15P21C204-302 raised the local cap from 120s,
+  // which left only about 90s of playing: too little for six wandering clients to find each
+  // other on the corridor maze. The local run is pinned to the open grid for now and finishes
+  // well inside this, so the headroom is for S15P21C204-308, which removes that pin.
   const until =
     started +
     Math.min(
       options.preflight.maxDurationSeconds * 1000,
-      options.mode === 'local-contract' ? 120_000 : Infinity,
+      options.mode === 'local-contract' ? 240_000 : Infinity,
     );
   const cleanupUntil = until + options.preflight.cleanupAllowanceSeconds * 1000;
   const phases = new Set<string>();
@@ -210,14 +215,12 @@ export async function runDeploymentSmoke(
         throw new Error('DP06_PRODUCT_RUNTIME_FAILED');
       return all.length === 6 && all.every((value) => value.round?.phase === phase);
     });
+  /** The request id of each client's last forward intent, and whether a wall refused it. */
+  const lastMoveRequest = new Map<number, string>();
+  const walled = new Set<number>();
   const move = (index: number, round: number) => {
     const player = players[index]!;
-    const moveId = player.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } });
-    if (moveId) {
-      report.commandsSent++;
-      if (player.runtime.getSnapshot().round?.phase === 'PLAYING') gameInputs.add(moveId);
-    }
-    if (round % (5 + index) === 0) {
+    const turn = () => {
       const turnId = player.runtime.send({
         type: 'TURN',
         payload: { direction: (round + index) % 2 ? 'right' : 'left' },
@@ -226,7 +229,19 @@ export async function runDeploymentSmoke(
         report.commandsSent++;
         if (player.runtime.getSnapshot().round?.phase === 'PLAYING') gameInputs.add(turnId);
       }
+    };
+    // S15P21C204-302. The product map is now the one-cell corridor maze. A forward intent into a
+    // wall is rejected (NOT_ALLOWED), and a client that keeps sending it stays parked against that
+    // wall: six parked clients never come within audible range, so the round never produces the
+    // game audio this smoke needs and never reaches RESULT. Turn as soon as a wall refuses.
+    if (walled.delete(index)) return turn();
+    const moveId = player.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } });
+    if (moveId) {
+      lastMoveRequest.set(index, moveId);
+      report.commandsSent++;
+      if (player.runtime.getSnapshot().round?.phase === 'PLAYING') gameInputs.add(moveId);
     }
+    if (round % (5 + index) === 0) turn();
   };
   const sampleMedia = async (purpose: 'practice' | 'game') => {
     const samples = await bounded(Promise.all(players.map((player) => player.probe.snapshot())));
@@ -347,6 +362,7 @@ export async function runDeploymentSmoke(
       room.onMessage('command-outcome', (outcome: { result: string; requestId: string }) => {
         practiceApproach.acknowledge(outcome.requestId, outcome.result);
         if (outcome.result === 'applied') report.commandsApplied++;
+        else if (lastMoveRequest.get(index) === outcome.requestId) walled.add(index);
         if (gameInputs.delete(outcome.requestId) && outcome.result === 'applied')
           report.gameInputsApplied++;
       });

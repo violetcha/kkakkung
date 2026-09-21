@@ -16,10 +16,11 @@ it('uses the watched runner as the visibility origin for a spectator', () => {
       action: null,
       candidates: ['runner-a'],
     },
+    // (13,8) is six cells from the target, past the sight, and must be dropped; (10,8) is inside.
     visibleCells: [
       { x: 7, y: 8 },
       { x: 10, y: 8 },
-      { x: 11, y: 8 },
+      { x: 13, y: 8 },
     ],
     visibleEntities: [
       { id: 'runner-a', kind: 'player', cell: { x: 7, y: 8 }, dir: 1, action: null },

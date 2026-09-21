@@ -16,16 +16,22 @@ export const FACILITY = Object.freeze({
   ceilingHeight: 1.9,
   wallLift: 0.35,
   background: '#211b0e',
-  fogNear: 1.7,
-  fogFar: 3.2,
+  // S15P21C204-302. 서버 시야가 3.5→5.0셀이 되면서 두 안개 거리를 같은 비율로 올렸다. 페이드
+  // 모양은 그대로 두고 늘어난 거리만 실제로 보이게 한다.
+  fogNear: 2.4,
+  fogFar: 4.6,
   ambient: 0.34,
 });
 
-/** 시선 방향 국소 조명과 바닥광. 근접 벽 과다 노출과 원거리 가독성의 균형은 facility-lighting.test가 고정한다. */
+/**
+ * 시선 방향 국소 조명과 바닥광. 근접 벽 과다 노출과 원거리 가독성의 균형은 facility-lighting.test가
+ * 고정한다. `distance`는 감쇠 창의 끝이라 세기·감쇠 지수를 건드리지 않고 도달만 늘리므로, 안개 끝을
+ * 넘기는 값으로 두면 근접 노출은 그대로이고 먼 쪽만 읽힌다(302).
+ */
 export const LIGHTING = Object.freeze({
   ambientColor: '#d2bd72',
   hemisphere: { sky: '#d8c77d', ground: '#4b3b1f', intensity: 0.64 },
-  spot: { color: '#ffe29a', intensity: 5.2, distance: 3.5, angle: 0.88, penumbra: 0.82, decay: 2 },
+  spot: { color: '#ffe29a', intensity: 5.2, distance: 4.8, angle: 0.88, penumbra: 0.82, decay: 2 },
   fill: { color: '#d8b96a', intensity: 0.46, distance: 1.8, decay: 2 },
 });
 

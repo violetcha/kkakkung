@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { SERVER_VIEW_RANGE } from './block-theme';
 import { FACILITY, LIGHTING } from './facility-theme';
 
 /** 머리 조명이 distance 앞 표면에 주는 상대 조도(three의 물리 감쇠 근사). */
@@ -18,6 +19,8 @@ it('lifts the floor level without flattening contrast', () => {
   expect(FACILITY.ambient).toBeGreaterThanOrEqual(0.28);
   expect(spotTerm(1)).toBeGreaterThan(3 * (LIGHTING.hemisphere.intensity + FACILITY.ambient));
   expect(FACILITY.fogNear).toBeLessThan(FACILITY.fogFar);
-  expect(FACILITY.fogFar).toBeGreaterThanOrEqual(3);
-  expect(FACILITY.fogFar).toBeLessThanOrEqual(3.5);
+  // S15P21C204-302. 안개는 서버 시야를 넘지 않되 그보다 한참 앞에서 끝나서도 안 된다. 넘지 않는
+  // 쪽은 block-theme.test가, 서버 시야 자체는 view-geometry 계약 시험이 코어와 묶어 둔다.
+  expect(FACILITY.fogFar).toBeGreaterThanOrEqual(SERVER_VIEW_RANGE - 0.5);
+  expect(FACILITY.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
 });

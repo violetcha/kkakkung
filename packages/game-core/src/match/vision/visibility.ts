@@ -10,11 +10,30 @@ import type { PlayerRecord } from '../state.js';
 import type { Cell, Dir, Topology, WallFace } from '../types.js';
 import { segmentClear, type Point } from './raycast.js';
 
-/** Horizontal field of view is 80 degrees: 40 degrees to each side of the heading. */
+/**
+ * Horizontal field of view is 80 degrees: 40 degrees to each side of the heading.
+ *
+ * S15P21C204-302 measured maze-v1 and left this alone on purpose. In a one-cell corridor the side
+ * walls, not the cone, decide what is visible: 80, 90, 100 and 110 degrees all yield the same mean
+ * of 2.63 visible cells per heading, and only a 120 degree fisheye moves it (+8.2%). Widening the
+ * cone here would also force the renderer's camera (view-geometry.test) for no gain.
+ */
 export const FOV_HALF_DEGREES = 40;
-/** Samples farther than this (in cells) from the camera are never visible: three cells ahead. */
-export const VIEW_RANGE = 3.5;
-const CANDIDATE_RADIUS = 4;
+/**
+ * Samples farther than this (in cells) from the camera are never visible: five cells ahead.
+ *
+ * S15P21C204-302 raised this from 3.5 when maze-v1 became the default. The corridor maze shows a
+ * quarter of what the open grid did (2.41 vs 9.70 mean visible cells per heading), and at 3.5 the
+ * junction ahead was outside sight on 24% of headings, so a runner committed to a corridor blind.
+ * At 5.0 that is 9%, for +15% visible cells; past 5.0 the curve flattens (6.5 is only +20%).
+ */
+export const VIEW_RANGE = 5.0;
+/**
+ * Candidate cells are collected from this square around the camera before the cone and the rays
+ * narrow them, so it must cover VIEW_RANGE or the range is silently truncated: at range 5.5 a
+ * radius of 4 still produced the range-4.5 result. Keep this at or above ceil(VIEW_RANGE).
+ */
+const CANDIDATE_RADIUS = 5;
 const FACE_OFFSET = 0.02;
 const COS_HALF_FOV = Math.cos((FOV_HALF_DEGREES * Math.PI) / 180);
 
