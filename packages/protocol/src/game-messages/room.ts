@@ -1,6 +1,6 @@
 /** Waiting-phase roster contract. Never a substitute for gameplay position or enemy roles. */
 import { z } from 'zod';
-import { PHASES } from '../game-schema/product.js';
+import { MAP_SIZES, PHASES } from '../game-schema/product.js';
 import { matchIdSchema, stateVersionSchema } from './product.js';
 
 export const roomRosterSchema = z.strictObject({
@@ -31,3 +31,13 @@ export const roomAccessSchema = z.strictObject({
   locked: z.boolean(),
 });
 export type RoomAccessMessage = z.infer<typeof roomAccessSchema>;
+/**
+ * S15P21C204-311. 방이 고른 맵 크기. roomAccess 와 같은 이유로 별도 채널이다 — 예전 클라이언트는
+ * 바뀌지 않은 roster 를 그대로 읽는다. 방장만 바꿀 수 있고 LOBBY 에서만 바뀐다.
+ */
+export const roomMapSchema = z.strictObject({
+  matchId: matchIdSchema,
+  revision: z.number().int().nonnegative().safe(),
+  size: z.enum(MAP_SIZES),
+});
+export type RoomMapMessage = z.infer<typeof roomMapSchema>;

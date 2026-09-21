@@ -7,6 +7,7 @@ import {
   type CommandEnvelope,
   type CommandOutcome,
   type CommandReceipt,
+  type RoomMapMessage,
   type SessionResponse,
 } from '@kkakkung/protocol/game-messages';
 import type { Phase, PublicMatchState } from '@kkakkung/protocol/game-schema';
@@ -250,6 +251,36 @@ it('delivers new-match roster and access after its public patch on a real rematc
     expect(
       observations.find((o) => o.matchId !== oldMatchId && o.channel === 'room-access')?.locked,
     ).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+// S15P21C204-311. 맵 크기는 방장만, 그리고 아직 모으는 중일 때만 바꾼다. 참가자도 같은 값을 본다.
+it('lets only the host change the map size while the room is still gathering', async () => {
+  const f = await fixture();
+  try {
+    const friend = await f.join();
+    const seen: RoomMapMessage[] = [];
+    friend.room.onMessage('room-map', (value: RoomMapMessage) => void seen.push(value));
+    expect(
+      (await f.send(friend, { type: 'ROOM_MAP_SIZE', payload: { size: 'small' } })).receipt.code,
+    ).toBe('NOT_ALLOWED');
+    const applied = await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'small' } });
+    expect(applied.outcome?.result).toBe('applied');
+    await vi.waitFor(() => expect(seen.at(-1)?.size).toBe('small'));
+    const revision = seen.at(-1)!.revision;
+    // 같은 값을 다시 고르면 판이 올라가지 않는다.
+    expect(
+      (await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'small' } })).outcome?.result,
+    ).toBe('applied');
+    await vi.waitFor(() => expect(seen.at(-1)?.size).toBe('small'));
+    expect(seen.at(-1)!.revision).toBe(revision);
+    // 장치 점검이 시작되면 방장도 못 바꾼다.
+    f.serverRoom.setPhase('DEVICE_CHECK');
+    expect(
+      (await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'large' } })).receipt.code,
+    ).toBe('INVALID_PHASE');
   } finally {
     await f.close();
   }

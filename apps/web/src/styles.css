@@ -783,6 +783,62 @@
 .product-shell .lobby li span:last-child {
   color: var(--color-muted);
 }
+/* S15P21C204-311. 로비의 맵 크기 선택. 방장만 누르고 참가자에게는 고른 것만 보인다. */
+.map-size-choice {
+  margin-top: var(--space-4);
+}
+.map-size-choice h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-body);
+  letter-spacing: 0.08em;
+}
+.map-size-choice p {
+  margin-top: var(--space-2);
+  font-size: var(--text-small);
+  color: var(--color-muted);
+}
+.map-size-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.product-shell .map-size-options button {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  margin: 0;
+  padding: var(--space-3) var(--space-2);
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-panel);
+  color: var(--color-text);
+  outline: var(--outline-pixel);
+  outline-offset: 2px;
+  box-shadow: var(--inset-highlight), var(--shadow-pixel);
+  cursor: pointer;
+}
+.map-size-options button strong {
+  font-size: var(--text-control);
+  letter-spacing: 0.1em;
+}
+.map-size-options button span {
+  font-size: var(--text-small);
+  color: var(--color-muted);
+}
+.product-shell .map-size-options button[aria-pressed='true'] {
+  border-color: var(--color-border-strong);
+  background: var(--color-panel-raised);
+}
+.map-size-options button[aria-pressed='true'] strong {
+  color: var(--color-focus);
+}
+.product-shell .map-size-options button:disabled {
+  cursor: default;
+}
+.map-size-options button:disabled[aria-pressed='false'] {
+  opacity: 0.55;
+}
+
 /* S15P21C204-292. 카메라를 켜기 전 동의 화면. 장치 점검 자리에 대신 놓인다. */
 .consent-gate {
   max-width: 68ch;

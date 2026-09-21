@@ -9,6 +9,7 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
+import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { useMediaConsent } from '../features/room/use-media-consent';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
@@ -559,6 +560,12 @@ export function ProductApp({
               lockRequest={snapshot.requests.ROOM_LOCK}
               kickRequest={snapshot.requests.ROOM_KICK}
               onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
+              mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
+              canChooseMapSize={round.phase === 'LOBBY'}
+              mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
+              onSelectMapSize={(size) =>
+                runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
+              }
               onKick={(targetPlayerId) =>
                 runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
               }
