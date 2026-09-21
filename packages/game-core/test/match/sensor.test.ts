@@ -181,7 +181,10 @@ describe('walk-through sensor single shot', () => {
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
       command('t-b', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    const contact = step(idleUntil(walking, 42, 49), 50);
+    const grabbing = step(idleUntil(walking, 42, 48), 49, [
+      command('t-b', 'GRAB_INTENT', {}),
+    ]).state;
+    const contact = step(grabbing, 50);
     expect(player(contact.state, 'r-a').status).toBe('CAPTURED');
     // Capture is settled first, so no ACTIVE candidate is left for the sensor.
     expect(device(contact.state).state).toBe('ARMED');

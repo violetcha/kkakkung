@@ -1,6 +1,6 @@
 // S15P21C204-277 (W10). 미니맵 그리기. 벽·바닥·안 가 본 칸을 서로 다른 모양으로 그려
 // 미니맵만 보고도 구분되게 한다. 캔버스 호출만 하고 판정은 map-draw-model 이 한다.
-import type { PrivateView, Role } from '@kkakkung/protocol/game-schema';
+import type { Cell, PrivateView, Role } from '@kkakkung/protocol/game-schema';
 import { ROLE_COLORS } from '../scene/role-colors';
 import { mapDrawModel } from './map-draw-model';
 import { pastEventMarkers, type HunterMarker } from './past-event-markers';
@@ -24,6 +24,7 @@ export const MINIMAP_COLORS = Object.freeze({
   /** --color-success / --color-warning. */
   exitMine: '#8dcf9f',
   exitOther: '#d8aa61',
+  operatorExit: '#f4c96b',
   marker: '#d8aa61',
 });
 
@@ -126,6 +127,8 @@ export function drawMinimap(
     size: number;
     tick?: number;
     markers?: readonly HunterMarker[];
+    /** Supplied only by the operator demo room; ordinary rooms leave this absent. */
+    operatorExit?: Cell | null;
     cells?: number;
   },
 ): MinimapLayout {
@@ -148,7 +151,7 @@ export function drawMinimap(
   }
   ctx.stroke();
 
-  const model = mapDrawModel(input.view, tick);
+  const model = mapDrawModel(input.view, tick, input.operatorExit ?? null);
   if (!model) return layout;
   const terrain = minimapTerrain(model.terrain, layout.cells);
 
@@ -175,6 +178,27 @@ export function drawMinimap(
       offset + (exit.approach.x + 1) * unit,
       offset + exit.approach.y * unit,
     );
+  }
+
+  if (model.operatorExit) {
+    const centerX = offset + (model.operatorExit.x + 0.5) * unit;
+    const centerY = offset + (model.operatorExit.y + 0.5) * unit;
+    const radius = Math.max(3, unit * 0.38);
+    // A diamond-within-circle is intentionally different from the square normal-exit marker.
+    ctx.strokeStyle = MINIMAP_COLORS.operatorExit;
+    ctx.lineWidth = Math.max(1, Math.round(unit / 6));
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY - radius);
+    ctx.lineTo(centerX + radius, centerY);
+    ctx.lineTo(centerX, centerY + radius);
+    ctx.lineTo(centerX - radius, centerY);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = MINIMAP_COLORS.operatorExit;
+    ctx.fillText('O', centerX - 3, centerY + 4);
   }
 
   const role: Role =

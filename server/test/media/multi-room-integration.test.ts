@@ -8,15 +8,24 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Client } from '@colyseus/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { sessionResponseSchema, type MediaGrant } from '@kkakkung/protocol/game-messages';
 import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/version';
 import { bindProductRoom } from '../../../apps/web/src/app/product-runtime';
 import { productRoomPort } from '../../../apps/web/src/features/room/product-session';
+import {
+  clearConsentedDevice,
+  useConsentedDevice,
+} from '../../../apps/web/src/features/room/consent-fixture';
 import { createSyntheticInteractionFactory } from '../../../apps/web/src/app/product-integration-fixture';
 import { INVITATION_ROUTES } from '../../src/session/invite-types.js';
 import { startProductServerProcess } from './product-server-process.js';
+
+// The real web runtime refuses to touch devices before the privacy notice is accepted
+// (S15P21C204-292). These clients drive that runtime, so they start from a consented device.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 const rooms = Number(process.env.KKAKKUNG_TEST_ROOMS ?? 0);
 const playingMs = Number(process.env.KKAKKUNG_TEST_PLAYING_MS ?? 20_000);

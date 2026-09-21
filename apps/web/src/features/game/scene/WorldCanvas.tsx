@@ -17,6 +17,7 @@ import { FrameMetricsProbe, type FrameMetrics } from './FrameMetrics';
 import { resolveSceneTheme, type SceneThemeId } from './scene-theme';
 import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
+import { GrabHand } from './GrabHand';
 
 /** Background and fog per theme. The fog never reaches past the server's 3.5-cell sight. */
 export const sceneWorld = (theme: SceneThemeId) =>
@@ -33,6 +34,7 @@ export function WorldCanvas({
   quality = 'medium',
   theme = resolveSceneTheme(),
   heldTool,
+  grabAnimationId,
   renderTick = () => null,
   onMetrics,
 }: {
@@ -47,6 +49,8 @@ export function WorldCanvas({
   theme?: SceneThemeId;
   /** What the first-person hand holds. Omitted: derived from the player's role and stock. */
   heldTool?: HeldToolKind | null;
+  /** 바뀔 때마다 술래의 1인칭 잡기 손 동작을 시작하거나 유지한다. */
+  grabAnimationId?: number;
   renderTick?(): number | null;
   onMetrics?(metrics: FrameMetrics): void;
 } = {}) {
@@ -82,6 +86,7 @@ export function WorldCanvas({
               <FacilityLighting self={viewpoint} renderTick={renderTick} quality={quality} />
             )}
             {theme === 'block' && <HeldTool tool={tool} />}
+            {self?.role === 'tagger' && <GrabHand signal={grabAnimationId} />}
           </>
         )}
         <VisibleTerrain

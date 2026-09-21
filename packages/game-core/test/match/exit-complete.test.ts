@@ -135,13 +135,16 @@ describe('exit completion, duplicates and capture priority', () => {
     const walking = step(running, 130, [
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    const contact = step(idleUntil(walking, 131, 138), 139);
+    const armed = step(idleUntil(walking, 131, 137), 138, [
+      command('t-a', 'GRAB_INTENT', {}),
+    ]).state;
+    const contact = step(armed, 139);
     expect(player(contact.state, 't-a').cell).toEqual(APPROACH);
     expect(player(contact.state, 'r-a').status).toBe('CAPTURED');
     expect(contact.state.counts).toEqual({ escaped: 0, captured: 1 });
 
     // A completion report of that same tick is canceled, not applied.
-    const late = step(walking, 139, [
+    const late = step(armed, 139, [
       command('r-a', 'EXIT_PROGRESS', { challengeId: 'ch-1', method: 'pose', completed: true }),
     ]);
     expect(player(late.state, 'r-a').status).toBe('CAPTURED');

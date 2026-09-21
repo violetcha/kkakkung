@@ -23,6 +23,7 @@ import {
   advanceInstallations,
   dropInstall,
   planInstall,
+  isStartCell,
   reserveInstall,
   spendEquipment,
   verifyInstallCancel,
@@ -52,6 +53,7 @@ import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from '.
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
 import { initialTerrain, knownTerrainOf, observeTerrain } from './knowledge/terrain.js';
 import { completeActions, reserveMove, type CompletedMove } from './movement.js';
+import { isWalkable } from './map/validate-template.js';
 import { visibilityOf } from './vision/visibility.js';
 import { terminateRunner, type TerminationOutcome } from './participation.js';
 import { createPriorityOrder } from './priority.js';
@@ -66,7 +68,7 @@ import {
   type MatchState,
   type PlayerRecord,
 } from './state.js';
-import type { Cell, RosterEntry } from './types.js';
+import type { Cell, Dir, RosterEntry } from './types.js';
 
 export type { MatchState, PlayerRecord } from './state.js';
 
@@ -88,6 +90,7 @@ function initialPlayer(entry: RosterEntry, input: CreateMatchInput): PlayerRecor
     nextAction: null,
     heldMove: null,
     connected: true,
+    grabUntilTick: null,
     restraintUntilTick: null,
     restraintImmuneUntilTick: null,
     // Runner items stay at zero until the product decision (D-2026-09-08-01).
@@ -157,6 +160,9 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     tuning: input.tuning,
     layout: input.layout,
     phase: mode === 'practice' ? 'TEAM_PRACTICE' : 'GAME_LOADING',
+    // S15P21C204-316. Practice never starts a round clock, so the flag only means something for
+    // a game. An absent value is the ordinary tuned round.
+    deadline: mode === 'game' ? (input.deadline ?? 'round') : 'round',
     tick: null,
     startTick: null,
     deadlineTick: null,
@@ -274,8 +280,50 @@ function applyStartPlaying(ctx: StepContext, startTick: number): void {
     ...ctx.state,
     phase: 'PLAYING',
     startTick,
-    deadlineTick: startTick + ctx.state.tuning.roundTicks,
+    // S15P21C204-316. The demo harness runs without a clock: `evaluateResult` already skips the
+    // timeout when there is no deadline, so leaving it null is the whole change.
+    deadlineTick: ctx.state.deadline === 'none' ? null : startTick + ctx.state.tuning.roundTicks,
   };
+}
+
+/**
+ * S15P21C204-316. Puts one participant on a free passage cell facing `dir`, for the operator
+ * demo harness. Refusals are silent and leave the state untouched: a control carries no
+ * requestId, so there is no outcome to answer with. The caller sees the refusal by reading the
+ * position back, which is what the demo scenario runner already does between steps.
+ *
+ * The guards exist so a placement can never stand in for a judgement the rules own. It cannot
+ * move somebody who is mid-action, mid-challenge, mid-exchange or installing, because those are
+ * decided by tick arithmetic that a jump would silently invalidate; it cannot land on a start
+ * cell, a wall, or a cell somebody occupies, because walking onto a participant is a capture.
+ */
+function applyPlacePlayer(ctx: StepContext, playerId: string, cell: Cell, dir: Dir): void {
+  const state = ctx.state;
+  // Only the demo harness. An ordinary match never carries `deadline: 'none'`.
+  if (state.mode !== 'game' || state.deadline !== 'none') return;
+  if (state.phase !== 'PLAYING' || isTerminal(state)) return;
+  if (!Number.isInteger(dir) || dir < 0 || dir > 3) return;
+  const player = state.players.get(playerId);
+  if (!player || player.status !== 'ACTIVE') return;
+  if (player.action !== null || player.installation !== null) return;
+  if (player.exchange !== null || isChallenging(player)) return;
+  if (!isWalkable(state.layout.topology, cell) || isStartCell(state, cell)) return;
+  for (const id of state.order) {
+    const other = state.players.get(id)!;
+    if (other.playerId === playerId || other.status !== 'ACTIVE') continue;
+    if (other.cell.x === cell.x && other.cell.y === cell.y) return;
+  }
+  // A held intent or queued turn from the old position would walk the wrong way from the new
+  // one, so the jump clears them. Equipment, knowledge and restraint are untouched.
+  ctx.state = withPlayers(state, [
+    {
+      ...player,
+      cell: Object.freeze({ x: cell.x, y: cell.y }),
+      dir,
+      heldMove: null,
+      nextAction: null,
+    },
+  ]);
 }
 
 function completeDueActions(ctx: StepContext): void {
@@ -509,6 +557,20 @@ function handleInstall(ctx: StepContext, command: CoreCommand<'INSTALL'>): void 
   return outcome(ctx, command, 'applied', null);
 }
 
+function handleGrabIntent(ctx: StepContext, command: CoreCommand<'GRAB_INTENT'>): void {
+  const code = actorCheck(ctx, command);
+  if (code) return outcome(ctx, command, 'rejected', code);
+  if (ctx.state.mode !== 'game' || ctx.state.phase !== 'PLAYING') {
+    return outcome(ctx, command, 'rejected', 'INVALID_PHASE');
+  }
+  const actor = ctx.state.players.get(command.actorId)!;
+  if (actor.role !== 'tagger') return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
+  ctx.state = withPlayers(ctx.state, [
+    { ...actor, grabUntilTick: ctx.tick + ctx.state.tuning.grabTicks + 1 },
+  ]);
+  return outcome(ctx, command, 'applied', null);
+}
+
 function handleInstallCancel(ctx: StepContext, command: CoreCommand<'INSTALL_CANCEL'>): void {
   const code = actorCheck(ctx, command);
   if (code) return outcome(ctx, command, 'rejected', code);
@@ -699,6 +761,8 @@ function handleCommand(ctx: StepContext, command: CoreCommand): void {
       return handleMoveIntent(ctx, command);
     case 'TURN':
       return handleTurn(ctx, command);
+    case 'GRAB_INTENT':
+      return handleGrabIntent(ctx, command);
     case 'EXCHANGE_REQUEST':
       return handleExchangeRequest(ctx, command);
     case 'EXCHANGE_ACCEPT':
@@ -794,7 +858,12 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   completeDueActions(ctx);
   if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
     // Capture is committed before equipment or pose stages; ended runners leave later stages.
-    for (const runnerId of detectCaptures(before, ctx.state.players)) {
+    for (const runnerId of detectCaptures(
+      before,
+      ctx.state.players,
+      ctx.state.layout.topology,
+      ctx.tick,
+    )) {
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }
@@ -824,6 +893,10 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
       const aborted = abortMatch(ctx.state, control.reason);
       ctx.state = aborted.state;
       ctx.media.push(...aborted.mediaIntents);
+    } else if (control.type === 'PLACE_PLAYER') {
+      // After this tick's captures and results, so a jump is never mistaken for a move into
+      // somebody. The refreshPerception below gives the new position its sight this same tick.
+      applyPlacePlayer(ctx, control.playerId, control.cell, control.dir);
     }
   }
   ctx.state = refreshPerception(ctx.state, ctx.tick);

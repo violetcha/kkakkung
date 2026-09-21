@@ -246,6 +246,7 @@ export function createG3Harness(options: HarnessOptions = {}) {
     /** MOVE_INTENT (held move refreshed at 10 Hz by real clients; here sent once). */
     move: (actorId: string, direction: 'forward' | 'back' | null = 'forward') =>
       accept(actorId, envelope(actorId, 'MOVE_INTENT', { direction })),
+    grab: (actorId: string) => accept(actorId, envelope(actorId, 'GRAB_INTENT', {})),
     turn: (actorId: string, direction: 'left' | 'right') =>
       accept(actorId, envelope(actorId, 'TURN', { direction })),
     /** Stop intent: drops the held move so a finished step does not resume on its own. */
@@ -265,6 +266,13 @@ export function createG3Harness(options: HarnessOptions = {}) {
       this.ticks(G3_TUNING.moveTicks);
       this.stop(actorId);
       this.tick();
+    },
+    /** Moves one cell into a runner and arms the six-tick grab window just before arrival. */
+    capture(actorId: string) {
+      this.move(actorId);
+      this.ticks(G3_TUNING.moveTicks - 1);
+      this.grab(actorId);
+      this.ticks(2);
     },
     /** Turns once and waits for the turn to finish. */
     face(actorId: string, direction: 'left' | 'right') {

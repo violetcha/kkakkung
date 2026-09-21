@@ -11,11 +11,13 @@ import {
   validateTuning,
   type MatchState,
 } from '@kkakkung/game-core/match';
+import type { MapSize } from '@kkakkung/protocol/game-schema';
 import type { ProductProfile } from '../bootstrap.js';
 import type { AppConfig } from '../config/env.js';
 import { loadRuntimeEvidence } from '../config/RuntimeEvidence.js';
 import { createMediaCoordinator } from '../media/MediaCoordinator.js';
 import { createOperatorAuth } from '../operations/OperatorAuth.js';
+import { MAP_TEMPLATE_BY_SIZE } from './map-templates.js';
 
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -34,17 +36,36 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
   if (!tuning.ok) throw new Error('INVALID_PRODUCT_TUNING');
   // S15P21C204-267. The template id names both the map and its certified placement file; the
   // loader still hashes the bytes and certifies the fallback, so a wrong pairing fails preparation.
-  const masterPath = resolve(content, `maps/${config.mapTemplate}.json`);
-  const master = await readJson(masterPath);
-  if (
-    typeof master !== 'object' ||
-    master === null ||
-    !('templateId' in master) ||
-    typeof master.templateId !== 'string' ||
-    !('templateVersion' in master) ||
-    typeof master.templateVersion !== 'string'
-  )
-    throw new Error('INVALID_PRODUCT_MAP_SOURCE');
+  const sourceOf = async (templateId: string) => {
+    const masterPath = resolve(content, `maps/${templateId}.json`);
+    const master = await readJson(masterPath);
+    if (
+      typeof master !== 'object' ||
+      master === null ||
+      !('templateId' in master) ||
+      typeof master.templateId !== 'string' ||
+      !('templateVersion' in master) ||
+      typeof master.templateVersion !== 'string'
+    )
+      throw new Error('INVALID_PRODUCT_MAP_SOURCE');
+    return {
+      masterPath,
+      fallbackPath: resolve(content, `placements/${templateId}-fallback.json`),
+      templateId: master.templateId,
+      templateVersion: master.templateVersion,
+    };
+  };
+  const fallbackSource = await sourceOf(config.mapTemplate);
+  // S15P21C204-321. 방이 로비에서 고른 크기로 경기한다. 크기마다 인증된 템플릿이 하나씩 있고,
+  // 어느 것도 고르지 않았거나 파일이 없으면 PRODUCT_MAP_TEMPLATE 가 정한 것을 쓴다.
+  const bySize: Partial<Record<MapSize, Awaited<ReturnType<typeof sourceOf>>>> = {};
+  for (const [size, templateId] of Object.entries(MAP_TEMPLATE_BY_SIZE) as [MapSize, string][]) {
+    try {
+      bySize[size] = await sourceOf(templateId);
+    } catch {
+      // 크기별 맵이 아직 배포에 없으면 그 크기는 기본 맵으로 간다.
+    }
+  }
   const admission = config.admission;
   const cloud = config.livekit;
   const cloudConfigured = Boolean(
@@ -159,10 +180,8 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
         layout: tuning.template.layout,
         selection: tuning.template.selection,
       }),
-      masterPath,
-      fallbackPath: resolve(content, `placements/${config.mapTemplate}-fallback.json`),
-      templateId: master.templateId,
-      templateVersion: master.templateVersion,
+      ...fallbackSource,
+      bySize,
     },
     assetVersion: config.assetVersion,
   };

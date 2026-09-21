@@ -26,6 +26,10 @@
     "./game-messages": {
       "types": "./dist/game-messages/index.d.ts",
       "import": "./dist/game-messages/index.js"
+    },
+    "./schema-runtime": {
+      "types": "./dist/schema-runtime.d.ts",
+      "import": "./dist/schema-runtime.js"
     }
   },
   "scripts": {

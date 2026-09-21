@@ -54,3 +54,13 @@ it('removes the entire map after participation ends', () => {
     mapDrawModel(viewFixture({ self: { playerId: 'self', role: 'runner', status: 'CAPTURED' } })),
   ).toBeNull();
 });
+
+it('keeps the demo operator exit separate and does not expose it to ordinary maps', () => {
+  const view = viewFixture();
+  expect(mapDrawModel(view)?.operatorExit).toBeNull();
+
+  const model = mapDrawModel(view, null, { x: 1, y: 1 });
+  expect(model?.operatorExit).toEqual({ x: 1, y: 1 });
+  // The same cell is not listed a second time as a normal numbered exit.
+  expect(model?.exits).toEqual([]);
+});

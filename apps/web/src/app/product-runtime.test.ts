@@ -1,5 +1,6 @@
-import { expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
+import { clearConsentedDevice, useConsentedDevice } from '../features/room/consent-fixture';
 import {
   createInteractionRuntime,
   type InteractionContext,
@@ -13,6 +14,11 @@ import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
 import { createRuntimeMetrics, type RuntimeMetrics } from './runtime-metrics';
 import { INPUT_TUNING } from '../features/input/input-tuning';
+
+// 장치를 켜는 시험들이다. 동의 없이는 다리가 장치에 닿지 않으므로(S15P21C204-292) 이미 동의한
+// 기기에서 시작한다. 동의가 없을 때 닿지 않는다는 사실 자체는 consent-bypass 시험이 본다.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 /** S15P21C204-265. 키보드는 모션과 같은 유지 시간을 채워야 하므로 시계와 타이머를 손으로 돈다. */
 function manualVision() {
@@ -1014,6 +1020,33 @@ it('keeps keyboard available if motion recalibration fails', async () => {
   }
 });
 
+it('advances the local grab animation only for each outgoing grab attempt', () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING', stateVersion: 10 });
+  const view = viewFixture({ stateVersion: 10 });
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.messages.get('private-view')!({
+    ...view,
+    self: { ...view.self, role: 'tagger' },
+  });
+
+  const first = f.runtime.send({ type: 'GRAB_INTENT', payload: {} });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(1);
+  f.runtime.send({ type: 'GRAB_INTENT', payload: {} });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(2);
+
+  f.messages.get('command-outcome')!({
+    matchId: 'm',
+    requestId: first,
+    sequence: 0,
+    tick: 100,
+    stateVersion: 10,
+    result: 'applied',
+    code: null,
+  });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(2);
+});
+
 it('releases rejected exit start immediately without creating a challenge', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });
@@ -1340,16 +1373,25 @@ it('keeps demo state for the running match and sends only listed scenarios', asy
     const matchId = f.runtime.getSnapshot().round!.matchId;
     const demo = {
       matchId,
-      available: ['trap', 'capture'],
+      available: [
+        { id: 'trap', options: [] },
+        { id: 'capture', options: [] },
+      ],
       running: null,
       step: null,
-      failure: null,
+      failureCode: null,
+      operatorExit: null,
     };
     // A message for another match is not this room's demo state.
     f.messages.get('demo-state')!({ ...demo, matchId: 'other-match' });
     expect(f.runtime.getSnapshot().demo).toBeUndefined();
     f.messages.get('demo-state')!(demo);
-    expect(f.runtime.getSnapshot().demo).toMatchObject({ available: ['trap', 'capture'] });
+    expect(f.runtime.getSnapshot().demo).toMatchObject({
+      available: [
+        { id: 'trap', options: [] },
+        { id: 'capture', options: [] },
+      ],
+    });
     f.runtime.runDemoScenario('trap');
     expect(f.send.mock.calls.filter(([channel]) => channel === 'demo-scenario')).toEqual([
       ['demo-scenario', { matchId, scenario: 'trap' }],
@@ -1367,10 +1409,11 @@ it('in a demo room skips media grants and reports LOAD_READY from assets and the
     const matchId = f.runtime.getSnapshot().round!.matchId;
     f.messages.get('demo-state')!({
       matchId,
-      available: ['trap'],
+      available: [{ id: 'trap', options: [] }],
       running: null,
       step: null,
-      failure: null,
+      failureCode: null,
+      operatorExit: null,
     });
     // 연습: 데모 방은 미디어 발급을 요청하지 않는다(요청하면 NOT_READY 로 거절돼 오류만 남는다).
     f.state({ phase: 'TEAM_PRACTICE', stateVersion: 12 });
@@ -1453,12 +1496,22 @@ it('keeps a demo-state that arrives before the first round until the round confi
     },
   );
   try {
-    const demo = { matchId: 'm', available: ['trap'], running: null, step: null, failure: null };
+    const demo = {
+      matchId: 'm',
+      available: [{ id: 'trap', options: [] }],
+      running: null,
+      step: null,
+      failureCode: null,
+      operatorExit: null,
+    };
     // 첫 상태 패치보다 먼저 온 demo-state 는 버리지 않고 들고 있다.
     messages.get('demo-state')!(demo);
     expect(runtime.getSnapshot().demo).toBeUndefined();
     stateHandler(roundFixture({ phase: 'LOBBY', stateVersion: 1 }) as unknown as PublicMatchState);
-    expect(runtime.getSnapshot().demo).toMatchObject({ matchId: 'm', available: ['trap'] });
+    expect(runtime.getSnapshot().demo).toMatchObject({
+      matchId: 'm',
+      available: [{ id: 'trap', options: [] }],
+    });
   } finally {
     await runtime.leave();
   }
@@ -1531,6 +1584,22 @@ it('plays state cues once, defers count cues behind my own ending and flashes th
     counts: { escaped: 0, captured: 0 },
   });
   expect(played()).toHaveLength(5);
+});
+
+it('shows a server-confirmed capture flash to an active tagger', () => {
+  const f = fixture();
+  const view = viewFixture();
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.state({ phase: 'PLAYING', stateVersion: 11, counts: { escaped: 0, captured: 0 } });
+  f.messages.get('private-view')!({
+    ...view,
+    stateVersion: 11,
+    self: { ...view.self, role: 'tagger' },
+  });
+
+  f.state({ phase: 'PLAYING', stateVersion: 12, counts: { escaped: 0, captured: 1 } });
+
+  expect(f.runtime.getSnapshot().cueFlash).toMatchObject({ kind: 'capture-success' });
 });
 
 it('flashes server-approved sensor and trap effects once without touching footsteps or my own cues', async () => {

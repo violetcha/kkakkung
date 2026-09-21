@@ -25,17 +25,17 @@
 
 값은 비밀이 아닌 정책으로 [compose.continuous.yaml](../infra/compose.continuous.yaml)·[compose.product.yaml](../infra/compose.product.yaml)에 두고, 배포 러너가 overlay에서 읽어 사전 검사에 넘긴다. 비밀값은 Jenkins Secret file `kkakkung-production-env`에만 둔다.
 
-| 설정                                       | 현재 값                 | 비고                                                                                                                                 |
-| ------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                 |
-| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                   |
-| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행 |
-| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅 |
-| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                           |
-| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                      |
-| API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                       |
-| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                                           |
-| `PRODUCT_MAP_TEMPLATE`                     | `master-v1`             | 본경기 맵. `maze-v1`은 통로 1칸(267). `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝                                        |
+| 설정                                       | 현재 값                 | 비고                                                                                                                                                     |
+| ------------------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                     |
+| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                       |
+| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                     |
+| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                     |
+| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                               |
+| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
+| API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
+| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                                                               |
+| `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
 
@@ -94,6 +94,20 @@ done
 
 세 줄이 모두 404여야 한다. 셋을 다 두드리는 이유는 nginx와 Express가 경로를 다르게 읽기 때문이다(S15P21C204-296). nginx의 접두·정확 일치 location은 대소문자를 가리는데 Express는 가리지 않아, `^~ /api/operations/` 하나로는 `/API/OPERATIONS/status`와 슬래시 없는 `/api/operations`가 그대로 앱까지 갔다. 지금은 대소문자를 무시하는 정규식으로 막는다. 배포 장벽도 같은 세 경로를 두드려 하나라도 404가 아니면 `OPERATIONS_PUBLICLY_REACHABLE`로 멈춘다.
 
+### 보안 헤더
+
+CSP를 비롯한 응답 헤더는 **web-proxy 컨테이너**가 붙인다([조각](../infra/nginx/security-headers.conf)). 호스트 nginx는 `proxy_pass`로 받은 헤더를 그대로 흘려보내므로 인터넷까지 그대로 간다. `Strict-Transport-Security`만 TLS를 끝내는 호스트가 붙인다. 두 곳에서 같은 헤더를 붙이면 값이 갈리므로 하지 않는다.
+
+**nginx 함정 하나.** 어떤 `location`에 자기 `add_header`가 하나라도 있으면 바깥 level의 `add_header`를 **전부 잃는다.** 그래서 `Cache-Control`을 따로 붙이는 경로마다 조각을 다시 `include`한다. 계약 시험이 이 누락을 잡는다.
+
+CSP 값은 실제 프로덕션 빌드를 브라우저로 돌려 정했다. 다시 확인하려면:
+
+```bash
+pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
+```
+
+비전 Worker·MediaPipe WASM 추론·폰트·캔버스에 도달하면서 위반이 0건이어야 한다. `'unsafe-eval'`은 필요 없다 — Zod 4의 JIT가 `new Function`을 쓰는 것을 웹 진입점에서 껐다(서버는 매 tick parse하므로 그대로 둔다). 이 스크립트는 LiveKit 실제 연결과 Colyseus WebSocket까지는 확인하지 못한다. `connect-src`의 해당 항목은 설정 검토로 남는다.
+
 ## 4. 요청과 기록의 상한
 
 **HTTP 입구**(S15P21C204-204). JSON 파싱 전에 운영·미디어 경로를 분류해 제한한다. 거절은 `429/RATE_LIMITED`.
@@ -143,21 +157,22 @@ docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.p
 
 ### 외부 알림
 
-| 경로                                               | 알리는 것                                                                                                                       | 시점                                                                                                                              |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 서버 → `ALERT_WEBHOOK_URL`                         | critical 경보: `READINESS_LOCKED`·`MEDIA_API_RATE_LIMITED`·`JOURNAL_NOT_WRITABLE`·`MEDIA_RETIREMENT_UNRESOLVED`·`TICK_OVERLOAD` | 발생 즉시. 해제는 60초 유지 뒤, 같은 경보 재발생은 5분 간격. 전달 전에 이미 풀린 경보는 "일시 경보"로 한 번                       |
-| Jenkins `kkakkung-watchdog` → `mattermost-webhook` | 서비스 무응답(컨테이너 없음·중지·unhealthy, `/health/live` 실패), 게임 서버 비정상 재시작, 복구                                 | 5분마다 확인. 무응답은 연속 2회부터, 지속 중에는 1시간마다 다시. 재시작은 같은 컨테이너의 RestartCount 증가만(배포는 새 컨테이너) |
+| 경로                                                    | 알리는 것                                                                                                                       | 시점                                                                                                                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 서버 → `ALERT_WEBHOOK_URL`                              | critical 경보: `READINESS_LOCKED`·`MEDIA_API_RATE_LIMITED`·`JOURNAL_NOT_WRITABLE`·`MEDIA_RETIREMENT_UNRESOLVED`·`TICK_OVERLOAD` | 발생 즉시. 해제는 60초 유지 뒤, 같은 경보 재발생은 5분 간격. 전달 전에 이미 풀린 경보는 "일시 경보"로 한 번                                                                             |
+| Jenkins `kkakkung-watchdog` → `mattermost-webhook`      | 서비스 무응답(컨테이너 없음·중지·unhealthy, `/health/live` 실패), 게임 서버 비정상 재시작, 복구                                 | 5분마다 확인. 무응답은 연속 2회부터, 지속 중에는 1시간마다 다시. 재시작은 같은 컨테이너의 RestartCount 증가만(배포는 새 컨테이너)                                                       |
+| Jenkins `kkakkung-livekit-usage` → `mattermost-webhook` | LiveKit Cloud Analytics API의 현재 월 참가자-분이 4,000/4,500/5,000분 임계치에 도달, API 인증·429·timeout 실패                  | 30분마다. 사용량은 session detail의 `connectionMinutes`를 세션별 최대값으로 누적하고, 첫 실행은 대시보드 기준값을 요구. Build 플랜에서는 Analytics API가 제공되지 않아 `BLOCKED`로 알림 |
 
 - warning 경보는 로그에만 남는다. 수동 해제 경보(회수 미확인·틱 과부하)는 서버에 해제 경로가 없어 발생 알림만 가고 재기동까지 켜져 있다.
 - 전달 실패는 `alert.notify.failed`(경보 id·코드만)로 남고 60초 뒤 다시 보낸다. 감시 잡은 전달에 실패하면 상태를 저장하지 않아 다음 회차에 다시 보낸다. 웹훅 URL은 메시지·오류·로그에 남지 않는다.
 - Docker는 unhealthy 컨테이너를 재시작하지 않는다. 멈춘 서버는 감시 알림을 받고 사람이 재시작한다.
-- 켜기: `kkakkung-production-env`에 `ALERT_WEBHOOK_URL`(선택 `ALERT_WEBHOOK_CHANNEL`)을 넣고 재배포한다. 비어 있으면 경보는 로그에만 남는다. 감시 잡은 [Jenkins 설정 11장](../infra/jenkins/SETUP.md#11-서비스-감시-잡-s15p21c204-288).
+- 켜기: `kkakkung-production-env`에 `ALERT_WEBHOOK_URL`(선택 `ALERT_WEBHOOK_CHANNEL`)을 넣고 재배포한다. 비어 있으면 경보는 로그에만 남는다. 감시 잡은 [Jenkins 설정 11장](../infra/jenkins/SETUP.md#11-서비스-감시-잡-s15p21c204-288), LiveKit 사용량 잡은 [12장](../infra/jenkins/SETUP.md#12-livekit-사용량-잡-s15p21c204-304)의 별도 호스트 작업이다.
 - 호스트 자체가 죽으면 두 경로가 함께 멈춘다. 호스트 밖 감시는 없다.
 
 ## 7. 남은 운영 과제
 
 - 게스트 공개 대상(W07): ingress·배포 manifest가 같은 audience를 선택하고, 같은 이미지로 team→격리 public→team 리허설. 운영 도메인 제한은 유지.
-- 게스트 남용 방어(방 생성 IP 제한 외 추가 정책), LiveKit 월 사용량 경보.
+- 게스트 남용 방어(방 생성 IP 제한 외 추가 정책), LiveKit 월 사용량 경보의 실제 플랜·자격 증명·수신 영수증 확인. 잡 코드와 절차는 준비됐지만 현재 Build 플랜에서는 공식 Analytics API가 제공되지 않아 대시보드 확인이 선행된다.
 - 호스트 외부 백업과 실제 복원 훈련. 호스트 자체 장애는 외부 알림도 함께 멈춘다(호스트 밖 감시 없음).
 - Docker 메모리·CPU·PID 상한이 없다. 실제 게임·미디어·CI 조건에서 상한과 회복을 검증한다.
 - 단일 모드의 공유 방 첫 예약 fsync와 첫 journal 기록 사이 종료 공백.

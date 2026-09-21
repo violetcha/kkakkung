@@ -18,6 +18,7 @@ import {
   PRODUCT_SERVER_MESSAGES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  demoControlSchema,
   demoScenarioRequestSchema,
   productJoinOptionsSchema,
   requestStatusSchema,
@@ -36,6 +37,7 @@ import {
   type Cell,
   type LoadingView,
   type Phase,
+  type MapSize,
   type Role,
 } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
@@ -73,7 +75,9 @@ import { CountdownCoordinator } from './CountdownCoordinator.js';
 import {
   availableScenarios,
   createDemoRunner,
+  SCENARIO_OPTIONS,
   type DemoExit,
+  type DemoOptionKey,
   type DemoScenario,
   type DemoWorld,
 } from './DemoScenarios.js';
@@ -110,6 +114,16 @@ export type ProductRoomDeps<State> = Readonly<{
     fallbackPath: string;
     templateId: string;
     templateVersion: string;
+    /**
+     * S15P21C204-321. 방이 고른 크기별 템플릿. 없는 크기는 위 기본값으로 간다, 그래야 크기별
+     * 맵이 아직 없는 배포도 그대로 돈다.
+     */
+    bySize?: Partial<
+      Record<
+        MapSize,
+        { masterPath: string; fallbackPath: string; templateId: string; templateVersion: string }
+      >
+    >;
   } | null;
   /** E's coordinator; null means media disabled (loading barrier checks client reports only). */
   media: ProductMediaRuntime | null;
@@ -183,6 +197,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly limiter = new CommandLimiter();
     private readonly inboundLimiter = new CommandLimiter({ capacity: 90, refillPerSecond: 45 });
     private closing = false;
+    // S15P21C204-311. 방장이 로비에서 고른 맵 크기. 제품 기본값 maze-v1(31x31)과 같은 large 로
+    // 시작한다. 실제 템플릿 선택은 크기별 맵이 생긴 뒤에 붙인다.
+    private roomMapSize: MapSize = 'large';
+    private roomMapRevision = 0;
     private readonly heartbeat = new HeartbeatTracker({ serverEpoch: deps.serverEpoch });
     private readonly clockSync = new ClockSync({
       serverEpoch: deps.serverEpoch,
@@ -235,10 +253,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly driver: MatchDriver<State>;
     /** S15P21C204-258. Set for a demo room: the operator's role, with five puppets filling 3:3. */
     private operatorRole: Role | null = null;
+    private pendingDemoRole: Role | null = null;
     private readonly puppets = new Set<string>();
     private readonly demoRunner = createDemoRunner();
     private puppetSequence = 0;
     private demoStateSent: string | null = null;
+    private demoAbortRequested = false;
 
     /** A demo room exists to show game situations to one operator, never to admit players. */
     private get demo() {
@@ -546,7 +566,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         const auth = this.playersByConnection.get(client.sessionId);
         const parsed = demoScenarioRequestSchema.safeParse(payload);
         if (!auth || !parsed.success || parsed.data.matchId !== this.context.matchId) return;
-        this.startDemoScenario(auth.playerId, parsed.data.scenario);
+        this.startDemoScenario(auth.playerId, parsed.data.scenario, parsed.data.options);
+      });
+      onInbound(PRODUCT_CLIENT_MESSAGES.demoControl, (client, payload: unknown) => {
+        const auth = this.playersByConnection.get(client.sessionId);
+        const parsed = demoControlSchema.safeParse(payload);
+        if (!auth || !parsed.success || parsed.data.matchId !== this.context.matchId) return;
+        this.abortDemoRound(auth.playerId);
       });
       onInbound(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
         this.heartbeat.ack(client.sessionId, payload, this.context.matchId, deps.monotonicNow());
@@ -580,7 +606,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (deps.strictProduct && !gateFor(this.demo)?.()) throw new ServerError(503, 'NOT_READY');
       const now = deps.monotonicNow();
       if (!auth || auth.roomCode !== this.roomCode) throw new ServerError(403, 'WRONG_ROOM');
-      if (this.phase !== 'LOBBY' && this.phase !== 'DEVICE_CHECK')
+      if (
+        !['LOBBY', 'DEVICE_CHECK'].includes(this.phase) &&
+        !(this.demo && ['RESULT', 'ABORTED'].includes(this.phase))
+      )
         throw new ServerError(403, 'ROOM_CLOSED');
       if (this.clientsByPlayer.has(auth.playerId)) throw new ServerError(409, 'SESSION_IN_USE');
       const claim = deps.sessions.claimConnection(auth.sessionId, client.sessionId);
@@ -634,13 +663,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.lobby.setConnected(auth.playerId, false);
       this.spectateChoices.delete(auth.playerId);
       if (control || heartbeatLost) this.handleConnectionLost(auth.playerId);
-      // Reconnect is intentionally unsupported. Invalidate the single-use session for every
-      // departure so a late onAuth/onJoin cannot resurrect a participant or its old scope.
-      this.lobby.remove(auth.playerId);
+      // Demo sessions are operator tools: keep the single seat and bearer lease so an operator
+      // can reconnect after a browser refresh. Ordinary match sessions remain one-use.
+      const preserveDemoSession = this.demo;
+      if (!preserveDemoSession) this.lobby.remove(auth.playerId);
       this.queue.forgetActor(auth.playerId);
       this.dispatcher.forget(auth.playerId);
-      deps.sessions.invalidate(auth.sessionId);
-      if (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK') {
+      if (!preserveDemoSession) deps.sessions.invalidate(auth.sessionId);
+      if (!preserveDemoSession && (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK')) {
         this.releaseSeat(auth.playerId, 'connection-lost');
         this.evaluateWaiting();
       } else if (PRE_GAME_DEPARTURE_PHASES.includes(phaseAtLeave)) {
@@ -690,6 +720,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         requestId: command.requestId,
         sequence: command.sequence,
       };
+      if (command.type === 'REMATCH' && command.payload.role !== undefined && !this.demo)
+        return this.sendReceipt(client, {
+          ...correlation,
+          status: 'rejected',
+          code: 'NOT_ALLOWED',
+        });
       if (!this.limiter.allow(client.sessionId, now))
         return this.sendReceipt(client, {
           ...correlation,
@@ -747,13 +783,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         READY: ['DEVICE_CHECK'],
         ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
+        ROOM_MAP_SIZE: ['LOBBY'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
         SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
-      if ((type === 'ROOM_LOCK' || type === 'ROOM_KICK') && playerId !== this.lobby.host)
+      if (
+        (type === 'ROOM_LOCK' || type === 'ROOM_KICK' || type === 'ROOM_MAP_SIZE') &&
+        playerId !== this.lobby.host
+      )
         return 'NOT_ALLOWED';
       if (type === 'REMATCH') {
         const gate = gateFor(this.demo);
@@ -820,6 +860,18 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           this.broadcastRoster();
           return { result: 'applied', code: null };
         }
+        case 'ROOM_MAP_SIZE': {
+          // 실행 시점에 다시 본다. 받아들인 뒤에 방장이나 단계가 바뀌었을 수 있다.
+          if (this.phase !== 'LOBBY') return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (command.payload.size !== this.roomMapSize) {
+            this.roomMapSize = command.payload.size;
+            this.roomMapRevision += 1;
+          }
+          this.broadcastRoster();
+          return { result: 'applied', code: null };
+        }
         case 'READY': {
           const result = this.lobby.applyReady(entry.actorId, command.payload.ready, this.phase);
           if (result.result === 'applied') this.broadcastRoster();
@@ -853,6 +905,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           return result;
         }
         case 'REMATCH': {
+          const hadPending = this.rematch.pending !== null;
           const decision = this.rematch.apply({
             actorId: entry.actorId,
             hostId: this.lobby.host,
@@ -864,6 +917,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
               .filter((p) => p.connected)
               .map((p) => p.playerId),
           });
+          if (decision.result === 'applied' && this.demo && !hadPending)
+            this.pendingDemoRole = command.payload.role ?? null;
           return decision.result === 'applied'
             ? { result: 'applied', code: null }
             : { result: decision.result, code: decision.code };
@@ -908,6 +963,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     tick() {
       if (this.disposed || this.closing) return;
       const now = deps.monotonicNow();
+      if (this.demoAbortRequested) {
+        this.demoAbortRequested = false;
+        this.demoRunner.stop();
+        this.abortMatch(null, 'DEMO_OPERATOR_ABORT');
+        return;
+      }
       for (const { connectionId, heartbeat } of this.heartbeat.due(
         now,
         this.context.matchId,
@@ -1037,7 +1098,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           if (frame && this.startRequestedTick !== null && deps.core && deps.tuning) {
             const view = deps.core.getFrame(frame.state);
             if (view.phase === 'PLAYING') {
-              this.context.fixStart(this.startRequestedTick, deps.tuning.roundTicks);
+              this.context.fixStart(
+                this.startRequestedTick,
+                this.demo ? null : deps.tuning.roundTicks,
+              );
               this.setPhase('PLAYING');
             }
           }
@@ -1072,7 +1136,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       else if (verdict === 'to-lobby') {
         this.lobby.clearReady();
         this.setPhase('LOBBY');
-      } else if (verdict === 'all-ready') this.startPractice();
+      } else if (verdict === 'all-ready') {
+        if (this.demo) this.startDemoRound();
+        else this.startPractice();
+      }
     }
 
     // ---- Phase transitions ----
@@ -1132,6 +1199,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         send: (actor, command) =>
           this.enqueuePuppetCommand(actor, command as Pick<CommandEnvelope, 'type' | 'payload'>),
         drop: (actor) => this.dropPuppet(actor),
+        place: (actor, cell, dir) => this.placePuppet(actor, cell, dir),
       });
       this.publishDemoState(world);
     }
@@ -1149,6 +1217,23 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       return true;
     }
 
+    private placePuppet(
+      playerId: string,
+      cell: Cell,
+      dir: import('@kkakkung/protocol/game-schema').Dir,
+    ) {
+      if (!this.puppets.has(playerId) || this.closing) return false;
+      const instance = this.context.instanceOf(playerId);
+      if (!instance || this.phase !== 'PLAYING') return false;
+      this.driver.enqueueControl(instance.gameInstanceId, {
+        type: 'PLACE_PLAYER',
+        playerId,
+        cell,
+        dir,
+      });
+      return true;
+    }
+
     /** The world a scenario reads: positions from the core frame, exits from the demo reader. */
     private demoWorld(): DemoWorld | null {
       const instance = this.gameInstance();
@@ -1157,6 +1242,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const frame = deps.core.getFrame(attached.state);
       const operatorId = [...this.roles.keys()].find((playerId) => !this.puppets.has(playerId));
       if (!operatorId) return null;
+      const operator = deps.core.getPlayerSelf(attached.state, operatorId);
       const challenges: Record<string, string> = {};
       const exchanges: Record<string, string> = {};
       for (const playerId of this.puppets) {
@@ -1165,6 +1251,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         if (self.challenge) challenges[playerId] = self.challenge.challengeId;
         if (self.exchange) exchanges[playerId] = self.exchange.exchangeId;
       }
+      const operatorExit = (deps.demoExits?.(attached.state) ?? []).find(
+        (exit) => exit.ownerId === operatorId,
+      );
       return {
         tick: frame.tick,
         topology: attached.topology,
@@ -1175,16 +1264,39 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         exchanges,
         operatorId,
         puppetIds: [...this.puppets],
+        operator:
+          operator?.status === 'ACTIVE'
+            ? {
+                installations: operator.ownedEquipment.map(({ kind, cell, state }) => ({
+                  kind,
+                  cell,
+                  state,
+                })),
+                challengeId: operator.challenge?.challengeId ?? null,
+                exchangeId: operator.exchange?.exchangeId ?? null,
+                exit: operatorExit ?? null,
+              }
+            : undefined,
       };
     }
 
     /** Accepts a scenario request from the operator of a demo room. */
-    private startDemoScenario(playerId: string, scenario: DemoScenario) {
+    private startDemoScenario(
+      playerId: string,
+      scenario: DemoScenario,
+      options?: import('./DemoScenarios.js').DemoScenarioOptions,
+    ) {
       if (!this.demo || this.puppets.has(playerId)) return;
       const world = this.demoWorld();
       if (!world || world.operatorId !== playerId) return;
-      this.demoRunner.start(scenario, world);
+      this.demoRunner.start(scenario, world, options);
       this.publishDemoState(world);
+    }
+
+    private abortDemoRound(playerId: string) {
+      if (!this.demo || this.puppets.has(playerId) || this.operatorId() !== playerId) return;
+      if (!['PLAYING', 'COUNTDOWN', 'GAME_LOADING', 'MAP_FINALIZING'].includes(this.phase)) return;
+      this.demoAbortRequested = true;
     }
 
     /**
@@ -1193,12 +1305,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      */
     private publishDemoState(world: DemoWorld | null = null) {
       const status = this.demoRunner.status;
+      const available = (world ? availableScenarios(world) : [...DEMO_SCENARIO_IDS]).map((id) => ({
+        id,
+        options: [...SCENARIO_OPTIONS[id]] as DemoOptionKey[],
+      }));
       const message: DemoStateMessage = {
         matchId: this.context.matchId,
-        available: world ? availableScenarios(world) : [...DEMO_SCENARIO_IDS],
+        available,
         running: status.scenario,
         step: status.step,
-        failure: status.failure,
+        failureCode: status.failure,
+        operatorExit: world?.operator?.exit?.approach ?? null,
       };
       const fingerprint = JSON.stringify(message);
       if (fingerprint === this.demoStateSent) return;
@@ -1312,6 +1429,29 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.settlePuppets();
     }
 
+    /** Demo rooms have no human teammates or media, so device check goes straight to map setup. */
+    private startDemoRound() {
+      const gate = gateFor(this.demo);
+      if (gate && !gate()) {
+        this.blockedReason = 'NOT_READY';
+        return;
+      }
+      if (!deps.core || !deps.tuning) {
+        this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
+        return;
+      }
+      const operatorId = this.demo ? this.operatorId() : null;
+      const roles = this.lobby.assignRoles(
+        this.demo && operatorId ? this.puppetRolePlan(operatorId) : this.context.takeRolePlan(),
+      );
+      this.roles.clear();
+      for (const [playerId, role] of roles) this.roles.set(playerId, role);
+      if (this.context.seed === null)
+        this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
+      this.blockedReason = null;
+      this.setPhase('MAP_FINALIZING');
+    }
+
     private endPractice(next: 'to-map-finalizing' | 'to-device-check') {
       for (const instance of this.driver.attached().filter((i) => i.kind === 'practice'))
         this.retireInstance(instance.gameInstanceId, 'phase-change');
@@ -1407,7 +1547,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       const seed = this.context.seed ?? 0;
-      const { loader, masterPath, fallbackPath, templateId, templateVersion } = deps.layouts;
+      const { loader } = deps.layouts;
+      // 방이 로비에서 고른 크기의 템플릿으로 준비한다.
+      const { masterPath, fallbackPath, templateId, templateVersion } =
+        deps.layouts.bySize?.[this.roomMapSize] ?? deps.layouts;
       const revision = ++this.layoutRevision;
       const matchId = this.matchId;
       this.finalizing = loader
@@ -1448,6 +1591,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         tuning: deps.tuning,
         layout,
         players,
+        deadline: this.demo ? 'none' : 'round',
       });
       const mediaInstanceId = randomUUID();
       this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
@@ -1675,6 +1819,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (this.hasUnresolvedMedia()) return;
       this.invalidateLayout();
       const request = this.rematch.take();
+      const operatorId = this.demo ? this.operatorId() : null;
+      const requestedDemoRole = this.pendingDemoRole;
+      this.pendingDemoRole = null;
+      if (requestedDemoRole) this.operatorRole = requestedDemoRole;
       const now = deps.monotonicNow();
       for (const instance of this.driver.attached())
         this.retireInstance(instance.gameInstanceId, 'round-ended');
@@ -1689,9 +1837,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.spectateChoices.clear();
       // A demo room's "back to lobby" rematch still keeps the operator's chosen role: a random
       // draw could hand the operator a role the scenario list was not made for.
-      const operatorId = this.demo ? this.operatorId() : null;
       this.context.setRolePlan(
-        request?.plan ?? (operatorId ? this.puppetRolePlan(operatorId) : null),
+        this.demo && operatorId
+          ? this.puppetRolePlan(operatorId)
+          : (request?.plan ?? (operatorId ? this.puppetRolePlan(operatorId) : null)),
       );
       this.loading.invalidate();
       this.countdown.cancel();
@@ -1935,6 +2084,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           { matchId: this.context.matchId, ...access },
           { afterNextPatch: true },
         );
+      this.broadcast(
+        PRODUCT_SERVER_MESSAGES.roomMap,
+        { matchId: this.context.matchId, revision: this.roomMapRevision, size: this.roomMapSize },
+        { afterNextPatch: true },
+      );
       // The client must observe a new match before its roster; old-match data is rejected.
       this.broadcast(
         PRODUCT_SERVER_MESSAGES.roomRoster,

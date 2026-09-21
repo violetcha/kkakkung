@@ -1024,6 +1024,14 @@ describe('createInteractionRuntime', () => {
         type: 'INSTALL_CANCEL',
         payload: { installationId: 'installed' },
       });
+      key('KeyG');
+      expect(base.deps.sendCommand).toHaveBeenLastCalledWith({ type: 'GRAB_INTENT', payload: {} });
+      key('KeyG', true);
+      expect(
+        vi
+          .mocked(base.deps.sendCommand)
+          .mock.calls.filter(([command]) => command.type === 'GRAB_INTENT'),
+      ).toHaveLength(1);
       key('Digit1', true);
       expect(base.deps.onInteractionState).not.toHaveBeenCalledWith({
         mode: 'keyboard',

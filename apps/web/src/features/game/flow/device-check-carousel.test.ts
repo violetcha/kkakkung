@@ -1,14 +1,9 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, beforeAll, expect, it } from 'vitest';
-import { clearConsentedDevice, useConsentedDevice } from '../../room/consent-fixture';
+import { expect, it } from 'vitest';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import { DeviceCheckScreen } from './DeviceCheckScreen';
 import { INITIAL_DEVICES } from './device-readiness';
-
-// 장치 점검은 동의 게이트 뒤에 있다(S15P21C204-292). 여기서 보는 것은 그 뒤 화면이다.
-beforeAll(() => useConsentedDevice());
-afterAll(() => clearConsentedDevice());
 
 const render = (
   status: DeviceStatus,
@@ -20,6 +15,9 @@ const render = (
       ready: false,
       onStart: async () => {},
       onReady() {},
+      // 동의 게이트 뒤의 화면을 본다(S15P21C204-292). 게이트 자체는 consent-bypass 시험이 본다.
+      consented: true,
+      onConsent() {},
       ...extra,
     }),
   );
@@ -88,4 +86,12 @@ it('only offers ready when every device passed and only where ready can be repor
   // 개인 체험처럼 보고할 곳이 없는 화면은 준비 단추를 그리지 않는다.
   expect(render(allReady, { onReady: undefined })).not.toContain('준비 완료');
   expect(render(allReady, { ready: true })).toContain('준비 취소');
+});
+
+it('lets a demo room skip devices while keeping the real check opt-in', () => {
+  const html = render(INITIAL_DEVICES, { demo: true });
+  expect(html).toContain('데모 방 준비');
+  expect(html).toContain('장치 점검 없이 준비 완료');
+  expect(html).toContain('장치 점검 진행');
+  expect(html).not.toContain('카메라 켜고 점검하기');
 });

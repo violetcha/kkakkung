@@ -45,7 +45,7 @@ export function GameHud({
           {practice
             ? '조작 연습'
             : remaining === null
-              ? '시간 확인 중'
+              ? '데모 진행'
               : `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`}
         </strong>
       </div>

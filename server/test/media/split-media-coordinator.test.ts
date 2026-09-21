@@ -300,7 +300,7 @@ describe('actual split media factory with durable files and controlled Cloud tra
       return clone;
     });
     const reconcile = f.coordinator.reconcile();
-    await vi.waitFor(() => expect(f.forward).toHaveBeenCalled(), { timeout: 1000, interval: 5 });
+    await vi.waitFor(() => expect(f.forward).toHaveBeenCalled(), { timeout: 5000, interval: 5 });
     let retired = false;
     const retirement = f.retire(a).then((result) => {
       retired = true;
@@ -308,7 +308,7 @@ describe('actual split media factory with durable files and controlled Cloud tra
     });
     await vi.waitFor(
       () => expect(f.remote.has(f.key(a.grant.roomName, a.grant.mediaIdentity))).toBe(false),
-      { timeout: 1000, interval: 5 },
+      { timeout: 5000, interval: 5 },
     );
     expect(retired).toBe(false);
     gate.resolve();

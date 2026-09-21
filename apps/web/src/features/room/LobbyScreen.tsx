@@ -3,6 +3,8 @@ import type { RoomAccessMessage, RoomRosterMessage } from '@kkakkung/protocol/ga
 import type { RequestDisplay } from './command-lifecycle';
 import { commandFeedback } from '../game/flow/command-feedback';
 import { PRIVACY_NOTICE } from './privacy-notice';
+import { MapSizeChoice } from './MapSizeChoice';
+import { DEFAULT_MAP_SIZE, type MapSizeId } from './map-size';
 export function LobbyScreen({
   roster,
   selfId,
@@ -12,6 +14,10 @@ export function LobbyScreen({
   kickRequest,
   onLock,
   onKick,
+  mapSize = DEFAULT_MAP_SIZE,
+  canChooseMapSize = false,
+  mapSizeRequest,
+  onSelectMapSize,
 }: {
   roster: RoomRosterMessage;
   selfId: string;
@@ -21,10 +27,16 @@ export function LobbyScreen({
   kickRequest?: RequestDisplay;
   onLock?(locked: boolean): void;
   onKick?(targetPlayerId: string): void;
+  /** 방이 고른 맵 크기. 서버가 방마다 맵을 갖기 전까지는 화면에서만 유지된다. */
+  mapSize?: MapSizeId;
+  /** 방장이고 아직 바꿀 수 있는 단계(LOBBY)일 때만 true. */
+  canChooseMapSize?: boolean;
+  mapSizeRequest?: RequestDisplay;
+  onSelectMapSize?(size: MapSizeId): void;
 }) {
   const [removalId, setRemovalId] = useState<string | null>(null);
   const host = roster.hostId === selfId;
-  const busy = [lockRequest, kickRequest].some(
+  const busy = [lockRequest, kickRequest, mapSizeRequest].some(
     (request) => request && ['pending', 'waiting-view'].includes(request.status),
   );
   const removal = roster.players.find(
@@ -49,6 +61,12 @@ export function LobbyScreen({
           {currentAccess?.locked ? '입장 잠금 해제' : '입장 잠그기'}
         </button>
       )}
+      <MapSizeChoice
+        value={mapSize}
+        canEdit={host && canChooseMapSize}
+        busy={busy}
+        onSelect={onSelectMapSize}
+      />
       <ol>
         {Array.from({ length: 6 }, (_, index) => {
           const player = roster.players[index];
@@ -93,7 +111,7 @@ export function LobbyScreen({
         </div>
       )}
       {busy && <p role="status">방 관리를 처리하고 있습니다.</p>}
-      {[lockRequest, kickRequest].map((request, index) =>
+      {[lockRequest, kickRequest, mapSizeRequest].map((request, index) =>
         commandFeedback(request) ? (
           <p role="status" key={index}>
             {commandFeedback(request)}

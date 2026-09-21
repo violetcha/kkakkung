@@ -7,7 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { Client } from '@colyseus/sdk';
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
   DEMO_ROOM_ROUTE,
   MEDIA_ROUTES,
@@ -19,10 +19,19 @@ import type { MatchState } from '@kkakkung/game-core/match';
 import { bindProductRoom } from '../../../apps/web/src/app/product-runtime';
 import { createSyntheticInteractionFactory } from '../../../apps/web/src/app/product-integration-fixture';
 import { productRoomPort } from '../../../apps/web/src/features/room/product-session';
+import {
+  clearConsentedDevice,
+  useConsentedDevice,
+} from '../../../apps/web/src/features/room/consent-fixture';
 import { createApplication } from '../../src/bootstrap.js';
 import { parseConfig } from '../../src/config/env.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
 import { createTestOperatorAuth, TEST_OPS_TOKEN } from './test-harness.js';
+
+// The real web runtime refuses to touch devices before the privacy notice is accepted
+// (S15P21C204-292). This test drives that runtime, so it starts from a consented device.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 it('takes the operator to PLAYING through the web runtime without any media grant', async () => {
   const config = {
@@ -102,23 +111,12 @@ it('takes the operator to PLAYING through the web runtime without any media gran
     await expect.poll(() => runtime.getSnapshot().demo?.available.length ?? 0).toBeGreaterThan(0);
     await runtime.startDevices(false);
     runtime.ready(true);
-    await expect.poll(phase, { timeout: 10_000 }).toBe('TEAM_PRACTICE');
-    // 연습 뷰가 도착해 practicePresenter 가 준비를 허용할 때까지 보고를 되풀이한다(사람은 버튼을 누른다).
-    await expect
-      .poll(
-        () => {
-          runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } });
-          return runtime.getSnapshot().practiceReady;
-        },
-        { timeout: 10_000 },
-      )
-      .toBe(true);
+    await expect.poll(phase, { timeout: 10_000 }).toBe('GAME_LOADING');
     // Before this fix the client waited for '카메라 연결 · 내 얼굴 게시 확인' here until the 30 s
     // LOADING_TIMEOUT sent everyone back to DEVICE_CHECK.
     await expect.poll(phase, { timeout: 20_000 }).toBe('PLAYING');
     expect(phases).toEqual([
       'DEVICE_CHECK',
-      'TEAM_PRACTICE',
       'MAP_FINALIZING',
       'GAME_LOADING',
       'COUNTDOWN',

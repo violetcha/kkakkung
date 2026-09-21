@@ -126,6 +126,8 @@ async function fixture(demoRooms = true, strictProduct = false) {
   };
 }
 
+// The phase waits below are wider than the sibling tests: under a full parallel vitest run on a
+// 4-core host this match with five puppets took 15.9 s to reach PLAYING (2026-09-18, local).
 it('takes one operator through the real phases into a match with five puppets', async () => {
   const f = await fixture();
   try {
@@ -147,23 +149,18 @@ it('takes one operator through the real phases into a match with five puppets', 
     // The roster never reveals a role, not even for puppets.
     expect(JSON.stringify(rosters.at(-1))).not.toMatch(/runner|tagger/);
 
-    // Practice: puppets report at once, so the operator's own report moves the room on.
-    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 5000 });
-    expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
-      'accepted',
-    );
-
-    // A real match: A's map selection, the 3:3 assignment and the operator's own exit.
-    await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
+    // Demo rooms skip team practice: there are no human teammates or media to prepare.
+    // A real match still goes through map selection, the 3:3 assignment and the operator's exit.
+    await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
     expect((await f.send(room, { type: 'LOAD_READY', payload: loadPayload(views) })).status).toBe(
       'accepted',
     );
-    await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 15_000 });
+    await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 30_000 });
     const self = views.at(-1)?.self;
     expect(self?.status === 'ACTIVE' && self.role).toBe('runner');
     // A real game instance with the round armed, not a practice instance.
     expect(views.at(-1)?.gameScope.kind).toBe('game');
-    expect(room.state.deadlineTick).toBeGreaterThan(room.state.startTick ?? 0);
+    expect(room.state.deadlineTick ?? null).toBeNull();
     expect(room.state.counts.escaped).toBe(0);
     expect(room.state.counts.captured).toBe(0);
     // The operator plays by the ordinary rules: a command is judged by A's core.
@@ -251,12 +248,8 @@ it('opens the demo room on the deployed composition, where a match cannot start'
     room.onMessage('private-view', (value: PrivateView) => views.push(value));
     await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
     expect(f.application.slots!.occupied(session.roomCode)).toBe(1);
-    // startPractice and startCountdown answer to the same demo gate.
+    // The demo gate still applies while the practice phase is skipped.
     expect((await f.send(room, { type: 'READY', payload: { ready: true } })).status).toBe(
-      'accepted',
-    );
-    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 5000 });
-    expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
       'accepted',
     );
     await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });

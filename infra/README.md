@@ -77,12 +77,15 @@ SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested �
 ```
 push → Jenkins
   Prepare       TAG = 커밋 SHA 8자리, GitLab 이 보낸 SHA 와 체크아웃 대조
-  Secret scan   gitleaks (실패 시 중단)
+  Secret scan   gitleaks (실패 시 중단). 이 빌드가 더한 커밋만 읽는다 (범위를 못 정하면 전체)
   Verify        scripts/ci-verify.mjs: 도구체인 → SHA 대조 → frozen install → Chromium → pnpm verify 1회 (kkakkung-ci 컨테이너, jenkins uid)
   Build images  kkakkung-game:<TAG>, kkakkung-web:<TAG> (revision 라벨 = 커밋 SHA)
-  Scan images   trivy (기록만)
+                배포 빌드는 항상, MR 빌드는 이미지에 들어가는 파일을 건드렸을 때만
   Deploy        develop 만. verify-release.mjs → deploy-release.mjs (아래 장벽). 실패 시 러너가 같은 장벽으로 이전 이미지 복귀
 ```
+
+이미지 취약점 스캔(trivy)은 파이프라인이 아니라 야간 잡 `kkakkung-image-scan` 이 배포돼 있는 이미지를
+대상으로 한다(`infra/jenkins/image-scan.Jenkinsfile`). 결과는 기록만 하고 배포를 막지 않는다.
 
 ## 배포 장벽 (DP-06, `scripts/deploy-release.mjs`)
 

@@ -37,6 +37,8 @@ it('allows device recovery during practice/play and preserves phase locks and th
       onLocalPreview: vi.fn(),
     },
     () => runtime,
+    // 이 시험이 보는 것은 단계 잠금이다. 동의는 이미 받았다고 두고 본다(S15P21C204-292).
+    () => true,
   );
   for (const phase of ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'] as const) {
     bridge.setContext({ ...context, phase, mode: 'keyboard' });

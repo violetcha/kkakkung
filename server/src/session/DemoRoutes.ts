@@ -23,6 +23,7 @@ export function createDemoRoutes(deps: {
   slots: SlotRegistry;
   authorize: OperatorAuthorize;
   monotonicNow: () => number;
+  demoAdmissionTtlMs: number;
   cleanupReservations?: () => void;
 }): Router {
   const router = Router();
@@ -39,6 +40,7 @@ export function createDemoRoutes(deps: {
         nickname: parsed.data.nickname ?? '관리자',
         inviteId: 'demo:' + randomUUID(),
         roomCode,
+        admissionTtlMs: deps.demoAdmissionTtlMs,
       });
     } catch {
       return void res.status(503).json({ error: 'CAPACITY' });
@@ -56,7 +58,10 @@ export function createDemoRoutes(deps: {
       playerId: issued.playerId,
       roomCode,
       role: parsed.data.role,
-      expiresAt: issued.expiresAt,
+      // Before the first connection this is the demo admission deadline, not the longer session
+      // lease. The operator script prints this value so an unused demo seat is not mistaken for a
+      // live room that may be opened later.
+      expiresAt: issued.admissionExpiresAt ?? issued.expiresAt,
       protocolVersion: PRODUCT_PROTOCOL_VERSION,
       entryFragment:
         '#demo=' +

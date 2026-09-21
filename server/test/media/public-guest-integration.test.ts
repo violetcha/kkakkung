@@ -4,7 +4,7 @@
 // public combination, not Cloud reception, abuse resistance or a public deployment.
 import { randomUUID } from 'node:crypto';
 import { Client } from '@colyseus/sdk';
-import { afterEach, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 import {
   ROOM_INVITATION_ROUTE,
   roomInvitationResponseSchema,
@@ -16,8 +16,17 @@ import type { PublicMatchState } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/version';
 import { bindProductRoom } from '../../../apps/web/src/app/product-runtime';
 import { productRoomPort } from '../../../apps/web/src/features/room/product-session';
+import {
+  clearConsentedDevice,
+  useConsentedDevice,
+} from '../../../apps/web/src/features/room/consent-fixture';
 import { createSyntheticInteractionFactory } from '../../../apps/web/src/app/product-integration-fixture';
 import { startProductServerProcess } from './product-server-process.js';
+
+// The real web runtime refuses to touch devices before the privacy notice is accepted
+// (S15P21C204-292). These clients drive that runtime, so they start from a consented device.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 const closers: (() => Promise<unknown>)[] = [];
 afterEach(async () => {

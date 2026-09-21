@@ -9,7 +9,9 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
+import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
+import { useMediaConsent } from '../features/room/use-media-consent';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { FaceGuidanceNotice } from '../features/game/flow/FaceGuidanceNotice';
@@ -58,6 +60,9 @@ export function ProductApp({
   /** S15P21C204-260. Operator demo session from the address fragment; absent for players. */
   demoSession?: SessionResponse;
 }) {
+  // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
+  // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
+  const consent = useMediaConsent();
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState(initialRoom);
   const [createRoom, setCreateRoom] = useState(!initialRoom);
@@ -341,6 +346,7 @@ export function ProductApp({
           onMicrophone={async (enabled) => {
             await runtime.current?.setMicrophone(enabled);
           }}
+          consented={consent.consented}
           canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
           compact={worldVisible}
           variant={round.phase === 'TEAM_PRACTICE' ? 'quiet' : 'full'}
@@ -555,6 +561,12 @@ export function ProductApp({
               lockRequest={snapshot.requests.ROOM_LOCK}
               kickRequest={snapshot.requests.ROOM_KICK}
               onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
+              mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
+              canChooseMapSize={round.phase === 'LOBBY'}
+              mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
+              onSelectMapSize={(size) =>
+                runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
+              }
               onKick={(targetPlayerId) =>
                 runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
               }
@@ -588,6 +600,16 @@ export function ProductApp({
                 await runtime.current?.setMicrophone(enabled);
               }}
               onTestTone={playTestTone}
+              consented={consent.consented}
+              onConsent={consent.accept}
+              demo={Boolean(snapshot.demo)}
+            />
+          )}
+          {snapshot.demo && round?.phase === 'DEVICE_CHECK' && (
+            <DemoPanel
+              demo={snapshot.demo}
+              phase={round.phase}
+              onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
             />
           )}
           {round && inResult && (
@@ -614,6 +636,7 @@ export function ProductApp({
                   ownerNames={playerNames}
                   quality={snapshot.quality}
                   standIn={demoFace.current}
+                  grabAnimationId={snapshot.grabAnimationId}
                   renderTick={() => runtime.current?.renderTick() ?? null}
                   {...(metrics.current
                     ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
@@ -635,6 +658,13 @@ export function ProductApp({
                   ) : null
                 }
               />
+              {snapshot.demo && (
+                <DemoPanel
+                  demo={snapshot.demo}
+                  phase={round.phase}
+                  onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                />
+              )}
               {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
               {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
               {interactiveWorld && (
@@ -742,12 +772,6 @@ export function ProductApp({
                       onSelect={(kind) => runtime.current?.selectEquipment(kind)}
                       send={(command) => runtime.current?.send(command)}
                     />
-                    {snapshot.demo && (
-                      <DemoPanel
-                        demo={snapshot.demo}
-                        onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
-                      />
-                    )}
                     {localControls}
                   </div>
                 </details>

@@ -217,7 +217,8 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
     const walking = step(withTagger, 13, [
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    const contact = step(idleUntil(walking, 14, 21), 22);
+    const armed = step(idleUntil(walking, 14, 20), 21, [command('t-a', 'GRAB_INTENT', {})]).state;
+    const contact = step(armed, 22);
     expect(player(contact.state, 't-a').cell).toEqual(CELL);
     expect(player(contact.state, 'r-a').status).toBe('CAPTURED');
 
@@ -228,7 +229,10 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
     const chasing = step(immune, 41, [
       command('t-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
-    const caught = step(idleUntil(chasing, 42, 49), 50);
+    const armedAgain = step(idleUntil(chasing, 42, 48), 49, [
+      command('t-a', 'GRAB_INTENT', {}),
+    ]).state;
+    const caught = step(armedAgain, 50);
     expect(player(caught.state, 'r-a').status).toBe('CAPTURED');
   });
 });

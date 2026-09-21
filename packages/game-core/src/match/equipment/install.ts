@@ -41,8 +41,11 @@ export function frontWallFace(topology: Topology, cell: Cell, dir: Dir): WallFac
   return { x: wall.x, y: wall.y, side: ((dir + 2) % 4) as Dir };
 }
 
-/** Every player's placement cell: no device may be installed on a start cell. */
-function isStartCell(state: MatchState, cell: Cell): boolean {
+/**
+ * Every player's placement cell: no device may be installed on a start cell. S15P21C204-316
+ * reuses it so the demo harness cannot place a participant on one either.
+ */
+export function isStartCell(state: MatchState, cell: Cell): boolean {
   return state.layout.players.some((placed) => sameCell(placed.cell, cell));
 }
 

@@ -44,11 +44,12 @@ const environment = z.object({
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
   PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
   // S15P21C204-267. Which certified template under PRODUCT_CONTENT_DIR the product room plays:
-  // maps/<id>.json with placements/<id>-fallback.json. The open grid stays the default.
+  // maps/<id>.json with placements/<id>-fallback.json. S15P21C204-302 made the corridor maze the
+  // default; the open grid master-v1 stays certified and selectable for load and regression runs.
   PRODUCT_MAP_TEMPLATE: z
     .string()
     .regex(/^[a-z0-9-]+$/)
-    .default('master-v1'),
+    .default('maze-v1'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(2567),
   ALLOWED_ORIGINS: z
@@ -100,6 +101,9 @@ const environment = z.object({
   // Demo rooms (S15P21C204-258): an operator-only room with server-driven puppets, used to show
   // game situations without six people. Off unless explicitly enabled, and always behind OPS_TOKEN.
   DEMO_ROOMS: z.enum(['0', '1']).default('0'),
+  // S15P21C204-312. A demo session may wait longer for the operator to open it than a player
+  // admission; claiming it still changes the session to the ordinary activity lease.
+  DEMO_ADMISSION_TTL_MS: positiveSafeInt.default(10 * 60_000),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -313,6 +317,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
       : null,
     // The operator token is the only way in, so a demo room without it is never opened.
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
+    demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

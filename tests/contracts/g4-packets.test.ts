@@ -37,7 +37,9 @@ describe('taggers: exits, unexplored terrain and out-of-sight coordinates never 
     v.publish('initial');
     // t1 walks north toward the runners for a while; views are published after every tick.
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     v.h.stop('t1');
     v.tickAndPublish(3);
     for (const id of TAGGERS) {
@@ -112,26 +114,31 @@ describe('taggers: exits, unexplored terrain and out-of-sight coordinates never 
 });
 
 describe('runners: only discovered, still-active exits; nothing of the others before an exchange', () => {
-  it('r1 learns its own exit by seeing the wall face; r2 and r3 keep none, and no view carries poseKind', () => {
+  it('runners learn exits only from wall faces they actually saw; r2 and r3 keep none, and no view carries poseKind', () => {
     const v = createViewHarness();
     v.h.start();
     v.publish('initial');
-    // From (5,6) facing north the south face of (5,2) is exactly 3.5 cells away: r1 sees its own
-    // exit from the first tick, and it is the only one it will ever know without an exchange.
-    expect(parseView(v.latestView('r1')).knownActiveExits.map((e) => e.exitId)).toEqual([
-      'exit-r1',
-    ]);
+    // Discovery is observation, never a handout: every exit r1 knows on the first tick is one
+    // whose wall face is in r1's own visible set that tick. S15P21C204-302 widened the sight to
+    // five cells, so from (5,6) this open 12x12 fixture reaches all three row-2 faces at once;
+    // the product corridor maze only ever shows a runner the faces down its own corridor.
+    const initial = parseView(v.latestView('r1'));
+    const seen = new Set(initial.visibleWallFaces.map((f) => `${f.x},${f.y},${f.side}`));
+    expect(initial.knownActiveExits.length).toBeGreaterThan(0);
+    for (const exit of initial.knownActiveExits)
+      expect(seen.has(`${exit.wall.x},${exit.wall.y},${exit.wall.side}`)).toBe(true);
+    expect(initial.knownActiveExits.map((e) => e.exitId)).toContain('exit-r1');
     v.h.walk('r1', 3);
     v.publish('change');
     const r1 = parseView(v.latestView('r1'));
-    expect(r1.knownActiveExits).toEqual([
+    expect(r1.knownActiveExits).toContainEqual(
       expect.objectContaining({
         exitId: 'exit-r1',
         ownerId: 'r1',
         wall: { x: 5, y: 2, side: 2 },
         approach: { x: 5, y: 3 },
       }),
-    ]);
+    );
     expect(JSON.stringify(r1)).not.toContain('poseKind');
     for (const id of ['r2', 'r3']) {
       const view = parseView(v.latestView(id));
@@ -159,7 +166,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.h.start();
     v.publish('initial');
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     expect(v.h.player('r1').status).toBe('CAPTURED');
     const ended = parseView(v.latestView('r1'));
     expect(ended.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });
@@ -199,7 +208,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.h.start();
     v.publish('initial');
     v.h.move('t1');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t1');
+    v.tickAndPublish(2);
     expect(v.h.player('r1').status).toBe('CAPTURED');
     v.spectate('r1', 'r3');
     v.publish('change');
@@ -215,7 +226,9 @@ describe('ended runners receive only their spectate target’s view', () => {
     v.spectate('r1', 'r3');
     v.publish('change');
     v.h.move('t3');
-    v.tickAndPublish(MOVE + 1);
+    v.tickAndPublish(MOVE - 1);
+    v.h.grab('t3');
+    v.tickAndPublish(2);
     expect(v.h.player('r3').status).toBe('CAPTURED');
     // Two captures end the round; the spectate view is gone with PLAYING.
     expect(v.publicState().phase).toBe('RESULT');
