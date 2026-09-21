@@ -86,12 +86,13 @@ try {
   });
   const normalizedFamily = (value) => value.replaceAll('"', '').replaceAll("'", '');
   if (Object.values(fonts.loaded).some((loaded) => !loaded)) throw new Error('FONT_LOAD_FAILED');
+  // S15P21C204-294: product text uses the system gothic stack; the Galmuri faces stay bundled
+  // (FONT_LOAD_FAILED above) for the logo and notices but are no longer part of the text tokens.
+  const systemGothic = 'Segoe UI, Apple SD Gothic Neo, Malgun Gothic, sans-serif';
   if (
-    normalizedFamily(fonts.body) !== 'Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif' ||
-    normalizedFamily(fonts.control) !==
-      'Galmuri11, Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif' ||
-    normalizedFamily(fonts.small) !==
-      'Galmuri9, Galmuri14, Pretendard, Noto Sans KR, system-ui, sans-serif'
+    normalizedFamily(fonts.body) !== systemGothic ||
+    normalizedFamily(fonts.control) !== systemGothic ||
+    normalizedFamily(fonts.small) !== systemGothic
   )
     throw new Error('FONT_FALLBACK_INVALID');
   const result = await page.evaluate(async (workerPath) => {
