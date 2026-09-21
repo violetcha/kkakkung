@@ -7,9 +7,19 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PLAN, REQUIRED, checkSourceSha, checkToolchain } from '../../scripts/ci-verify.mjs';
+import {
+  changedFilesAgainst,
+  needsImageBuild,
+  touchesImageInputs,
+} from '../../scripts/needs-image-build.mjs';
+import { scanRange } from '../../scripts/secret-scan-range.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const jenkinsfile = readFileSync(resolve(root, 'Jenkinsfile'), 'utf8');
+const imageScanJenkinsfile = readFileSync(
+  resolve(root, 'infra/jenkins/image-scan.Jenkinsfile'),
+  'utf8',
+);
 const dockerfileCi = readFileSync(resolve(root, 'infra/docker/Dockerfile.ci'), 'utf8');
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
   packageManager: string;
@@ -100,6 +110,7 @@ describe('Jenkinsfile uses the single entry point', () => {
       jenkinsfile.indexOf("stage('Verify')"),
       jenkinsfile.indexOf("stage('Build images')"),
     );
+    expect(verifyStage).not.toBe('');
     for (const inner of ['pnpm format:check', 'pnpm lint', 'pnpm typecheck', 'pnpm test'])
       expect(verifyStage).not.toContain(inner);
     expect(jenkinsfile).not.toContain('RUN_NODE');
@@ -127,5 +138,107 @@ describe('Jenkinsfile uses the single entry point', () => {
     const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
     expect(post).toMatch(/failure \{/);
     expect(post).not.toMatch(/currentBuild\.result\s*=\s*'SUCCESS'/);
+  });
+});
+
+// S15P21C204-322. 파이프라인에서 결과에 영향을 주지 않던 단계를 걷어낸 상태를 고정한다.
+describe('pipeline carries no stage that cannot change its verdict', () => {
+  it('builds images only when they are deployed or their inputs changed', () => {
+    expect(jenkinsfile).toContain(
+      'node scripts/needs-image-build.mjs --deploy "$IS_DEPLOY" --base origin/develop',
+    );
+    const stage = jenkinsfile.slice(jenkinsfile.indexOf("stage('Build images')"));
+    expect(stage.slice(0, stage.indexOf('steps'))).toMatch(
+      /when \{ environment name: 'NEEDS_IMAGES', value: 'true' \}/,
+    );
+  });
+  it('scans images in the nightly job, not in the build that cannot fail on the result', () => {
+    // 옛 단계는 `--exit-code 0` 이라 취약점이 나와도 통과시키면서 잠금을 1~3분 쥐고 있었다.
+    expect(jenkinsfile).not.toContain("stage('Scan images')");
+    expect(jenkinsfile).not.toContain('trivy');
+    expect(imageScanJenkinsfile).toContain('aquasec/trivy:');
+    expect(imageScanJenkinsfile).toMatch(/triggers \{ cron\(/);
+    // 배포된 것만 본다. 아무도 쓰지 않는 MR 이미지를 스캔하던 것이 문제였다.
+    expect(imageScanJenkinsfile).toContain('last-good-tag');
+  });
+  it('pins every scanner tag so a build never silently changes what it ran', () => {
+    for (const source of [jenkinsfile, imageScanJenkinsfile])
+      expect(source).not.toMatch(/(gitleaks|trivy):latest/);
+    expect(jenkinsfile).toMatch(/GITLEAKS_IMAGE = 'zricethezav\/gitleaks:v\d+\.\d+\.\d+'/);
+    expect(imageScanJenkinsfile).toMatch(/TRIVY_IMAGE = 'aquasec\/trivy:\d+\.\d+\.\d+'/);
+  });
+  it('bounds the secret scan to this build without ever skipping it', () => {
+    expect(jenkinsfile).toContain('node scripts/secret-scan-range.mjs "$SCAN_BASE"');
+    const stage = jenkinsfile.slice(
+      jenkinsfile.indexOf("stage('Secret scan')"),
+      jenkinsfile.indexOf("stage('Verify')"),
+    );
+    expect(stage).toContain('--exit-code 1');
+    // 범위를 못 정하면 인자 없이 전체를 읽는다. 건너뛰는 갈래가 없어야 한다.
+    expect(stage).toMatch(/set --\s*$/m);
+    expect(stage).not.toMatch(/exit 0/);
+  });
+});
+
+describe('needs-image-build decides conservatively', () => {
+  const infra = ['infra/docker/Dockerfile.web'];
+  const source = ['server/src/rooms/KkakkungRoom.ts', 'docs/testing.md'];
+  it('always builds for a deploy', () => {
+    expect(needsImageBuild({ deploy: true, changedFiles: [] })).toBe(true);
+  });
+  it('builds when an image input changed and skips when only source did', () => {
+    expect(needsImageBuild({ deploy: false, changedFiles: infra })).toBe(true);
+    expect(needsImageBuild({ deploy: false, changedFiles: source })).toBe(false);
+  });
+  it('builds when the comparison itself failed', () => {
+    // 얕은 클론·없는 ref·git 실패. 무엇이 바뀌었는지 모르는 것은 안 바뀐 것과 다르다.
+    expect(needsImageBuild({ deploy: false, changedFiles: null })).toBe(true);
+    expect(changedFilesAgainst('')).toBeNull();
+    expect(changedFilesAgainst('no-such-ref-for-a-test')).toBeNull();
+  });
+  it('covers every path the two Dockerfiles read', () => {
+    const dockerfiles = ['infra/docker/Dockerfile.game-server', 'infra/docker/Dockerfile.web']
+      .map((file) => readFileSync(resolve(root, file), 'utf8'))
+      .join('\n');
+    const copied = [...dockerfiles.matchAll(/^COPY (?!--from)(\S+)/gm)].map((match) => match[1]!);
+    // COPY 한 경로가 하나라도 판정 밖에 있으면, 그 파일만 바꾼 MR 이 깨진 이미지를 통과시킨다.
+    const missed = copied.filter(
+      (path) => !touchesImageInputs([path.endsWith('/') ? `${path}x` : path]),
+    );
+    expect(missed.filter((path) => !['packages', 'server', 'apps/web'].includes(path))).toEqual([]);
+  });
+});
+
+describe('secret-scan-range narrows only when it is certain', () => {
+  /** A repository where `name` resolves and `name..HEAD` holds `count` commits. */
+  const repo = (name: string, count: string) => (args: readonly string[]) => {
+    if (args[0] === 'rev-parse') return args[3]?.startsWith(name) ? 'sha' : null;
+    if (args[0] === 'rev-list') return args[2]!.startsWith(name) ? count : null;
+    return null;
+  };
+  it('uses the first base that resolves to a non-empty range', () => {
+    expect(scanRange(['missing', 'origin/develop'], repo('origin/develop', '3'))).toBe(
+      'origin/develop..HEAD',
+    );
+  });
+  it('narrows even when the base is not an ancestor of HEAD', () => {
+    // MR 브랜치를 딴 뒤 develop 이 앞서 나간 보통의 상황. `base..HEAD` 는 그래도 이 브랜치가
+    // 더한 커밋만 가리킨다. 조상일 것을 요구하면 거의 모든 MR 이 전체 스캔으로 떨어진다.
+    const diverged = (args: readonly string[]) => {
+      if (args[0] === 'merge-base') return null; // --is-ancestor 가 거짓인 저장소
+      return repo('origin/develop', '2')(args);
+    };
+    expect(scanRange(['origin/develop'], diverged)).toBe('origin/develop..HEAD');
+  });
+  it('falls back to the whole history rather than scanning nothing', () => {
+    expect(scanRange([''], repo('x', '1'))).toBeNull();
+    expect(scanRange(['no-such-ref'], repo('origin/develop', '1'))).toBeNull();
+    // 범위가 비면 커밋을 하나도 읽지 않는다. 그럴 바엔 전체를 읽는다.
+    expect(scanRange(['origin/develop'], repo('origin/develop', '0'))).toBeNull();
+    expect(scanRange(['origin/develop'], repo('origin/develop', 'not-a-number'))).toBeNull();
+  });
+  it('refuses a base that is not a plain ref', () => {
+    expect(scanRange(['a; rm -rf /'], () => 'sha')).toBeNull();
+    expect(scanRange(['$(whoami)'], () => 'sha')).toBeNull();
   });
 });

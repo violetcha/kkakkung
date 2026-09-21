@@ -6,7 +6,8 @@ F는 설정 스키마, 배포 파이프라인과 배포 러너, 관측 등록명
 
 ## 상태
 
-- Jenkins: Prepare → Secret scan(gitleaks) → Verify(`scripts/ci-verify.mjs` → `pnpm verify` 1회) → Build images → Scan(trivy, 기록만) → Deploy(develop만). 무거운 단계는 같은 flock을 잡고, 동일 트리 재검증은 생략하며, CI에서만 Playwright 1회 재시도.
+- Jenkins: Prepare → Secret scan(gitleaks) → Verify(`scripts/ci-verify.mjs` → `pnpm verify` 1회) → Build images → Deploy(develop만). 무거운 단계는 같은 flock을 잡고, 동일 트리 재검증은 생략하며, CI에서만 Playwright 1회 재시도.
+- 2026-09-21(S15P21C204-322): 빌드의 합격·불합격을 바꿀 수 없던 단계를 걷어냈다. 이미지 빌드는 배포 빌드와 이미지 입력(`scripts/needs-image-build.mjs`)이 바뀐 MR에서만, trivy는 야간 잡 `kkakkung-image-scan`에서, gitleaks는 이 빌드가 더한 커밋 범위(`scripts/secret-scan-range.mjs`)만. 검사 도구 이미지는 태그를 고정했다.
 - 제품 배포(`DEPLOY_PROFILE=product`, continuous)가 기본이며 매 배포 DP-06 실제 Cloud 합성 6인 시험을 통과한다. 호스트 nginx가 GitLab SSO(프로젝트 Reporter 이상)를 강제한다.
 - 2026-09-15: 실행계획 문서 검사(`check:execution`)를 CI와 `pnpm verify`에서 제거했다(S15P21C204-252). 방 수·좌석은 제품 Compose overlay가 원본이고 배포 러너가 `scripts/lib/product-capacity.mjs`로 읽어 사전 검사에 넘긴다(251).
 - QA 도구(G1 fault adapter, 증거 writer, 10방 판정기, 6대 수집기, MVP 판정기)는 로컬 검증까지. G1·G2·G4 metadata·G5·G6의 실제 실행은 BLOCKED(관측 생산자 미연결, preflight·장치 필요).

@@ -37,6 +37,9 @@ pipeline {
     // 검증 도구체인은 infra/docker/Dockerfile.ci (Node 24.19.0 + pnpm 11.19.0 + Playwright Chromium).
     // 파일 해시로 태그해서 Dockerfile.ci 가 바뀔 때만 다시 빌드합니다.
     CI_IMAGE   = 'kkakkung-ci'
+    // 검사 도구는 태그를 고정합니다. :latest 는 원격이 움직일 때마다 다시 받고, 어떤 판정으로
+    // 통과했는지 나중에 되짚을 수 없습니다. 올릴 때는 이 줄만 바꿉니다 (S15P21C204-322).
+    GITLEAKS_IMAGE = 'zricethezav/gitleaks:v8.30.1'
   }
 
   stages {
@@ -65,6 +68,23 @@ pipeline {
           env.EXPECTED_SOURCE_SHA = env.gitlabAfter ?: (env.gitlabMergeRequestLastCommit ?: '')
           env.CI_TAG = sh(script: 'sha256sum infra/docker/Dockerfile.ci | cut -c1-12', returnStdout: true).trim()
         }
+        // 이 빌드가 이미지를 만들어야 하는지, 비밀 스캔이 어디부터 읽으면 되는지 (S15P21C204-322).
+        // 판단은 두 스크립트가 하고 여기서는 결과만 받습니다. 둘 다 "모르겠으면 전부 한다" 쪽으로
+        // 답하므로, 판단이 실패해도 검사가 느슨해지지 않습니다.
+        script {
+          env.NEEDS_IMAGES = sh(
+            script: 'node scripts/needs-image-build.mjs --deploy "$IS_DEPLOY" --base origin/develop',
+            returnStdout: true).trim()
+          // MR 은 develop 이후의 커밋만, 배포는 마지막 정상 배포 이후만 읽으면 됩니다.
+          def scanBase = env.IS_DEPLOY == 'true'
+            ? sh(script: 'cat "$STATE_DIR/last-good-tag" 2>/dev/null || true', returnStdout: true).trim()
+            : 'origin/develop'
+          withEnv(["SCAN_BASE=${scanBase}"]) {
+            env.SCAN_RANGE = sh(
+              script: 'node scripts/secret-scan-range.mjs "$SCAN_BASE"', returnStdout: true).trim()
+          }
+          echo "images=${env.NEEDS_IMAGES}  secret-scan=${env.SCAN_RANGE ?: '전체 히스토리'}"
+        }
         sh '''
           if ! docker image inspect "$CI_IMAGE:$CI_TAG" > /dev/null 2>&1; then
             echo "CI 이미지 빌드: $CI_IMAGE:$CI_TAG"
@@ -77,9 +97,17 @@ pipeline {
     stage('Secret scan') {
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
+        // 범위는 Prepare 가 정합니다. 비어 있으면 전체 히스토리를 읽습니다.
         sh '''
-          docker run --rm -v "$WORKSPACE:/repo" zricethezav/gitleaks:latest \
-            detect --source=/repo --no-banner --redact --exit-code 1
+          if [ -n "$SCAN_RANGE" ]; then
+            echo "비밀 스캔 범위: $SCAN_RANGE"
+            set -- "--log-opts=$SCAN_RANGE"
+          else
+            echo "비밀 스캔: 전체 히스토리 (기준 커밋을 찾지 못했습니다)"
+            set --
+          fi
+          docker run --rm -v "$WORKSPACE:/repo" "$GITLEAKS_IMAGE" \
+            detect --source=/repo --no-banner --redact --exit-code 1 "$@"
         '''
       }
     }
@@ -95,7 +123,7 @@ pipeline {
         // 시간 (2026-09-14): 이 단계가 빌드의 7~8분을 차지합니다.
         // - 같은 소스 트리를 MR 빌드가 이미 검증했으면 develop(배포) 빌드는 검증을 생략합니다.
         //   키는 git tree 해시라서, 사이에 다른 MR 이 머지돼 트리가 달라지면 다시 전부 검증합니다.
-        // - Verify·이미지 빌드·Trivy·배포는 같은 호스트 flock 을 잡아 한 번에 하나만 돕니다. 다른 빌드의
+        // - Verify·이미지 빌드·배포는 같은 호스트 flock 을 잡아 한 번에 하나만 돕니다. 다른 빌드의
         //   vitest 와 CPU 를 나누면 tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70, #139).
         //   체크아웃·비밀 스캔 같은 가벼운 단계만 겹칩니다.
         script {
@@ -121,7 +149,12 @@ pipeline {
       }
     }
 
+    // 배포 빌드는 항상, MR 빌드는 이미지에 들어가는 파일을 건드렸을 때만 (S15P21C204-322).
+    // MR 이미지는 Deploy 를 건너뛰어 아무도 쓰지 않고, 태그가 커밋 SHA 라서 머지 커밋이 재사용하지도
+    // 못했습니다. 소스가 깨지는 것은 Verify 의 `pnpm build` 가 이미 잡고, 여기서 더 보는 것은
+    // Dockerfile 과 그것이 COPY·install 하는 것들뿐입니다.
     stage('Build images') {
+      when { environment name: 'NEEDS_IMAGES', value: 'true' }
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // 컨텍스트는 저장소 루트 (workspace 패키지 의존). 루트 .dockerignore 가 node_modules/dist 를 걸러줍니다.
@@ -129,21 +162,6 @@ pipeline {
           # 무거운 단계 잠금: 다른 빌드의 vitest(250ms tick 판정)와 CPU 를 나누지 않는다 (SETUP.md §6).
           exec 9>/var/lib/jenkins/verify.lock; flock 9
           node scripts/build-release-images.mjs "$GIT_SHA"
-        '''
-      }
-    }
-
-    stage('Scan images') {
-      steps {
-        script { env.FAILED_STAGE = env.STAGE_NAME }
-        // HIGH/CRITICAL 이 있어도 중단하지 않고 기록만 합니다. 발표까지 시간이 짧아서요.
-        sh '''
-          # 무거운 단계 잠금: 다른 빌드의 vitest(250ms tick 판정)와 CPU 를 나누지 않는다 (SETUP.md §6).
-          exec 9>/var/lib/jenkins/verify.lock; flock 9
-          for img in "$IMG_GAME:$TAG" "$IMG_WEB:$TAG"; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ \
-              aquasec/trivy:latest image --severity HIGH,CRITICAL --no-progress --exit-code 0 "$img"
-          done
         '''
       }
     }

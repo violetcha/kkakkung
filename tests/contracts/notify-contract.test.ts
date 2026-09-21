@@ -51,7 +51,10 @@ describe('notify-map.json', () => {
 describe('Jenkinsfile wiring', () => {
   it('records the running stage so the failure message can name it', () => {
     const stages = [...jenkinsfile.matchAll(/stage\('([^']+)'\)/g)].map((m) => m[1]);
-    expect(stages.length).toBeGreaterThanOrEqual(6);
+    // S15P21C204-322. 개수 하한(옛 단계 수 6)이 아니라 이름을 고정한다. 하한만 보면 단계가
+    // 사라져도 지나가고, 실제로 `Scan images` 를 야간 잡으로 옮겼을 때 이 시험이 남은 5개를
+    // 문제 삼는 대신 무엇이 빠졌는지 말해 줘야 한다.
+    expect(stages).toEqual(['Prepare', 'Secret scan', 'Verify', 'Build images', 'Deploy']);
     const markers = jenkinsfile.match(/env\.FAILED_STAGE = env\.STAGE_NAME/g) ?? [];
     expect(markers).toHaveLength(stages.length);
   });
