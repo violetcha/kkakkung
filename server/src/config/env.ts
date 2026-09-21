@@ -101,6 +101,9 @@ const environment = z.object({
   // Demo rooms (S15P21C204-258): an operator-only room with server-driven puppets, used to show
   // game situations without six people. Off unless explicitly enabled, and always behind OPS_TOKEN.
   DEMO_ROOMS: z.enum(['0', '1']).default('0'),
+  // S15P21C204-312. A demo session may wait longer for the operator to open it than a player
+  // admission; claiming it still changes the session to the ordinary activity lease.
+  DEMO_ADMISSION_TTL_MS: positiveSafeInt.default(10 * 60_000),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -314,6 +317,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
       : null,
     // The operator token is the only way in, so a demo room without it is never opened.
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
+    demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

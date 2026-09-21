@@ -51,6 +51,7 @@ try {
     );
   } else {
     console.log(`room ${result.roomCode} · ${result.role} · operator ${result.playerId}`);
+    console.log(`expires ${new Date(result.expiresAt).toISOString()}`);
     console.log(result.url);
   }
 } catch (error) {
