@@ -30,7 +30,7 @@ export function renderFixture(
     ]),
     { x: 0, y: -3, side: 2 },
   ];
-  const players: VisibleEntity[] =
+  const players: Extract<VisibleEntity, { kind: 'player' }>[] =
     scene === '출구·장비'
       ? []
       : [
@@ -55,6 +55,7 @@ export function renderFixture(
     walls.push({ x: 1, y: -3, side: 2 }, { x: 2, y: -2, side: 3 });
   }
   if (scene === '상대 5명') {
+    players[0] = { ...players[0]!, role: 'tagger' };
     cells.push(...[-1, 1].flatMap((x) => [0, -1, -2].map((y) => ({ x, y }))));
     walls = [
       ...[0, -1, -2].flatMap((y) => [
@@ -74,6 +75,7 @@ export function renderFixture(
         kind: 'player' as const,
         cell: { x: x!, y: y! },
         dir: 2 as const,
+        role: index % 2 === 0 ? ('tagger' as const) : ('runner' as const),
         action: null,
       })),
     );

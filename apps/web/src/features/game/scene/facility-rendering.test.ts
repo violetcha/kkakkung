@@ -54,6 +54,13 @@ it('removes actors and remembered doors with recipient visibility loss', () => {
   expect(visibilityMask({ ...crowded, self: null }).players).toEqual([]);
 });
 
+it('shows both finished role silhouettes in the crowded render inspection scene', () => {
+  const roles = visibilityMask(renderFixture('상대 5명')).players.map((player) => player.role);
+  expect(roles[0]).toBe('tagger');
+  expect(roles).toContain('runner');
+  expect(roles).toContain('tagger');
+});
+
 it('facility walls and their raised panels face the passage on all four exit sides', () => {
   const resources = createFacilityResources();
   const material = new MeshBasicMaterial();
