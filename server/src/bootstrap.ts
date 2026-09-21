@@ -402,6 +402,7 @@ export function createApplication<State = unknown>(
                   slots,
                   authorize,
                   monotonicNow,
+                  demoAdmissionTtlMs: config.demoAdmissionTtlMs,
                   cleanupReservations,
                 })
               : createDemoUnavailableRoutes(authorize),

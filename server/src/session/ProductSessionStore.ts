@@ -53,8 +53,17 @@ export class ProductSessionStore {
     roomCode: string;
     /** An invitation may expire before the normal first-connection deadline. */
     admissionDeadlineEpochMs?: number;
+    /** A special admission flow may use a longer first-connection window. */
+    admissionTtlMs?: number;
   }) {
     const now = this.options.now();
+    const admissionTtlMs = input.admissionTtlMs ?? this.admissionTtlMs;
+    if (
+      !Number.isSafeInteger(admissionTtlMs) ||
+      admissionTtlMs <= 0 ||
+      admissionTtlMs > this.maxLifetimeMs
+    )
+      throw new Error('INVALID_ADMISSION_TTL');
     if (
       input.admissionDeadlineEpochMs !== undefined &&
       (!Number.isSafeInteger(input.admissionDeadlineEpochMs) ||
@@ -74,7 +83,7 @@ export class ProductSessionStore {
       issuedAt: now,
       expiresAt: now + this.leaseTtlMs,
       admissionExpiresAt: Math.min(
-        now + this.admissionTtlMs,
+        now + admissionTtlMs,
         input.admissionDeadlineEpochMs ?? Number.POSITIVE_INFINITY,
       ),
       activeConnectionId: null,
@@ -88,6 +97,7 @@ export class ProductSessionStore {
       sessionId: session.sessionId,
       roomCode: session.roomCode,
       expiresAt: session.expiresAt,
+      admissionExpiresAt: session.admissionExpiresAt,
     };
   }
 
