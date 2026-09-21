@@ -31,37 +31,72 @@ import {
   nodeIndex,
   selectLayout,
   validateConnectivity,
+  scaleLayoutConstraints,
   validateTemplate,
   validateTuning,
 } from '@kkakkung/game-core/match';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MAP_PATH = resolve(root, 'server/content/maps/maze-v1.json');
-const FALLBACK_PATH = resolve(root, 'server/content/placements/maze-v1-fallback.json');
 const TUNING_PATH = resolve(root, 'server/config/tuning/mvp-v1.json');
+const mapPath = (id) => resolve(root, `server/content/maps/${id}.json`);
+const fallbackPath = (id) => resolve(root, `server/content/placements/${id}-fallback.json`);
 
-export const TEMPLATE_ID = 'maze-v1';
 export const TEMPLATE_VERSION = '1';
-export const SIZE = 31;
+/** The size every scaled value is written against. maze-v1 keeps its committed geometry. */
+export const BASE_SIZE = 31;
+
+/**
+ * S15P21C204-321. One certified template per room map size. Sizes are odd because the maze lives
+ * on an odd lattice; the lobby shows 16x16 / 24x24 / 32x32 and these are the real grids.
+ * Seeds differ so the three mazes are not scaled copies of one another.
+ */
+export const MAPS = Object.freeze([
+  Object.freeze({ id: 'maze-s-v1', size: 15, seed: 321 }),
+  Object.freeze({ id: 'maze-m-v1', size: 23, seed: 322 }),
+  Object.freeze({ id: 'maze-v1', size: BASE_SIZE, seed: 267 }),
+]);
 /** Seed of the maze itself. Changing it is a new template version, not a regeneration. */
 export const MAZE_SEED = 267;
 /** Fallback placements are searched from this seed upward per variant. */
 const FALLBACK_SEED_START = 1;
 
 /**
- * Regions in cell coordinates (inclusive). Taggers hold the middle band, runners start in the two
- * upper corners and the lower middle, mirroring master-v1 so the D4 variants stay comparable.
+ * Regions in cell coordinates (inclusive), derived from the grid size. Taggers hold the middle
+ * band, runners start in the two upper corners and the lower middle, mirroring master-v1 so the
+ * D4 variants stay comparable. At size 31 this reproduces the committed maze-v1 rectangles
+ * exactly, so that template regenerates byte for byte.
  */
-const TAGGER_RECTS = [
-  { regionId: 'tagger-west', x0: 1, y0: 11, x1: 9, y1: 19 },
-  { regionId: 'tagger-center', x0: 11, y0: 11, x1: 19, y1: 19 },
-  { regionId: 'tagger-east', x0: 21, y0: 11, x1: 29, y1: 19 },
-];
-const RUNNER_RECTS = [
-  { regionId: 'runner-northwest', x0: 1, y0: 1, x1: 7, y1: 5 },
-  { regionId: 'runner-northeast', x0: 23, y0: 1, x1: 29, y1: 5 },
-  { regionId: 'runner-south', x0: 11, y0: 25, x1: 19, y1: 29 },
-];
+export function regionRects(size) {
+  const inner = size - 2;
+  // Three tagger rectangles side by side with a one-cell wall between them.
+  const band = Math.floor((inner - 2) / 3);
+  const bandHeight = Math.max(5, band);
+  const midY = (size - 1) / 2;
+  const y0 = midY - Math.floor(bandHeight / 2);
+  const taggerRects = ['west', 'center', 'east'].map((name, index) => ({
+    regionId: `tagger-${name}`,
+    x0: 1 + index * (band + 1),
+    y0,
+    x1: index * (band + 1) + band,
+    y1: y0 + bandHeight - 1,
+  }));
+  // Runner areas sit clear of the band: two top corners and one bottom middle.
+  const corner = Math.max(3, band - 2);
+  const depth = Math.max(3, Math.round((5 * size) / BASE_SIZE));
+  const southX0 = midY - Math.floor(band / 2);
+  const runnerRects = [
+    { regionId: 'runner-northwest', x0: 1, y0: 1, x1: corner, y1: depth },
+    { regionId: 'runner-northeast', x0: size - 1 - corner, y0: 1, x1: size - 2, y1: depth },
+    {
+      regionId: 'runner-south',
+      x0: southX0,
+      y0: size - 1 - depth,
+      x1: southX0 + band - 1,
+      y1: size - 2,
+    },
+  ];
+  return { taggerRects, runnerRects };
+}
 
 const DIRS = [
   { dx: 0, dy: -1 },
@@ -274,24 +309,26 @@ function exitCandidatesOf(grid) {
   return faces;
 }
 
-export function generateMaze(seed = MAZE_SEED) {
+export function generateMaze(map) {
+  const { id, size, seed } = map;
+  const { taggerRects, runnerRects } = regionRects(size);
   const random = rng(seed);
-  const grid = new Grid(SIZE);
+  const grid = new Grid(size);
   carvePerfectMaze(grid, random);
-  const junctions = nodesOf(SIZE).length;
-  const deadEndsBefore = nodesOf(SIZE).filter((n) => degree(grid, n) === 1).length;
+  const junctions = nodesOf(size).length;
+  const deadEndsBefore = nodesOf(size).filter((n) => degree(grid, n) === 1).length;
   const braided = braidDeadEnds(grid, random);
   let bypasses = 0;
   while (bypassOneArticulation(grid, random)) bypasses += 1;
   const connectors = grid.open.reduce((sum, v) => sum + v, 0) - junctions;
   const template = {
-    templateId: TEMPLATE_ID,
+    templateId: id,
     templateVersion: TEMPLATE_VERSION,
-    width: SIZE,
-    height: SIZE,
+    width: size,
+    height: size,
     rows: grid.rows(),
-    taggerRegions: TAGGER_RECTS.map((rect) => regionOf(grid, rect)),
-    runnerSpawnRegions: RUNNER_RECTS.map((rect) => regionOf(grid, rect)),
+    taggerRegions: taggerRects.map((rect) => regionOf(grid, rect)),
+    runnerSpawnRegions: runnerRects.map((rect) => regionOf(grid, rect)),
     exitCandidates: exitCandidatesOf(grid),
   };
   const stats = {
@@ -322,7 +359,7 @@ const slotRoster = [
 ];
 
 /** Validates, transforms, connectivity-checks, and searches a certified fallback per variant. */
-export function certify(rawTemplate, templateHash, tuning) {
+export function certify(rawTemplate, templateHash, constraints, selection) {
   const source = {
     templateId: rawTemplate.templateId,
     templateVersion: rawTemplate.templateVersion,
@@ -330,7 +367,7 @@ export function certify(rawTemplate, templateHash, tuning) {
     variantId: 'r0',
   };
   const validated = validateTemplate(rawTemplate, source, {
-    minSpawnNeighbors: tuning.layout.minSpawnNeighbors,
+    minSpawnNeighbors: constraints.minSpawnNeighbors,
   });
   if (validated.status !== 'valid') throw new Error(JSON.stringify(validated, null, 2));
   const variants = createTemplateVariants(validated.template);
@@ -338,18 +375,12 @@ export function certify(rawTemplate, templateHash, tuning) {
   const fallbacks = [];
   for (const variant of variants.variants) {
     const report = validateConnectivity(variant, {
-      minSpawnNeighbors: tuning.layout.minSpawnNeighbors,
+      minSpawnNeighbors: constraints.minSpawnNeighbors,
     });
     if (!report.ok) throw new Error(`${variant.variantId}: ${JSON.stringify(report.issues)}`);
     let layout = null;
     for (let seed = FALLBACK_SEED_START; seed < FALLBACK_SEED_START + 64 && !layout; seed += 1) {
-      const result = selectLayout(
-        variant,
-        slotRoster,
-        seed,
-        tuning.selection.maxAttempts,
-        tuning.layout,
-      );
+      const result = selectLayout(variant, slotRoster, seed, selection.maxAttempts, constraints);
       if (result.ok) layout = result.layout;
     }
     if (!layout) throw new Error(`${variant.variantId}: no fallback within the seed budget`);
@@ -382,44 +413,73 @@ function pairOdds(template, constraints) {
   return ok / total;
 }
 
+async function buildMap(map, tuning) {
+  const layout = scaleLayoutConstraints(tuning.layout, map.size);
+  const { template, stats } = generateMaze(map);
+  const mapText = await pretty(JSON.stringify(template, null, 2), mapPath(map.id));
+  const mapBytes = Buffer.from(mapText, 'utf8');
+  const templateHash = sha256(mapBytes);
+  const certified = certify(template, templateHash, layout, tuning.selection);
+  const fallbackText = await pretty(
+    JSON.stringify(
+      {
+        templateId: map.id,
+        templateVersion: TEMPLATE_VERSION,
+        templateHash,
+        fallbacks: certified.fallbacks,
+      },
+      null,
+      2,
+    ),
+    fallbackPath(map.id),
+  );
+  return {
+    map,
+    mapText,
+    mapBytes,
+    fallbackText,
+    summary: {
+      templateId: map.id,
+      size: map.size,
+      ...stats,
+      layout,
+      variants: certified.variants.map((v) => v.variantId),
+      templateHash,
+      runnerTaggerPairsAtOrAboveFloor: pairOdds(certified.template, layout).toFixed(3),
+    },
+  };
+}
+
 async function main() {
   const check = process.argv.includes('--check');
+  const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice('--only='.length);
   const tuningResult = validateTuning(JSON.parse(readFileSync(TUNING_PATH, 'utf8')));
   if (!tuningResult.ok) throw new Error('tuning invalid');
   const tuning = tuningResult.template;
 
-  const { template, stats } = generateMaze();
-  const mapText = await pretty(JSON.stringify(template, null, 2), MAP_PATH);
-  const mapBytes = Buffer.from(mapText, 'utf8');
-  const templateHash = sha256(mapBytes);
-  const certified = certify(template, templateHash, tuning);
-  const fallbackFile = {
-    templateId: TEMPLATE_ID,
-    templateVersion: TEMPLATE_VERSION,
-    templateHash,
-    fallbacks: certified.fallbacks,
-  };
-  const fallbackText = await pretty(JSON.stringify(fallbackFile, null, 2), FALLBACK_PATH);
+  const maps = only ? MAPS.filter((m) => m.id === only) : MAPS;
+  if (maps.length === 0) throw new Error('no such map: ' + only);
+  const built = [];
+  for (const map of maps) built.push(await buildMap(map, tuning));
 
-  const summary = {
-    ...stats,
-    variants: certified.variants.map((v) => v.variantId),
-    templateHash,
-    runnerTaggerPairsAtOrAboveFloor: pairOdds(certified.template, tuning.layout).toFixed(3),
-  };
   if (check) {
-    const same =
-      existsSync(MAP_PATH) &&
-      existsSync(FALLBACK_PATH) &&
-      readFileSync(MAP_PATH, 'utf8') === mapText &&
-      readFileSync(FALLBACK_PATH, 'utf8') === fallbackText;
-    console.log(JSON.stringify({ ...summary, committedMatches: same }, null, 2));
-    if (!same) process.exit(1);
+    const report = built.map((b) => ({
+      ...b.summary,
+      committedMatches:
+        existsSync(mapPath(b.map.id)) &&
+        existsSync(fallbackPath(b.map.id)) &&
+        readFileSync(mapPath(b.map.id), 'utf8') === b.mapText &&
+        readFileSync(fallbackPath(b.map.id), 'utf8') === b.fallbackText,
+    }));
+    console.log(JSON.stringify(report, null, 2));
+    if (report.some((entry) => !entry.committedMatches)) process.exit(1);
     return;
   }
-  writeFileSync(MAP_PATH, mapBytes);
-  writeFileSync(FALLBACK_PATH, fallbackText, 'utf8');
-  console.log(JSON.stringify({ ...summary, wrote: [MAP_PATH, FALLBACK_PATH] }, null, 2));
+  for (const b of built) {
+    writeFileSync(mapPath(b.map.id), b.mapBytes);
+    writeFileSync(fallbackPath(b.map.id), b.fallbackText, 'utf8');
+  }
+  console.log(JSON.stringify(built.map((b) => b.summary), null, 2));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

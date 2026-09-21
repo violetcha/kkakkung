@@ -170,3 +170,31 @@ export function validateTuning(raw: unknown): TemplateValidation<MatchTuningConf
     }),
   };
 }
+
+/** The grid one side of the JSON layout floors is written against (maze-v1 / master-v1). */
+export const LAYOUT_BASE_SIZE = 31;
+
+/**
+ * S15P21C204-321. Layout floors are absolute cell counts written for the 31 grid, so a smaller
+ * map has to scale them or nothing can be placed. They scale with one side, not with area: every
+ * floor is a length and walking time follows distance. `maxExitRatio` and `minSpawnNeighbors`
+ * carry no unit and stay as they are. Only smaller maps relax the floors: at or above the base
+ * size the written values stand, so master-v1 (32) keeps exactly what the JSON says.
+ *
+ * The map generator scales the same way, so a committed fallback and a live selection agree.
+ */
+export function scaleLayoutConstraints(
+  base: LayoutConstraints,
+  size: number,
+): LayoutConstraints {
+  if (!Number.isFinite(size) || size <= 0 || size >= LAYOUT_BASE_SIZE) return base;
+  const at = (value: number) => Math.max(1, Math.round((value * size) / LAYOUT_BASE_SIZE));
+  return Object.freeze({
+    ...base,
+    minRunnerDistance: at(base.minRunnerDistance),
+    minRunnerTaggerDistance: at(base.minRunnerTaggerDistance),
+    minExitDistance: at(base.minExitDistance),
+    minExitPathLength: at(base.minExitPathLength),
+    maxExitPathLength: at(base.maxExitPathLength),
+  });
+}

@@ -1,0 +1,7095 @@
+{
+  "templateId": "maze-m-v1",
+  "templateVersion": "1",
+  "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+  "fallbacks": [
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "mr0",
+      "layout": {
+        "layoutId": "maze-m-v1@1#mr0:5ef0d256",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#mr0",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 11
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 21,
+              "y": 13
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 13
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 21
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 3
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 16,
+              "y": 13,
+              "side": 1
+            },
+            "approach": {
+              "x": 17,
+              "y": 13
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 18,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 19,
+              "y": 11
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 10,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 11,
+              "y": 11
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 3,
+                "y": 8
+              },
+              {
+                "x": 5,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 6,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 3,
+                "y": 10
+              },
+              {
+                "x": 7,
+                "y": 10
+              },
+              {
+                "x": 2,
+                "y": 11
+              },
+              {
+                "x": 3,
+                "y": 11
+              },
+              {
+                "x": 4,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 12
+              },
+              {
+                "x": 7,
+                "y": 12
+              },
+              {
+                "x": 3,
+                "y": 13
+              },
+              {
+                "x": 4,
+                "y": 13
+              },
+              {
+                "x": 5,
+                "y": 13
+              },
+              {
+                "x": 7,
+                "y": 13
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 21,
+                "y": 8
+              },
+              {
+                "x": 16,
+                "y": 9
+              },
+              {
+                "x": 17,
+                "y": 9
+              },
+              {
+                "x": 18,
+                "y": 9
+              },
+              {
+                "x": 19,
+                "y": 9
+              },
+              {
+                "x": 21,
+                "y": 9
+              },
+              {
+                "x": 17,
+                "y": 10
+              },
+              {
+                "x": 19,
+                "y": 10
+              },
+              {
+                "x": 21,
+                "y": 10
+              },
+              {
+                "x": 17,
+                "y": 11
+              },
+              {
+                "x": 19,
+                "y": 11
+              },
+              {
+                "x": 20,
+                "y": 11
+              },
+              {
+                "x": 21,
+                "y": 11
+              },
+              {
+                "x": 17,
+                "y": 12
+              },
+              {
+                "x": 17,
+                "y": 13
+              },
+              {
+                "x": 18,
+                "y": 13
+              },
+              {
+                "x": 19,
+                "y": 13
+              },
+              {
+                "x": 20,
+                "y": 13
+              },
+              {
+                "x": 21,
+                "y": 13
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 13,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 12,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 10
+              },
+              {
+                "x": 11,
+                "y": 10
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 12,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 14,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 12,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              },
+              {
+                "x": 14,
+                "y": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "mr1",
+      "layout": {
+        "layoutId": "maze-m-v1@1#mr1:c9a1075e",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#mr1",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 19
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 3
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 13
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 19,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 13
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 14,
+              "y": 19,
+              "side": 3
+            },
+            "approach": {
+              "x": 13,
+              "y": 19
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 17,
+              "y": 10,
+              "side": 2
+            },
+            "approach": {
+              "x": 17,
+              "y": 11
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 19,
+              "y": 2,
+              "side": 0
+            },
+            "approach": {
+              "x": 19,
+              "y": 1
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 13,
+                "y": 16
+              },
+              {
+                "x": 9,
+                "y": 17
+              },
+              {
+                "x": 10,
+                "y": 17
+              },
+              {
+                "x": 11,
+                "y": 17
+              },
+              {
+                "x": 12,
+                "y": 17
+              },
+              {
+                "x": 13,
+                "y": 17
+              },
+              {
+                "x": 9,
+                "y": 18
+              },
+              {
+                "x": 13,
+                "y": 18
+              },
+              {
+                "x": 9,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 19
+              },
+              {
+                "x": 12,
+                "y": 19
+              },
+              {
+                "x": 13,
+                "y": 19
+              },
+              {
+                "x": 9,
+                "y": 20
+              },
+              {
+                "x": 11,
+                "y": 20
+              },
+              {
+                "x": 9,
+                "y": 21
+              },
+              {
+                "x": 11,
+                "y": 21
+              },
+              {
+                "x": 12,
+                "y": 21
+              },
+              {
+                "x": 13,
+                "y": 21
+              },
+              {
+                "x": 14,
+                "y": 21
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 11,
+                "y": 2
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 11,
+                "y": 3
+              },
+              {
+                "x": 12,
+                "y": 3
+              },
+              {
+                "x": 13,
+                "y": 3
+              },
+              {
+                "x": 14,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 11,
+                "y": 4
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 10,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 14,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 6
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 10,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 12,
+                "y": 7
+              },
+              {
+                "x": 13,
+                "y": 7
+              },
+              {
+                "x": 14,
+                "y": 7
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 12,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 12,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 11,
+                "y": 12
+              },
+              {
+                "x": 13,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              },
+              {
+                "x": 14,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 14
+              },
+              {
+                "x": 11,
+                "y": 14
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "mr2",
+      "layout": {
+        "layoutId": "maze-m-v1@1#mr2:b7a362a2",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#mr2",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 9
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 15,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 19,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 21
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 9,
+              "y": 3
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 12,
+              "y": 13,
+              "side": 3
+            },
+            "approach": {
+              "x": 11,
+              "y": 13
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 7,
+              "y": 12,
+              "side": 2
+            },
+            "approach": {
+              "x": 7,
+              "y": 13
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 18,
+              "y": 13,
+              "side": 3
+            },
+            "approach": {
+              "x": 17,
+              "y": 13
+            },
+            "poseKind": "right"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 8,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 10,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 8,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 10,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 12
+              },
+              {
+                "x": 13,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 10,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 14
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 15,
+                "y": 9
+              },
+              {
+                "x": 17,
+                "y": 9
+              },
+              {
+                "x": 18,
+                "y": 9
+              },
+              {
+                "x": 19,
+                "y": 9
+              },
+              {
+                "x": 15,
+                "y": 10
+              },
+              {
+                "x": 17,
+                "y": 10
+              },
+              {
+                "x": 15,
+                "y": 11
+              },
+              {
+                "x": 17,
+                "y": 11
+              },
+              {
+                "x": 18,
+                "y": 11
+              },
+              {
+                "x": 19,
+                "y": 11
+              },
+              {
+                "x": 20,
+                "y": 11
+              },
+              {
+                "x": 15,
+                "y": 12
+              },
+              {
+                "x": 19,
+                "y": 12
+              },
+              {
+                "x": 15,
+                "y": 13
+              },
+              {
+                "x": 16,
+                "y": 13
+              },
+              {
+                "x": 17,
+                "y": 13
+              },
+              {
+                "x": 19,
+                "y": 13
+              },
+              {
+                "x": 15,
+                "y": 14
+              },
+              {
+                "x": 17,
+                "y": 14
+              },
+              {
+                "x": 19,
+                "y": 14
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 1,
+                "y": 9
+              },
+              {
+                "x": 2,
+                "y": 9
+              },
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 4,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 10
+              },
+              {
+                "x": 1,
+                "y": 11
+              },
+              {
+                "x": 2,
+                "y": 11
+              },
+              {
+                "x": 3,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 1,
+                "y": 12
+              },
+              {
+                "x": 3,
+                "y": 12
+              },
+              {
+                "x": 5,
+                "y": 12
+              },
+              {
+                "x": 1,
+                "y": 13
+              },
+              {
+                "x": 3,
+                "y": 13
+              },
+              {
+                "x": 4,
+                "y": 13
+              },
+              {
+                "x": 5,
+                "y": 13
+              },
+              {
+                "x": 6,
+                "y": 13
+              },
+              {
+                "x": 1,
+                "y": 14
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "mr3",
+      "layout": {
+        "layoutId": "maze-m-v1@1#mr3:d6907b7d",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#mr3",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 9
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 17
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 3
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 3
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 11
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 12,
+              "y": 3,
+              "side": 1
+            },
+            "approach": {
+              "x": 13,
+              "y": 3
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 6,
+              "y": 17,
+              "side": 1
+            },
+            "approach": {
+              "x": 7,
+              "y": 17
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 14,
+              "y": 9,
+              "side": 1
+            },
+            "approach": {
+              "x": 15,
+              "y": 9
+            },
+            "poseKind": "right"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 11,
+                "y": 8
+              },
+              {
+                "x": 13,
+                "y": 8
+              },
+              {
+                "x": 8,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 10
+              },
+              {
+                "x": 11,
+                "y": 10
+              },
+              {
+                "x": 13,
+                "y": 10
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 10,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 10,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 8,
+                "y": 15
+              },
+              {
+                "x": 9,
+                "y": 15
+              },
+              {
+                "x": 10,
+                "y": 15
+              },
+              {
+                "x": 11,
+                "y": 15
+              },
+              {
+                "x": 12,
+                "y": 15
+              },
+              {
+                "x": 13,
+                "y": 15
+              },
+              {
+                "x": 9,
+                "y": 16
+              },
+              {
+                "x": 8,
+                "y": 17
+              },
+              {
+                "x": 9,
+                "y": 17
+              },
+              {
+                "x": 11,
+                "y": 17
+              },
+              {
+                "x": 12,
+                "y": 17
+              },
+              {
+                "x": 13,
+                "y": 17
+              },
+              {
+                "x": 11,
+                "y": 18
+              },
+              {
+                "x": 13,
+                "y": 18
+              },
+              {
+                "x": 8,
+                "y": 19
+              },
+              {
+                "x": 9,
+                "y": 19
+              },
+              {
+                "x": 10,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 19
+              },
+              {
+                "x": 13,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 20
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 8,
+                "y": 1
+              },
+              {
+                "x": 9,
+                "y": 1
+              },
+              {
+                "x": 10,
+                "y": 1
+              },
+              {
+                "x": 11,
+                "y": 1
+              },
+              {
+                "x": 13,
+                "y": 1
+              },
+              {
+                "x": 11,
+                "y": 2
+              },
+              {
+                "x": 13,
+                "y": 2
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 10,
+                "y": 3
+              },
+              {
+                "x": 11,
+                "y": 3
+              },
+              {
+                "x": 13,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 13,
+                "y": 4
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 10,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 12,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 6
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "r0",
+      "layout": {
+        "layoutId": "maze-m-v1@1#r0:93b0b501",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#r0",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 15,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 19,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 3
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 9,
+              "y": 21
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 17,
+              "y": 16,
+              "side": 2
+            },
+            "approach": {
+              "x": 17,
+              "y": 17
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 8,
+              "y": 9,
+              "side": 1
+            },
+            "approach": {
+              "x": 9,
+              "y": 9
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 8,
+              "y": 17,
+              "side": 3
+            },
+            "approach": {
+              "x": 7,
+              "y": 17
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 9,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 10,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 10
+              },
+              {
+                "x": 13,
+                "y": 10
+              },
+              {
+                "x": 8,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 10,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 8,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 10,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 15,
+                "y": 8
+              },
+              {
+                "x": 17,
+                "y": 8
+              },
+              {
+                "x": 19,
+                "y": 8
+              },
+              {
+                "x": 15,
+                "y": 9
+              },
+              {
+                "x": 16,
+                "y": 9
+              },
+              {
+                "x": 17,
+                "y": 9
+              },
+              {
+                "x": 19,
+                "y": 9
+              },
+              {
+                "x": 15,
+                "y": 10
+              },
+              {
+                "x": 19,
+                "y": 10
+              },
+              {
+                "x": 15,
+                "y": 11
+              },
+              {
+                "x": 17,
+                "y": 11
+              },
+              {
+                "x": 18,
+                "y": 11
+              },
+              {
+                "x": 19,
+                "y": 11
+              },
+              {
+                "x": 20,
+                "y": 11
+              },
+              {
+                "x": 15,
+                "y": 12
+              },
+              {
+                "x": 17,
+                "y": 12
+              },
+              {
+                "x": 15,
+                "y": 13
+              },
+              {
+                "x": 17,
+                "y": 13
+              },
+              {
+                "x": 18,
+                "y": 13
+              },
+              {
+                "x": 19,
+                "y": 13
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 1,
+                "y": 8
+              },
+              {
+                "x": 1,
+                "y": 9
+              },
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 4,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 6,
+                "y": 9
+              },
+              {
+                "x": 1,
+                "y": 10
+              },
+              {
+                "x": 3,
+                "y": 10
+              },
+              {
+                "x": 5,
+                "y": 10
+              },
+              {
+                "x": 1,
+                "y": 11
+              },
+              {
+                "x": 2,
+                "y": 11
+              },
+              {
+                "x": 3,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 12
+              },
+              {
+                "x": 1,
+                "y": 13
+              },
+              {
+                "x": 2,
+                "y": 13
+              },
+              {
+                "x": 3,
+                "y": 13
+              },
+              {
+                "x": 4,
+                "y": 13
+              },
+              {
+                "x": 5,
+                "y": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "r1",
+      "layout": {
+        "layoutId": "maze-m-v1@1#r1:c4cb5fb4",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#r1",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 17
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 5
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 13
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 13
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 3
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 12,
+              "y": 17,
+              "side": 3
+            },
+            "approach": {
+              "x": 11,
+              "y": 17
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 17,
+              "y": 4,
+              "side": 2
+            },
+            "approach": {
+              "x": 17,
+              "y": 5
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 19,
+              "y": 10,
+              "side": 2
+            },
+            "approach": {
+              "x": 19,
+              "y": 11
+            },
+            "poseKind": "right"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 9,
+                "y": 15
+              },
+              {
+                "x": 10,
+                "y": 15
+              },
+              {
+                "x": 11,
+                "y": 15
+              },
+              {
+                "x": 12,
+                "y": 15
+              },
+              {
+                "x": 13,
+                "y": 15
+              },
+              {
+                "x": 14,
+                "y": 15
+              },
+              {
+                "x": 13,
+                "y": 16
+              },
+              {
+                "x": 9,
+                "y": 17
+              },
+              {
+                "x": 10,
+                "y": 17
+              },
+              {
+                "x": 11,
+                "y": 17
+              },
+              {
+                "x": 13,
+                "y": 17
+              },
+              {
+                "x": 14,
+                "y": 17
+              },
+              {
+                "x": 9,
+                "y": 18
+              },
+              {
+                "x": 11,
+                "y": 18
+              },
+              {
+                "x": 9,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 19
+              },
+              {
+                "x": 12,
+                "y": 19
+              },
+              {
+                "x": 13,
+                "y": 19
+              },
+              {
+                "x": 14,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 20
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 9,
+                "y": 1
+              },
+              {
+                "x": 11,
+                "y": 1
+              },
+              {
+                "x": 12,
+                "y": 1
+              },
+              {
+                "x": 13,
+                "y": 1
+              },
+              {
+                "x": 14,
+                "y": 1
+              },
+              {
+                "x": 9,
+                "y": 2
+              },
+              {
+                "x": 11,
+                "y": 2
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 11,
+                "y": 3
+              },
+              {
+                "x": 12,
+                "y": 3
+              },
+              {
+                "x": 13,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 13,
+                "y": 4
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 10,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 12,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 6
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 9,
+                "y": 8
+              },
+              {
+                "x": 11,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 14,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 10
+              },
+              {
+                "x": 11,
+                "y": 10
+              },
+              {
+                "x": 13,
+                "y": 10
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 12,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 12,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "r2",
+      "layout": {
+        "layoutId": "maze-m-v1@1#r2:35d36987",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#r2",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 9
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 17,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 9
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 1
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 21
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 12,
+              "y": 19,
+              "side": 1
+            },
+            "approach": {
+              "x": 13,
+              "y": 19
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 15,
+              "y": 8,
+              "side": 0
+            },
+            "approach": {
+              "x": 15,
+              "y": 7
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 11,
+              "y": 14,
+              "side": 2
+            },
+            "approach": {
+              "x": 11,
+              "y": 15
+            },
+            "poseKind": "left"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 4,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 10
+              },
+              {
+                "x": 7,
+                "y": 10
+              },
+              {
+                "x": 2,
+                "y": 11
+              },
+              {
+                "x": 3,
+                "y": 11
+              },
+              {
+                "x": 4,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 3,
+                "y": 12
+              },
+              {
+                "x": 7,
+                "y": 12
+              },
+              {
+                "x": 3,
+                "y": 13
+              },
+              {
+                "x": 5,
+                "y": 13
+              },
+              {
+                "x": 6,
+                "y": 13
+              },
+              {
+                "x": 7,
+                "y": 13
+              },
+              {
+                "x": 3,
+                "y": 14
+              },
+              {
+                "x": 5,
+                "y": 14
+              },
+              {
+                "x": 7,
+                "y": 14
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 17,
+                "y": 9
+              },
+              {
+                "x": 18,
+                "y": 9
+              },
+              {
+                "x": 19,
+                "y": 9
+              },
+              {
+                "x": 20,
+                "y": 9
+              },
+              {
+                "x": 21,
+                "y": 9
+              },
+              {
+                "x": 17,
+                "y": 10
+              },
+              {
+                "x": 17,
+                "y": 11
+              },
+              {
+                "x": 19,
+                "y": 11
+              },
+              {
+                "x": 20,
+                "y": 11
+              },
+              {
+                "x": 21,
+                "y": 11
+              },
+              {
+                "x": 17,
+                "y": 12
+              },
+              {
+                "x": 19,
+                "y": 12
+              },
+              {
+                "x": 21,
+                "y": 12
+              },
+              {
+                "x": 16,
+                "y": 13
+              },
+              {
+                "x": 17,
+                "y": 13
+              },
+              {
+                "x": 18,
+                "y": 13
+              },
+              {
+                "x": 19,
+                "y": 13
+              },
+              {
+                "x": 21,
+                "y": 13
+              },
+              {
+                "x": 21,
+                "y": 14
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 12,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 14,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 12,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 14,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 11,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 12,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 14
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-m-v1",
+      "templateVersion": "1",
+      "templateHash": "eeb40b54a509b3a0d928e31696fcaf63b5be948aa88436c4c19d911f24107af2",
+      "variantId": "r3",
+      "layout": {
+        "layoutId": "maze-m-v1@1#r3:435819b9",
+        "topology": {
+          "topologyVersion": "maze-m-v1@1#r3",
+          "width": 23,
+          "height": 23,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 13
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 19
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 3
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 19
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 21,
+              "y": 9
+            },
+            "dir": 2
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 12,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 13,
+              "y": 11
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 10,
+              "y": 5,
+              "side": 3
+            },
+            "approach": {
+              "x": 9,
+              "y": 5
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 15,
+              "y": 12,
+              "side": 2
+            },
+            "approach": {
+              "x": 15,
+              "y": 13
+            },
+            "poseKind": "left"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 10,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 10,
+                "y": 11
+              },
+              {
+                "x": 11,
+                "y": 11
+              },
+              {
+                "x": 13,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 11,
+                "y": 12
+              },
+              {
+                "x": 13,
+                "y": 12
+              },
+              {
+                "x": 8,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 13
+              },
+              {
+                "x": 13,
+                "y": 13
+              },
+              {
+                "x": 11,
+                "y": 14
+              },
+              {
+                "x": 13,
+                "y": 14
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 9,
+                "y": 16
+              },
+              {
+                "x": 9,
+                "y": 17
+              },
+              {
+                "x": 10,
+                "y": 17
+              },
+              {
+                "x": 11,
+                "y": 17
+              },
+              {
+                "x": 12,
+                "y": 17
+              },
+              {
+                "x": 13,
+                "y": 17
+              },
+              {
+                "x": 9,
+                "y": 18
+              },
+              {
+                "x": 13,
+                "y": 18
+              },
+              {
+                "x": 9,
+                "y": 19
+              },
+              {
+                "x": 10,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 19
+              },
+              {
+                "x": 13,
+                "y": 19
+              },
+              {
+                "x": 11,
+                "y": 20
+              },
+              {
+                "x": 13,
+                "y": 20
+              },
+              {
+                "x": 8,
+                "y": 21
+              },
+              {
+                "x": 9,
+                "y": 21
+              },
+              {
+                "x": 10,
+                "y": 21
+              },
+              {
+                "x": 11,
+                "y": 21
+              },
+              {
+                "x": 13,
+                "y": 21
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 11,
+                "y": 2
+              },
+              {
+                "x": 8,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 10,
+                "y": 3
+              },
+              {
+                "x": 11,
+                "y": 3
+              },
+              {
+                "x": 13,
+                "y": 3
+              },
+              {
+                "x": 11,
+                "y": 4
+              },
+              {
+                "x": 13,
+                "y": 4
+              },
+              {
+                "x": 8,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 12,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 6
+              },
+              {
+                "x": 8,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 10,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 12,
+                "y": 7
+              },
+              {
+                "x": 13,
+                "y": 7
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

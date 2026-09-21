@@ -111,6 +111,16 @@ export type ProductRoomDeps<State> = Readonly<{
     fallbackPath: string;
     templateId: string;
     templateVersion: string;
+    /**
+     * S15P21C204-321. 방이 고른 크기별 템플릿. 없는 크기는 위 기본값으로 간다, 그래야 크기별
+     * 맵이 아직 없는 배포도 그대로 돈다.
+     */
+    bySize?: Partial<
+      Record<
+        MapSize,
+        { masterPath: string; fallbackPath: string; templateId: string; templateVersion: string }
+      >
+    >;
   } | null;
   /** E's coordinator; null means media disabled (loading barrier checks client reports only). */
   media: ProductMediaRuntime | null;
@@ -1428,7 +1438,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       const seed = this.context.seed ?? 0;
-      const { loader, masterPath, fallbackPath, templateId, templateVersion } = deps.layouts;
+      const { loader } = deps.layouts;
+      // 방이 로비에서 고른 크기의 템플릿으로 준비한다.
+      const { masterPath, fallbackPath, templateId, templateVersion } =
+        deps.layouts.bySize?.[this.roomMapSize] ?? deps.layouts;
       const revision = ++this.layoutRevision;
       const matchId = this.matchId;
       this.finalizing = loader

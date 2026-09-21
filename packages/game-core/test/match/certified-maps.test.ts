@@ -4,7 +4,7 @@ import { createTemplateVariants } from '../../src/match/map/transform.js';
 import { certifyFallback } from '../../src/match/map/select-with-fallback.js';
 import { validateConnectivity } from '../../src/match/map/validate-connectivity.js';
 import { selectLayout } from '../../src/match/map/select-layout.js';
-import { validateTuning } from '../../src/match/tuning.js';
+import { scaleLayoutConstraints, validateTuning } from '../../src/match/tuning.js';
 import type { FallbackLayout, RosterEntry } from '../../src/match/types.js';
 import {
   CERTIFIED_TEMPLATE_IDS,
@@ -18,11 +18,12 @@ import {
  * Certification of the real server data: every validated variant of every shipped template must
  * be connected with a single core, carry a stored fallback with the same source fields, and that
  * fallback must pass the full layout rules for a real roster. Intended for `pnpm test:maps`
- * (root script owned by F). S15P21C204-267 added the corridor maze beside the open grid.
+ * (root script owned by F). S15P21C204-267 added the corridor maze beside the open grid,
+ * S15P21C204-321 the two smaller mazes. Each template is judged by its own scaled floors.
  */
 const tuning = validateTuning(loadTuning());
 if (!tuning.ok) throw new Error('tuning invalid');
-const constraints = tuning.template.layout;
+const baseConstraints = tuning.template.layout;
 
 const roster: RosterEntry[] = [
   { playerId: 'p-tagger-c', role: 'tagger' },
@@ -42,6 +43,9 @@ type FallbackFile = {
 
 describe.each(CERTIFIED_TEMPLATE_IDS)('%s certification', (templateId) => {
   const template = certifiedTemplate(templateId);
+  // S15P21C204-321. 작은 맵은 그 크기에 맞게 줄인 바닥값으로 판정한다. 런타임 선택기와 맵
+  // 생성기가 쓰는 규칙과 같은 함수다.
+  const constraints = scaleLayoutConstraints(baseConstraints, template.topology.width);
   const variants = createTemplateVariants(template);
   const file = loadFallbackFile(templateId) as FallbackFile;
 

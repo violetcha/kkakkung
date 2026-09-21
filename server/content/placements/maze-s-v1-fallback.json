@@ -1,0 +1,3831 @@
+{
+  "templateId": "maze-s-v1",
+  "templateVersion": "1",
+  "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+  "fallbacks": [
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "mr0",
+      "layout": {
+        "layoutId": "maze-s-v1@1#mr0:4754fc6d",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#mr0",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 7
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 3,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 7,
+              "y": 13
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 1
+            },
+            "dir": 1
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 10,
+              "y": 9,
+              "side": 3
+            },
+            "approach": {
+              "x": 9,
+              "y": 9
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 2,
+              "y": 9,
+              "side": 3
+            },
+            "approach": {
+              "x": 1,
+              "y": 9
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 13,
+              "y": 10,
+              "side": 0
+            },
+            "approach": {
+              "x": 13,
+              "y": 9
+            },
+            "poseKind": "right"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 8,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 8,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 3,
+                "y": 5
+              },
+              {
+                "x": 4,
+                "y": 5
+              },
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 3,
+                "y": 6
+              },
+              {
+                "x": 3,
+                "y": 7
+              },
+              {
+                "x": 4,
+                "y": 7
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 4,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 12,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 6
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 13,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 8
+              },
+              {
+                "x": 13,
+                "y": 8
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 12,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "mr1",
+      "layout": {
+        "layoutId": "maze-s-v1@1#mr1:40ab89e1",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#mr1",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 5
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 13
+            },
+            "dir": 1
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 13,
+              "y": 6,
+              "side": 2
+            },
+            "approach": {
+              "x": 13,
+              "y": 7
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 4,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 5,
+              "y": 11
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 8,
+              "y": 5,
+              "side": 3
+            },
+            "approach": {
+              "x": 7,
+              "y": 5
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 6,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 5,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 5,
+                "y": 3
+              },
+              {
+                "x": 7,
+                "y": 3
+              },
+              {
+                "x": 8,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 5,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 6,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 5,
+                "y": 13
+              },
+              {
+                "x": 6,
+                "y": 13
+              },
+              {
+                "x": 7,
+                "y": 13
+              },
+              {
+                "x": 8,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "mr2",
+      "layout": {
+        "layoutId": "maze-s-v1@1#mr2:71212cab",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#mr2",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 1,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 11,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 7,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 11
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 11
+            },
+            "dir": 1
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 10,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 11,
+              "y": 11
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 5,
+              "y": 8,
+              "side": 0
+            },
+            "approach": {
+              "x": 5,
+              "y": 7
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 7,
+              "y": 2,
+              "side": 0
+            },
+            "approach": {
+              "x": 7,
+              "y": 1
+            },
+            "poseKind": "left"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 1,
+                "y": 5
+              },
+              {
+                "x": 2,
+                "y": 5
+              },
+              {
+                "x": 3,
+                "y": 5
+              },
+              {
+                "x": 1,
+                "y": 6
+              },
+              {
+                "x": 3,
+                "y": 6
+              },
+              {
+                "x": 1,
+                "y": 7
+              },
+              {
+                "x": 3,
+                "y": 7
+              },
+              {
+                "x": 1,
+                "y": 8
+              },
+              {
+                "x": 1,
+                "y": 9
+              },
+              {
+                "x": 2,
+                "y": 9
+              },
+              {
+                "x": 3,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 10,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 10,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 10,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 6,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 6
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 6,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "mr3",
+      "layout": {
+        "layoutId": "maze-s-v1@1#mr3:9f8722d1",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#mr3",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 7
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 3
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 11
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 1
+            },
+            "dir": 1
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 3,
+              "y": 10,
+              "side": 0
+            },
+            "approach": {
+              "x": 3,
+              "y": 9
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 10,
+              "y": 3,
+              "side": 1
+            },
+            "approach": {
+              "x": 11,
+              "y": 3
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 11,
+              "y": 6,
+              "side": 2
+            },
+            "approach": {
+              "x": 11,
+              "y": 7
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 6
+              },
+              {
+                "x": 9,
+                "y": 6
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 8,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 10
+              },
+              {
+                "x": 7,
+                "y": 10
+              },
+              {
+                "x": 9,
+                "y": 10
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 6,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 1
+              },
+              {
+                "x": 6,
+                "y": 1
+              },
+              {
+                "x": 7,
+                "y": 1
+              },
+              {
+                "x": 8,
+                "y": 1
+              },
+              {
+                "x": 9,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 2
+              },
+              {
+                "x": 9,
+                "y": 2
+              },
+              {
+                "x": 5,
+                "y": 3
+              },
+              {
+                "x": 7,
+                "y": 3
+              },
+              {
+                "x": 8,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "r0",
+      "layout": {
+        "layoutId": "maze-s-v1@1#r0:67d1d604",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#r0",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 3,
+              "y": 7
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 5
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 5
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 7,
+              "y": 13
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 3
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 1
+            },
+            "dir": 2
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 4,
+              "y": 9,
+              "side": 3
+            },
+            "approach": {
+              "x": 3,
+              "y": 9
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 5,
+              "y": 12,
+              "side": 0
+            },
+            "approach": {
+              "x": 5,
+              "y": 11
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 11,
+              "y": 4,
+              "side": 2
+            },
+            "approach": {
+              "x": 11,
+              "y": 5
+            },
+            "poseKind": "right"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 1,
+                "y": 5
+              },
+              {
+                "x": 2,
+                "y": 5
+              },
+              {
+                "x": 3,
+                "y": 5
+              },
+              {
+                "x": 1,
+                "y": 6
+              },
+              {
+                "x": 1,
+                "y": 7
+              },
+              {
+                "x": 3,
+                "y": 7
+              },
+              {
+                "x": 1,
+                "y": 8
+              },
+              {
+                "x": 3,
+                "y": 8
+              },
+              {
+                "x": 1,
+                "y": 9
+              },
+              {
+                "x": 2,
+                "y": 9
+              },
+              {
+                "x": 3,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 10,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 6
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 10,
+                "y": 7
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 10,
+                "y": 9
+              },
+              {
+                "x": 11,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 6,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 6,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "r1",
+      "layout": {
+        "layoutId": "maze-s-v1@1#r1:c82c6045",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#r1",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 3
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 9
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 1
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 13
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 10,
+              "y": 11,
+              "side": 1
+            },
+            "approach": {
+              "x": 11,
+              "y": 11
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 8,
+              "y": 9,
+              "side": 3
+            },
+            "approach": {
+              "x": 7,
+              "y": 9
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 2,
+              "y": 7,
+              "side": 3
+            },
+            "approach": {
+              "x": 1,
+              "y": 7
+            },
+            "poseKind": "left"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 5,
+                "y": 1
+              },
+              {
+                "x": 6,
+                "y": 1
+              },
+              {
+                "x": 7,
+                "y": 1
+              },
+              {
+                "x": 8,
+                "y": 1
+              },
+              {
+                "x": 9,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 2
+              },
+              {
+                "x": 9,
+                "y": 2
+              },
+              {
+                "x": 5,
+                "y": 3
+              },
+              {
+                "x": 6,
+                "y": 3
+              },
+              {
+                "x": 7,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 3
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 5,
+                "y": 6
+              },
+              {
+                "x": 7,
+                "y": 6
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 6,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 10
+              },
+              {
+                "x": 7,
+                "y": 10
+              },
+              {
+                "x": 9,
+                "y": 10
+              },
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 8,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "r2",
+      "layout": {
+        "layoutId": "maze-s-v1@1#r2:dc2258d7",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#r2",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 5
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 7
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 13,
+              "y": 5
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 11,
+              "y": 11
+            },
+            "dir": 2
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 7,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 11
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 10,
+              "y": 5,
+              "side": 1
+            },
+            "approach": {
+              "x": 11,
+              "y": 5
+            },
+            "poseKind": "y"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 2,
+              "y": 9,
+              "side": 3
+            },
+            "approach": {
+              "x": 1,
+              "y": 9
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 7,
+              "y": 2,
+              "side": 2
+            },
+            "approach": {
+              "x": 7,
+              "y": 3
+            },
+            "poseKind": "left"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 3,
+                "y": 5
+              },
+              {
+                "x": 4,
+                "y": 5
+              },
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 3,
+                "y": 7
+              },
+              {
+                "x": 4,
+                "y": 7
+              },
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 3,
+                "y": 8
+              },
+              {
+                "x": 3,
+                "y": 9
+              },
+              {
+                "x": 4,
+                "y": 9
+              },
+              {
+                "x": 5,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 8,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 6
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 8,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 11,
+                "y": 5
+              },
+              {
+                "x": 12,
+                "y": 5
+              },
+              {
+                "x": 13,
+                "y": 5
+              },
+              {
+                "x": 11,
+                "y": 6
+              },
+              {
+                "x": 13,
+                "y": 6
+              },
+              {
+                "x": 11,
+                "y": 7
+              },
+              {
+                "x": 13,
+                "y": 7
+              },
+              {
+                "x": 13,
+                "y": 8
+              },
+              {
+                "x": 11,
+                "y": 9
+              },
+              {
+                "x": 12,
+                "y": 9
+              },
+              {
+                "x": 13,
+                "y": 9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "templateId": "maze-s-v1",
+      "templateVersion": "1",
+      "templateHash": "94ee70859ac2d64b50de56ce0c5360e9f932ab51130e41465ecf2121ef8facdd",
+      "variantId": "r3",
+      "layout": {
+        "layoutId": "maze-s-v1@1#r3:16c3d0e3",
+        "topology": {
+          "topologyVersion": "maze-s-v1@1#r3",
+          "width": 15,
+          "height": 15,
+          "walkable": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "players": [
+          {
+            "playerId": "tagger-1",
+            "role": "tagger",
+            "cell": {
+              "x": 5,
+              "y": 7
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-2",
+            "role": "tagger",
+            "cell": {
+              "x": 9,
+              "y": 5
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "tagger-3",
+            "role": "tagger",
+            "cell": {
+              "x": 7,
+              "y": 11
+            },
+            "dir": 0
+          },
+          {
+            "playerId": "runner-1",
+            "role": "runner",
+            "cell": {
+              "x": 1,
+              "y": 11
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-2",
+            "role": "runner",
+            "cell": {
+              "x": 3,
+              "y": 1
+            },
+            "dir": 1
+          },
+          {
+            "playerId": "runner-3",
+            "role": "runner",
+            "cell": {
+              "x": 13,
+              "y": 7
+            },
+            "dir": 0
+          }
+        ],
+        "exits": [
+          {
+            "exitId": "exit-1",
+            "ownerId": "runner-1",
+            "wall": {
+              "x": 10,
+              "y": 13,
+              "side": 3
+            },
+            "approach": {
+              "x": 9,
+              "y": 13
+            },
+            "poseKind": "left"
+          },
+          {
+            "exitId": "exit-2",
+            "ownerId": "runner-2",
+            "wall": {
+              "x": 6,
+              "y": 5,
+              "side": 3
+            },
+            "approach": {
+              "x": 5,
+              "y": 5
+            },
+            "poseKind": "right"
+          },
+          {
+            "exitId": "exit-3",
+            "ownerId": "runner-3",
+            "wall": {
+              "x": 12,
+              "y": 11,
+              "side": 3
+            },
+            "approach": {
+              "x": 11,
+              "y": 11
+            },
+            "poseKind": "y"
+          }
+        ],
+        "territories": [
+          {
+            "playerId": "tagger-1",
+            "cells": [
+              {
+                "x": 5,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 7
+              },
+              {
+                "x": 8,
+                "y": 7
+              },
+              {
+                "x": 9,
+                "y": 7
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 8
+              },
+              {
+                "x": 5,
+                "y": 9
+              },
+              {
+                "x": 7,
+                "y": 9
+              },
+              {
+                "x": 9,
+                "y": 9
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-2",
+            "cells": [
+              {
+                "x": 5,
+                "y": 3
+              },
+              {
+                "x": 6,
+                "y": 3
+              },
+              {
+                "x": 7,
+                "y": 3
+              },
+              {
+                "x": 9,
+                "y": 3
+              },
+              {
+                "x": 5,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 5,
+                "y": 5
+              },
+              {
+                "x": 7,
+                "y": 5
+              },
+              {
+                "x": 9,
+                "y": 5
+              }
+            ]
+          },
+          {
+            "playerId": "tagger-3",
+            "cells": [
+              {
+                "x": 5,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              },
+              {
+                "x": 8,
+                "y": 11
+              },
+              {
+                "x": 9,
+                "y": 11
+              },
+              {
+                "x": 5,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 5,
+                "y": 13
+              },
+              {
+                "x": 6,
+                "y": 13
+              },
+              {
+                "x": 7,
+                "y": 13
+              },
+              {
+                "x": 8,
+                "y": 13
+              },
+              {
+                "x": 9,
+                "y": 13
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
