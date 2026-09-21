@@ -7,11 +7,11 @@ import {
 } from './backrooms-textures';
 
 describe('backroomsTexturePaths', () => {
-  it('keeps full wall relief on medium and avoids extra texture maps on low quality', () => {
+  it('uses the seamless tile at both qualities without mismatched relief maps', () => {
     expect(backroomsTexturePaths('medium')).toEqual({
-      color: '/textures/backrooms/albedo.png',
-      roughness: '/textures/backrooms/roughness.png',
-      normal: '/textures/backrooms/normal.png',
+      color: '/textures/backrooms/seamless.png',
+      roughness: null,
+      normal: null,
     });
     expect(backroomsTexturePaths('low')).toEqual({
       color: '/textures/backrooms/seamless.png',
@@ -34,10 +34,10 @@ it('tiles wall maps vertically with colour conversion only on colour textures', 
   const color = configureBackroomsTexture(new Texture(), 'color');
   const data = configureBackroomsTexture(new Texture(), 'data');
 
-  expect([color.repeat.x, color.repeat.y]).toEqual([1, 1.7]);
-  expect([data.repeat.x, data.repeat.y]).toEqual([1, 1.7]);
+  expect([color.repeat.x, color.repeat.y]).toEqual([1, 2]);
+  expect([data.repeat.x, data.repeat.y]).toEqual([1, 2]);
   expect(color.colorSpace).toBe('srgb');
   expect(data.colorSpace).toBe('');
   expect(color.wrapS).toBe(1000);
-  expect(color.wrapT).toBe(1000);
+  expect(color.wrapT).toBe(1002);
 });

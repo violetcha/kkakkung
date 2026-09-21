@@ -2,6 +2,7 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   RepeatWrapping,
+  MirroredRepeatWrapping,
   SRGBColorSpace,
   type Texture,
 } from 'three';
@@ -20,20 +21,18 @@ export type BackroomsTexturePaths = Readonly<{
   normal: string | null;
 }>;
 
-export function backroomsTexturePaths(quality: QualityPreset): BackroomsTexturePaths {
-  return quality === 'low'
-    ? { color: BACKROOMS_TEXTURE_PATHS.seamless, roughness: null, normal: null }
-    : {
-        color: BACKROOMS_TEXTURE_PATHS.albedo,
-        roughness: BACKROOMS_TEXTURE_PATHS.roughness,
-        normal: BACKROOMS_TEXTURE_PATHS.normal,
-      };
+export function backroomsTexturePaths(_quality: QualityPreset): BackroomsTexturePaths {
+  // Both qualities use the tileable source. The supplied PBR maps align with the untiled
+  // original, so mixing them would reintroduce a visible cut at every cell boundary.
+  return { color: BACKROOMS_TEXTURE_PATHS.seamless, roughness: null, normal: null };
 }
 
 export function configureBackroomsTexture(texture: Texture, kind: 'color' | 'data'): Texture {
   texture.wrapS = RepeatWrapping;
-  texture.wrapT = RepeatWrapping;
-  texture.repeat.set(1, 1.7);
+  // The supplied "seamless" asset is not vertically periodic. Reflect alternate rows so
+  // the exact same edge texels meet, rather than cutting back to a different top edge.
+  texture.wrapT = MirroredRepeatWrapping;
+  texture.repeat.set(1, 2);
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearMipmapLinearFilter;
   texture.colorSpace = kind === 'color' ? SRGBColorSpace : '';

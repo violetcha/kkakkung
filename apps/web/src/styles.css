@@ -5,6 +5,258 @@
   font-display: swap;
   src: url('/fonts/Galmuri9.woff2') format('woff2');
 }
+
+/* Home: an inhabited game space, with the menu kept legible in the dark foreground. */
+.product-shell.home-shell {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 100svh;
+  box-sizing: border-box;
+  padding: 44px 7vw 40px;
+  background: #090b08;
+}
+.home-shell .lobby-backdrop {
+  position: fixed;
+  inset: 0 0 0 22%;
+  z-index: -3;
+  pointer-events: none;
+  background: linear-gradient(100deg, #14170f, #2a281a 60%, #090b08);
+}
+.home-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      #090b08 0%,
+      #090b08f7 22%,
+      #090b08cf 35%,
+      #090b0866 49%,
+      transparent 69%
+    ),
+    linear-gradient(0deg, #060805ed, transparent 32%, #06080522 80%, #06080588);
+  box-shadow: inset 0 0 140px 25px #0009;
+}
+.home-shell::after {
+  content: '';
+  position: fixed;
+  inset: 18px;
+  border: 1px solid #d4ce9e18;
+  z-index: -1;
+  pointer-events: none;
+}
+.home-shell > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.home-shell .brand-logo img {
+  width: 112px;
+  filter: drop-shadow(0 3px 16px #000);
+}
+.product-shell.home-shell .admission {
+  max-width: 380px;
+  margin: 36px 0 0;
+}
+.product-shell.home-shell h2 {
+  font-size: clamp(26px, 2.3vw, 38px);
+  line-height: 1.6;
+  letter-spacing: -0.055em;
+  color: #e0dfcc;
+  margin-bottom: 16px;
+}
+.home-specs {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  color: #a8ab9b;
+  font: 10px var(--font-control);
+}
+.home-specs > span + span {
+  padding-left: 12px;
+  border-left: 1px solid #6b6e5755;
+}
+.product-shell.home-shell form {
+  gap: 10px;
+  margin-top: 28px;
+}
+.home-shell form > label {
+  color: #c4c5b5;
+  font-size: 11px;
+}
+.product-shell.home-shell input:not([type='radio'], [type='checkbox']) {
+  box-sizing: border-box;
+  border: 1px solid #74786266;
+  background: #11160fbb;
+  box-shadow: none;
+  border-radius: 0;
+  min-height: 48px;
+  padding: 12px 14px;
+  color: #e0dfcc;
+}
+.home-shell input::placeholder {
+  color: #7f8476;
+}
+.product-shell.home-shell fieldset {
+  gap: 24px;
+  padding: 10px 0 14px;
+}
+.home-shell fieldset legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.home-shell fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b9bdad;
+  cursor: pointer;
+}
+.product-shell.home-shell input[type='radio'] {
+  accent-color: #bfc49b;
+}
+.product-shell.home-shell form > button:not(.quiet) {
+  background: #c2c5a3;
+  color: #14190f;
+  border: 1px solid #dce0bc;
+  min-height: 50px;
+  border-radius: 0;
+  box-shadow: 0 3px 25px #c2c5a30b;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.product-shell.home-shell .home-practice {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 16px;
+  width: 100%;
+  border: 1px solid #74786266;
+  color: #c5c8b6;
+  border-radius: 0;
+  min-height: 46px;
+  cursor: pointer;
+}
+.home-guide {
+  margin-top: 22px;
+  font-size: 11px;
+  color: #a0a690;
+  line-height: 1.9;
+}
+.home-guide summary {
+  cursor: pointer;
+}
+.home-guide ol {
+  padding-left: 20px;
+}
+.product-shell.home-shell .notice {
+  font-size: 10px;
+  color: #969d8d;
+  margin: 12px 0 0;
+}
+.product-shell.home-shell .asset-notices-link {
+  color: #969d8d;
+}
+@media (min-width: 1500px) and (min-height: 850px) {
+  .product-shell.home-shell {
+    padding-top: 56px;
+  }
+  .home-shell .brand-logo img {
+    width: 138px;
+  }
+  .product-shell.home-shell .admission {
+    margin-top: 40px;
+  }
+}
+@media (max-width: 760px) {
+  .product-shell.home-shell {
+    padding: 32px 28px;
+  }
+  .home-shell .lobby-backdrop {
+    left: 0;
+  }
+  .home-shell::before {
+    background: linear-gradient(90deg, #090b08ef, #090b08bb 65%, #090b0877);
+  }
+  .home-shell::after {
+    inset: 10px;
+  }
+  .home-shell .brand-logo img {
+    width: 84px;
+  }
+  .product-shell.home-shell .admission {
+    margin-top: 28px;
+    max-width: 420px;
+  }
+}
+.product-shell.home-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: 7vh;
+  padding-bottom: 12vh;
+}
+.home-title .brand-logo img {
+  width: clamp(220px, 21vw, 320px);
+}
+.title-menu {
+  display: grid;
+  gap: 12px;
+  width: clamp(220px, 21vw, 320px);
+  margin-top: 50px;
+}
+.product-shell.home-shell .title-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #cbcdbc;
+  min-height: 56px;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    color 150ms,
+    background 150ms;
+}
+.product-shell.home-shell .title-menu button:hover {
+  color: #f3f3df;
+  background: linear-gradient(90deg, transparent, #b7baa210, transparent);
+}
+.home-options .background-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid #74786266;
+}
+.product-shell.home-shell .home-back {
+  border: 0;
+  padding: 0;
+  margin-bottom: 16px;
+  color: #c5c8b6;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .product-shell.home-title {
+    padding-left: 36px;
+  }
+  .home-title .brand-logo img {
+    width: 220px;
+  }
+}
 @font-face {
   font-family: Galmuri11;
   font-style: normal;
@@ -107,12 +359,12 @@
 }
 
 :root {
-  --font-display: Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
-  --font-body: Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
-  --font-control: Galmuri11, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
-  --font-small: Galmuri9, Galmuri14, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
-  --text-small: 9px;
-  --text-control: 11px;
+  --font-display: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-body: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-control: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-small: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --text-small: 12px;
+  --text-control: 14px;
   --text-body: 14px;
   --text-heading: 28px;
   --text-hero: 56px;
@@ -153,7 +405,7 @@
   padding: 28px 0 56px;
   color: var(--color-text);
   font-size: var(--text-body);
-  -webkit-font-smoothing: none;
+  -webkit-font-smoothing: antialiased;
 }
 .brand-logo {
   margin: 0;

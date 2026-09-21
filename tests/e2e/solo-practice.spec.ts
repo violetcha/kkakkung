@@ -72,6 +72,7 @@ async function enter(page: Page) {
     route.fulfill({ json: { method: 'gitlab-sso' } }),
   );
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
   await expect(page.getByRole('heading', { name: '혼자 준비해 볼까요?' })).toBeVisible();
 }

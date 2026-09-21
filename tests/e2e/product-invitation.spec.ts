@@ -12,6 +12,7 @@ test('home opens the real shipped notices and license text without a camera or g
       sessions.push(request.url());
   });
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await page.getByRole('link', { name: '오픈소스 고지', exact: true }).click();
   await expect(page).toHaveURL(/\/licenses\/index\.html$/);
   await expect(page.getByRole('heading', { name: '오픈소스 고지', exact: true })).toBeVisible();
@@ -50,6 +51,7 @@ test('guest creation works without a link while friend admission still requires 
     await route.fulfill({ status: 503, json: { error: 'ADMISSION_CLOSED' } });
   });
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await expect(page.getByText('가입 없이 시작해요.', { exact: false })).toBeVisible();
   await expect(page.getByText('팀원 로그인이 확인됐습니다.', { exact: false })).toHaveCount(0);
   await page.getByLabel('닉네임').fill('guest');
@@ -112,6 +114,7 @@ test('team login enables creation and room-code admission without an invitation'
     await route.fulfill({ status: 503, json: { error: 'CAPACITY' } });
   });
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await expect(page.getByText('팀원 로그인이 확인됐습니다.', { exact: false })).toBeVisible();
   await expect(page.getByText('유효한 초대 링크로 열어 주세요.')).toHaveCount(0);
   await page.getByLabel('닉네임').fill('team');
@@ -140,6 +143,7 @@ test('a failed access check stays closed, can retry, and does not reuse SSO as a
     route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } }),
   );
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await expect(page.getByRole('button', { name: '접속 상태 다시 확인' })).toBeVisible();
   await expect(page.getByRole('button', { name: '방 만들기', exact: true })).toBeDisabled();
   unavailable = false;
@@ -183,6 +187,7 @@ test('same-tab invitations refresh a rejected form and its next request', async 
     await route.fulfill({ status: 403, json: { error: 'INVALID_INVITATION' } });
   });
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   await expect(page.getByRole('button', { name: '방 만들기', exact: true })).toBeDisabled();
   await page.evaluate(() => {
     location.hash = 'invite=synthetic-create-invitation';
@@ -276,6 +281,7 @@ test('a shared room invitation selects join and removes secrets before admission
 test('real local vision models initialize in the browser Worker', async ({ page }) => {
   test.setTimeout(60000);
   await page.goto('/play');
+  await page.getByRole('button', { name: '시작하기', exact: true }).click();
   const result = await page.evaluate(async () => {
     const workerModule = '/src/features/vision/worker-scheduler.ts';
     const protocolModule = '/src/features/vision/worker-protocol.ts';
