@@ -1020,6 +1020,33 @@ it('keeps keyboard available if motion recalibration fails', async () => {
   }
 });
 
+it('advances the local grab animation only for each outgoing grab attempt', () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING', stateVersion: 10 });
+  const view = viewFixture({ stateVersion: 10 });
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.messages.get('private-view')!({
+    ...view,
+    self: { ...view.self, role: 'tagger' },
+  });
+
+  const first = f.runtime.send({ type: 'GRAB_INTENT', payload: {} });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(1);
+  f.runtime.send({ type: 'GRAB_INTENT', payload: {} });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(2);
+
+  f.messages.get('command-outcome')!({
+    matchId: 'm',
+    requestId: first,
+    sequence: 0,
+    tick: 100,
+    stateVersion: 10,
+    result: 'applied',
+    code: null,
+  });
+  expect(f.runtime.getSnapshot().grabAnimationId).toBe(2);
+});
+
 it('releases rejected exit start immediately without creating a challenge', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });

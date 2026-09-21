@@ -136,6 +136,8 @@ export type ProductSnapshot = {
   endedSelf: PrivateView['self'];
   /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
   cueFlash?: { kind: FlashKind; id: number } | null;
+  /** 로컬 잡기 입력마다 증가한다. 서버 결과와 무관한 1인칭 손 연출 신호다. */
+  grabAnimationId: number;
   /** S15P21C204-276. 좌하단 사건 로그에 그릴 최근 줄. 안내음이 울린 순간과 같다. */
   events: readonly MatchEvent[];
 };
@@ -182,6 +184,7 @@ export function bindProductRoom(
     error: null,
     quality: 'medium',
     endedSelf: null,
+    grabAnimationId: 0,
   };
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   // S15P21C204-261. 안내음은 이전 상태와의 차이로만 고른다. 누계 안내음은 라운드·개인 뷰 도착
@@ -884,7 +887,16 @@ export function bindProductRoom(
       startPending = { exitId: command.payload.exitId, requestId: '', until: null };
       publish({ exitStarting: true });
     }
-    return commands.send(command);
+    const requestId = commands.send(command);
+    if (
+      command.type === 'GRAB_INTENT' &&
+      requestId &&
+      own?.status === 'ACTIVE' &&
+      own.role === 'tagger' &&
+      snapshot.round.phase === 'PLAYING'
+    )
+      publish({ grabAnimationId: snapshot.grabAnimationId + 1 });
+    return requestId;
   }
   function queueRecovery(scope: MediaScope, reported: Promise<unknown>) {
     const key = JSON.stringify(scope);

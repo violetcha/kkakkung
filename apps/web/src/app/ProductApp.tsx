@@ -620,6 +620,7 @@ export function ProductApp({
                   ownerNames={playerNames}
                   quality={snapshot.quality}
                   standIn={demoFace.current}
+                  grabAnimationId={snapshot.grabAnimationId}
                   renderTick={() => runtime.current?.renderTick() ?? null}
                   {...(metrics.current
                     ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
