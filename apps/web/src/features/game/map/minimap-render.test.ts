@@ -9,6 +9,8 @@ import {
   minimapTerrain,
   roleMarkColor,
   wallBandRect,
+  windowOrigin,
+  MINIMAP_WINDOW_CELLS,
   type MinimapContext,
 } from './minimap-render';
 
@@ -43,8 +45,14 @@ function recorder() {
     'restore',
     'translate',
     'rotate',
+    'rect',
+    'clip',
   ] as const)
     (ctx as unknown as Record<string, unknown>)[op] = record(op);
+  (ctx as unknown as Record<string, unknown>).createRadialGradient = () => ({
+    addColorStop: () => undefined,
+    toString: () => 'gradient',
+  });
   return { ctx, calls };
 }
 
@@ -249,5 +257,45 @@ describe('drawMinimap', () => {
         (call) => call.op === 'strokeRect' && call.stroke === MINIMAP_COLORS.exitMine,
       ),
     ).toBe(false);
+  });
+});
+
+// S15P21C204-295. 경기 화면의 근접 창: 내 주변 홀수 칸만 확대해 그리고 내 표식이 항상 가운데다.
+describe('drawMinimap window mode', () => {
+  it('centres my cell in an odd window and drops terrain outside it', () => {
+    expect(MINIMAP_WINDOW_CELLS % 2).toBe(1);
+    expect(windowOrigin({ x: 10, z: 20 }, 11)).toEqual({ x: 5, y: 15 });
+    const view = viewFixture({
+      knownTerrain: [
+        { x: 1, y: 1, kind: 'floor' },
+        { x: 30, y: 30, kind: 'floor' }, // 창 밖
+        { x: 30, y: 30, side: 2, kind: 'wall' },
+      ],
+    });
+    const { ctx, calls } = recorder();
+    const layout = drawMinimap(ctx, { view, size: 165, window: 11 });
+    // 11칸 창이라 칸이 15px: 전체 지도(32칸, 5px)보다 세 배 크다.
+    expect(layout.cells).toBe(11);
+    expect(layout.unit).toBe(15);
+    expect(fillsOf(calls, MINIMAP_COLORS.windowFloor)).toHaveLength(1);
+    expect(fillsOf(calls, MINIMAP_COLORS.wall)).toHaveLength(0);
+    // 창 모드는 격자 없이 어두운 바탕만 둔다.
+    expect(
+      calls.some((call) => call.op === 'lineTo' && call.stroke === MINIMAP_COLORS.unknownGrid),
+    ).toBe(false);
+    // 내 위치는 창 한가운데 칸(5,5)의 중심으로 옮겨지고, 흰 점과 흰 시야 부채꼴로 그린다.
+    const translate = calls.find((call) => call.op === 'translate');
+    expect(translate?.args).toEqual([layout.offset + 5.5 * 15, layout.offset + 5.5 * 15]);
+    expect(calls.some((call) => call.op === 'fill' && call.fill === 'gradient')).toBe(true);
+    expect(calls.some((call) => call.op === 'fill' && call.fill === MINIMAP_COLORS.me)).toBe(true);
+    expect(calls.filter((call) => call.op === 'arc')).toHaveLength(2);
+    expect(calls.some((call) => call.op === 'fillText' && call.args[0] === 'N')).toBe(true);
+  });
+
+  it('keeps the full map when no window is requested and still centres nothing', () => {
+    const { ctx, calls } = recorder();
+    const layout = drawMinimap(ctx, { view: before(), size: 320 });
+    expect(layout.cells).toBe(32);
+    expect(calls.some((call) => call.op === 'fillText' && call.args[0] === 'N')).toBe(false);
   });
 });

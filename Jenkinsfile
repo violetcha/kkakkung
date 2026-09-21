@@ -121,16 +121,17 @@ pipeline {
         // jenkins uid 로 돌려 root 소유 파일이 안 남게 하고, pnpm store 는 호스트 jenkins 홈에 캐시합니다.
         //
         // 시간 (2026-09-14): 이 단계가 빌드의 7~8분을 차지합니다.
-        // - 같은 소스 트리를 MR 빌드가 이미 검증했으면 develop(배포) 빌드는 검증을 생략합니다.
-        //   키는 git tree 해시라서, 사이에 다른 MR 이 머지돼 트리가 달라지면 다시 전부 검증합니다.
+        // - 같은 소스 트리를 이미 검증했으면 어느 잡이든 검증을 생략합니다. 키는 git tree 해시입니다.
+        //   MR 빌드는 소스 브랜치를 그대로 체크아웃하므로(머지 결과가 아니라) 다른 MR 이 머지돼
+        //   develop 이 움직여도 이 트리는 달라지지 않습니다. 그때 GitLab 이 열린 MR 을 다시
+        //   트리거하면 예전에는 같은 트리를 9~10분씩 다시 검증했고, 새로 얻는 정보가 없었습니다
+        //   (kkakkung-mr #237~#245 실측). 트리가 조금이라도 다르면 여전히 전부 검증합니다.
         // - Verify·이미지 빌드·배포는 같은 호스트 flock 을 잡아 한 번에 하나만 돕니다. 다른 빌드의
         //   vitest 와 CPU 를 나누면 tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70, #139).
         //   체크아웃·비밀 스캔 같은 가벼운 단계만 겹칩니다.
         script {
           env.TREE_SHA = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
-          env.VERIFIED_BY = env.IS_DEPLOY == 'true'
-            ? sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA"', returnStdout: true).trim()
-            : ''
+          env.VERIFIED_BY = sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA"', returnStdout: true).trim()
         }
         sh '''
           if [ -n "$VERIFIED_BY" ]; then

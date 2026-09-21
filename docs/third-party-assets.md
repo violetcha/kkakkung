@@ -47,13 +47,19 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 장비 형상, 효과음·안내음)는 파일이 아니라 저장소 TypeScript 코드가 실행 시점에 만들어 내므로
 제3자 권리가 붙지 않는다. 아래 두 표가 그 경계다.
 
-| 배포 경로                      | 자산                               | 출처·권리                                | 고지 의무        |
-| ------------------------------ | ---------------------------------- | ---------------------------------------- | ---------------- |
-| `models/` (모델 3·WASM 6·문서) | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending) | 있음 — 고지 화면 |
-| `fonts/` (WOFF2 4·OFL 원문)    | 갈무리 픽셀 글꼴 4종               | Lee Minseo(quiple), SIL OFL 1.1          | 있음 — 고지 화면 |
-| `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득      | 고지 대상 자체   |
-| `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산         | 없음             |
-| `textures/backrooms/` (PNG 4)  | 백룸 벽지 PBR 재질                 | 프로젝트 구성원 제공 렌더 자산           | 없음             |
+| 배포 경로                      | 자산                               | 출처·권리                                   | 고지 의무        |
+| ------------------------------ | ---------------------------------- | ------------------------------------------- | ---------------- |
+| `models/` (모델 3·WASM 6·문서) | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending)    | 있음 — 고지 화면 |
+| `fonts/` (WOFF2 6·OFL 원문)    | 갈무리 픽셀 글꼴 4종·나눔명조 2종  | Lee Minseo(quiple)·Google Inc., SIL OFL 1.1 | 있음 — 고지 화면 |
+| `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득         | 고지 대상 자체   |
+| `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산            | 없음             |
+| `textures/backrooms/` (PNG 4)  | 백룸 벽지 PBR 재질                 | 프로젝트 구성원 제공 렌더 자산              | 없음             |
+
+나눔명조(S15P21C204-295)는 제목용 명조로 `@fontsource/nanum-myeongjo` 5.2.5(Google Fonts 배포본)의
+한글·라틴 400 서브셋 WOFF2 두 개를 그대로 담았다. 그 패키지의 LICENSE 는 저작권자를 Google Inc. 로
+적고 SIL Open Font License 1.1 을 따른다고 선언한다. 함께 배포하는 라이선스 원문은 갈무리와 같은
+`fonts/OFL-1.1.txt` 이며, 두 계열의 저작권 표기는 고지 화면에 각각 적는다. 바이트는
+`pnpm check:product-assets` 가 sha256 으로 고정한다.
 
 외부에서 받은 음원 파일은 없다. 새 파일을 `public/` 에 넣으면 이 표에 줄을 추가해야 하며,
 빠뜨리면 `tests/contracts/asset-ledger.test.ts`가 실패한다.

@@ -65,12 +65,14 @@ test('the camcorder frame, five-slot hotbar and minimap sit over a full-bleed 3D
     Math.abs(parts.crosshair.y + parts.crosshair.height / 2 - (stage.y + stage.height / 2)),
   ).toBeLessThan(3);
 
-  // 술래는 감지기·덫, 도망자는 지도 교환과 예약 슬롯을 같은 자리에서 본다.
+  // 핫바는 아이템 칸이다. 술래는 감지기·덫을 갖고, 도망자는 아직 아이템이 없어 빈 칸 다섯이다.
+  // 지도 교환·탈출 도전은 아이템이 아니라 십자선 아래 상호작용 줄에서 E 로 안내한다.
   await expect(page.locator('.hotbar-slot[data-slot="sensor"]')).toBeVisible();
   await expect(page.locator('.hotbar-slot[data-slot="trap"]')).toBeVisible();
   await page.getByRole('button', { name: '도망자 시점', exact: true }).click();
-  await expect(page.locator('.hotbar-slot[data-slot="exchange"]')).toBeVisible();
-  await expect(page.locator('.hotbar-slot[data-slot="reserved"]')).toHaveAttribute(
+  await expect(page.locator('.hotbar-slot[data-slot="exchange"]')).toHaveCount(0);
+  await expect(page.locator('.game-stage > .hotbar .hotbar-slot')).toHaveCount(5);
+  await expect(page.locator('.hotbar-slot[data-slot="locked-1"]')).toHaveAttribute(
     'data-state',
     'reserved',
   );

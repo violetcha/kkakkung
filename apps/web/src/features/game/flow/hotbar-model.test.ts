@@ -21,9 +21,9 @@ describe('hotbarSlots', () => {
     const view = asRole('tagger', { equipment: { sensor: 2, trap: 1 } });
     const bar = slots(view);
     expect(bar).toHaveLength(5);
-    expect(bar.slice(0, 2).map((slot) => [slot.key, slot.label, slot.detail, slot.state])).toEqual([
-      ['1', '감지기', '2개', 'selected'],
-      ['2', '덫', '1개', 'available'],
+    expect(bar.slice(0, 2).map((slot) => [slot.key, slot.label, slot.count, slot.state])).toEqual([
+      ['1', '감지기', 2, 'selected'],
+      ['2', '덫', 1, 'available'],
     ]);
     expect(bar.slice(2).map((slot) => [slot.id, slot.key, slot.state])).toEqual([
       ['locked-3', '3', 'reserved'],
@@ -48,17 +48,8 @@ describe('hotbarSlots', () => {
     ).toEqual(['unavailable', 'unavailable']);
   });
 
-  it('keeps the runner exchange in a five-slot bar without enabling undecided items', () => {
-    const bar = slots(asRole('runner'));
-    expect(bar).toHaveLength(5);
-    expect(bar.slice(0, 2).map((slot) => [slot.key, slot.label, slot.state])).toEqual([
-      ['E', '지도 교환', 'unavailable'],
-      ['2', '예약 슬롯', 'reserved'],
-    ]);
-    expect(bar.slice(2).every((slot) => slot.state === 'reserved')).toBe(true);
-  });
-
-  it('lights the exchange slot once an ally is next to me', () => {
+  it('gives the runner an empty five-slot bar and never an interaction slot', () => {
+    // 지도 교환은 아이템이 아니라 E 상호작용이다. 옆에 동료가 있어도 핫바는 비어 있다.
     const view = asRole('runner');
     const near: PrivateView = {
       ...view,
@@ -66,7 +57,11 @@ describe('hotbarSlots', () => {
         { id: 'ally', kind: 'player', cell: { x: 1, y: 0 }, dir: 2, action: null, role: 'runner' },
       ],
     };
-    expect(slots(near)[0]?.state).toBe('available');
+    for (const bar of [slots(view), slots(near)]) {
+      expect(bar).toHaveLength(5);
+      expect(bar.map((slot) => slot.key)).toEqual(['1', '2', '3', '4', '5']);
+      expect(bar.every((slot) => slot.state === 'reserved')).toBe(true);
+    }
   });
 
   it('has no hotbar for a view without an active self', () => {

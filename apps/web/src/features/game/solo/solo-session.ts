@@ -211,6 +211,8 @@ export function createSoloSession(
       if (!disposed) bridge!.runtime.setAudioPreferences({ ...value, mutedPlayerIds: [] });
     },
     playTestTone: () => bridge!.runtime.playTestTone(),
+    /** 경기에 게시되는 것과 같은 가공 얼굴 스트림. 카메라를 켜기 전에는 null. */
+    processedFace: () => (disposed ? null : (bridge!.runtime.getProcessedFaceStream?.() ?? null)),
     setPreviewHost(element: HTMLElement | null) {
       if (!disposed) bridge!.setPreviewHost(element);
     },

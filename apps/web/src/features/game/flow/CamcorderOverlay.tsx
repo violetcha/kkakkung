@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Role } from '@kkakkung/protocol/game-schema';
+import { TaggerVeins } from './TaggerVeins';
 
 export function formatRecordingTime(elapsedSeconds: number): string {
   const total = Math.max(0, Math.floor(elapsedSeconds));
@@ -35,21 +37,79 @@ export function CamcorderOverlay({ startedAtMs, nowMs }: { startedAtMs?: number;
   );
 }
 
+/**
+ * 화면 테두리는 역할이 정한다. 도망자는 캠코더를 들고 다니므로 REC 와 모서리 표식을 보고,
+ * 술래는 장비만 들고 다니므로 가장자리에 핏줄이 번진다(S15P21C204-295).
+ * 역할을 모르는 화면(관전·검수)은 캠코더를 쓴다.
+ */
+/**
+ * 무대 맨 위의 시계. 남은 시간이 있으면 내려가는 시간을, 없으면(연습) 지나간 시간을 보여 준다.
+ * 캠코더를 쓰지 않는 술래도 시간을 봐야 하므로 테두리와 따로 둔다(S15P21C204-295).
+ */
+export function StageClock({
+  remainingSeconds,
+  elapsedFrom,
+  nowMs,
+}: {
+  remainingSeconds?: number | null;
+  elapsedFrom?: number;
+  nowMs?: number;
+}) {
+  const mountedAtMs = useRef(elapsedFrom ?? Date.now());
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (nowMs !== undefined || remainingSeconds !== undefined) return;
+    const interval = window.setInterval(() => setClockMs(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, [nowMs, remainingSeconds]);
+  const text =
+    remainingSeconds === undefined || remainingSeconds === null
+      ? formatRecordingTime(((nowMs ?? clockMs) - (elapsedFrom ?? mountedAtMs.current)) / 1_000)
+      : `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
+          remainingSeconds % 60,
+        ).padStart(2, '0')}`;
+  const low = typeof remainingSeconds === 'number' && remainingSeconds <= 30;
+  return (
+    <p
+      className="stage-clock"
+      role="status"
+      aria-label={remainingSeconds === undefined ? `지난 시간 ${text}` : `남은 시간 ${text}`}
+      data-low={low}
+    >
+      {text}
+    </p>
+  );
+}
+
 export function GameStatusChrome({
   status,
+  role,
+  remainingSeconds,
   startedAtMs,
   nowMs,
 }: {
   status: ReactNode;
+  role?: Role | null;
+  remainingSeconds?: number | null;
   startedAtMs?: number;
   nowMs?: number;
 }) {
   return (
     <>
-      <CamcorderOverlay
-        {...(startedAtMs === undefined ? {} : { startedAtMs })}
-        {...(nowMs === undefined ? {} : { nowMs })}
-      />
+      {remainingSeconds !== undefined && (
+        <StageClock
+          remainingSeconds={remainingSeconds}
+          {...(nowMs === undefined ? {} : { nowMs })}
+        />
+      )}
+      {role === 'tagger' ? (
+        <TaggerVeins />
+      ) : (
+        <CamcorderOverlay
+          {...(startedAtMs === undefined ? {} : { startedAtMs })}
+          {...(nowMs === undefined ? {} : { nowMs })}
+        />
+      )}
       <div className="game-status-a11y">{status}</div>
     </>
   );

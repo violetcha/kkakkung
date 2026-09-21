@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useEffect, useId, useState } from 'react';
 import type {
   AudioPreferences,
@@ -13,6 +14,7 @@ export function AudioControls({
   participants = [],
   canTestTone,
   compact = false,
+  sections = 'all',
 }: {
   readStatus(): LocalAudioStatus | null;
   onPreferences(preferences: AudioPreferences): void;
@@ -20,6 +22,11 @@ export function AudioControls({
   participants?: readonly Participant[];
   canTestTone: boolean;
   compact?: boolean;
+  /**
+   * S15P21C204-295. 'live' 는 살아 있는 장치가 있어야 하는 것(마이크 입력·확인음·참가자별 끄기)만
+   * 그린다. 음량과 전체 끄기는 설정 창이 저장소와 함께 맡으므로 같은 줄이 두 번 나오지 않는다.
+   */
+  sections?: 'all' | 'live';
 }) {
   const [status, setStatus] = useState<LocalAudioStatus | null>(readStatus);
   const [feedback, setFeedback] = useState('');
@@ -43,26 +50,34 @@ export function AudioControls({
     <aside className="audio-controls" aria-label="소리 설정">
       <details open={!compact}>
         <summary>소리 점검 · 음량</summary>
-        <label htmlFor={id}>
-          듣는 음량 <output>{Math.round(preferences.volume * 100)}%</output>
-        </label>
-        <input
-          id={id}
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          value={Math.round(preferences.volume * 100)}
-          onChange={(event) => change({ volume: Number(event.currentTarget.value) / 100 })}
-        />
-        <label className="audio-toggle">
-          <input
-            type="checkbox"
-            checked={preferences.muted}
-            onChange={(event) => change({ muted: event.currentTarget.checked })}
-          />
-          모든 소리 끄기
-        </label>
+        {sections === 'all' && (
+          <>
+            <label htmlFor={id}>
+              듣는 음량 <output>{Math.round(preferences.volume * 100)}%</output>
+            </label>
+            {/* S15P21C204-295. 채워진 구간을 CSS 가 그릴 수 있게 값 자체를 변수로 넘긴다. */}
+            <input
+              id={id}
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(preferences.volume * 100)}
+              style={
+                { '--range-fill': `${Math.round(preferences.volume * 100)}%` } as CSSProperties
+              }
+              onChange={(event) => change({ volume: Number(event.currentTarget.value) / 100 })}
+            />
+            <label className="audio-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.muted}
+                onChange={(event) => change({ muted: event.currentTarget.checked })}
+              />
+              모든 소리 끄기
+            </label>
+          </>
+        )}
         <div className="microphone-level">
           <label htmlFor={id + '-microphone'}>마이크 입력 크기</label>
           <meter

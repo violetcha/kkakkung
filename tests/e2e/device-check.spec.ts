@@ -20,7 +20,7 @@ test('asks for media consent before the device check appears', async ({ page }) 
 
   await expect(page.getByRole('heading', { name: '카메라를 켜기 전에' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '플레이 전 장치 점검' })).toBeHidden();
-  const proceed = page.getByRole('button', { name: '동의하고 장치 점검으로' });
+  const proceed = page.getByRole('button', { name: '동의합니다' });
   await expect(proceed).toBeDisabled();
 
   // 하나만 켜도 통과하지 못한다.

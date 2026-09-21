@@ -18,7 +18,8 @@ export function LocalControls({
 }: {
   status: DeviceStatus;
   mode: InteractionState['mode'];
-  previewHost(element: HTMLDivElement | null): void;
+  /** 없으면 미리보기 자리를 그리지 않는다. 호출자가 무대 위 다른 자리에 직접 둔다(혼자 연습). */
+  previewHost?(element: HTMLDivElement | null): void;
   onKeyboard(): void;
   onMotion(): Promise<void>;
   onRecover(): Promise<void>;
@@ -45,7 +46,9 @@ export function LocalControls({
   if (variant === 'quiet')
     return (
       <aside className="local-controls local-controls-quiet" aria-label="내 카메라">
-        <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+        {previewHost && (
+          <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+        )}
         {deviceLost(status) && (
           <div className="device-recovery" role="alert">
             <p>
@@ -64,7 +67,9 @@ export function LocalControls({
     );
   return (
     <aside className="local-controls" aria-label="내 카메라와 조작">
-      <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+      {previewHost && (
+        <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
+      )}
       <details open={!compact}>
         <summary>조작 안내 · 장치 설정</summary>
         <p>

@@ -73,7 +73,8 @@ async function enter(page: Page) {
   );
   await page.goto('/play');
   await page.getByRole('button', { name: '시작하기', exact: true }).click();
-  await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
+  await page.getByRole('button', { name: '튜토리얼', exact: true }).click();
+  await page.keyboard.press('Escape'); // 메뉴(안내·장치·종료 버튼) 열기
   await expect(page.getByRole('heading', { name: '혼자 준비해 볼까요?' })).toBeVisible();
 }
 
@@ -146,19 +147,33 @@ test('solo teaches actual keyboard movement and both roles without admission or 
   await enter(page);
   const progress = page.getByLabel('체험 진행');
   await holdKey(page, 'KeyW', 400);
-  await expect(progress.getByText('✓ 완료 · 한 칸 전진', { exact: true })).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '한 칸 전진' }),
+  ).toBeVisible();
   await holdKey(page, 'KeyS', 600);
-  await expect(progress.getByText('✓ 완료 · 한 칸 후진', { exact: true })).toBeVisible();
-  await expect(progress.getByText('✓ 완료 · 중립으로 멈추기', { exact: true })).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '한 칸 후진' }),
+  ).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '중립으로 멈추기' }),
+  ).toBeVisible();
   await holdKey(page, 'KeyA', 400);
-  await expect(progress.getByText('✓ 완료 · 왼쪽 90° 회전', { exact: true })).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '왼쪽 90° 회전' }),
+  ).toBeVisible();
   // 회전은 키를 놓고 중립 시간(150ms)이 지나야 다음 회전을 받는다(265). 같은 이유로 페이지 시계.
   await page.evaluate(() => new Promise<void>((done) => setTimeout(done, 300)));
   await holdKey(page, 'KeyD', 400);
-  await expect(progress.getByText('✓ 완료 · 오른쪽 90° 회전', { exact: true })).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '오른쪽 90° 회전' }),
+  ).toBeVisible();
+  // 역할 전환은 무대 위 튜토리얼 패널에 있다. 메뉴(반투명 덮개)를 닫아야 눌린다.
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '술래 체험', exact: true }).click();
   await page.keyboard.press('KeyF');
-  await expect(progress.getByText('✓ 완료 · 술래 · 장비 설치', { exact: true })).toBeVisible();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '술래 · 장비 설치' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: '도망자 체험', exact: true }).click();
   await page.keyboard.press('KeyE');
   for (const step of await page.getByLabel('도전 순서').locator('li').allTextContents()) {
@@ -171,10 +186,14 @@ test('solo teaches actual keyboard movement and both roles without admission or 
           : 'ArrowLeft';
     await page.keyboard.press(arrow);
   }
-  await expect(progress.getByText('✓ 완료 · 도망자 · 탈출 도전', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await expect(
+    progress.locator('li[data-completed="true"]', { hasText: '도망자 · 탈출 도전' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape'); // 종료 버튼은 메뉴에 있다
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
   await expect(page.getByLabel('닉네임')).toBeVisible();
-  await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
+  await page.getByRole('button', { name: '튜토리얼', exact: true }).click();
+  await page.keyboard.press('Escape'); // 메뉴(안내·장치·종료 버튼) 열기
   await expect(page.locator('[data-completed="true"]')).toHaveCount(0);
   expect(admissions).toEqual([]);
   expect(
@@ -184,10 +203,10 @@ test('solo teaches actual keyboard movement and both roles without admission or 
           .nonViteSockets,
     ),
   ).toBe(0);
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
 });
 
-test('actual vision Worker and audio lifetime close on hidden-tab handling and restart fresh', async ({
+test('actual vision Worker and audio lifetime survive a hidden tab and close when the practice ends', async ({
   page,
 }) => {
   await localDevices(page);
@@ -196,21 +215,21 @@ test('actual vision Worker and audio lifetime close on hidden-tab handling and r
   await expect(page.getByLabel('내 웹캠 미리보기').locator('video')).toBeVisible();
   await expect.poll(async () => (await resources(page)).workers).toBe(1);
   await expect(page.getByText('얼굴을 찾지 못했습니다.', { exact: false })).toBeVisible();
+  // S15P21C204-295. Alt+Tab·다른 탭으로 나가도 체험은 유지된다(입력만 멈춤). 이 체험의 영상·음성은
+  // 어디로도 전송되지 않으므로 카메라·Worker 를 그대로 둔다. 페이지를 떠날 때만 정리한다.
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await expect(
-    page.getByText('다른 탭으로 이동해 카메라와 체험을 종료했어요.', { exact: true }),
-  ).toBeVisible();
-  await expect.poll(() => resources(page)).toEqual({ live: 0, workers: 0, audio: 0 });
+  await expect(page.getByLabel('내 웹캠 미리보기').locator('video')).toBeVisible();
+  await expect.poll(async () => (await resources(page)).workers).toBe(1);
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
   });
-  await page.getByRole('button', { name: '새 체험 시작하기', exact: true }).click();
-  await expect(page.getByLabel('내 웹캠 미리보기').locator('video')).toHaveCount(0);
-  await expect(page.locator('[data-completed="true"]')).toHaveCount(0);
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
+  await expect(page.getByLabel('닉네임')).toBeVisible();
+  await expect.poll(() => resources(page)).toEqual({ live: 0, workers: 0, audio: 0 });
 });
 
 test('closing while permission is pending stops the late stream and does not reopen the next session', async ({
@@ -220,13 +239,14 @@ test('closing while permission is pending stops the late stream and does not reo
   await enter(page);
   await page.getByRole('button', { name: '카메라 켜고 점검하기', exact: true }).click();
   await expect.poll(async () => (await resources(page)).live).toBe(1);
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
   await expect(page.getByLabel('닉네임')).toBeVisible();
-  await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
+  await page.getByRole('button', { name: '튜토리얼', exact: true }).click();
+  await page.keyboard.press('Escape'); // 메뉴(안내·장치·종료 버튼) 열기
   await page.evaluate(() => {
     (globalThis as typeof globalThis & { soloProbe: Probe }).soloProbe.release?.();
   });
   await expect.poll(() => resources(page)).toEqual({ live: 0, workers: 0, audio: 0 });
   await expect(page.getByLabel('내 웹캠 미리보기').locator('video')).toHaveCount(0);
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
 });

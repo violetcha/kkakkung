@@ -238,6 +238,8 @@ export function createGestureIntentController(deps: GestureIntentDeps): GestureI
       if (!deps.context.acceptsInput) return null;
       // challenge 중에는 취소 외 일반 행동을 막는다.
       if (blockedByChallenge()) return null;
+      // S15P21C204-295. 숫자 키는 핫바(아이템) 전용이다. 지도 교환·탈출 도전 같은 상호작용은
+      // 핫바 칸이 아니라 E 하나에만 둔다.
       if (key === '1' || key === '2') {
         if (context.role !== 'tagger') return null;
         const next: EquipmentKind = key === '1' ? 'sensor' : 'trap';

@@ -97,8 +97,15 @@ async function setup(page: Page) {
   );
   await page.goto('/play');
   await page.getByRole('button', { name: '시작하기', exact: true }).click();
-  await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
-  await expect(page.getByLabel('소리 설정')).toBeVisible();
+  await page.getByRole('button', { name: '튜토리얼', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: '혼자 준비해 볼까요?' })).toBeVisible();
+}
+/** 설정 창의 갈래를 연다. 창이 닫혀 있으면 Esc 로 먼저 연다. */
+async function openTab(page: Page, label: string) {
+  if (!(await page.getByRole('button', { name: '계속하기', exact: true }).isVisible()))
+    await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: label, exact: true }).click();
 }
 async function resources(page: Page) {
   return page.evaluate(() => {
@@ -122,6 +129,7 @@ test('personal sound check reuses one real Context without capture and resets on
     if (/\/api\/media\//.test(request.url())) requests.push(request.url());
   });
   await setup(page);
+  await openTab(page, '소리');
   const volume = page.getByRole('slider', { name: '듣는 음량', exact: false });
   await expect(volume).toHaveValue('70');
   await page.getByRole('button', { name: '확인음 듣기', exact: true }).click();
@@ -145,12 +153,14 @@ test('personal sound check reuses one real Context without capture and resets on
   expect((await resources(page)).tones).toBe(0);
   await page.getByRole('checkbox', { name: '모든 소리 끄기', exact: true }).uncheck();
   await page.getByRole('button', { name: '확인음 듣기', exact: true }).click();
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
   await expect.poll(() => resources(page)).toMatchObject({ contexts: 1, open: 0, tones: 0 });
-  await page.getByRole('button', { name: '혼자 장치 점검·조작 체험', exact: true }).click();
-  await expect(page.getByRole('slider', { name: '듣는 음량', exact: false })).toHaveValue('70');
+  // 설정은 이 기기에 남는다. 다시 들어오면 마지막 음량(100%)이 그대로 보인다.
+  await page.getByRole('button', { name: '튜토리얼', exact: true }).click();
+  await openTab(page, '소리');
+  await expect(page.getByRole('slider', { name: '듣는 음량', exact: false })).toHaveValue('100');
   expect(requests).toEqual([]);
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
 });
 
 test('microphone meter follows actual synthetic PCM and releases the borrowed source on mic off', async ({
@@ -158,19 +168,19 @@ test('microphone meter follows actual synthetic PCM and releases the borrowed so
 }) => {
   await setup(page);
   await page.getByRole('button', { name: '카메라 켜고 점검하기', exact: true }).click();
-  // S15P21C204-273. 마이크 선택은 장치 점검 캐러셀의 '소리' 단계에 있다.
-  await page.getByRole('button', { name: '3 소리', exact: true }).click();
-  await page.getByRole('checkbox', { name: '마이크 사용', exact: true }).check();
+  // S15P21C204-295. 마이크는 장치 갈래의 한 줄이고, 입력 크기는 소리 갈래에서 본다.
+  await page.getByRole('button', { name: '연결', exact: true }).click();
   await expect.poll(() => resources(page)).toMatchObject({ contexts: 1, tracks: 2, analysers: 1 });
+  await openTab(page, '소리');
   await expect
     .poll(async () =>
       Number(await page.getByLabel('마이크 입력 크기', { exact: true }).getAttribute('value')),
     )
     .toBeGreaterThan(0.05);
-  await page.getByText('조작 안내 · 장치 설정', { exact: true }).click();
-  await expect(page.getByRole('button', { name: '마이크 끄기', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: '마이크 끄기', exact: true }).click();
+  await openTab(page, '카메라 · 장치');
+  await expect(page.getByRole('button', { name: '끄기', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '끄기', exact: true }).click();
   await expect.poll(() => resources(page)).toMatchObject({ tracks: 1, analysers: 0, tones: 0 });
-  await page.getByRole('button', { name: '체험 마치고 방 준비하기', exact: true }).click();
+  await page.getByRole('button', { name: '체험 마치기', exact: true }).click();
   await expect.poll(() => resources(page)).toMatchObject({ open: 0, tracks: 0, analysers: 0 });
 });

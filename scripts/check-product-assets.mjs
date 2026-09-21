@@ -43,6 +43,14 @@ try {
     ['Galmuri11.woff2', 'f467d1b10e6b88dfa8399c9f93b38c7643e050abfe4fc15800ac0b000f5a57d6'],
     ['Galmuri11-Bold.woff2', '8643094f395aa2dbad6bc4385cc043314801eaec2e759d549435ec8ac4f2d078'],
     ['Galmuri14.woff2', '79b34b22b86536d0fe9ebe7105dd5f20f56558d691c67a0c6432807a03ec5a82'],
+    [
+      'NanumMyeongjo-korean-400.woff2',
+      'acfabaa30f8c6818549ce47060a382892f42ed7941550aec26c99601d5680f32',
+    ],
+    [
+      'NanumMyeongjo-latin-400.woff2',
+      '06f6ddd742ebe3c12ebaefdac3ef16720aa91ac98592d551af1de043ceb541c0',
+    ],
     ['OFL-1.1.txt', '86a3ee9495f942f0243f18c103da9faca27adb88142613edb8bb852e56c892c1'],
   ];
   for (const [name, expected] of fontAssets) {
@@ -70,6 +78,8 @@ try {
       ['Galmuri11', '400 11px Galmuri11'],
       ['Galmuri11-Bold', '700 11px Galmuri11'],
       ['Galmuri14', '400 14px Galmuri14'],
+      // S15P21C204-295. 제목용 명조. 한글 글자로 물어야 korean 서브셋이 적재된다.
+      ['Nanum Myeongjo', "400 16px 'Nanum Myeongjo'"],
     ];
     const loaded = {};
     for (const [name, descriptor] of requested) {
@@ -88,6 +98,7 @@ try {
   if (Object.values(fonts.loaded).some((loaded) => !loaded)) throw new Error('FONT_LOAD_FAILED');
   // S15P21C204-294: product text uses the system gothic stack; the Galmuri faces stay bundled
   // (FONT_LOAD_FAILED above) for the logo and notices but are no longer part of the text tokens.
+  // S15P21C204-295: headings use --font-display (Nanum Myeongjo). Body/control/small stay gothic.
   const systemGothic = 'Segoe UI, Apple SD Gothic Neo, Malgun Gothic, sans-serif';
   if (
     normalizedFamily(fonts.body) !== systemGothic ||

@@ -22,7 +22,8 @@ export function ConsentGate({
     <section className="consent-gate" aria-label="개인정보 처리 동의">
       <h2>{heading}</h2>
       <p>이 게임은 얼굴과 음성을 사용합니다. 아래 내용을 읽고 동의해야 카메라를 켤 수 있습니다.</p>
-      <ul className="notice" aria-label="개인정보 처리 안내">
+      {/* 흔한 약관 상자처럼 안내는 제자리에서 굴린다. 창 크기는 문장 수에 따라 변하지 않는다. */}
+      <ul className="notice consent-gate-notice" aria-label="개인정보 처리 안내" tabIndex={0}>
         {PRIVACY_NOTICE.map((sentence) => (
           <li key={sentence.text}>{sentence.text}</li>
         ))}
@@ -38,7 +39,7 @@ export function ConsentGate({
         </label>
       </div>
       <button type="button" disabled={!ready} onClick={onAccept}>
-        동의하고 장치 점검으로
+        동의합니다
       </button>
       <small>
         동의하지 않으면 이 창을 닫으면 됩니다. 동의는 이 기기에 저장되며 안내가 바뀌면 다시
