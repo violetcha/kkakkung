@@ -300,6 +300,11 @@ export interface InteractionRuntime {
   /** D-14. 승인된 세대에서 가공 얼굴/선택 마이크를 게시한다. */
   publishMedia(): Promise<string | null>;
   getPublications(): readonly PublicationRecord[];
+  /**
+   * S15P21C204-295. 게시되는 것과 같은 가공 얼굴(얼굴만 잘라 흑백) 스트림. 내 캐릭터 미리보기 등
+   * 로컬 표시용이며 게시 경로는 여전히 handle 검사를 거친다. 장치를 켜기 전에는 null.
+   */
+  getProcessedFaceStream?(): MediaStream | null;
   /** D-15. SDK 구독 사건을 넘긴다. */
   addRemoteTrack(track: RemoteTrack): void;
   removeRemoteTrack(trackSid: string): void;
@@ -1662,6 +1667,9 @@ export const createInteractionRuntime = (
 
     getPublications() {
       return publisher?.getPublications() ?? [];
+    },
+    getProcessedFaceStream() {
+      return compositor?.getHandle()?.stream ?? null;
     },
 
     /**

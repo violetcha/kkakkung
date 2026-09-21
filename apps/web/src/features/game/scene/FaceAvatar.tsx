@@ -58,7 +58,7 @@ export const AVATAR_PARTS = Object.freeze({
   satchel: [0.22, 0.16, 0.08] as const,
 });
 
-function createAvatarResources() {
+export function createAvatarResources() {
   const geometry = {
     cube: new BoxGeometry(1, 1, 1),
     face: new PlaneGeometry(0.418, 0.418),
@@ -98,7 +98,7 @@ function createAvatarResources() {
   };
 }
 
-function Avatar({
+export function Avatar({
   player,
   ally,
   faces,
