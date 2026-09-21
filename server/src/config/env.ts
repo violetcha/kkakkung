@@ -68,6 +68,11 @@ const environment = z.object({
   // actually load-tested may be opened (QA-10/QA-11 raise this step by step).
   MAX_ROOMS: z.coerce.number().int().min(1).max(10).default(1),
   MAX_SLOTS: z.coerce.number().int().min(6).max(60).default(6),
+  // S15P21C204-300. 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 열어 둘 수 있는 방 수. 공유
+  // NAT 뒤에서는 여러 사람이 한 출처로 묶이므로 "한 사람" 이 아니라 "한 회선" 기준이다.
+  // 정상 6인은 방 하나에 초대로 모이므로 영향이 없다. 올리면 전역 예산을 한 회선이 더 많이
+  // 가져갈 수 있고, 내리면 같은 망에서 동시에 두 팀이 놀기 어려워진다.
+  MAX_ROOMS_PER_ORIGIN: z.coerce.number().int().min(1).max(10).default(2),
   OPS_DATA_DIR: z.string().default('./.local/operations'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 
@@ -189,6 +194,10 @@ export function parseConfig(input: Record<string, string | undefined>) {
     throw new Error('ALLOWED_ORIGINS must contain exact HTTP origins');
   if (raw.MAX_SLOTS !== raw.MAX_ROOMS * 6)
     throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
+  // 출처 상한이 전역 방 수 이상이면 상한이 아무것도 막지 않는다. 설정 실수로 조용히 꺼지지
+  // 않게 부팅에서 거절한다(S15P21C204-300).
+  if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ORIGIN >= raw.MAX_ROOMS)
+    throw new Error('MAX_ROOMS_PER_ORIGIN must be below MAX_ROOMS');
   if (raw.ALERT_WEBHOOK_CHANNEL !== undefined && raw.ALERT_WEBHOOK_URL === undefined)
     throw new Error('ALERT_WEBHOOK_CHANNEL requires ALERT_WEBHOOK_URL');
   if (raw.ALERT_WEBHOOK_URL !== undefined) {
@@ -286,6 +295,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     mediaMode: raw.MEDIA_MODE,
     maxRooms: raw.MAX_ROOMS,
     maxSlots: raw.MAX_SLOTS,
+    maxRoomsPerOrigin: raw.MAX_ROOMS_PER_ORIGIN,
     opsDataDir: raw.OPS_DATA_DIR,
     logLevel: raw.LOG_LEVEL,
     livekit: livekit
