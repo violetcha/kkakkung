@@ -1,19 +1,48 @@
+import { useState } from 'react';
 import type { DemoScenarioId, DemoStateMessage } from '@kkakkung/protocol/game-messages';
+import { demoFailureLabel, demoScenarioGuide, demoStepLabel } from './demo-scenario-guide';
 
-/** Operator wording for each scenario the server offers. Unknown ids fall back to their id. */
-const LABELS: Readonly<Record<DemoScenarioId, string>> = {
-  trap: '덫 설치·무장',
-  sensor: '감지기 설치',
-  capture: '술래가 나를 포획',
-  'capture-one': '인형끼리 포획 · 누계 +1',
-  approach: '상대가 다가오기',
-  exit: '인형 도망자 탈출 · 누계 +1',
-  exchange: '지도 교환 요청',
-  'exchange-cancel': '지도 교환 요청 뒤 취소',
-  'exchange-trace': '지도 교환 흔적 · 술래 시점',
-  'result-tagger-win': '결과 화면 · 술래 승리',
-  'result-runner-win': '결과 화면 · 도망자 승리',
-  'abort-connection-lost': '연결 상실 무효',
+type DemoOptionValues = Readonly<{
+  role?: 'tagger' | 'runner';
+  distance?: 1 | 2 | 3;
+  side?: 'front' | 'left' | 'right' | 'back';
+  facing?: 'toward' | 'away';
+  installer?: 'puppet' | 'me';
+}>;
+
+type AvailableScenario =
+  DemoScenarioId | { id: DemoScenarioId; options?: readonly (keyof DemoOptionValues)[] };
+
+const OPTION_LABELS: Readonly<Record<keyof DemoOptionValues, string>> = {
+  role: '역할',
+  distance: '거리',
+  side: '위치',
+  facing: '방향',
+  installer: '설치자',
+};
+
+const OPTION_VALUES: Readonly<Record<keyof DemoOptionValues, readonly string[]>> = {
+  role: ['tagger', 'runner'],
+  distance: ['1', '2', '3'],
+  side: ['front', 'left', 'right', 'back'],
+  facing: ['toward', 'away'],
+  installer: ['puppet', 'me'],
+};
+
+const OPTION_VALUE_LABELS: Readonly<Record<string, string>> = {
+  tagger: '술래',
+  runner: '도망자',
+  '1': '1칸',
+  '2': '2칸',
+  '3': '3칸',
+  front: '앞',
+  left: '왼쪽',
+  right: '오른쪽',
+  back: '뒤',
+  toward: '나를 봄',
+  away: '등짐',
+  puppet: '인형',
+  me: '나',
 };
 
 /**
@@ -23,26 +52,136 @@ const LABELS: Readonly<Record<DemoScenarioId, string>> = {
 export function DemoPanel({
   demo,
   onRun,
+  onRunWithOptions,
+  onAbort,
+  phase,
 }: {
   demo: DemoStateMessage;
   onRun(scenario: DemoScenarioId): void;
+  onRunWithOptions?(scenario: DemoScenarioId, options: DemoOptionValues): void;
+  onAbort?(): void;
+  phase?: string | null;
 }) {
+  const [options, setOptions] = useState<Record<string, DemoOptionValues>>({});
   const running = demo.running !== null;
+  const beforeGame = phase != null && !['PLAYING', 'RESULT'].includes(phase);
+  const available = demo.available as readonly AvailableScenario[];
+  const groups = new Map<string, AvailableScenario[]>();
+  for (const scenario of available) {
+    const id = typeof scenario === 'string' ? scenario : scenario.id;
+    const key = demoScenarioGuide(id).group;
+    const group = groups.get(key) ?? [];
+    group.push(scenario);
+    groups.set(key, group);
+  }
+  const setOption = (id: string, key: keyof DemoOptionValues, value: string) => {
+    setOptions((current) => ({
+      ...current,
+      [id]: { ...current[id], [key]: key === 'distance' ? Number(value) : value },
+    }));
+  };
+  const run = (scenario: AvailableScenario) => {
+    const id = typeof scenario === 'string' ? scenario : scenario.id;
+    const selected = options[id] ?? {};
+    if (onRunWithOptions && Object.keys(selected).length > 0) onRunWithOptions(id, selected);
+    else onRun(id);
+  };
   return (
     <section className="game-panel demo-panel" aria-label="데모 시나리오">
-      <h2>데모 시나리오</h2>
-      <div className="actions">
-        {demo.available.map((scenario) => (
-          <button key={scenario} disabled={running} onClick={() => onRun(scenario)}>
-            {LABELS[scenario] ?? scenario}
+      <div className="demo-panel-heading">
+        <div>
+          <p className="eyebrow">OPERATOR CONSOLE</p>
+          <h2>데모 시나리오</h2>
+        </div>
+        {onAbort && (
+          <button
+            type="button"
+            className="demo-abort"
+            disabled={running || beforeGame}
+            onClick={onAbort}
+          >
+            라운드 종료
           </button>
+        )}
+      </div>
+      {beforeGame && (
+        <p className="demo-panel-note">경기가 시작되면 시나리오를 실행할 수 있습니다.</p>
+      )}
+      <div className="demo-scenario-groups">
+        {[...groups.entries()].map(([group, scenarios]) => (
+          <section
+            key={group}
+            className="demo-scenario-group"
+            aria-labelledby={`demo-group-${group}`}
+          >
+            <h3 id={`demo-group-${group}`}>
+              {
+                demoScenarioGuide(
+                  scenarios[0] === undefined
+                    ? ''
+                    : typeof scenarios[0] === 'string'
+                      ? scenarios[0]
+                      : scenarios[0].id,
+                ).groupLabel
+              }
+            </h3>
+            <div className="actions">
+              {scenarios.map((scenario) => {
+                const id = typeof scenario === 'string' ? scenario : scenario.id;
+                const item = demoScenarioGuide(id);
+                const fields =
+                  typeof scenario === 'string' ? [] : (scenario.options ?? item.options ?? []);
+                return (
+                  <div key={id} className="demo-scenario-item">
+                    <button
+                      type="button"
+                      disabled={running || beforeGame}
+                      aria-describedby={`demo-guide-${id}`}
+                      onClick={() => run(scenario)}
+                    >
+                      {item.label}
+                    </button>
+                    {fields.length > 0 && (
+                      <div className="demo-options" aria-label={`${item.label} 선택 사항`}>
+                        {fields.map((field) => (
+                          <label key={field}>
+                            {OPTION_LABELS[field]}
+                            <select
+                              value={String(options[id]?.[field] ?? '')}
+                              disabled={running || beforeGame}
+                              onChange={(event) => setOption(id, field, event.target.value)}
+                            >
+                              <option value="">기본값</option>
+                              {OPTION_VALUES[field].map((value) => (
+                                <option key={value} value={value}>
+                                  {OPTION_VALUE_LABELS[value] ?? value}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <details id={`demo-guide-${id}`} className="demo-checklist">
+                      <summary>{item.description}</summary>
+                      <ul>
+                        {item.checklist.map((check) => (
+                          <li key={check}>{check}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         ))}
       </div>
       <p role="status">
         {running
-          ? `진행 중: ${LABELS[demo.running!] ?? demo.running} · ${demo.step ?? '준비'}`
+          ? `진행 중: ${demoScenarioGuide(demo.running!).label} · ${demoStepLabel(demo.step)}`
           : demo.failure
-            ? `직전 시나리오 중단: ${demo.failure}`
+            ? `직전 시나리오 중단: ${demoFailureLabel(demo.failure)}`
             : '시나리오를 고르면 인형이 실제 규칙으로 움직입니다.'}
       </p>
     </section>

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { demoStateSchema, type DemoStateMessage } from '@kkakkung/protocol/game-messages';
 import { DemoPanel } from './DemoPanel';
+import { DEMO_SCENARIO_GUIDE, demoFailureCodes } from './demo-scenario-guide';
 
 const state = (over: Partial<DemoStateMessage> = {}): DemoStateMessage =>
   demoStateSchema.parse({
@@ -35,7 +36,7 @@ it('locks the buttons while one runs and reports a stopped scenario', () => {
       onRun: () => {},
     }),
   );
-  expect(running).toContain('진행 중: 술래가 나를 포획 · chase-operator');
+  expect(running).toContain('진행 중: 술래가 나를 포획 · 관리자에게 접근하는 중');
   expect(running.match(/disabled/g)).toHaveLength(3);
   const stopped = renderToStaticMarkup(
     createElement(DemoPanel, {
@@ -43,7 +44,7 @@ it('locks the buttons while one runs and reports a stopped scenario', () => {
       onRun: () => {},
     }),
   );
-  expect(stopped).toContain('직전 시나리오 중단: chase-operator:TIMEOUT');
+  expect(stopped).toContain('직전 시나리오 중단: 정해진 시간 안에 조건을 확인하지 못했습니다.');
   expect(stopped).not.toContain('disabled');
 });
 
@@ -55,4 +56,31 @@ it('asks for exactly the scenario id the button stands for', () => {
   props.onRun(props.demo.available[0]!);
   expect(onRun).toHaveBeenCalledWith('trap');
   expect(onRun).toHaveBeenCalledTimes(1);
+});
+
+it('keeps a Korean label and at least one checklist for every planned scenario', () => {
+  for (const item of Object.values(DEMO_SCENARIO_GUIDE)) {
+    expect(item.label).not.toBe(item.id);
+    expect(item.checklist.length).toBeGreaterThan(0);
+    expect(item.description).not.toBe('');
+  }
+});
+
+it('has a user-facing label for every known failure code', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, {
+      demo: state({ failure: 'place:PATH_BLOCKED' }),
+      onRun: () => {},
+    }),
+  );
+  expect(html).toContain('이동 경로가 막혔습니다.');
+  for (const code of demoFailureCodes()) expect(code).not.toBe('');
+});
+
+it('disables controls before the round starts and explains why', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, { demo: state(), phase: 'DEVICE_CHECK', onRun: () => {} }),
+  );
+  expect(html).toContain('경기가 시작되면 시나리오를 실행할 수 있습니다.');
+  expect(html.match(/disabled=""/g)).toHaveLength(3);
 });

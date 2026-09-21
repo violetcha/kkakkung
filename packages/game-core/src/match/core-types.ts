@@ -1,5 +1,6 @@
 import type {
   Cell,
+  DeadlineMode,
   Dir,
   KnownExit,
   MatchLayout,
@@ -77,7 +78,15 @@ export type ControlIntent =
   | Readonly<{ type: 'EXPIRE_MOVE'; playerId: string; sequence: number }>
   | Readonly<{ type: 'CONNECTION_LOST'; playerId: string }>
   | Readonly<{ type: 'ABORT_MATCH'; reason: AbortReason }>
-  | Readonly<{ type: 'START_PLAYING'; startTick: number }>;
+  | Readonly<{ type: 'START_PLAYING'; startTick: number }>
+  /**
+   * S15P21C204-316. Puts one participant on a cell facing a direction, so the demo harness can
+   * show a feature without walking there first. **Only a `deadline: 'none'` game accepts it**;
+   * an ordinary match ignores it entirely. It moves nobody into a capture: the target cell must
+   * be a free passage, and the placement lands after this tick's judgements so the next tick
+   * decides captures from the new position under the ordinary rules.
+   */
+  | Readonly<{ type: 'PLACE_PLAYER'; playerId: string; cell: Cell; dir: Dir }>;
 
 export type OutcomeResult =
   | Readonly<{ result: 'applied'; code: null }>
@@ -261,6 +270,12 @@ export type CreateMatchInput = Readonly<{
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly RosterEntry[];
+  /**
+   * S15P21C204-316. Omitted or `'round'` for every real match. `'none'` is the operator demo
+   * harness: no timeout, and `PLACE_PLAYER` is accepted. Practice ignores it because practice
+   * never starts a round clock.
+   */
+  deadline?: DeadlineMode;
 }>;
 
 export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;

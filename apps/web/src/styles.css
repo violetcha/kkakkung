@@ -1252,6 +1252,114 @@
   min-height: 90px;
   max-width: 180px;
 }
+.game-stage > .demo-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: min(360px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-3);
+  background: #090a09e8;
+  border: 1px solid #d7d7cf70;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px #000b;
+  backdrop-filter: blur(8px);
+}
+.demo-panel-heading {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.demo-panel-heading h2 {
+  margin: 0;
+}
+.demo-panel .eyebrow {
+  margin: 0 0 3px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--color-muted);
+}
+.demo-panel-note,
+.demo-device-default {
+  margin: var(--space-2) 0;
+  color: var(--color-muted);
+  font-size: var(--text-small);
+}
+.demo-scenario-groups {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.demo-scenario-group {
+  margin: 0;
+}
+.demo-scenario-group h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-control);
+  color: var(--color-accent);
+}
+.demo-scenario-item {
+  display: grid;
+  gap: 4px;
+}
+.demo-scenario-item + .demo-scenario-item {
+  margin-top: 6px;
+}
+.demo-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding: 0 4px;
+}
+.demo-options label {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.demo-options select {
+  min-width: 0;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+.demo-checklist {
+  padding: 0 4px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.demo-checklist summary {
+  cursor: pointer;
+  line-height: 1.35;
+}
+.demo-checklist ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.demo-abort {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  color: #ffd4cc;
+  border-color: #bf695d;
+}
+.demo-panel > p[role='status'] {
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-small);
+}
+.demo-device-check {
+  border-color: #c09a5b;
+}
+@media (max-width: 850px) {
+  .game-stage > .demo-panel {
+    top: 8px;
+    right: 8px;
+    width: min(320px, calc(100% - 16px));
+    max-height: calc(100% - 16px);
+  }
+}
 .product-shell .hotbar-slot {
   position: relative;
   display: flex;
