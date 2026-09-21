@@ -65,6 +65,7 @@ import {
 import {
   cueState,
   CUE_FLASH_MS,
+  captureProgressFlash,
   detectCues,
   detectEffectFlashes,
   isFlashCue,
@@ -374,7 +375,9 @@ export function bindProductRoom(
       countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
     });
     const cues = detectCues(lastCueState, next);
+    const progressFlash = captureProgressFlash(lastCueState, next);
     lastCueState = next;
+    if (progressFlash) flash(progressFlash);
     for (const kind of cues) {
       if (isProgressCue(kind)) {
         deferredProgress = {

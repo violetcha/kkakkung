@@ -1539,6 +1539,22 @@ it('plays state cues once, defers count cues behind my own ending and flashes th
   expect(played()).toHaveLength(5);
 });
 
+it('shows a server-confirmed capture flash to an active tagger', () => {
+  const f = fixture();
+  const view = viewFixture();
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.state({ phase: 'PLAYING', stateVersion: 11, counts: { escaped: 0, captured: 0 } });
+  f.messages.get('private-view')!({
+    ...view,
+    stateVersion: 11,
+    self: { ...view.self, role: 'tagger' },
+  });
+
+  f.state({ phase: 'PLAYING', stateVersion: 12, counts: { escaped: 0, captured: 1 } });
+
+  expect(f.runtime.getSnapshot().cueFlash).toMatchObject({ kind: 'capture-success' });
+});
+
 it('flashes server-approved sensor and trap effects once without touching footsteps or my own cues', async () => {
   const f = await mediaFixture();
   f.state({ phase: 'GAME_LOADING', stateVersion: 11 });
