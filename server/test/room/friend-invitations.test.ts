@@ -29,6 +29,7 @@ async function fixture() {
     expiresAt: now + 600_000,
   });
   if (operator.status !== 'issued') throw new Error(operator.code);
+
   const requestSession = (token: string, roomCode?: string) =>
     fetch(h.endpoint + '/api/sessions', {
       method: 'POST',
@@ -39,11 +40,13 @@ async function fixture() {
         ...(roomCode ? { createRoom: false, roomCode } : { createRoom: true }),
       }),
     });
+
   const options = (session: SessionResponse) => ({
     token: session.sessionToken,
     roomCode: session.roomCode,
     protocolVersion: PRODUCT_PROTOCOL_VERSION,
   });
+
   const connect = async (session: SessionResponse) => {
     const room = await new Client(h.endpoint).joinOrCreate<unknown, PublicMatchState>(
       PRODUCT_ROOM_NAME,
@@ -54,11 +57,13 @@ async function fixture() {
     peers.push(room);
     return room;
   };
+
   const host = sessionResponseSchema.parse(
     await (await requestSession(operator.invitation.inviteToken)).json(),
   );
   const hostRoom = await connect(host);
   await vi.waitFor(() => expect(hostRoom.state.matchId).toBeTruthy());
+
   const actual = h.application.directory.get(host.roomCode)!;
   const room = actual as unknown as {
     roomId: string;
@@ -69,7 +74,9 @@ async function fixture() {
       onAuth(token: string, options: unknown, context: unknown): Promise<SessionAuth>;
     };
   };
+
   h.application.coordinator.unregister(room.roomId);
+
   const manage = (session = host, method = 'POST', body?: unknown) =>
     fetch(h.endpoint + ROOM_INVITATION_ROUTE, {
       method,
@@ -79,12 +86,45 @@ async function fixture() {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+
   const rotate = async () => {
     const response = await manage();
     expect(response.status).toBe(201);
     expect(response.headers.get('cache-control')).toBe('no-store');
     return roomInvitationResponseSchema.parse(await response.json());
   };
+
+  const kick = async (targetPlayerId: string) => {
+    const requestId = randomUUID();
+    let receipt: unknown;
+    let outcome: unknown;
+
+    const offReceipt = hostRoom.onMessage(PRODUCT_SERVER_MESSAGES.commandResult, (value) => {
+      if ((value as { requestId?: string }).requestId === requestId) receipt = value;
+    });
+
+    const off = hostRoom.onMessage(PRODUCT_SERVER_MESSAGES.commandOutcome, (value) => {
+      if ((value as { requestId?: string }).requestId === requestId) outcome = value;
+    });
+
+    hostRoom.send(PRODUCT_CLIENT_MESSAGES.command, {
+      matchId: hostRoom.state.matchId,
+      requestId,
+      sequence: 1,
+      type: 'ROOM_KICK',
+      payload: { targetPlayerId },
+    });
+
+    await vi.waitFor(() => expect(receipt).toBeDefined());
+    room.tick();
+    await vi.waitFor(() => expect(outcome).toBeDefined());
+
+    offReceipt();
+    off();
+
+    return outcome as { result: string; code: string | null };
+  };
+
   return {
     ...h,
     host,
@@ -94,6 +134,7 @@ async function fixture() {
     options,
     manage,
     rotate,
+    kick,
     connect,
     requestSession,
     advance: (ms: number) => {
@@ -111,21 +152,27 @@ async function fixture() {
 
 it('rotates scoped links and rejects stale onAuth/queued admission while preserving joined players', async () => {
   const f = await fixture();
+
   try {
     const first = await f.rotate();
+
     expect(first.roomCode).toBe(f.host.roomCode);
     expect(first.inviteToken).not.toBe(f.host.sessionToken);
     expect((await f.requestSession(first.inviteToken)).status).toBe(403);
     expect((await f.requestSession(first.inviteToken, 'ABC234')).status).toBe(403);
+
     const joined = sessionResponseSchema.parse(
       await (await f.requestSession(first.inviteToken, first.roomCode)).json(),
     );
     await f.connect(joined);
+
     const pending = sessionResponseSchema.parse(
       await (await f.requestSession(first.inviteToken, first.roomCode)).json(),
     );
     const staleAuth = await f.room.constructor.onAuth('', f.options(pending), {});
+
     const second = await f.rotate();
+
     expect(second.inviteToken).not.toBe(first.inviteToken);
     expect((await f.requestSession(first.inviteToken, first.roomCode)).status).toBe(403);
     expect(f.application.productSessions.authenticate(pending.sessionToken)).toBeNull();
@@ -146,20 +193,27 @@ it('rotates scoped links and rejects stale onAuth/queued admission while preserv
 
 it('keeps the previous link if replacement fails and permits revocation while draining', async () => {
   const f = await fixture();
+
   try {
     const link = await f.rotate();
+
     vi.spyOn(f.application.invites!, 'issue').mockReturnValueOnce({
       status: 'rejected',
       code: 'NOT_READY',
     });
+
     expect((await f.manage()).status).toBe(503);
+
     const scope = {
       inviteToken: link.inviteToken,
       createRoom: false as const,
       roomCode: link.roomCode,
     };
+
     expect(f.application.invites!.verify(scope)).not.toBeNull();
+
     f.setAdmission('DRAINING');
+
     expect((await f.manage()).status).toBe(503);
     expect((await f.manage(f.host, 'DELETE')).status).toBe(204);
     expect(f.application.invites!.verify(scope)).toBeNull();
@@ -170,14 +224,18 @@ it('keeps the previous link if replacement fails and permits revocation while dr
 
 it('does not start a rematch while product admission is draining', async () => {
   const f = await fixture();
+
   try {
     f.room.setPhase('RESULT');
     f.setAdmission('DRAINING');
+
     const requestId = randomUUID();
     let receipt: unknown;
+
     const off = f.hostRoom.onMessage(PRODUCT_SERVER_MESSAGES.commandResult, (value) => {
       if ((value as { requestId?: string }).requestId === requestId) receipt = value;
     });
+
     f.hostRoom.send(PRODUCT_CLIENT_MESSAGES.command, {
       matchId: f.hostRoom.state.matchId,
       requestId,
@@ -185,10 +243,65 @@ it('does not start a rematch while product admission is draining', async () => {
       type: 'REMATCH',
       payload: { mode: 'lobby' },
     });
+
     await vi.waitFor(() => expect(receipt).toBeDefined());
     off();
-    expect(receipt).toMatchObject({ status: 'rejected', code: 'NOT_READY' });
+
+    expect(receipt).toMatchObject({
+      status: 'rejected',
+      code: 'NOT_READY',
+    });
     expect(f.room.phase).toBe('RESULT');
+  } finally {
+    await f.close();
+  }
+});
+
+it('revokes the current invitation and pending reservations when the host kicks a participant', async () => {
+  const f = await fixture();
+
+  try {
+    const link = await f.rotate();
+
+    const joined = sessionResponseSchema.parse(
+      await (await f.requestSession(link.inviteToken, link.roomCode)).json(),
+    );
+    await f.connect(joined);
+
+    const pending = sessionResponseSchema.parse(
+      await (await f.requestSession(link.inviteToken, link.roomCode)).json(),
+    );
+    expect(f.application.productSessions.authenticate(pending.sessionToken)).not.toBeNull();
+
+    const staleAuth = await f.room.constructor.onAuth('', f.options(pending), {});
+
+    expect((await f.kick(joined.playerId)).result).toBe('applied');
+
+    expect(
+      f.application.invites!.verify({
+        inviteToken: link.inviteToken,
+        createRoom: false,
+        roomCode: link.roomCode,
+      }),
+    ).toBeNull();
+
+    expect(f.application.productSessions.authenticate(pending.sessionToken)).toBeNull();
+    expect(f.application.slots!.slotState(link.roomCode, pending.playerId)).toBeNull();
+
+    expect(() => f.room.onJoin({ sessionId: 'late-kicked-reservation' }, {}, staleAuth)).toThrow(
+      'INVALID_SESSION',
+    );
+
+    const replacement = await f.rotate();
+
+    expect(replacement.inviteToken).not.toBe(link.inviteToken);
+    expect(
+      f.application.invites!.verify({
+        inviteToken: replacement.inviteToken,
+        createRoom: false,
+        roomCode: replacement.roomCode,
+      }),
+    ).not.toBeNull();
   } finally {
     await f.close();
   }
@@ -196,11 +309,15 @@ it('does not start a rematch while product admission is draining', async () => {
 
 it('bounds repeated link rotation without discarding live invitations on a rejected request', async () => {
   const f = await fixture();
+
   try {
     let link;
     for (let i = 0; i < 20; i++) link = await f.rotate();
+
     expect(f.application.invites!.size).toBe(2);
+
     const response = await f.manage();
+
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: 'RATE_LIMITED' });
     expect(
@@ -217,21 +334,29 @@ it('bounds repeated link rotation without discarding live invitations on a rejec
 
 it('enforces current host, connected session, current phase and strict empty bodies', async () => {
   const f = await fixture();
+
   try {
     const invite = await f.rotate();
     const friend = sessionResponseSchema.parse(
       await (await f.requestSession(invite.inviteToken, invite.roomCode)).json(),
     );
+
     expect((await f.manage(friend)).status).toBe(403);
+
     await f.connect(friend);
+
     expect((await f.manage(friend)).status).toBe(403);
     expect((await f.manage(f.host, 'POST', { roomCode: 'ABC234' })).status).toBe(400);
     expect((await fetch(f.endpoint + ROOM_INVITATION_ROUTE, { method: 'POST' })).status).toBe(401);
+
     await f.hostRoom.leave();
     await vi.waitFor(() => expect(f.actual.canManageInvitations(friend.playerId)).toBe(true));
+
     expect([401, 403]).toContain((await f.manage()).status);
     expect((await f.manage(friend)).status).toBe(201);
+
     f.room.setPhase('PLAYING');
+
     expect((await f.manage(friend)).status).toBe(403);
     expect((await f.manage(friend, 'DELETE')).status).toBe(403);
   } finally {
@@ -241,18 +366,26 @@ it('enforces current host, connected session, current phase and strict empty bod
 
 it('refuses reservations at invitation expiry and forgets the closed room link', async () => {
   const f = await fixture();
+
   try {
     const invite = await f.rotate();
+
     f.advance(599_000);
+
     const pending = sessionResponseSchema.parse(
       await (await f.requestSession(invite.inviteToken, invite.roomCode)).json(),
     );
+
     f.advance(1000);
+
     await expect(f.connect(pending)).rejects.toThrow('INVALID_SESSION');
     expect((await f.requestSession(invite.inviteToken, invite.roomCode)).status).toBe(403);
+
     const next = await f.rotate();
+
     await f.hostRoom.leave();
     await vi.waitFor(() => expect(f.application.directory.get(next.roomCode)).toBeNull());
+
     expect(
       f.application.invites!.verify({
         inviteToken: next.inviteToken,
