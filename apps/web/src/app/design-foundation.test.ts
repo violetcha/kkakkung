@@ -55,18 +55,46 @@ test('폰트 배포물에 수정하지 않은 OFL 1.1 원문을 함께 둔다', 
   expect(license).toContain('SIL OPEN FONT LICENSE Version 1.1');
 });
 
-test('픽셀 카드 토큰은 반투명 판과 간격·모서리·이중 선 규칙을 제공한다', () => {
+// S15P21C204-295. 화면의 결은 docs/design/ui-system.md 가 정한다: 잉크·뼛빛·나트륨·REC 넷,
+// 각진 모서리, 채우지 않는 단추, 닳은 선. 예전 픽셀 카드 토큰(둥근 모서리·이중 선)은 그 규칙에
+// 어긋나 사라졌다. 색이 조용히 늘거나 모서리가 다시 둥글어지면 여기서 잡는다.
+test('화면 토큰은 잉크·뼛빛·나트륨 네 색과 각진 모서리를 유지한다', () => {
   for (const declaration of [
-    '--color-panel: #171310e6;',
+    '--ink-0: #050504;',
+    '--ink-panel: #0b0b0ae6;',
+    '--bone: #e6e1d3;',
+    '--bone-dim: #9d9889;',
+    '--sodium: #d9b25a;',
+    '--rec: #ff3535;',
     '--space-1: 4px;',
     '--space-2: 8px;',
     '--space-3: 16px;',
     '--space-4: 32px;',
-    '--radius-pixel: 2px;',
-    '--outline-pixel: 3px solid var(--color-bg);',
-    '--inset-highlight: inset 0 0 0 1px #f4ead755;',
+    '--radius-pixel: 0;',
   ]) {
     expect(css).toContain(declaration);
+  }
+});
+
+// 선은 자로 긋지 않는다. 필터 정의가 사라지면 CSS 는 아무 말 없이 밋밋한 선을 그린다.
+test('닳은 선 토큰과 그 필터가 함께 있다', () => {
+  expect(css).toContain('--rough-ink:');
+  expect(css).toContain('filter: url(#rough-line)');
+  const defs = readFileSync(
+    new URL('../features/game/flow/RoughDefs.tsx', import.meta.url),
+    'utf8',
+  );
+  for (const id of ['rough-line', 'rough-line-v', 'rough-box'])
+    expect(defs).toContain(`id="${id}"`);
+});
+
+// 제목 명조는 배포에 든 파일로만 뜬다. 토큰과 @font-face 가 어긋나면 조용히 고딕으로 돌아간다.
+test('제목 글꼴은 배포하는 나눔명조를 가리킨다', () => {
+  expect(css).toContain("--font-display: 'Nanum Myeongjo'");
+  for (const file of ['NanumMyeongjo-korean-400.woff2', 'NanumMyeongjo-latin-400.woff2']) {
+    const bytes = readFileSync(new URL(`../../public/fonts/${file}`, import.meta.url));
+    expect(css).toContain(`url('/fonts/${file}') format('woff2')`);
+    expect(bytes.subarray(0, 4).toString('ascii')).toBe('wOF2');
   }
 });
 

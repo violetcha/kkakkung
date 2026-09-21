@@ -89,7 +89,8 @@ describe('notice page carries the notices the ledger promises', () => {
     expect(noticePage).toContain('SIL Open Font License 1.1');
     expect(noticePage).toContain('/fonts/OFL-1.1.txt');
     // The shipped families, so a dropped weight is noticed.
-    for (const family of ['Galmuri9', 'Galmuri11', 'Galmuri14'])
+    expect(noticePage).toContain('Google Inc.');
+    for (const family of ['Galmuri9', 'Galmuri11', 'Galmuri14', 'Nanum Myeongjo'])
       expect(noticePage, family).toContain(family);
   });
 

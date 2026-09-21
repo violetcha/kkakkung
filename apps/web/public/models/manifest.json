@@ -265,12 +265,12 @@
     }
   },
   "notices": {
-    "reviewedAt": "2026-09-18",
+    "reviewedAt": "2026-09-21",
     "files": [
       {
         "publicPath": "/licenses/index.html",
-        "sha256": "b89818a346034e882683a36295bab93b59735dc6bb8ff3fbbdf6793d15112656",
-        "bytes": 3526
+        "sha256": "56f632fbcebdb767c964e237092a618b194a4ac08150422ffc2fad8333ca84e0",
+        "bytes": 3965
       },
       {
         "publicPath": "/licenses/notices.css",
