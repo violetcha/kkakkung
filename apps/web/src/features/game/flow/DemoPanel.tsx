@@ -180,8 +180,8 @@ export function DemoPanel({
       <p role="status">
         {running
           ? `진행 중: ${demoScenarioGuide(demo.running!).label} · ${demoStepLabel(demo.step)}`
-          : demo.failure
-            ? `직전 시나리오 중단: ${demoFailureLabel(demo.failure)}`
+          : demo.failureCode
+            ? `직전 시나리오 중단: ${demoFailureLabel(demo.failureCode)}`
             : '시나리오를 고르면 인형이 실제 규칙으로 움직입니다.'}
       </p>
     </section>

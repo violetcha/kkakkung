@@ -12,10 +12,15 @@ import { DEMO_SCENARIO_GUIDE, demoFailureCodes } from './demo-scenario-guide';
 const state = (over: Partial<DemoStateMessage> = {}): DemoStateMessage =>
   demoStateSchema.parse({
     matchId: 'match-1',
-    available: ['trap', 'capture', 'result-runner-win'],
+    available: [
+      { id: 'trap', options: [] },
+      { id: 'capture', options: [] },
+      { id: 'result-runner-win', options: [] },
+    ],
     running: null,
     step: null,
-    failure: null,
+    failureCode: null,
+    operatorExit: null,
     ...over,
   });
 
@@ -40,7 +45,7 @@ it('locks the buttons while one runs and reports a stopped scenario', () => {
   expect(running.match(/disabled/g)).toHaveLength(3);
   const stopped = renderToStaticMarkup(
     createElement(DemoPanel, {
-      demo: state({ failure: 'chase-operator:TIMEOUT' }),
+      demo: state({ failureCode: 'chase-operator:TIMEOUT' }),
       onRun: () => {},
     }),
   );
@@ -53,7 +58,7 @@ it('asks for exactly the scenario id the button stands for', () => {
   // Rendering to markup cannot click, so the handler contract is checked directly.
   const element = createElement(DemoPanel, { demo: state(), onRun });
   const props = element.props as { demo: DemoStateMessage; onRun: (id: string) => void };
-  props.onRun(props.demo.available[0]!);
+  props.onRun(props.demo.available[0]!.id);
   expect(onRun).toHaveBeenCalledWith('trap');
   expect(onRun).toHaveBeenCalledTimes(1);
 });
@@ -69,7 +74,7 @@ it('keeps a Korean label and at least one checklist for every planned scenario',
 it('has a user-facing label for every known failure code', () => {
   const html = renderToStaticMarkup(
     createElement(DemoPanel, {
-      demo: state({ failure: 'place:PATH_BLOCKED' }),
+      demo: state({ failureCode: 'place:PATH_BLOCKED' }),
       onRun: () => {},
     }),
   );

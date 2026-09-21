@@ -153,6 +153,8 @@ export type CreateMatchInput = Readonly<{
   tuning: MatchTuning;
   layout: MatchLayout;
   players: readonly { playerId: string; role: Role }[];
+  /** S15P21C204-318. Only an operator demo game may omit the round deadline. */
+  deadline?: 'round' | 'none';
 }>;
 export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 

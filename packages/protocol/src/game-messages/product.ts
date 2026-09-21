@@ -17,6 +17,8 @@ export const PRODUCT_CLIENT_MESSAGES = {
   mediaBindingsRefresh: 'media-bindings-refresh',
   /** Operator-only demo room (S15P21C204-259). Ordinary rooms refuse it. */
   demoScenario: 'demo-scenario',
+  /** Operator-only demo room control (S15P21C204-318). */
+  demoControl: 'demo-control',
 } as const;
 
 export const PRODUCT_SERVER_MESSAGES = {
@@ -94,7 +96,11 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
     method: z.enum(['pose', 'keys']),
     completed: z.boolean(),
   }),
-  envelope('REMATCH', { mode: z.enum(['same', 'swap', 'lobby']) }),
+  envelope('REMATCH', {
+    mode: z.enum(['same', 'swap', 'lobby']),
+    /** Only demo rooms accept role; ordinary rooms reject the field at the room boundary. */
+    role: z.enum(['runner', 'tagger']).optional(),
+  }),
   /** S15P21C204-269. An ended runner picks which surviving runner to watch. */
   envelope('SPECTATE', { targetPlayerId: playerIdSchema }),
 ]);
@@ -241,17 +247,38 @@ export const DEMO_SCENARIO_IDS = [
   'abort-connection-lost',
 ] as const;
 export type DemoScenarioId = (typeof DEMO_SCENARIO_IDS)[number];
+const demoScenarioOptionKeySchema = z.enum(['role', 'distance', 'side', 'facing', 'installer']);
+export const demoScenarioOptionsSchema = z.strictObject({
+  role: z.enum(['runner', 'tagger']).optional(),
+  distance: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  side: z.enum(['front', 'left', 'right', 'back']).optional(),
+  facing: z.enum(['toward', 'away']).optional(),
+  installer: z.enum(['puppet', 'me']).optional(),
+});
+export type DemoScenarioOptions = z.infer<typeof demoScenarioOptionsSchema>;
 export const demoScenarioRequestSchema = z.strictObject({
   matchId: matchIdSchema,
   scenario: z.enum(DEMO_SCENARIO_IDS),
+  options: demoScenarioOptionsSchema.optional(),
 });
 export type DemoScenarioRequest = z.infer<typeof demoScenarioRequestSchema>;
+export const demoControlSchema = z.strictObject({
+  matchId: matchIdSchema,
+  action: z.literal('abort-round'),
+});
+export type DemoControl = z.infer<typeof demoControlSchema>;
+export const demoAvailableScenarioSchema = z.strictObject({
+  id: z.enum(DEMO_SCENARIO_IDS),
+  options: z.array(demoScenarioOptionKeySchema).max(5),
+});
+export type DemoAvailableScenario = z.infer<typeof demoAvailableScenarioSchema>;
 export const demoStateSchema = z.strictObject({
   matchId: matchIdSchema,
-  available: z.array(z.enum(DEMO_SCENARIO_IDS)).max(DEMO_SCENARIO_IDS.length),
+  available: z.array(demoAvailableScenarioSchema).max(DEMO_SCENARIO_IDS.length),
   running: z.enum(DEMO_SCENARIO_IDS).nullable(),
   step: z.string().max(128).nullable(),
   /** Why the last scenario stopped early, in a short code. Cleared when a new one starts. */
-  failure: z.string().max(128).nullable(),
+  failureCode: z.string().max(128).nullable(),
+  operatorExit: z.strictObject({ x: z.number().int(), y: z.number().int() }).nullable(),
 });
 export type DemoStateMessage = z.infer<typeof demoStateSchema>;

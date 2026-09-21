@@ -240,7 +240,7 @@ export type CommandPayloads = {
   EXIT_START: { exitId: string };
   EXIT_CANCEL: { challengeId: string };
   EXIT_PROGRESS: { challengeId: string; method: 'pose' | 'keys'; completed: boolean };
-  REMATCH: { mode: 'same' | 'swap' | 'lobby' };
+  REMATCH: { mode: 'same' | 'swap' | 'lobby'; role?: 'runner' | 'tagger' };
 };
 export type CommandType = keyof CommandPayloads;
 export type CommandInput = {
