@@ -31,14 +31,29 @@ test.afterEach(async ({}, info) => {
 
 async function openRenderReview(page: Page) {
   const errors: string[] = [];
+  const failedResponses: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('response', (response) => {
+    if (response.status() >= 400)
+      failedResponses.push(`${response.status()} ${response.request().method()} ${response.url()}`);
+  });
   await page.goto('/preview');
   await page.getByRole('button', { name: '렌더 검수', exact: true }).click();
   const metrics = page.getByRole('status', { name: '렌더 측정' });
   const counts = async () => {
     const text = await metrics.textContent();
-    const match = text?.match(/geometry (\d+) · texture (\d+)/);
-    return match ? { geometry: Number(match[1]), texture: Number(match[2]) } : null;
+    const match = text?.match(
+      /draw (\d+) · triangles (\d+) · geometry (\d+) · texture (\d+) · program (\d+)/,
+    );
+    return match
+      ? {
+          draws: Number(match[1]),
+          triangles: Number(match[2]),
+          geometry: Number(match[3]),
+          texture: Number(match[4]),
+          programs: Number(match[5]),
+        }
+      : null;
   };
   await expect.poll(counts).not.toBeNull();
   mark('first-frame');
@@ -73,7 +88,7 @@ async function openRenderReview(page: Page) {
       .toBe(true);
     return counts();
   };
-  return { errors, metrics, counts, settledAfter };
+  return { errors, failedResponses, metrics, counts, settledAfter };
 }
 
 async function fullPageShot(page: Page, info: TestInfo, name: string) {
@@ -84,7 +99,25 @@ async function fullPageShot(page: Page, info: TestInfo, name: string) {
 test('product renderer survives direction, quality, visibility and scene lifecycle changes', async ({
   page,
 }, info) => {
-  const { errors, metrics, counts, settledAfter } = await openRenderReview(page);
+  const { errors, failedResponses, metrics, counts, settledAfter } = await openRenderReview(page);
+  const loading = page.getByRole('status', { name: '아바타 로딩' });
+  type ResourceSnapshot = NonNullable<Awaited<ReturnType<typeof counts>>>;
+  const inspectScene = async (scene: string, ready: number) => {
+    const before = await metrics.textContent();
+    await page.getByRole('button', { name: scene, exact: true }).click();
+    await expect(loading).toHaveText(`준비 ${ready}/${ready} · 대체 0`);
+    const current = await settledAfter(before);
+    expect(current).not.toBeNull();
+    return current!;
+  };
+
+  // Warm both roles before recording the stable medium-quality resource ceiling.
+  const beforeWarm = await metrics.textContent();
+  await page.getByRole('button', { name: '상대 5명', exact: true }).click();
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
+  const mediumCrowd = await settledAfter(beforeWarm);
+  expect(mediumCrowd).not.toBeNull();
+  mark('role-geometries-warmed');
   const beforeExit = await metrics.textContent();
   await page.getByRole('button', { name: '출구·장비', exact: true }).click();
   await expect.poll(async () => (await counts())?.texture ?? 0).toBeGreaterThanOrEqual(4);
@@ -102,34 +135,60 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   }
   await expect.poll(counts).toEqual(original);
   mark('scene-cycle');
-  for (const quality of ['low', 'medium']) {
-    await page.getByRole('combobox', { name: '화면 품질' }).selectOption(quality);
-    await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
-    await expect(page.locator('canvas')).toHaveCount(0);
-    await expect(metrics).toHaveText('측정 대기');
-    await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
-    // A fresh Canvas has not uploaded the earlier corridor's cached avatar geometry yet.
-    // It may own fewer resources, and WebGL releases disposed textures asynchronously, but neither
-    // resource kind may accumulate beyond the stable baseline across re-entry.
-    await expect
-      .poll(async () => {
-        const current = await counts();
-        return (
-          current !== null &&
-          current.geometry > 0 &&
-          current.geometry <= original!.geometry &&
-          current.texture > 0 &&
-          current.texture <= original!.texture
-        );
-      })
-      .toBe(true);
-    mark(`reopen-${quality}`);
+
+  await inspectScene('술래 단독', 1);
+  await inspectScene('도망자 단독', 1);
+  await inspectScene('상대 5명', 5);
+  await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveCount(0);
+  await expect(metrics).toHaveText('측정 대기');
+  const beforeMediumReopen = await metrics.textContent();
+  await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
+  const reopenedMedium = await settledAfter(beforeMediumReopen);
+  expect(reopenedMedium).not.toBeNull();
+  mark('reopen-medium');
+
+  const beforeLow = await metrics.textContent();
+  await page.getByRole('combobox', { name: '화면 품질' }).selectOption('low');
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
+  const lowCrowd = await settledAfter(beforeLow);
+  expect(lowCrowd).not.toBeNull();
+  await inspectScene('도망자 단독', 1);
+  await inspectScene('술래 단독', 1);
+  await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveCount(0);
+  await expect(metrics).toHaveText('측정 대기');
+  const beforeLowReopen = await metrics.textContent();
+  await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
+  await expect(loading).toHaveText('준비 1/1 · 대체 0');
+  const reopenedLow = await settledAfter(beforeLowReopen);
+  expect(reopenedLow).not.toBeNull();
+  mark('reopen-low');
+
+  const qualitySamples: Record<'low' | 'medium', ResourceSnapshot[]> = {
+    low: [],
+    medium: [],
+  };
+  for (let cycle = 0; cycle < 5; cycle += 1)
+    for (const quality of ['medium', 'low'] as const) {
+      await page.getByRole('combobox', { name: '화면 품질' }).selectOption(quality);
+      qualitySamples[quality].push(await inspectScene('상대 5명', 5));
+    }
+  await page.getByRole('combobox', { name: '화면 품질' }).selectOption('medium');
+  qualitySamples.medium.push(await inspectScene('상대 5명', 5));
+  for (const quality of ['low', 'medium'] as const) {
+    const previous = qualitySamples[quality].at(-2)!;
+    const current = qualitySamples[quality].at(-1)!;
+    for (const field of ['draws', 'triangles', 'geometry', 'texture', 'programs'] as const)
+      expect(current[field], `${quality} stable ${field}`).toBeLessThanOrEqual(previous[field]);
   }
   expect(errors).toEqual([]);
+  expect(failedResponses).toEqual([]);
 });
 
 test('product renderer draws the five-opponent crowd scene', async ({ page }, info) => {
-  const { errors, metrics, counts } = await openRenderReview(page);
+  const { errors, failedResponses, metrics, counts } = await openRenderReview(page);
   const before = await metrics.textContent();
   await page.getByRole('button', { name: '상대 5명', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(1);
@@ -140,4 +199,38 @@ test('product renderer draws the five-opponent crowd scene', async ({ page }, in
   mark('crowd-frame');
   await fullPageShot(page, info, 'facility-crowd');
   expect(errors).toEqual([]);
+  expect(failedResponses).toEqual([]);
+});
+
+test('product renderer loads and captures both role avatars', async ({ page }, info) => {
+  const { errors, failedResponses, metrics, counts, settledAfter } = await openRenderReview(page);
+  const loading = page.getByRole('status', { name: '아바타 로딩' });
+  const baseline = await counts();
+  const manifest = await page.evaluate(async () => {
+    const response = await fetch('/models/avatars/v1/manifest.json');
+    return response.json() as Promise<{ roles: { tagger: { metrics: { triangles: number } } } }>;
+  });
+
+  const beforeRunner = await metrics.textContent();
+  await page.getByRole('button', { name: '도망자 단독', exact: true }).click();
+  await expect(loading).toHaveText('준비 1/1 · 대체 0');
+  const runner = await settledAfter(beforeRunner);
+  expect(runner!.texture).toBeGreaterThan(baseline!.texture);
+  await fullPageShot(page, info, 'avatar-runner-front');
+
+  const beforeTagger = await metrics.textContent();
+  await page.getByRole('button', { name: '술래 단독', exact: true }).click();
+  await expect(loading).toHaveText('준비 1/1 · 대체 0');
+  const tagger = await settledAfter(beforeTagger);
+  expect(tagger!.triangles).toBeGreaterThanOrEqual(manifest.roles.tagger.metrics.triangles);
+  await fullPageShot(page, info, 'avatar-tagger-front');
+
+  await page.getByRole('button', { name: '상대 5명', exact: true }).click();
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
+  await fullPageShot(page, info, 'avatar-crowd-front');
+  await page.getByRole('combobox', { name: '상대 방향' }).selectOption('side');
+  await fullPageShot(page, info, 'avatar-crowd-side');
+
+  expect(errors).toEqual([]);
+  expect(failedResponses).toEqual([]);
 });

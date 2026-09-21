@@ -28,7 +28,7 @@ test('host can create, copy, rotate and revoke a scoped invitation', async ({ pa
   await page.getByRole('button', { name: '초대 링크 만들기', exact: true }).click();
   const link = page.getByLabel('친구에게 보낼 링크');
   await expect(link).toHaveValue(
-    'http://127.0.0.1:5173/#invite=synthetic-room-invitation-1&room=ABCDEF',
+    `${new URL(page.url()).origin}/#invite=synthetic-room-invitation-1&room=ABCDEF`,
   );
   await page.getByRole('button', { name: '초대 링크 복사', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await link.inputValue());

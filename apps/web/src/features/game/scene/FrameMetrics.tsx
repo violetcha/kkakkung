@@ -8,6 +8,7 @@ export type FrameMetrics = {
   triangles: number;
   geometries: number;
   textures: number;
+  programs: number;
 };
 /** Opt-in inspection, never a substitute for six real devices with vision and media. */
 export function FrameMetricsProbe({ report }: { report(metrics: FrameMetrics): void }) {
@@ -32,6 +33,7 @@ export function FrameMetricsProbe({ report }: { report(metrics: FrameMetrics): v
       triangles: gl.info.render.triangles,
       geometries: gl.info.memory.geometries,
       textures: gl.info.memory.textures,
+      programs: gl.info.programs?.length ?? 0,
     });
     samples.current = [];
     lastReport.current = now;

@@ -2887,7 +2887,7 @@
   margin-top: 8px;
 }
 .render-preview .product-canvas {
-  height: calc(100vh - 290px);
+  height: min(calc((100vw - 32px) * 0.5625), 700px);
   min-height: 280px;
 }
 .render-preview output {

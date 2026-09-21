@@ -43,30 +43,35 @@ export function RoleAvatar({
   const [instance, setInstance] = useState<AvatarInstance | null>(null);
   const playerId = player.id;
   const requestedRole = roleAssetRequest(player);
+  const renderState = useRef<AvatarRenderState>(requestedRole ? 'loading' : 'fallback');
 
   useEffect(() => {
     let active = true;
     let owned: AvatarInstance | null = null;
+    const reportState = (state: AvatarRenderState) => {
+      renderState.current = state;
+      reporter.current?.(playerId, state);
+    };
     instanceRef.current = null;
     setInstance(null);
     if (!requestedRole) {
-      reporter.current?.(playerId, 'fallback');
+      reportState('fallback');
       return () => reporter.current?.(playerId, 'removed');
     }
-    reporter.current?.(playerId, 'loading');
+    reportState('loading');
     void loadRoleAvatar(requestedRole, quality).then((result) => {
       if (!active) return;
       if (result.status === 'fallback') {
-        reporter.current?.(playerId, 'fallback');
+        reportState('fallback');
         return;
       }
       try {
         owned = createAvatarInstance(result.template);
         instanceRef.current = owned;
         setInstance(owned);
-        reporter.current?.(playerId, 'ready');
+        reportState('ready');
       } catch {
-        reporter.current?.(playerId, 'fallback');
+        reportState('fallback');
       }
     });
     return () => {
@@ -76,6 +81,12 @@ export function RoleAvatar({
       reporter.current?.(playerId, 'removed');
     };
   }, [playerId, quality, requestedRole]);
+
+  // Preview inspection callbacks may change while React preserves the same ready avatar instance.
+  // Re-announce the current state without reloading the model so a new scene aggregate is accurate.
+  useEffect(() => {
+    onState?.(playerId, renderState.current);
+  }, [onState, playerId]);
 
   useFrame((_state, delta) => {
     const next = sampleActor(player, renderTick());

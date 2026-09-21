@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AnimationClip, BoxGeometry, Group, Mesh, MeshStandardMaterial, Texture } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   clearAvatarAssetCache,
   loadRoleAvatar,
@@ -36,14 +37,14 @@ function sceneFor(role: 'runner' | 'tagger') {
       ? ['FaceSocket', 'Hood', 'ShoulderCape', 'RobeHem', 'DollFace']
       : [
           'Mouth',
-          'Teeth.Upper',
-          'Teeth.Lower',
-          'Finger.L.1',
-          'Finger.L.2',
-          'Finger.L.3',
-          'Finger.R.1',
-          'Finger.R.2',
-          'Finger.R.3',
+          'TeethUpper',
+          'TeethLower',
+          'FingerL1',
+          'FingerL2',
+          'FingerL3',
+          'FingerR1',
+          'FingerR2',
+          'FingerR3',
         ];
   for (const name of names) {
     const node = new Group();
@@ -97,6 +98,19 @@ function deps(options?: {
     },
   };
 }
+
+it.each(['runner', 'tagger'] as const)(
+  'the shipped %s GLB exposes every manifest node after GLTFLoader parsing',
+  async (role) => {
+    const manifest = JSON.parse(Buffer.from(await bytesFor(manifestUrl)).toString('utf8')) as {
+      roles: Record<typeof role, { model: { url: string }; contract: { semanticNodes: string[] } }>;
+    };
+    const bytes = await bytesFor(manifest.roles[role].model.url);
+    const parsed = await new GLTFLoader().parseAsync(bytes, '');
+    for (const name of manifest.roles[role].contract.semanticNodes)
+      expect(parsed.scene.getObjectByName(name), name).toBeDefined();
+  },
+);
 
 beforeEach(() => clearAvatarAssetCache());
 

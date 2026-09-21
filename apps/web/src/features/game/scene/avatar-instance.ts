@@ -24,6 +24,9 @@ function cloneMaterial(material: Material, template: AvatarTemplate) {
   if (cloned.name === 'BodyMaterial' && cloned instanceof MeshStandardMaterial) {
     cloned.map = template.atlas.color;
     cloned.roughnessMap = template.atlas.roughness ?? null;
+    // The authored atlas owns the final cloth colour; keeping the GLB tint would multiply dark
+    // tagger texels twice and erase its silhouette under the facility lighting.
+    cloned.color.set('#ffffff');
     cloned.needsUpdate = true;
   }
   return cloned;

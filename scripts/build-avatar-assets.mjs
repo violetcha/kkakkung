@@ -42,14 +42,14 @@ const semantics = {
   runner: ['Hood', 'ShoulderCape', 'RobeHem', 'DollFace'],
   tagger: [
     'Mouth',
-    'Teeth.Upper',
-    'Teeth.Lower',
-    'Finger.L.1',
-    'Finger.L.2',
-    'Finger.L.3',
-    'Finger.R.1',
-    'Finger.R.2',
-    'Finger.R.3',
+    'TeethUpper',
+    'TeethLower',
+    'FingerL1',
+    'FingerL2',
+    'FingerL3',
+    'FingerR1',
+    'FingerR2',
+    'FingerR3',
   ],
 };
 

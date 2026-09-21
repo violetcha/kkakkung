@@ -49,7 +49,7 @@ const materials = (role) => {
   });
   const skin = new MeshStandardMaterial({
     name: 'SkinMaterial',
-    color: runner ? '#8b8172' : '#74695f',
+    color: runner ? '#24211f' : '#74695f',
     roughness: 0.9,
     flatShading: true,
   });
@@ -257,7 +257,7 @@ function taggerModel() {
     );
     for (let finger = 1; finger <= 3; finger += 1)
       namedGroup(
-        `Finger.${side < 0 ? 'L' : 'R'}.${finger}`,
+        `Finger${side < 0 ? 'L' : 'R'}${finger}`,
         hand,
         [(finger - 2) * 0.045, -0.08 - Math.abs(finger - 2) * 0.015, -0.02],
         [0.12, 0, (finger - 2) * -0.08],
@@ -283,8 +283,8 @@ function taggerModel() {
     [0, -0.055, -0.255],
     [1, 1, 1],
   );
-  namedGroup('Teeth.Upper', bones.head, [0, -0.025, -0.276]);
-  namedGroup('Teeth.Lower', bones.head, [0, -0.087, -0.276]);
+  namedGroup('TeethUpper', bones.head, [0, -0.025, -0.276]);
+  namedGroup('TeethLower', bones.head, [0, -0.087, -0.276]);
   const toothGeometries = [];
   for (const row of [-1, 1])
     for (let column = -3; column <= 3; column += 1) {

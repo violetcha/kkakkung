@@ -13,6 +13,7 @@ function template(): AvatarTemplate {
   root.add(rig);
   const body = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
   body.material.name = 'BodyMaterial';
+  body.material.color.set('#2b2623');
   rig.add(body);
   const socket = new Group();
   socket.name = 'FaceSocket';
@@ -41,6 +42,7 @@ it('isolates scene, material, mixer and actions while sharing immutable resource
   expect(firstMesh.material).not.toBe(sourceMesh.material);
   expect((firstMesh.material as MeshStandardMaterial).map).toBe(source.atlas.color);
   expect((firstMesh.material as MeshStandardMaterial).roughnessMap).toBe(source.atlas.roughness);
+  expect((firstMesh.material as MeshStandardMaterial).color.getHexString()).toBe('ffffff');
   expect(first.mixer).not.toBe(second.mixer);
   expect(first.actions.idle).not.toBe(second.actions.idle);
   expect(first.actions.walk).not.toBe(second.actions.walk);
