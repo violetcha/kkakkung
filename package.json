@@ -23,6 +23,8 @@
     "test:maps": "pnpm build:packages && vitest run packages/game-core/test/match/certified-maps.test.ts packages/game-core/test/match/maze-template.test.ts",
     "maps:generate": "pnpm build:packages && node scripts/generate-maze-template.mjs",
     "maps:check": "pnpm build:packages && node scripts/generate-maze-template.mjs --check",
+    "avatars:build": "node scripts/build-avatar-assets.mjs",
+    "avatars:check": "node scripts/build-avatar-assets.mjs --check",
     "test:e2e": "pnpm build:packages && playwright test",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:product-assets && pnpm test:e2e",
     "check:product-assets": "node scripts/check-product-assets.mjs",
