@@ -518,6 +518,7 @@ export function createApplication<State = unknown>(
         roomInvitations?.revoke(roomCode);
         invites?.forgetRoom(roomCode);
       },
+      onKickRoom: (roomCode) => roomInvitations?.revoke(roomCode),
     });
     server.define(PRODUCT_ROOM_NAME, RoomClass).filterBy(['roomCode']);
   } else {

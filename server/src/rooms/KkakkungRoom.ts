@@ -133,6 +133,8 @@ export type ProductRoomDeps<State> = Readonly<{
   emitMetric?: EmitMetric;
   random?: () => number;
   onInvalidateRoom?: (roomCode: string) => void;
+  /** Revoke the current room invitation when the host removes a participant. */
+  onKickRoom?: (roomCode: string) => void;
   /**
    * F structured event sink (observability/StructuredEvents). Phase changes, preparation
    * failures and rejected preparation commands are written here with counts and codes only,
@@ -809,6 +811,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
               return { result: 'rejected', code: 'NOT_ALLOWED' };
             // Close the entry race before removing the participant. The host can reopen it.
             this.setWaitingLock(true);
+            // Revoke the current invitation before closing the kicked socket. This also
+            // invalidates issued-but-not-yet-connected reservations tied to that link.
+            deps.onKickRoom?.(this.roomCode);
             this.removeConnection(target);
             target.leave(ROOM_REMOVED_CLOSE_CODE, 'REMOVED_BY_HOST');
           }
