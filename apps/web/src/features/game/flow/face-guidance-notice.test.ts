@@ -1,17 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, beforeAll, expect, it } from 'vitest';
-import { clearConsentedDevice, useConsentedDevice } from '../../room/consent-fixture';
+import { expect, it } from 'vitest';
 import { faceConditionGuidance, type FaceCondition } from '../../media/face-condition';
 import { INITIAL_DEVICES } from './device-readiness';
 import { DeviceCheckScreen } from './DeviceCheckScreen';
 import { FaceGuidanceNotice } from './FaceGuidanceNotice';
 import { LoadingOverlay } from './LoadingOverlay';
 import { roundFixture } from '../../room/product-fixture';
-
-// 장치 점검은 동의 게이트 뒤에 있다(S15P21C204-292). 여기서 보는 것은 그 뒤 화면이다.
-beforeAll(() => useConsentedDevice());
-afterAll(() => clearConsentedDevice());
 
 it('renders each face condition as its own status message and nothing without a notice', () => {
   const conditions: FaceCondition[] = ['turned-away', 'glare', 'backlit', 'occluded'];
@@ -37,6 +32,9 @@ it('shows the guidance on the device check screen and annotated waits while load
       ready: false,
       onStart: async () => {},
       onReady() {},
+      // 동의 게이트 뒤의 화면을 본다(S15P21C204-292).
+      consented: true,
+      onConsent() {},
       faceGuidance: { condition: 'backlit', message, isNew: true },
     }),
   );

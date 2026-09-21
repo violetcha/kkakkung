@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { ConsentGate } from '../../room/ConsentGate';
-import { browserConsentStorage, hasConsented, rememberConsent } from '../../room/consent';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import type { TestToneResult } from '../../media/audio-preferences';
 import { deviceReady } from './device-readiness';
@@ -53,6 +52,8 @@ export function DeviceCheckScreen({
   onCalibrate,
   onMicrophone,
   onTestTone,
+  consented,
+  onConsent,
   heading = '플레이 전 장치 점검',
 }: {
   status: DeviceStatus;
@@ -67,12 +68,14 @@ export function DeviceCheckScreen({
   onCalibrate?(): Promise<void>;
   onMicrophone?(enabled: boolean): Promise<void>;
   onTestTone?(): Promise<TestToneResult>;
+  /**
+   * S15P21C204-292. 동의 상태는 화면이 스스로 기억하지 않는다. 장치 단추를 그리는 곳이 여기
+   * 말고도 있어서(`LocalControls`) 한 곳에서 받아 함께 내려 주어야 한다.
+   */
+  consented: boolean;
+  onConsent(): void;
   heading?: string;
 }) {
-  // S15P21C204-292. 카메라를 켜는 모든 경로가 이 화면을 지나므로 동의도 여기서 받는다.
-  // 동의 전에는 장치 제어를 그리지 않는다: 누를 것이 없으면 실수로 켜질 일도 없다.
-  const [storage] = useState(browserConsentStorage);
-  const [consented, setConsented] = useState(() => hasConsented(storage));
   const [microphone, setMicrophone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pinned, setPinned] = useState<number | null>(null);
@@ -96,16 +99,8 @@ export function DeviceCheckScreen({
     const next = Math.min(Math.max(index, 0), steps.length - 1);
     setPinned(next === auto ? null : next);
   };
-  if (!consented)
-    return (
-      <ConsentGate
-        onAccept={() => {
-          // 저장에 실패해도(사생활 보호 모드 등) 이번 진행은 막지 않는다. 다음 방문에 다시 묻는다.
-          rememberConsent(storage, Date.now());
-          setConsented(true);
-        }}
-      />
-    );
+  // 동의 전에는 장치 제어를 그리지 않는다: 누를 것이 없으면 실수로 켜질 일도 없다.
+  if (!consented) return <ConsentGate onAccept={onConsent} />;
   return (
     <section
       className={previewHost ? 'device-check' : 'device-check device-check-with-controls'}

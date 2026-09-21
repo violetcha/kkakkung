@@ -41,6 +41,8 @@ const controls = (
       onMotion: async () => {},
       onRecover: async () => {},
       onMicrophone: async () => {},
+      // 이 시험은 연습방이 장치 점검의 것을 되풀이하지 않는지를 본다. 동의는 이미 받은 뒤다.
+      consented: true,
       variant,
     }),
   );

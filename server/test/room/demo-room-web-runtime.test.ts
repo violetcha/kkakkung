@@ -7,7 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { Client } from '@colyseus/sdk';
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
   DEMO_ROOM_ROUTE,
   MEDIA_ROUTES,
@@ -19,10 +19,19 @@ import type { MatchState } from '@kkakkung/game-core/match';
 import { bindProductRoom } from '../../../apps/web/src/app/product-runtime';
 import { createSyntheticInteractionFactory } from '../../../apps/web/src/app/product-integration-fixture';
 import { productRoomPort } from '../../../apps/web/src/features/room/product-session';
+import {
+  clearConsentedDevice,
+  useConsentedDevice,
+} from '../../../apps/web/src/features/room/consent-fixture';
 import { createApplication } from '../../src/bootstrap.js';
 import { parseConfig } from '../../src/config/env.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
 import { createTestOperatorAuth, TEST_OPS_TOKEN } from './test-harness.js';
+
+// The real web runtime refuses to touch devices before the privacy notice is accepted
+// (S15P21C204-292). This test drives that runtime, so it starts from a consented device.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 it('takes the operator to PLAYING through the web runtime without any media grant', async () => {
   const config = {

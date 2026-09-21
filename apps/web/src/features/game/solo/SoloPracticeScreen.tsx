@@ -6,6 +6,7 @@ import type { AudioPreferences } from '../../media/audio-preferences';
 import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
 import { POSE_LABELS } from '../pose/PoseChallenge';
+import { useMediaConsent } from '../../room/use-media-consent';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS } from './solo-world';
 import { SoloPracticeHud } from './SoloPracticeHud';
@@ -22,6 +23,8 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const [snapshot, setSnapshot] = useState<SoloSnapshot | null>(null);
   const [stopped, setStopped] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  // S15P21C204-292. 개인 체험도 같은 장치를 켠다. 방과 같은 동의를 같은 방식으로 받는다.
+  const consent = useMediaConsent();
   const [busy, setBusy] = useState(false);
   const [microphone, setMicrophone] = useState(false);
   const [error, setError] = useState('');
@@ -189,6 +192,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                     setMicrophone(value);
                     await session.current?.microphone(value);
                   }}
+                  consented={consent.consented}
                   canRecover={!closing && !busy}
                 />
                 {debugOverlay && <DebugOverlay host={hostElement} />}
@@ -211,6 +215,8 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                     await session.current?.microphone(enabled);
                   }}
                   onTestTone={playTestTone}
+                  consented={consent.consented}
+                  onConsent={consent.accept}
                 />
                 <p>
                   현재 조작:{' '}

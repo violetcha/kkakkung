@@ -30,6 +30,20 @@ export default [
     },
   },
   {
+    // S15P21C204-303. 이 스크립트는 Node 에서 돌지만, 일부 함수 본문은 브라우저 안에서
+    // 실행된다(`page.addInitScript`·`page.evaluate`). 그 안의 전역은 실제로 존재한다.
+    files: ['scripts/check-security-headers.mjs'],
+    languageOptions: {
+      globals: {
+        document: 'readonly',
+        navigator: 'readonly',
+        localStorage: 'readonly',
+        setInterval: 'readonly',
+      },
+    },
+    rules: { 'no-empty': ['error', { allowEmptyCatch: true }] },
+  },
+  {
     files: ['apps/web/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [

@@ -10,6 +10,7 @@ import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
+import { useMediaConsent } from '../features/room/use-media-consent';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { FaceGuidanceNotice } from '../features/game/flow/FaceGuidanceNotice';
@@ -57,6 +58,9 @@ export function ProductApp({
   /** S15P21C204-260. Operator demo session from the address fragment; absent for players. */
   demoSession?: SessionResponse;
 }) {
+  // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
+  // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
+  const consent = useMediaConsent();
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState(initialRoom);
   const [createRoom, setCreateRoom] = useState(!initialRoom);
@@ -340,6 +344,7 @@ export function ProductApp({
           onMicrophone={async (enabled) => {
             await runtime.current?.setMicrophone(enabled);
           }}
+          consented={consent.consented}
           canRecover={['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)}
           compact={worldVisible}
           variant={round.phase === 'TEAM_PRACTICE' ? 'quiet' : 'full'}
@@ -587,6 +592,8 @@ export function ProductApp({
                 await runtime.current?.setMicrophone(enabled);
               }}
               onTestTone={playTestTone}
+              consented={consent.consented}
+              onConsent={consent.accept}
             />
           )}
           {round && inResult && (

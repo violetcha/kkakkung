@@ -4,7 +4,7 @@
 // or a wall-clock load test. The real 3600-tick round is advanced locally.
 import { createHash, randomUUID } from 'node:crypto';
 import { Client, type Room } from '@colyseus/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   MEDIA_ROUTES,
   mediaBindingsSchema,
@@ -17,11 +17,20 @@ import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/
 import { bindProductRoom } from '../../../apps/web/src/app/product-runtime';
 import { productRoomPort } from '../../../apps/web/src/features/room/product-session';
 import {
+  clearConsentedDevice,
+  useConsentedDevice,
+} from '../../../apps/web/src/features/room/consent-fixture';
+import {
   createSyntheticInteractionFactory,
   type SyntheticMediaControl,
 } from '../../../apps/web/src/app/product-integration-fixture';
 import { INVITATION_ROUTES } from '../../src/session/invite-types.js';
 import { startProductServerProcess } from './product-server-process.js';
+
+// The real web runtime refuses to touch devices before the privacy notice is accepted
+// (S15P21C204-292). These six clients drive that runtime, so they start from a consented device.
+beforeAll(() => useConsentedDevice());
+afterAll(() => clearConsentedDevice());
 
 const closers: (() => Promise<unknown>)[] = [];
 afterEach(async () => {

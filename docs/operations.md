@@ -94,6 +94,20 @@ done
 
 세 줄이 모두 404여야 한다. 셋을 다 두드리는 이유는 nginx와 Express가 경로를 다르게 읽기 때문이다(S15P21C204-296). nginx의 접두·정확 일치 location은 대소문자를 가리는데 Express는 가리지 않아, `^~ /api/operations/` 하나로는 `/API/OPERATIONS/status`와 슬래시 없는 `/api/operations`가 그대로 앱까지 갔다. 지금은 대소문자를 무시하는 정규식으로 막는다. 배포 장벽도 같은 세 경로를 두드려 하나라도 404가 아니면 `OPERATIONS_PUBLICLY_REACHABLE`로 멈춘다.
 
+### 보안 헤더
+
+CSP를 비롯한 응답 헤더는 **web-proxy 컨테이너**가 붙인다([조각](../infra/nginx/security-headers.conf)). 호스트 nginx는 `proxy_pass`로 받은 헤더를 그대로 흘려보내므로 인터넷까지 그대로 간다. `Strict-Transport-Security`만 TLS를 끝내는 호스트가 붙인다. 두 곳에서 같은 헤더를 붙이면 값이 갈리므로 하지 않는다.
+
+**nginx 함정 하나.** 어떤 `location`에 자기 `add_header`가 하나라도 있으면 바깥 level의 `add_header`를 **전부 잃는다.** 그래서 `Cache-Control`을 따로 붙이는 경로마다 조각을 다시 `include`한다. 계약 시험이 이 누락을 잡는다.
+
+CSP 값은 실제 프로덕션 빌드를 브라우저로 돌려 정했다. 다시 확인하려면:
+
+```bash
+pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
+```
+
+비전 Worker·MediaPipe WASM 추론·폰트·캔버스에 도달하면서 위반이 0건이어야 한다. `'unsafe-eval'`은 필요 없다 — Zod 4의 JIT가 `new Function`을 쓰는 것을 웹 진입점에서 껐다(서버는 매 tick parse하므로 그대로 둔다). 이 스크립트는 LiveKit 실제 연결과 Colyseus WebSocket까지는 확인하지 못한다. `connect-src`의 해당 항목은 설정 검토로 남는다.
+
 ## 4. 요청과 기록의 상한
 
 **HTTP 입구**(S15P21C204-204). JSON 파싱 전에 운영·미디어 경로를 분류해 제한한다. 거절은 `429/RATE_LIMITED`.
