@@ -1,5 +1,7 @@
 import { sameCell } from './map/validate-template.js';
+import { moveTarget } from './movement.js';
 import type { PlayerRecord } from './state.js';
+import type { Topology } from './types.js';
 
 /**
  * Contact and crossing capture (RL-04). Computed once per tick from the cells
@@ -7,13 +9,15 @@ import type { PlayerRecord } from './state.js';
  * evaluated against another player's partially updated position.
  *
  * A runner is captured when, after completion, a tagger with an active grab window
- * shares its cell, or when the runner and that tagger swapped cells in the same tick.
- * Adjacent, diagonal, or wall-separated players never capture; teammates never
- * capture. Each runner appears at most once regardless of how many taggers touched it.
+ * shares its cell, when the runner and that tagger swapped cells in the same tick,
+ * or when the runner is one walkable cell directly in front of the tagger. Side,
+ * diagonal, behind, or wall-separated players never capture; teammates never capture.
+ * Each runner appears at most once regardless of how many taggers touched it.
  */
 export function detectCaptures(
   before: ReadonlyMap<string, PlayerRecord>,
   after: ReadonlyMap<string, PlayerRecord>,
+  topology: Topology,
   tick: number,
 ): readonly string[] {
   const taggers: PlayerRecord[] = [];
@@ -37,7 +41,9 @@ export function detectCaptures(
         taggerBefore !== undefined &&
         sameCell(runner.cell, taggerBefore.cell) &&
         sameCell(tagger.cell, runnerBefore.cell);
-      if (contact || crossed) {
+      const front = moveTarget(topology, tagger.cell, tagger.dir, 'forward');
+      const inReach = front !== null && sameCell(runner.cell, front);
+      if (contact || crossed || inReach) {
         captured.add(runner.playerId);
         break;
       }

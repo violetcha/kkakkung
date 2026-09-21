@@ -811,7 +811,12 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
   completeDueActions(ctx);
   if (ctx.state.mode === 'game' && ctx.state.phase === 'PLAYING') {
     // Capture is committed before equipment or pose stages; ended runners leave later stages.
-    for (const runnerId of detectCaptures(before, ctx.state.players, ctx.tick)) {
+    for (const runnerId of detectCaptures(
+      before,
+      ctx.state.players,
+      ctx.state.layout.topology,
+      ctx.tick,
+    )) {
       endRunner(ctx, runnerId, 'CAPTURED');
     }
   }
