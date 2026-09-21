@@ -41,6 +41,16 @@ export const DEFAULT_DEADLINES = Object.freeze({
   resumeMs: 60_000,
 });
 
+/**
+ * S15P21C204-296. 공개 주소에서 운영 API 가 막혔는지 두드려 볼 대표 경로.
+ * 정상 철자 하나, 대문자 변형 하나, 슬래시 없는 bare 접두 하나. 셋 다 404 여야 한다.
+ */
+export const OPERATIONS_EDGE_PROBES = Object.freeze([
+  '/api/operations/status',
+  '/API/OPERATIONS/status',
+  '/api/operations',
+]);
+
 const SHA40 = /^[0-9a-f]{40}$/;
 const TAG8 = /^[0-9a-f]{8}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -431,11 +441,22 @@ export async function runRelease(input, adapters) {
           'AUDIENCE_MISMATCH',
           `public audience but /api/config answered ${gate.status}`,
         );
-      const exposed = await http('GET', `${input.baseUrl}/api/operations/status`);
-      if (exposed.status === 200)
-        fail('BLOCKED', 'OPERATIONS_PUBLICLY_REACHABLE', `public /api/operations/status 200`);
     } else if (!isolatedStatus(gate.status))
       fail('BLOCKED', 'ISOLATION_UNVERIFIED', `public /api/config answered ${gate.status}`);
+    // 296. 대상과 무관하게 운영 API 는 공개 주소에서 404 여야 한다. 한 철자만 막힌 ingress 를
+    // 잡으려고 대표 변형을 함께 두드린다: nginx 의 접두·정확 일치는 대소문자를 가리지만
+    // Express 는 가리지 않아 `/API/OPERATIONS/status` 가 라우트까지 들어갔다. 슬래시 없는
+    // bare 접두도 옛 `^~ /api/operations/` 를 지나쳤다. SSO 리다이렉트(팀)나 403 도 통과로
+    // 읽지 않는다: 막았다면 앱에 닿기 전에 404 다.
+    for (const path of OPERATIONS_EDGE_PROBES) {
+      const exposed = await http('GET', `${input.baseUrl}${path}`);
+      if (exposed.status !== 404)
+        fail(
+          'BLOCKED',
+          'OPERATIONS_PUBLICLY_REACHABLE',
+          `public ${path} answered ${exposed.status}`,
+        );
+    }
     const live = await http('GET', `${input.baseUrl}/health/live`);
     if (live.status !== 200)
       fail('BLOCKED', 'ISOLATION_UNVERIFIED', `public /health/live ${live.status}`);
