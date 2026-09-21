@@ -208,15 +208,28 @@ export function correlateRejectedCommand(payload: unknown): {
  * client picks one of the ids it was given and never describes the choreography itself.
  */
 export const DEMO_SCENARIO_IDS = [
+  // S15P21C204-317. 서버의 `DEMO_SCENARIOS` 와 같은 순서·같은 값이다. 대본이 늘면 여기도
+  // 함께 는다. 배치 두 개는 관리자를 걷지 않고 확인 자리로 보내고, 그 밖의 새 대본은
+  // 관리자가 주도하는 기능(내 장비·내 요청·내 도전)을 인형이 받아 주는 것들이다.
+  'place-me-at-exit',
+  'place-puppet',
+  'approach',
+  'cross-my-view',
+  'turn-before-me',
   'trap',
   'sensor',
+  'device-states',
+  'double-trap-immunity',
   'capture',
   'capture-one',
-  'approach',
+  'capture-in-challenge',
+  'caught-in-my-challenge',
   'exit',
   'exchange',
   'exchange-cancel',
+  'accept-my-exchange',
   'exchange-trace',
+  'spectate-then-capture',
   'result-tagger-win',
   'result-runner-win',
   'abort-connection-lost',
