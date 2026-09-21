@@ -34,6 +34,7 @@ export function WorldCanvas({
   theme = resolveSceneTheme(),
   heldTool,
   renderTick = () => null,
+  paused = false,
   onMetrics,
 }: {
   scene?: ComponentProps<typeof ScenePrimitives>;
@@ -48,6 +49,11 @@ export function WorldCanvas({
   /** What the first-person hand holds. Omitted: derived from the player's role and stock. */
   heldTool?: HeldToolKind | null;
   renderTick?(): number | null;
+  /**
+   * S15P21C204-295. 멈춘 동안(설정 창) 장면을 그대로 세운다. 마지막 화면은 남으므로 뒤에
+   * 복도가 비치는 것은 그대로이고, 느린 기기에서 창 조작이 밀리지 않는다.
+   */
+  paused?: boolean;
   onMetrics?(metrics: FrameMetrics): void;
 } = {}) {
   const players = useAppStore((state) => state.players);
@@ -65,6 +71,7 @@ export function WorldCanvas({
         : null;
     return (
       <Canvas
+        frameloop={paused ? 'never' : 'always'}
         dpr={QUALITY_PRESETS[quality].dpr}
         gl={{ antialias: false }}
         camera={{ position: [0, 0.8, 0], near: 0.03, far: 3.5 }}

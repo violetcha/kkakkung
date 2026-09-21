@@ -327,6 +327,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
                   renderTick={renderTick}
                   ownerNames={{ 'solo-self': '나' }}
                   quality="low"
+                  paused={menuOpen}
                 />
               </div>
               <SoloPracticeHud
@@ -337,29 +338,33 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
               />
               {/* 도전 진행은 메뉴가 닫혀 있어도 무대 위에 보인다. */}
               {challenge && <div className="solo-challenge">{challenge}</div>}
-              {/* 우상단: 상대가 보는 내 캐릭터와 앞뒤·좌우 게이지, 그 아래 카메라 연결. */}
-              <div className="solo-corner">
-                <div className="solo-self" aria-hidden="true">
-                  <SelfAvatarView
-                    self={snapshot.self}
-                    renderTick={renderTick}
-                    faceStream={faceStream}
-                  />
-                  <StaticNoise />
-                  <MotionGauges />
+              {/* 우상단: 상대가 보는 내 캐릭터와 앞뒤·좌우 게이지, 그 아래 카메라 연결.
+                  멈춘 동안에는 내려 둔다. 보이지 않는데 WebGL 한 장을 더 그리면 느린 기기에서
+                  설정 창 클릭까지 밀린다(CI SwiftShader 에서 실제로 밀렸다). */}
+              {!menuOpen && (
+                <div className="solo-corner">
+                  <div className="solo-self" aria-hidden="true">
+                    <SelfAvatarView
+                      self={snapshot.self}
+                      renderTick={renderTick}
+                      faceStream={faceStream}
+                    />
+                    <StaticNoise />
+                    <MotionGauges />
+                  </div>
+                  <button
+                    type="button"
+                    className="solo-camera-button"
+                    data-state={camera.state}
+                    disabled={camera.disabled}
+                    onClick={camera.run}
+                    aria-label={camera.label}
+                    title={camera.label}
+                  >
+                    {camera.icon}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="solo-camera-button"
-                  data-state={camera.state}
-                  disabled={camera.disabled}
-                  onClick={camera.run}
-                  aria-label={camera.label}
-                  title={camera.label}
-                >
-                  {camera.icon}
-                </button>
-              </div>
+              )}
               {/* 좌중단: 역할 토글은 튜토리얼 박스 밖 위에, 퀘스트는 그 역할의 것만. */}
               <div className="solo-tutorial">
                 <div className="solo-role-toggle" role="group" aria-label="역할 전환">
