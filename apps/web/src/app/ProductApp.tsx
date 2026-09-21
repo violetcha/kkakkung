@@ -594,6 +594,14 @@ export function ProductApp({
               onTestTone={playTestTone}
               consented={consent.consented}
               onConsent={consent.accept}
+              demo={Boolean(snapshot.demo)}
+            />
+          )}
+          {snapshot.demo && round?.phase === 'DEVICE_CHECK' && (
+            <DemoPanel
+              demo={snapshot.demo}
+              phase={round.phase}
+              onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
             />
           )}
           {round && inResult && (
@@ -649,6 +657,13 @@ export function ProductApp({
                   ) : null
                 }
               />
+              {snapshot.demo && (
+                <DemoPanel
+                  demo={snapshot.demo}
+                  phase={round.phase}
+                  onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                />
+              )}
               {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
               {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
               {interactiveWorld && (
@@ -746,12 +761,6 @@ export function ProductApp({
                       onSelect={(kind) => runtime.current?.selectEquipment(kind)}
                       send={(command) => runtime.current?.send(command)}
                     />
-                    {snapshot.demo && (
-                      <DemoPanel
-                        demo={snapshot.demo}
-                        onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
-                      />
-                    )}
                     {localControls}
                   </div>
                 </details>

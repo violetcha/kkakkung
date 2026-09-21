@@ -50,6 +50,19 @@ it('marks escape, capture and the self state with shape and data attributes, not
   expect(restrained).toContain('구속 중');
 });
 
+it('does not present a clock when the demo round has no deadline', () => {
+  const self = viewFixture().self!;
+  const html = renderToStaticMarkup(
+    createElement(GameHud, {
+      round: roundFixture({ deadlineTick: null }),
+      self,
+      mode: 'keyboard',
+    }),
+  );
+  expect(html).toContain('데모 진행');
+  expect(html).not.toContain('시간 확인 중');
+});
+
 it('shows the watched player and every candidate instead of active controls', () => {
   const html = renderToStaticMarkup(
     createElement(GameHud, {

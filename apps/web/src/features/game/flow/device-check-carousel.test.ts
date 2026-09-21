@@ -87,3 +87,11 @@ it('only offers ready when every device passed and only where ready can be repor
   expect(render(allReady, { onReady: undefined })).not.toContain('준비 완료');
   expect(render(allReady, { ready: true })).toContain('준비 취소');
 });
+
+it('lets a demo room skip devices while keeping the real check opt-in', () => {
+  const html = render(INITIAL_DEVICES, { demo: true });
+  expect(html).toContain('데모 방 준비');
+  expect(html).toContain('장치 점검 없이 준비 완료');
+  expect(html).toContain('장치 점검 진행');
+  expect(html).not.toContain('카메라 켜고 점검하기');
+});
