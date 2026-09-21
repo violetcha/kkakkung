@@ -20,6 +20,7 @@ import {
   type RoomInvitationErrorCode,
 } from '@kkakkung/protocol/game-messages';
 import { AdmissionLimiter } from './AdmissionLimiter.js';
+import { clientOrigin } from './client-origin.js';
 import type { InvitationPort } from './invite-types.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import type { SlotRegistry } from './SlotRegistry.js';
@@ -58,17 +59,11 @@ export type SessionRouteDeps = Readonly<{
   canManageInvitations?: (session: SessionAuth) => boolean;
 }>;
 
-export function clientIp(
-  req: Pick<Request, 'headers' | 'socket'>,
-  trustProxy: boolean,
-): string | null {
-  if (trustProxy) {
-    const forwarded = req.headers['x-forwarded-for'];
-    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return req.socket?.remoteAddress ?? null;
-}
+/**
+ * S15P21C204-300. 제한과 상한은 원본 주소가 아니라 **접힌 출처 키**로만 센다. 주소를 그대로
+ * 돌려주는 함수를 두지 않아, 새 호출 지점이 실수로 정규화를 건너뛸 수 없게 한다.
+ */
+export { clientOrigin } from './client-origin.js';
 
 export function createSessionRoutes(deps: SessionRouteDeps): Router {
   const router = Router();
@@ -81,7 +76,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       })
     : null;
   router.use(SESSION_ROUTE, (req, res, next) => {
-    const ip = clientIp(req, deps.trustProxy) ?? 'unknown-peer';
+    const ip = clientOrigin(req, deps.trustProxy) ?? 'unknown-peer';
     if (
       requestLimiter !== null &&
       requestLimiter.attempt({ inviteId: ip, ip: null }, deps.monotonicNow()) !== 'allowed'
@@ -129,7 +124,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
     if (
       deps.limiter === null ||
       deps.limiter.attempt(
-        { inviteId: `host-invite:${session.sessionId}`, ip: clientIp(req, deps.trustProxy) },
+        { inviteId: `host-invite:${session.sessionId}`, ip: clientOrigin(req, deps.trustProxy) },
         deps.monotonicNow(),
       ) !== 'allowed'
     )
@@ -185,7 +180,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
     const body = parsed.data;
     const principal = ssoPrincipal(req);
     const guestCreate = deps.admissionMode === 'guest' && body.createRoom && !body.inviteToken;
-    const ip = clientIp(req, deps.trustProxy);
+    const ip = clientOrigin(req, deps.trustProxy);
     // A new random session is not a new attempt budget. Guest creation shares its IP bucket.
     const guestLimiter = guestCreate
       ? 'guest:' +

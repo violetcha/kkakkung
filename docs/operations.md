@@ -30,6 +30,7 @@
 | `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                 |
 | `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                   |
 | `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행 |
+| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅 |
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                           |
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                      |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                       |

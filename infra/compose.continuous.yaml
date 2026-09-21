@@ -13,6 +13,10 @@ services:
       # Cloud load (1-7) has not run, so ten rooms of real media is still unmeasured.
       MAX_ROOMS: '10'
       MAX_SLOTS: '60'
+      # S15P21C204-300: one origin (an IPv4 address or an IPv6 /64) may hold at most this many
+      # rooms at once, so a single visitor cannot take the whole budget above. Shared NAT folds a
+      # school or office onto one origin; a normal team opens one room and joins by invitation.
+      MAX_ROOMS_PER_ORIGIN: '2'
       # S15P21C204-258: the operator demo room stays available so a demonstration needs no redeploy.
       # It is still reachable only with OPS_TOKEN and has no entry point on the home screen, and it
       # takes a room from MAX_ROOMS above while it is open.
