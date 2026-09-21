@@ -309,6 +309,78 @@ it('releases a practice leaver who never requested a media generation', () => {
   }
 });
 
+it('returns to the lobby immediately when a participant leaves during preparation', () => {
+  const f = fixture();
+  try {
+    const leaving = f.players[5]!;
+    f.room.onLeave(leaving.client);
+    expect(f.room.phase).toBe('LOBBY');
+    expect(f.room.lobby.list()).toHaveLength(5);
+    expect(f.room.lobby.list().every((player: any) => player.connected)).toBe(true);
+    expect(f.room.loading.current).toBeNull();
+    expect(f.room.gameInstance()).toBeNull();
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBeNull();
+  } finally {
+    f.close();
+  }
+});
+
+it('invalidates map and loading work when a participant leaves during map finalization', () => {
+  const f = fixture();
+  try {
+    f.room.endPractice('to-map-finalizing');
+    expect(f.room.phase).toBe('MAP_FINALIZING');
+    f.room.onLeave(f.players[5]!.client);
+    expect(f.room.phase).toBe('LOBBY');
+    expect(f.room.pendingLayout).toBeNull();
+    expect(f.room.finalizing).toBeNull();
+    expect(f.room.loading.current).toBeNull();
+    expect(f.room.lobby.list()).toHaveLength(5);
+  } finally {
+    f.close();
+  }
+});
+
+it('reclaims an unready participant when device check expires without deleting the group', () => {
+  const f = fixture();
+  try {
+    f.room.endPractice('to-device-check');
+    f.room.lobby.clearReady();
+    for (const player of f.players.slice(0, 5))
+      f.room.lobby.applyReady(player.session.playerId, true, 'DEVICE_CHECK');
+    f.advance(300_000);
+    expect(f.room.phase).toBe('LOBBY');
+    expect(f.room.lobby.list()).toHaveLength(5);
+    expect(f.room.lobby.list().every((player: any) => player.ready === false)).toBe(true);
+    expect(f.slots.slotState('ABCDEF', f.players[5]!.session.playerId)).toBeNull();
+    expect(f.sessions.authenticate(f.players[5]!.session.sessionToken)).toBeNull();
+  } finally {
+    f.close();
+  }
+});
+
+it('removes a result-stage leaver before a new round can reuse the roster', () => {
+  const f = fixture();
+  try {
+    f.room.setPhase('RESULT');
+    const leaving = f.players[5]!;
+    f.room.onLeave(leaving.client);
+    expect(f.room.lobby.list()).toHaveLength(5);
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBeNull();
+
+    f.room.startNewRound();
+    expect(f.room.phase).toBe('LOBBY');
+    expect(f.room.lobby.list()).toHaveLength(5);
+    expect(f.room.lobby.list().every((player: any) => player.connected)).toBe(true);
+    expect(f.slots.reserve('ABCDEF', 'replacement', 100)).toBe('reserved');
+    expect(f.room.lobby.list()).not.toContainEqual(
+      expect.objectContaining({ playerId: leaving.session.playerId }),
+    );
+  } finally {
+    f.close();
+  }
+});
+
 it('holds an in-flight leaver until the late generation is confirmed retired', async () => {
   let allocate!: (result: any) => void;
   let confirm!: (result: any) => void;

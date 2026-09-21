@@ -1,6 +1,10 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { expect, it, vi } from 'vitest';
-import { ROOM_EXPIRED_CLOSE_CODE, sessionResponseSchema } from '@kkakkung/protocol/game-messages';
+import {
+  ROOM_EXPIRED_CLOSE_CODE,
+  ROOM_REMOVED_CLOSE_CODE,
+  sessionResponseSchema,
+} from '@kkakkung/protocol/game-messages';
 import type { Phase, PublicMatchState } from '@kkakkung/protocol/game-schema';
 import { PRODUCT_PROTOCOL_VERSION, PRODUCT_ROOM_NAME } from '@kkakkung/protocol/version';
 import { bootProductApplication } from './test-harness.js';
@@ -84,13 +88,18 @@ it.each(['LOBBY', 'DEVICE_CHECK', 'RESULT', 'ABORTED'] as const)(
       expect(closed).not.toHaveBeenCalled();
       f.time(deadline);
       f.serverRoom.checkExpiry(deadline);
-      f.serverRoom.checkExpiry(deadline);
+      // Device-check recovery returns an active group to LOBBY. A second expiry pass is
+      // intentionally not part of this case because the recovered room is now empty.
+      if (phase !== 'DEVICE_CHECK') f.serverRoom.checkExpiry(deadline);
       expect(f.application.productSessions.authenticate(f.session.sessionToken)).toBeNull();
       expect(f.application.slots!.reserve(f.session.roomCode, 'late-join', deadline)).toBe(
-        'ROOM_CLOSED',
+        phase === 'DEVICE_CHECK' ? 'reserved' : 'ROOM_CLOSED',
       );
       await vi.waitFor(() => expect(closed).toHaveBeenCalledOnce());
-      expect(closed.mock.calls[0]?.[0]).toBe(ROOM_EXPIRED_CLOSE_CODE);
+      expect(closed.mock.calls[0]?.[0]).toBe(
+        phase === 'DEVICE_CHECK' ? ROOM_REMOVED_CLOSE_CODE : ROOM_EXPIRED_CLOSE_CODE,
+      );
+      if (phase === 'DEVICE_CHECK') f.application.slots!.release(f.session.roomCode, 'late-join');
       await vi.waitFor(() => {
         expect(f.application.slots!.totalOccupied()).toBe(0);
         expect(f.application.directory.size).toBe(0);

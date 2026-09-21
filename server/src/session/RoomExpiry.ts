@@ -6,7 +6,8 @@
  */
 import type { Phase } from '@kkakkung/protocol/game-schema';
 
-export type ExpiryDecision = 'keep' | 'expire-idle' | 'expire-empty' | 'expire-sessions';
+export type ExpiryDecision =
+  'keep' | 'recover-device-check' | 'expire-idle' | 'expire-empty' | 'expire-sessions';
 
 export class RoomExpiry {
   constructor(
@@ -50,8 +51,13 @@ export class RoomExpiry {
   }): ExpiryDecision {
     if (!['LOBBY', 'DEVICE_CHECK', 'RESULT', 'ABORTED'].includes(input.phase)) return 'keep';
     if (input.liveSessionCount === 0) return 'expire-sessions';
-    if (this.remainingMs(input) === 0)
+    if (this.remainingMs(input) === 0) {
+      // A connected room in device check is still an active group. Reclaim only the
+      // participants that did not complete the check; destroying the whole room would
+      // make one failed camera or permission prompt take five other players with it.
+      if (input.phase === 'DEVICE_CHECK' && input.connectedCount > 0) return 'recover-device-check';
       return input.connectedCount === 0 ? 'expire-empty' : 'expire-idle';
+    }
     return 'keep';
   }
 }

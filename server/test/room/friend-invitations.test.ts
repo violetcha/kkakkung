@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { Client, type Room } from '@colyseus/sdk';
 import { expect, it, vi } from 'vitest';
 import {
+  PRODUCT_CLIENT_MESSAGES,
+  PRODUCT_SERVER_MESSAGES,
   ROOM_INVITATION_ROUTE,
   roomInvitationResponseSchema,
   sessionResponseSchema,
@@ -60,6 +63,7 @@ async function fixture() {
   const room = actual as unknown as {
     roomId: string;
     setPhase(phase: Phase): void;
+    tick(): void;
     onJoin(client: unknown, options: unknown, auth: SessionAuth): void;
     constructor: {
       onAuth(token: string, options: unknown, context: unknown): Promise<SessionAuth>;
@@ -159,6 +163,32 @@ it('keeps the previous link if replacement fails and permits revocation while dr
     expect((await f.manage()).status).toBe(503);
     expect((await f.manage(f.host, 'DELETE')).status).toBe(204);
     expect(f.application.invites!.verify(scope)).toBeNull();
+  } finally {
+    await f.close();
+  }
+});
+
+it('does not start a rematch while product admission is draining', async () => {
+  const f = await fixture();
+  try {
+    f.room.setPhase('RESULT');
+    f.setAdmission('DRAINING');
+    const requestId = randomUUID();
+    let receipt: unknown;
+    const off = f.hostRoom.onMessage(PRODUCT_SERVER_MESSAGES.commandResult, (value) => {
+      if ((value as { requestId?: string }).requestId === requestId) receipt = value;
+    });
+    f.hostRoom.send(PRODUCT_CLIENT_MESSAGES.command, {
+      matchId: f.hostRoom.state.matchId,
+      requestId,
+      sequence: 1,
+      type: 'REMATCH',
+      payload: { mode: 'lobby' },
+    });
+    await vi.waitFor(() => expect(receipt).toBeDefined());
+    off();
+    expect(receipt).toMatchObject({ status: 'rejected', code: 'NOT_READY' });
+    expect(f.room.phase).toBe('RESULT');
   } finally {
     await f.close();
   }
