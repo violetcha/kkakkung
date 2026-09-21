@@ -81,6 +81,7 @@ function assetRef(input: unknown, name: string): AvatarAssetRef {
   const url = value.url;
   if (
     typeof url !== 'string' ||
+    !/^\/models\/avatars\/v1\/[A-Za-z0-9._/-]+$/.test(url) ||
     !url.startsWith('/models/avatars/v1/') ||
     url.length === '/models/avatars/v1/'.length ||
     url.includes('..') ||

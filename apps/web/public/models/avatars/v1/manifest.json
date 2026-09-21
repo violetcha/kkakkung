@@ -4,8 +4,8 @@
     "runner": {
       "model": {
         "url": "/models/avatars/v1/runner.glb",
-        "sha256": "7145321c2828895416b779e48606da4ac4aa991b1c044c133a09b372aa7e15dc",
-        "bytes": 26760
+        "sha256": "0237927516d537cb5962fea11e79224b68718e6cfc8ea5eb692aa3ac4b67d442",
+        "bytes": 26844
       },
       "textures": {
         "low": {
@@ -57,8 +57,8 @@
     "tagger": {
       "model": {
         "url": "/models/avatars/v1/tagger.glb",
-        "sha256": "71d0e9e6d48f327b4d4edef23160e765849951e060e29ef2e56957efc59d208e",
-        "bytes": 40976
+        "sha256": "a6140de90196885d3e4079d4e23aba892c786446379beb54198ae7cb6183de40",
+        "bytes": 40996
       },
       "textures": {
         "low": {

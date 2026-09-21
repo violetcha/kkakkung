@@ -61,8 +61,14 @@ function glbJson(asset: AssetRef) {
   ) as {
     nodes: Array<{ name?: string; mesh?: number }>;
     materials?: Array<{ name?: string }>;
-    meshes?: Array<{ primitives: Array<{ indices?: number; attributes: { POSITION: number } }> }>;
-    accessors?: Array<{ count: number }>;
+    meshes?: Array<{
+      primitives: Array<{
+        indices?: number;
+        material?: number;
+        attributes: { POSITION: number; TEXCOORD_0?: number };
+      }>;
+    }>;
+    accessors?: Array<{ count: number; min?: number[]; max?: number[] }>;
     animations?: Array<{
       name?: string;
       channels: Array<{ target: { node: number; path: string } }>;
@@ -175,4 +181,27 @@ describe('generated avatar assets', () => {
     expect(trianglesForNode(json, 'LongArm.R')).toBeGreaterThan(30);
     expect(selected.metrics.drawCalls).toBe(8);
   });
+
+  it.each(['runner', 'tagger'] as const)(
+    '%s BodyMaterial UVs stay inside the first atlas column',
+    (role) => {
+      const selected = manifest().roles[role];
+      const json = glbJson(selected.model);
+      const bodyMaterial = json.materials?.findIndex(
+        (material) => material.name === 'BodyMaterial',
+      );
+      expect(bodyMaterial).toBeGreaterThanOrEqual(0);
+      const bodyUvs =
+        json.meshes?.flatMap((mesh) =>
+          mesh.primitives
+            .filter((primitive) => primitive.material === bodyMaterial)
+            .map((primitive) => json.accessors?.[primitive.attributes.TEXCOORD_0 ?? -1]),
+        ) ?? [];
+      expect(bodyUvs.length).toBeGreaterThan(0);
+      for (const uv of bodyUvs) {
+        expect(uv?.min?.[0]).toBeGreaterThan(0);
+        expect(uv?.max?.[0]).toBeLessThan(0.25);
+      }
+    },
+  );
 });

@@ -3,7 +3,15 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AnimationClip, BoxGeometry, Group, Mesh, MeshStandardMaterial, Texture } from 'three';
+import {
+  AnimationClip,
+  BoxGeometry,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  Texture,
+  VectorKeyframeTrack,
+} from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   clearAvatarAssetCache,
@@ -21,11 +29,17 @@ async function bytesFor(url: string) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-function sceneFor(role: 'runner' | 'tagger') {
+function sceneFor(role: 'runner' | 'tagger', invalidAncestor?: 'animated' | 'offset') {
   const scene = new Group();
   const avatarRoot = new Group();
   avatarRoot.name = 'AvatarRoot';
-  scene.add(avatarRoot);
+  const ancestor = new Group();
+  ancestor.name = 'ImportedOffset';
+  if (invalidAncestor) {
+    if (invalidAncestor === 'offset') ancestor.position.x = 50;
+    scene.add(ancestor);
+    ancestor.add(avatarRoot);
+  } else scene.add(avatarRoot);
   const rig = new Group();
   rig.name = 'Rig';
   avatarRoot.add(rig);
@@ -51,9 +65,14 @@ function sceneFor(role: 'runner' | 'tagger') {
     node.name = name;
     rig.add(node);
   }
+  const animations = [new AnimationClip('idle', 1), new AnimationClip('walk', 1)];
+  if (invalidAncestor === 'animated')
+    animations[1]?.tracks.push(
+      new VectorKeyframeTrack('ImportedOffset.position', [0, 1], [0, 0, 0, 50, 0, 0]),
+    );
   return {
     scene,
-    animations: [new AnimationClip('idle', 1), new AnimationClip('walk', 1)],
+    animations,
   };
 }
 
@@ -61,6 +80,7 @@ function deps(options?: {
   failModelOnce?: boolean;
   badHash?: boolean;
   missingSocket?: boolean;
+  invalidAncestor?: 'animated' | 'offset';
   events?: AvatarLoaderEvent[];
   counters?: { modelFetches: number; parses: number };
 }): AvatarLoaderDeps {
@@ -86,7 +106,7 @@ function deps(options?: {
     },
     async parseGlb(_bytes, selection) {
       if (options?.counters) options.counters.parses += 1;
-      const parsed = sceneFor(selection.role);
+      const parsed = sceneFor(selection.role, options?.invalidAncestor);
       if (options?.missingSocket) parsed.scene.getObjectByName('FaceSocket')?.removeFromParent();
       return parsed;
     },
@@ -179,4 +199,16 @@ describe('avatar loader', () => {
       reason: 'contract',
     });
   });
+
+  it.each(['animated', 'offset'] as const)(
+    'falls back when AvatarRoot has an %s ancestor',
+    async (invalidAncestor) => {
+      expect(await loadRoleAvatar('runner', 'medium', deps({ invalidAncestor }))).toEqual({
+        status: 'fallback',
+        role: 'runner',
+        version: 'v1',
+        reason: 'contract',
+      });
+    },
+  );
 });

@@ -77,7 +77,26 @@ function namedGroup(name, parent, position = [0, 0, 0], rotation = [0, 0, 0]) {
   return group;
 }
 
+const ATLAS_COLUMNS = 4;
+const ATLAS_EDGE_INSET = 1 / 512;
+
+function mapToAtlasColumn(geometry, column) {
+  const uv = geometry.getAttribute('uv');
+  if (!uv) return geometry;
+  const start = column / ATLAS_COLUMNS + ATLAS_EDGE_INSET;
+  const width = 1 / ATLAS_COLUMNS - ATLAS_EDGE_INSET * 2;
+  for (let index = 0; index < uv.count; index += 1) {
+    const source = Math.min(1, Math.max(0, uv.getX(index)));
+    uv.setX(index, start + source * width);
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
 function namedMesh(name, geometry, material, parent, position, scale, rotation = [0, 0, 0]) {
+  // BodyMaterial은 의상용 첫 번째 아틀라스 열만 사용한다. 기본 프리미티브 UV(0~1)를
+  // 그대로 두면 피부/검정/치아 팔레트까지 샘플링되어 옷이 반으로 갈라져 보인다.
+  if (material.name === 'BodyMaterial') mapToAtlasColumn(geometry, 0);
   const mesh = new Mesh(geometry, material);
   mesh.name = name;
   mesh.position.fromArray(position);

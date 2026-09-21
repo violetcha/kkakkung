@@ -222,6 +222,19 @@ function validateModel(parsed: ParsedAvatarGlb, selection: AvatarRoleSelection) 
   if (clips.join(',') !== 'idle,walk') throw new AvatarLoadError('contract');
   const root = parsed.scene.getObjectByName('AvatarRoot');
   if (!root) throw new AvatarLoadError('contract');
+  // 서버 좌표는 AvatarRoot에 직접 적용된다. 중간 래퍼가 있으면 정적 오프셋이나
+  // 애니메이션이 서버 좌표 위에 다시 더해지므로, GLB 장면의 직계 자식만 허용한다.
+  if (root.parent !== parsed.scene) throw new AvatarLoadError('contract');
+  const identityRoot =
+    root.position.lengthSq() <= 1e-12 &&
+    Math.abs(root.quaternion.x) <= 1e-6 &&
+    Math.abs(root.quaternion.y) <= 1e-6 &&
+    Math.abs(root.quaternion.z) <= 1e-6 &&
+    Math.abs(root.quaternion.w - 1) <= 1e-6 &&
+    Math.abs(root.scale.x - 1) <= 1e-6 &&
+    Math.abs(root.scale.y - 1) <= 1e-6 &&
+    Math.abs(root.scale.z - 1) <= 1e-6;
+  if (!identityRoot) throw new AvatarLoadError('contract');
   if (
     parsed.animations.some((clip) =>
       clip.tracks.some(

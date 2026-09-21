@@ -91,9 +91,9 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 
 | 파일                                                     |  bytes | SHA256                                                             |
 | -------------------------------------------------------- | -----: | ------------------------------------------------------------------ |
-| `models/avatars/v1/manifest.json`                        |  3,052 | `d105a3ce47d266bae61e95acebf30c6b80d5fc14976e3ac817a69af040be6286` |
-| `models/avatars/v1/runner.glb`                           | 26,760 | `7145321c2828895416b779e48606da4ac4aa991b1c044c133a09b372aa7e15dc` |
-| `models/avatars/v1/tagger.glb`                           | 40,976 | `71d0e9e6d48f327b4d4edef23160e765849951e060e29ef2e56957efc59d208e` |
+| `models/avatars/v1/manifest.json`                        |  3,052 | `38074af8338bf4a5c8d03df749b1c3f312a7f7ead1ae401657b439d93cf84f98` |
+| `models/avatars/v1/runner.glb`                           | 26,844 | `0237927516d537cb5962fea11e79224b68718e6cfc8ea5eb692aa3ac4b67d442` |
+| `models/avatars/v1/tagger.glb`                           | 40,996 | `a6140de90196885d3e4079d4e23aba892c786446379beb54198ae7cb6183de40` |
 | `models/avatars/v1/textures/runner-low-color.png`        | 10,460 | `0e443dc7af9d434431a2d9059407af218e660b705f6aab7436262c294805d17b` |
 | `models/avatars/v1/textures/runner-medium-color.png`     | 30,434 | `9ad57f3b72cd210138a2a146f4a5c52ca379c44cb4bf834539a3ab3cd044fd19` |
 | `models/avatars/v1/textures/runner-medium-roughness.png` | 10,354 | `354cc62d1d1086359c8717120c103223cdfb6aaa2bbed6a2ac7214888a09787c` |

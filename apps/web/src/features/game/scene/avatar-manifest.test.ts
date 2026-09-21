@@ -65,6 +65,9 @@ describe('avatar manifest', () => {
   it.each([
     ['external URL', 'https://example.com/runner.glb'],
     ['path traversal', '/models/avatars/v1/../runner.glb'],
+    ['encoded path traversal', '/models/avatars/v1/%2e%2e/runner.glb'],
+    ['encoded slash', '/models/avatars/v1/runner%2f..%2ftagger.glb'],
+    ['encoded backslash', '/models/avatars/v1/runner%5c..%5ctagger.glb'],
     ['backslash', '/models/avatars/v1\\runner.glb'],
     ['query', '/models/avatars/v1/runner.glb?v=2'],
     ['fragment', '/models/avatars/v1/runner.glb#mesh'],
