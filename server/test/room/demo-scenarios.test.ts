@@ -115,8 +115,6 @@ async function playing(role: Role) {
   };
   await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
   await send({ type: 'READY', payload: { ready: true } });
-  await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 10_000 });
-  await send({ type: 'PRACTICE_READY', payload: { ready: true } });
   await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
   const loading = views.at(-1)?.self;
   const barrier = loading?.status === 'ACTIVE' ? loading.loading : null;
@@ -155,12 +153,18 @@ it('offers the scenario list to the operator and refuses an unknown request', as
     // Before the match the whole list is offered and only a PLAYING tick narrows it to the
     // operator's role, so waiting for "some state arrived" can still read the opening list.
     // The list follows the operator's role: a runner cannot be shown a tagger's trace view.
-    await vi.waitFor(() => expect(demo.states.at(-1)?.available).not.toContain('exchange-trace'), {
-      timeout: 5000,
-    });
-    expect(demo.states.at(-1)?.available).toContain('trap');
-    expect(demo.states.at(-1)?.available).toContain('capture');
-    expect(demo.states.at(-1)?.available).toContain('exchange');
+    await vi.waitFor(
+      () =>
+        expect(demo.states.at(-1)?.available.map((item) => item.id)).not.toContain(
+          'exchange-trace',
+        ),
+      {
+        timeout: 5000,
+      },
+    );
+    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('trap');
+    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('capture');
+    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('exchange');
     expect(demo.states.at(-1)?.running).toBeNull();
     // A malformed request changes nothing: the room keeps waiting for a real scenario id.
     demo.room.send(PRODUCT_CLIENT_MESSAGES.demoScenario, { matchId: demo.room.state.matchId });
@@ -179,19 +183,33 @@ it('aborts on a puppet connection loss and refills the room for the rematch', as
     await vi.waitFor(() => expect(demo.room.state.phase).toBe('ABORTED'), { timeout: 5000 });
     expect(demo.room.state.abortReason).toBe('GAME_CONNECTION_LOST');
     await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBeNull());
-    expect(demo.states.at(-1)?.failure).toBeNull();
+    expect(demo.states.at(-1)?.failureCode).toBeNull();
 
     // The operator alone asks for a rematch; the puppets are back and ready without a client.
-    expect((await demo.send({ type: 'REMATCH', payload: { mode: 'same' } })).status).toBe(
-      'accepted',
-    );
+    expect(
+      (await demo.send({ type: 'REMATCH', payload: { mode: 'same', role: 'tagger' } })).status,
+    ).toBe('accepted');
     await vi.waitFor(() => expect(demo.room.state.phase).toBe('DEVICE_CHECK'), { timeout: 5000 });
     await demo.send({ type: 'READY', payload: { ready: true } });
-    await vi.waitFor(() => expect(demo.room.state.phase).toBe('TEAM_PRACTICE'), {
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('GAME_LOADING'), {
       timeout: 10_000,
     });
-    // The operator keeps the role the room was opened with.
-    await vi.waitFor(() => expect(demo.self()?.role).toBe('runner'));
+    // The operator can choose the role for the next demo round.
+    await vi.waitFor(() => expect(demo.self()?.role).toBe('tagger'));
+  } finally {
+    await demo.close();
+  }
+}, 60_000);
+
+it('lets the operator abort a demo round through the control channel', async () => {
+  const demo = await playing('runner');
+  try {
+    demo.room.send(PRODUCT_CLIENT_MESSAGES.demoControl, {
+      matchId: demo.room.state.matchId,
+      action: 'abort-round',
+    });
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('ABORTED'), { timeout: 5000 });
+    expect(demo.room.state.abortReason ?? null).toBeNull();
   } finally {
     await demo.close();
   }
@@ -238,7 +256,7 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
         timeout: 80_000,
       });
       await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBeNull(), { timeout: 20_000 });
-      expect(demo.states.at(-1)?.failure).toBeNull();
+      expect(demo.states.at(-1)?.failureCode).toBeNull();
       await vi.waitFor(
         async () => {
           await demo.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } });

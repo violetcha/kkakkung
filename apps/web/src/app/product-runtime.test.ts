@@ -1346,16 +1346,25 @@ it('keeps demo state for the running match and sends only listed scenarios', asy
     const matchId = f.runtime.getSnapshot().round!.matchId;
     const demo = {
       matchId,
-      available: ['trap', 'capture'],
+      available: [
+        { id: 'trap', options: [] },
+        { id: 'capture', options: [] },
+      ],
       running: null,
       step: null,
-      failure: null,
+      failureCode: null,
+      operatorExit: null,
     };
     // A message for another match is not this room's demo state.
     f.messages.get('demo-state')!({ ...demo, matchId: 'other-match' });
     expect(f.runtime.getSnapshot().demo).toBeUndefined();
     f.messages.get('demo-state')!(demo);
-    expect(f.runtime.getSnapshot().demo).toMatchObject({ available: ['trap', 'capture'] });
+    expect(f.runtime.getSnapshot().demo).toMatchObject({
+      available: [
+        { id: 'trap', options: [] },
+        { id: 'capture', options: [] },
+      ],
+    });
     f.runtime.runDemoScenario('trap');
     expect(f.send.mock.calls.filter(([channel]) => channel === 'demo-scenario')).toEqual([
       ['demo-scenario', { matchId, scenario: 'trap' }],
@@ -1373,10 +1382,11 @@ it('in a demo room skips media grants and reports LOAD_READY from assets and the
     const matchId = f.runtime.getSnapshot().round!.matchId;
     f.messages.get('demo-state')!({
       matchId,
-      available: ['trap'],
+      available: [{ id: 'trap', options: [] }],
       running: null,
       step: null,
-      failure: null,
+      failureCode: null,
+      operatorExit: null,
     });
     // 연습: 데모 방은 미디어 발급을 요청하지 않는다(요청하면 NOT_READY 로 거절돼 오류만 남는다).
     f.state({ phase: 'TEAM_PRACTICE', stateVersion: 12 });
@@ -1459,12 +1469,22 @@ it('keeps a demo-state that arrives before the first round until the round confi
     },
   );
   try {
-    const demo = { matchId: 'm', available: ['trap'], running: null, step: null, failure: null };
+    const demo = {
+      matchId: 'm',
+      available: [{ id: 'trap', options: [] }],
+      running: null,
+      step: null,
+      failureCode: null,
+      operatorExit: null,
+    };
     // 첫 상태 패치보다 먼저 온 demo-state 는 버리지 않고 들고 있다.
     messages.get('demo-state')!(demo);
     expect(runtime.getSnapshot().demo).toBeUndefined();
     stateHandler(roundFixture({ phase: 'LOBBY', stateVersion: 1 }) as unknown as PublicMatchState);
-    expect(runtime.getSnapshot().demo).toMatchObject({ matchId: 'm', available: ['trap'] });
+    expect(runtime.getSnapshot().demo).toMatchObject({
+      matchId: 'm',
+      available: [{ id: 'trap', options: [] }],
+    });
   } finally {
     await runtime.leave();
   }

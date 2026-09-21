@@ -17,6 +17,7 @@ import {
   ROOM_REMOVED_CLOSE_CODE,
   type SessionResponse,
   type DemoScenarioId,
+  type DemoScenarioOptions,
   type DemoStateMessage,
   type RoomRosterMessage,
   type RoomAccessMessage,
@@ -1348,9 +1349,18 @@ export function bindProductRoom(
     playTestTone: () => bridge.runtime.playTestTone(),
     quality: (value: QualityPreset) => quality.select(value),
     /** Asks the server to run a demo scenario. Ordinary rooms ignore the message. */
-    runDemoScenario(scenario: DemoScenarioId) {
+    runDemoScenario(scenario: DemoScenarioId, options?: DemoScenarioOptions) {
       if (!snapshot.round || !snapshot.demo) return;
-      send('demo-scenario', { matchId: snapshot.round.matchId, scenario });
+      send('demo-scenario', {
+        matchId: snapshot.round.matchId,
+        scenario,
+        ...(options ? { options } : {}),
+      });
+    },
+    /** Ends the current demo round without inventing a public failure reason. */
+    abortDemoRound() {
+      if (!snapshot.round || !snapshot.demo) return;
+      send('demo-control', { matchId: snapshot.round.matchId, action: 'abort-round' });
     },
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
