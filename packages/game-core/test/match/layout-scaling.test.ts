@@ -1,6 +1,10 @@
 import { expect, it } from 'vitest';
 
-import { LAYOUT_BASE_SIZE, scaleLayoutConstraints, validateTuning } from '../../src/match/tuning.js';
+import {
+  LAYOUT_BASE_SIZE,
+  scaleLayoutConstraints,
+  validateTuning,
+} from '../../src/match/tuning.js';
 import { loadTuning } from './helpers.js';
 
 /**

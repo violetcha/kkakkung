@@ -479,7 +479,13 @@ async function main() {
     writeFileSync(mapPath(b.map.id), b.mapBytes);
     writeFileSync(fallbackPath(b.map.id), b.fallbackText, 'utf8');
   }
-  console.log(JSON.stringify(built.map((b) => b.summary), null, 2));
+  console.log(
+    JSON.stringify(
+      built.map((b) => b.summary),
+      null,
+      2,
+    ),
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

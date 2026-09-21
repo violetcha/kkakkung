@@ -183,10 +183,7 @@ export const LAYOUT_BASE_SIZE = 31;
  *
  * The map generator scales the same way, so a committed fallback and a live selection agree.
  */
-export function scaleLayoutConstraints(
-  base: LayoutConstraints,
-  size: number,
-): LayoutConstraints {
+export function scaleLayoutConstraints(base: LayoutConstraints, size: number): LayoutConstraints {
   if (!Number.isFinite(size) || size <= 0 || size >= LAYOUT_BASE_SIZE) return base;
   const at = (value: number) => Math.max(1, Math.round((value * size) / LAYOUT_BASE_SIZE));
   return Object.freeze({

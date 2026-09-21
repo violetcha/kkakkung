@@ -83,8 +83,7 @@ describe.each(MAZES)('$id corridor structure', ({ id, size, minCycles }) => {
 
   it('keeps enough loops to be a braid, not a single ring', () => {
     const cells = passages(topology);
-    const edges =
-      cells.reduce((sum, cell) => sum + passageNeighbors(topology, cell).length, 0) / 2;
+    const edges = cells.reduce((sum, cell) => sum + passageNeighbors(topology, cell).length, 0) / 2;
     const cycles = edges - cells.length + 1;
     expect(cycles).toBeGreaterThanOrEqual(minCycles);
   });
