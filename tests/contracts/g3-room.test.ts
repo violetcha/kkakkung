@@ -61,6 +61,27 @@ describe('assembly: A matchCore through B driver', () => {
     expect(h.outcomes.every((o) => o.outcome.result === 'applied')).toBe(true);
     expect(h.player('t1').action?.kind).toBe('move');
   });
+
+  it('진짜 경기는 데모 배치 제어를 받지 않는다', () => {
+    // S15P21C204-316. `PLACE_PLAYER` 는 데모 하네스 전용이다. 실제 방이 쓰는 드라이버 경로로
+    // 넣어도 위치가 바뀌지 않아야 한다. 코어 단독 시험(`demo-controls`)과 달리 여기서는
+    // 서버가 실제로 제어를 흘려보내는 조립에서 확인한다.
+    const h = createG3Harness();
+    h.start();
+    const before = h.player('r1');
+    const destination = { x: before.cell.x, y: before.cell.y + 1 };
+    h.driver.enqueueControl(h.instance.gameInstanceId, {
+      type: 'PLACE_PLAYER',
+      playerId: 'r1',
+      cell: destination,
+      dir: 2,
+    });
+    h.tick();
+    expect(h.player('r1').cell).toEqual(before.cell);
+    expect(h.player('r1').dir).toBe(before.dir);
+    expect(h.state().deadline).toBe('round');
+    expect(h.integrityFailures).toEqual([]);
+  });
 });
 
 describe('G3-A personal end and connection loss', () => {

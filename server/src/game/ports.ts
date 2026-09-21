@@ -52,7 +52,12 @@ export type ControlIntent =
   | Readonly<{ type: 'EXPIRE_MOVE'; playerId: string; sequence: number }>
   | Readonly<{ type: 'CONNECTION_LOST'; playerId: string }>
   | Readonly<{ type: 'ABORT_MATCH'; reason: AbortReason }>
-  | Readonly<{ type: 'START_PLAYING'; startTick: number }>;
+  | Readonly<{ type: 'START_PLAYING'; startTick: number }>
+  /**
+   * S15P21C204-316. 데모 하네스 전용. 코어가 `deadline: 'none'` 경기에서만 받고 그 밖에서는
+   * 조용히 무시한다(계약 시험 `g3-room`). 서버는 그대로 흘려보낸다.
+   */
+  | Readonly<{ type: 'PLACE_PLAYER'; playerId: string; cell: Cell; dir: Dir }>;
 
 export type OutcomeResult =
   { result: 'applied'; code: null } | { result: 'rejected' | 'canceled'; code: CommandCode };
