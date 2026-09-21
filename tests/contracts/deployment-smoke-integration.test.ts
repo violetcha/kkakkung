@@ -83,6 +83,11 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
   const opsToken = randomUUID();
   const server = await startProductServerProcess(opsToken);
   try {
+    // S15P21C204-302. This run's positive in-game audio evidence is a coin flip on the corridor
+    // maze, so the child pins the open grid. Asserted here because the first attempt at that pin
+    // set an environment variable the child never reads, and nothing said so: the run stayed on
+    // the maze and failed in CI. S15P21C204-308 removes the pin and this expectation with it.
+    expect(server.mapTemplate).toBe('master-v1');
     await expect
       .poll(async () => (await server.inspect()).readiness?.state, { timeout: 5000 })
       .toBe('READY');

@@ -77,7 +77,13 @@ export type ProductServerInspection = Readonly<{
   removedIdentityHashes: readonly string[];
   probe: ProductServerProbe;
 }>;
-export type ProductServerStarted = Readonly<{ port: number; pid: number; strictProduct: boolean }>;
+export type ProductServerStarted = Readonly<{
+  port: number;
+  pid: number;
+  strictProduct: boolean;
+  /** Which certified map the child actually loaded. Reported so a test can assert it (302). */
+  mapTemplate: string;
+}>;
 export type ProductServerResult =
   ProductServerInspection | ProductServerStarted | Readonly<{ done: true }>;
 export type ProductServerReply =
@@ -103,6 +109,7 @@ export const productServerReplySchema = z.discriminatedUnion('ok', [
         port: z.number().int().min(1).max(65535),
         pid: z.number().int().positive(),
         strictProduct: z.boolean(),
+        mapTemplate: z.string().regex(/^[a-z0-9-]+$/),
       }),
       z.strictObject({ done: z.literal(true) }),
       z.strictObject({
