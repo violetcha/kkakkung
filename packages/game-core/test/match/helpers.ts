@@ -16,7 +16,7 @@ export function loadServerJson(relativePath: string): { raw: unknown; hash: stri
 }
 
 /** Certified product templates: each ships `content/maps/<id>.json` and `<id>-fallback.json`. */
-export const CERTIFIED_TEMPLATE_IDS = ['master-v1', 'maze-v1'] as const;
+export const CERTIFIED_TEMPLATE_IDS = ['master-v1', 'maze-v1', 'maze-m-v1', 'maze-s-v1'] as const;
 export type CertifiedTemplateId = (typeof CERTIFIED_TEMPLATE_IDS)[number];
 
 export function loadTemplateFile(templateId: CertifiedTemplateId): {
