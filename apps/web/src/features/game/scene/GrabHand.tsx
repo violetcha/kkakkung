@@ -5,11 +5,11 @@ import { ROLE_COLORS } from './role-colors';
 import { grabHandReach, refreshGrabHandMotion, type GrabHandMotion } from './grab-hand';
 
 const START = Object.freeze({
-  position: [0.34, -0.38, -0.22] as const,
-  rotation: [-0.5, -0.25, -0.15] as const,
+  position: [-0.34, -0.38, -0.22] as const,
+  rotation: [-0.5, 0.25, 0.15] as const,
 });
 const EXTENDED = Object.freeze({
-  position: [0.06, -0.1, -0.72] as const,
+  position: [-0.06, -0.1, -0.72] as const,
   rotation: [-0.1, 0, 0] as const,
 });
 
