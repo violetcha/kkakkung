@@ -5,7 +5,12 @@ const ABORT_LABELS: Record<AbortReason, string> = {
   MEDIA_POLICY_UNCERTAIN: '미디어 권한을 확인하지 못해 경기가 무효 처리되었습니다.',
   MEDIA_UNAVAILABLE: '미디어 연결을 사용할 수 없어 경기가 무효 처리되었습니다.',
 };
-export function resultPresenter(round: PublicRoundState, self: PrivateView['self']) {
+export function resultPresenter(
+  round: PublicRoundState,
+  self: PrivateView['self'],
+  options: { runners?: number } = {},
+) {
+  const runners = options.runners ?? 3;
   const ended = round.phase === 'RESULT' || round.phase === 'ABORTED';
   const reason = round.result?.reason;
   const personal =
@@ -48,12 +53,14 @@ export function resultPresenter(round: PublicRoundState, self: PrivateView['self
             : reason === 'two-captured'
               ? '도망자 2명을 포획하여 술래 팀이 승리했습니다.'
               : reason === 'timeout'
-                ? '제한 시간이 끝나 술래 팀이 승리했습니다.'
+                ? round.result?.winner === 'runners'
+                  ? '제한 시간이 끝났고 탈출이 포획보다 많아 도망자 팀이 승리했습니다.'
+                  : '제한 시간이 끝나 술래 팀이 승리했습니다.'
                 : '최종 결과를 확인하고 있습니다.'
           : '참가가 종료되었습니다. 경기가 끝날 때까지 팀의 공개 결과를 확인할 수 있습니다.',
     counts: {
       ...round.counts,
-      active: Math.max(0, 3 - round.counts.escaped - round.counts.captured),
+      active: Math.max(0, runners - round.counts.escaped - round.counts.captured),
     },
     remaining:
       ended || round.deadlineTick === null

@@ -2886,20 +2886,28 @@
   min-height: 90px;
   max-width: 180px;
 }
-.game-stage > .demo-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: min(360px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
+/* S15P21C204-313. 데모의 관리자 패널은 무대 옆 열이다. 무대 위에 얹으면 미니맵·HUD 를 가린다. */
+.stage-layout {
+  display: contents;
+}
+.demo-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(360px, 30vw);
+  gap: var(--space-2);
+  align-items: start;
+}
+.demo-layout > .game-stage {
+  min-width: 0;
+}
+.demo-layout > .demo-panel {
+  height: calc(100dvh - 128px);
+  min-height: 360px;
   overflow: auto;
-  margin: 0;
+  margin: var(--space-2) 0 0;
   padding: var(--space-3);
-  background: #090a09e8;
-  border: 1px solid #d7d7cf70;
-  border-radius: 8px;
-  box-shadow: 0 12px 32px #000b;
-  backdrop-filter: blur(8px);
+  background: var(--ink-panel);
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
 .demo-panel-heading {
   display: flex;
@@ -2987,11 +2995,14 @@
   border-color: #c09a5b;
 }
 @media (max-width: 850px) {
-  .game-stage > .demo-panel {
-    top: 8px;
-    right: 8px;
-    width: min(320px, calc(100% - 16px));
-    max-height: calc(100% - 16px);
+  /* 좁은 화면은 패널을 무대 아래로 내린다. */
+  .demo-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .demo-layout > .demo-panel {
+    height: auto;
+    min-height: 0;
+    max-height: 60dvh;
   }
 }
 /* 칸은 정사각형 하나. 번호는 왼쪽 위, 개수는 오른쪽 아래, 가운데는 글리프뿐이다. */

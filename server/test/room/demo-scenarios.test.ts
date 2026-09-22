@@ -26,7 +26,7 @@ import { parseConfig } from '../../src/config/env.js';
 import { loadProductProfile } from '../../src/game/ProductProfileLoader.js';
 import { createTestOperatorAuth, TEST_OPS_TOKEN } from './test-harness.js';
 
-const configuration = () => ({
+const configuration = (mapTemplate = process.env.KKAKKUNG_DEMO_MAP) => ({
   ...parseConfig({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
@@ -42,19 +42,40 @@ const configuration = () => ({
     SESSION_ATTEMPTS_PER_IP: '100',
     ROOM_IDLE_TTL_MS: '600000',
     // S15P21C204-267. KKAKKUNG_DEMO_MAP=maze-v1 runs the same scenarios on the corridor maze.
-    ...(process.env.KKAKKUNG_DEMO_MAP
-      ? { PRODUCT_MAP_TEMPLATE: process.env.KKAKKUNG_DEMO_MAP }
-      : {}),
+    ...(mapTemplate ? { PRODUCT_MAP_TEMPLATE: mapTemplate } : {}),
   }),
   port: 0,
 });
 
 /** Opens a demo room, walks it to PLAYING and returns handles for driving scenarios. */
-async function playing(role: Role) {
-  const config = configuration();
+async function playing(
+  role: Role,
+  /** null chooses nothing, even when KKAKKUNG_DEMO_MAP_SIZE is set. */
+  mapSize?: 'small' | 'medium' | 'large' | null,
+  /** Receives each template the match preparation validates, to see which map was played. */
+  prepared?: (templateId: string) => void,
+  mapTemplate?: string,
+) {
+  const config = configuration(mapTemplate);
   const real = await loadProductProfile(config);
+  const layouts = real.layouts;
   const application = createApplication<MatchState>(config, {
     ...real,
+    ...(prepared && layouts
+      ? {
+          layouts: {
+            ...layouts,
+            maps: {
+              ...layouts.maps,
+              validateTemplate: (raw, source) => {
+                const result = layouts.maps.validateTemplate(raw, source);
+                if (result.status === 'valid') prepared(result.template.templateId);
+                return result;
+              },
+            },
+          },
+        }
+      : {}),
     strictProduct: false,
     developmentAdmission: () => 'OPEN',
     createOperatorAuth: createTestOperatorAuth,
@@ -114,6 +135,11 @@ async function playing(role: Role) {
     return receipt!;
   };
   await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
+  // S15P21C204-321 크기별 미로. KKAKKUNG_DEMO_MAP_SIZE=small|medium 으로 같은 대본을 돌린다.
+  // 데모 방은 로비를 곧바로 지나므로 준비 단계에서 고른다.
+  const size = mapSize === undefined ? process.env.KKAKKUNG_DEMO_MAP_SIZE : mapSize;
+  if (size === 'small' || size === 'medium' || size === 'large')
+    expect((await send({ type: 'ROOM_MAP_SIZE', payload: { size } })).status).toBe('accepted');
   await send({ type: 'READY', payload: { ready: true } });
   await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
   const loading = views.at(-1)?.self;
@@ -128,6 +154,13 @@ async function playing(role: Role) {
     },
   });
   await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 15_000 });
+  // 고른 크기가 실제로 쓰였는지: 보이는 칸이 그 격자 안에 있어야 한다.
+  const grid = { small: 15, medium: 23, large: 31 }[size as 'small' | 'medium' | 'large'];
+  if (grid !== undefined) {
+    await vi.waitFor(() => expect(views.at(-1)?.visibleCells.length).toBeGreaterThan(0));
+    for (const cell of views.at(-1)!.visibleCells)
+      expect(Math.max(cell.x, cell.y)).toBeLessThan(grid);
+  }
   return {
     application,
     room,
@@ -201,6 +234,29 @@ it('aborts on a puppet connection loss and refills the room for the rematch', as
   }
 }, 60_000);
 
+// S15P21C204-318. The demo plans roles around the operator, so "swap" used to keep the same role.
+it('swaps the operator to the other role when the rematch asks to swap', async () => {
+  const demo = await playing('runner');
+  try {
+    demo.room.send(PRODUCT_CLIENT_MESSAGES.demoControl, {
+      matchId: demo.room.state.matchId,
+      action: 'abort-round',
+    });
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('ABORTED'), { timeout: 5000 });
+    expect((await demo.send({ type: 'REMATCH', payload: { mode: 'swap' } })).status).toBe(
+      'accepted',
+    );
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('DEVICE_CHECK'), { timeout: 5000 });
+    await demo.send({ type: 'READY', payload: { ready: true } });
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('GAME_LOADING'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(() => expect(demo.self()?.role).toBe('tagger'));
+  } finally {
+    await demo.close();
+  }
+}, 60_000);
+
 it('lets the operator abort a demo round through the control channel', async () => {
   const demo = await playing('runner');
   try {
@@ -215,8 +271,106 @@ it('lets the operator abort a demo round through the control channel', async () 
   }
 }, 60_000);
 
+// S15P21C204-321. 조립(bootstrap)이 크기별 맵을 방에 넘기지 않아 어떤 방이든 고른 크기와 상관없이
+// 기본 31칸 맵으로 경기했다. 일반 방과 같은 조립을 쓰므로 여기서 함께 고정한다. 데모 방은 로비를
+// 곧바로 지나므로 준비 단계에서 고른다(313).
+it('plays the map size chosen in preparation', async () => {
+  for (const [size, templateId] of [
+    ['small', 'maze-s-v1'],
+    ['medium', 'maze-m-v1'],
+  ] as const) {
+    const templates: string[] = [];
+    const demo = await playing('runner', size, (id) => templates.push(id));
+    try {
+      // Practice validates its own template; the match's is the last one before PLAYING.
+      expect(templates.at(-1), size).toBe(templateId);
+    } finally {
+      await demo.close();
+    }
+  }
+  // 고르지 않은 방은 PRODUCT_MAP_TEMPLATE 을 따른다. 크기 기본값 'large' 로 찾으면 이것이 무시된다.
+  const templates: string[] = [];
+  const demo = await playing('runner', null, (id) => templates.push(id), 'master-v1');
+  try {
+    expect(templates.at(-1)).toBe('master-v1');
+  } finally {
+    await demo.close();
+  }
+}, 120_000);
+
+// S15P21C204-317. The room placed puppets only, so this scenario failed on every run. Placement
+// takes no walking, so it stays in the default suite.
+it('places the operator at their own exit, facing the door', async () => {
+  const demo = await playing('runner');
+  try {
+    demo.scenario('place-me-at-exit');
+    await vi.waitFor(
+      () => {
+        const target = demo.states.at(-1)?.operatorExit;
+        expect(target).toBeTruthy();
+        expect(demo.self()?.cell).toEqual(target);
+      },
+      { timeout: 10_000 },
+    );
+    expect(demo.states.at(-1)?.failureCode).toBeNull();
+    const me = demo.self()!;
+    const exit = demo.views.at(-1)?.knownActiveExits.find((known) => known.ownerId === me.playerId);
+    expect(exit && me.dir === (exit.wall.side + 2) % 4).toBe(true);
+  } finally {
+    await demo.close();
+  }
+}, 60_000);
+
+// "내 출구로 가면 탈출이 안 된다"(현장 보고). 배치 뒤 도전을 열고 키 입력으로 끝내 실제 탈출까지 간다.
+it('lets the placed operator start their exit challenge and escape', async () => {
+  const demo = await playing('runner');
+  try {
+    demo.scenario('place-me-at-exit');
+    await vi.waitFor(
+      () => {
+        const target = demo.states.at(-1)?.operatorExit;
+        expect(target).toBeTruthy();
+        expect(demo.self()?.cell).toEqual(target);
+      },
+      { timeout: 10_000 },
+    );
+    const me = demo.self()!;
+    const exit = await vi.waitFor(() => {
+      const found = demo.views
+        .at(-1)
+        ?.knownActiveExits.find((known) => known.ownerId === me.playerId);
+      expect(found).toBeDefined();
+      return found!;
+    });
+    expect((await demo.send({ type: 'EXIT_START', payload: { exitId: exit.exitId } })).status).toBe(
+      'accepted',
+    );
+    const challenge = await vi.waitFor(() => {
+      const value = demo.self()?.challenge;
+      expect(value).toBeTruthy();
+      return value!;
+    });
+    // 규칙이 정한 최소 시간이 지나야 완료 보고가 받아들여진다.
+    await vi.waitFor(
+      () => expect(demo.room.state.serverTick).toBeGreaterThanOrEqual(challenge.minSuccessTick),
+      { timeout: 10_000 },
+    );
+    await demo.send({
+      type: 'EXIT_PROGRESS',
+      payload: { challengeId: challenge.challengeId, method: 'keys', completed: true },
+    });
+    await vi.waitFor(
+      () => expect(demo.room.state.counts.escaped, JSON.stringify(demo.states.at(-1))).toBe(1),
+      { timeout: 10_000 },
+    );
+    expect(demo.self()).toBeNull();
+  } finally {
+    await demo.close();
+  }
+}, 60_000);
+
 /**
- * These three run a real match in real time: a puppet walks the maze for tens of seconds while a
+ * These run a real match in real time: a puppet walks the maze for tens of seconds while a
  * 20Hz room ticks. Running them beside the rest of the suite starves both, so they are opt-in:
  *   KKAKKUNG_DEMO_SCENARIOS=1 pnpm exec vitest run server/test/room/demo-scenarios.test.ts
  */
@@ -225,8 +379,11 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
     const demo = await playing('runner');
     try {
       demo.scenario('capture');
-      // The capture is A's verdict on a completed move into the operator's cell.
-      await vi.waitFor(() => expect(demo.room.state.counts.captured).toBe(1), { timeout: 80_000 });
+      // The capture is A's verdict on the puppet's armed grab with the operator in front (319).
+      await vi.waitFor(
+        () => expect(demo.room.state.counts.captured, JSON.stringify(demo.states.at(-1))).toBe(1),
+        { timeout: 80_000 },
+      );
       await vi.waitFor(() => expect(demo.self()).toBeNull());
       expect(demo.room.state.phase).toBe('PLAYING');
       // S15P21C204-269. The ended operator now watches a surviving puppet runner and can switch.
@@ -245,6 +402,87 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
       await demo.close();
     }
   }, 130_000);
+
+  // S15P21C204-317. Each capture scenario on the real core. Before the grab step these walked
+  // onto their prey, which is no capture since 319, and sat on the step budget for two minutes.
+  it('moves the public tally by one puppet capture without ending the round', async () => {
+    const demo = await playing('runner');
+    try {
+      demo.scenario('capture-one');
+      await vi.waitFor(
+        () => expect(demo.room.state.counts.captured, JSON.stringify(demo.states.at(-1))).toBe(1),
+        { timeout: 80_000 },
+      );
+      await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBeNull());
+      expect(demo.states.at(-1)?.failureCode).toBeNull();
+      expect(demo.room.state.phase).toBe('PLAYING');
+      expect(demo.self()).not.toBeNull();
+    } finally {
+      await demo.close();
+    }
+  }, 130_000);
+
+  it('captures the operator, then the runner being watched, which ends the round', async () => {
+    const demo = await playing('runner');
+    try {
+      demo.scenario('spectate-then-capture');
+      await vi.waitFor(() => expect(demo.views.at(-1)?.spectating?.targetId).toBeTruthy(), {
+        timeout: 80_000,
+      });
+      // The second capture is the taggers' second: the rules end the round with their win.
+      await vi.waitFor(
+        () => expect(demo.room.state.counts.captured, JSON.stringify(demo.states.at(-1))).toBe(2),
+        { timeout: 80_000 },
+      );
+      await vi.waitFor(() => expect(demo.room.state.phase).toBe('RESULT'), { timeout: 10_000 });
+      expect(demo.room.state.result?.winner).toBe('taggers');
+    } finally {
+      await demo.close();
+    }
+  }, 190_000);
+
+  it('captures the operator in the middle of their own exit challenge', async () => {
+    const demo = await playing('runner');
+    try {
+      demo.scenario('place-me-at-exit');
+      // Read the arrival, not `running: null`: the state from before the request says that too.
+      // Waiting on it alone once passed a placement the room had refused (S15P21C204-317).
+      await vi.waitFor(
+        () => {
+          const target = demo.states.at(-1)?.operatorExit;
+          expect(target).toBeTruthy();
+          expect(demo.self()?.cell).toEqual(target);
+        },
+        { timeout: 20_000 },
+      );
+      expect(demo.states.at(-1)?.failureCode).toBeNull();
+      const me = demo.self()!;
+      // Standing at the approach facing the door, the next view shows the operator their exit.
+      const exit = await vi.waitFor(() => {
+        const found = demo.views
+          .at(-1)
+          ?.knownActiveExits.find((known) => known.ownerId === me.playerId);
+        expect(found).toBeDefined();
+        return found!;
+      });
+
+      demo.scenario('caught-in-my-challenge');
+      await vi.waitFor(() => expect(demo.states.at(-1)?.step).toBe('operator-starts-challenge'), {
+        timeout: 80_000,
+      });
+      expect(
+        (await demo.send({ type: 'EXIT_START', payload: { exitId: exit.exitId } })).status,
+      ).toBe('accepted');
+      await vi.waitFor(
+        () => expect(demo.room.state.counts.captured, JSON.stringify(demo.states.at(-1))).toBe(1),
+        { timeout: 30_000 },
+      );
+      expect(demo.self()).toBeNull();
+      expect(demo.room.state.counts.escaped).toBe(0);
+    } finally {
+      await demo.close();
+    }
+  }, 160_000);
 
   it('restrains the operator with a puppet-installed trap', async () => {
     const demo = await playing('runner');
@@ -275,7 +513,10 @@ describe.skipIf(!process.env.KKAKKUNG_DEMO_SCENARIOS)('demo scenarios in real ti
     const demo = await playing('tagger');
     try {
       demo.scenario('result-runner-win');
-      await vi.waitFor(() => expect(demo.room.state.counts.escaped).toBe(2), { timeout: 150_000 });
+      await vi.waitFor(
+        () => expect(demo.room.state.counts.escaped, JSON.stringify(demo.states.at(-1))).toBe(2),
+        { timeout: 150_000 },
+      );
       await vi.waitFor(() => expect(demo.room.state.phase).toBe('RESULT'), { timeout: 10_000 });
       expect(demo.room.state.result?.winner).toBe('runners');
     } finally {

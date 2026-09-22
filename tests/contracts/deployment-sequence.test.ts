@@ -556,6 +556,27 @@ describe('release, recovery, resume, smoke, publication', () => {
     expect(await runRelease(h.input(), adapters)).toMatchObject({ result: 'ROLLED_BACK' });
     expect(selected[1]).toEqual(manifest().previous!.images);
   });
+  // S15P21C204-343. DP-06 은 이 작업 공간의 웹 클라이언트 소스를 돌리는데 롤백이 되돌리는 것은
+  // **이전** 서버 이미지다. 프로토콜이 바뀐 배포를 되돌리면 그 조합은 아무도 쓰지 않는데도 무조건
+  // 실패해 ROLLBACK_BLOCKED 를 만든다(#203). 롤백 확인은 버전에 묶이지 않은 http 스모크로 한다.
+  it('confirms a product rollback with the version-free http smoke, not DP-06', async () => {
+    const h = harness(world({ smokeCodes: { [TAG]: 1 } }));
+    expect(await runRelease(h.input(), h.adapters)).toMatchObject({ result: 'ROLLED_BACK' });
+    expect(h.calls.smoke).toEqual(['cloud', 'http']);
+    // 되돌린 쪽도 product 프로필 그대로다: 바뀌는 것은 확인 방법뿐이지 무엇을 띄우는지가 아니다.
+    expect(h.calls.profiles).toEqual(['product', 'product']);
+  });
+
+  it('still reports ROLLBACK_BLOCKED when the restored server fails that smoke', async () => {
+    const h = harness(world({ smokeCodes: { [TAG]: 1, [PREV_TAG]: 1 } }));
+    expect(await runRelease(h.input(), h.adapters)).toMatchObject({
+      result: 'ROLLBACK_BLOCKED',
+      reason: 'SMOKE_FAILED',
+      lastGoodWritten: false,
+    });
+    expect(h.calls.smoke).toEqual(['cloud', 'http']);
+  });
+
   it('reports a deleted rollback image and never publishes last-good', async () => {
     const h = harness(
       world({ smokeCodes: { [TAG]: 1 }, images: { ...world().images, [digest('3')]: null } }),

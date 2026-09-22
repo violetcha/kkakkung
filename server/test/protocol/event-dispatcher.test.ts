@@ -162,6 +162,79 @@ describe('EventDispatcher', () => {
     expect(new Set(versions).size).toBe(versions.length);
   });
 
+  // S15P21C204-326. The accumulated knowledge is 87% of a view's bytes and changes in 2.5% of
+  // the views that go out, so a view that would repeat it leaves it off.
+  it('leaves unchanged knowledge off a change view and always carries it on every other reason', () => {
+    const h = setup();
+    const instance = h.context.createInstance('game');
+    h.context.enterInstance('r1', instance.gameInstanceId);
+    h.bodies.set('r1', body(2));
+    const first = h.dispatcher.publishView('r1', 'initial', 'PLAYING')!;
+    expect(first.knownTerrain).toEqual([{ x: 2, y: 1, kind: 'floor' }]);
+    expect(first.knownActiveExits).toEqual([]);
+    expect(first.knowledgeRevision).toBe(1);
+
+    // Walking changes `self` and sight but not the memory: the memory does not go out again.
+    h.bodies.set('r1', { ...body(3), knownTerrain: body(2).knownTerrain });
+    const moved = h.dispatcher.publishView('r1', 'change', 'PLAYING')!;
+    expect(moved.knownTerrain).toBeUndefined();
+    expect(moved.knownActiveExits).toBeUndefined();
+    expect(moved.knowledgeRevision).toBe(1);
+    expect('knownTerrain' in moved).toBe(false);
+
+    // Seeing a new cell moves the revision and puts the whole pair back on the wire.
+    const grown = [...body(2).knownTerrain, { x: 9, y: 9, kind: 'floor' as const }];
+    h.bodies.set('r1', { ...body(3), knownTerrain: grown });
+    const discovered = h.dispatcher.publishView('r1', 'change', 'PLAYING')!;
+    expect(discovered.knownTerrain).toEqual(grown);
+    expect(discovered.knowledgeRevision).toBe(2);
+
+    // Every reason but `change` is a moment the recipient may have just dropped what it held.
+    for (const reason of ['initial', 'scope', 'phase', 'resync'] as const) {
+      h.context.bumpVersion();
+      const forced = h.dispatcher.publishView('r1', reason, 'PLAYING')!;
+      expect(forced.knownTerrain, reason).toEqual(grown);
+      expect(forced.knownActiveExits, reason).toEqual([]);
+      // Repeating the pair is not a change to it: the revision stays where it was.
+      expect(forced.knowledgeRevision, reason).toBe(2);
+    }
+
+    // Exits are knowledge too, and they move the same revision.
+    h.bodies.set('r1', {
+      ...body(3),
+      knownTerrain: grown,
+      knownActiveExits: [
+        { exitId: 'e', ownerId: 'r1', wall: { x: 1, y: 0, side: 2 }, approach: { x: 1, y: 1 } },
+      ],
+    });
+    const withExit = h.dispatcher.publishView('r1', 'change', 'PLAYING')!;
+    expect(withExit.knownActiveExits).toHaveLength(1);
+    expect(withExit.knownTerrain).toEqual(grown);
+    expect(withExit.knowledgeRevision).toBe(3);
+  });
+
+  it('gives each recipient its own revision and never reuses one across matches', () => {
+    const h = setup();
+    const instance = h.context.createInstance('game');
+    for (const id of ['r1', 'r2']) h.context.enterInstance(id, instance.gameInstanceId);
+    h.bodies.set('r1', body(2));
+    h.bodies.set('r2', body(5));
+    expect(h.dispatcher.publishView('r1', 'initial', 'PLAYING')?.knowledgeRevision).toBe(1);
+    expect(h.dispatcher.publishView('r2', 'initial', 'PLAYING')?.knowledgeRevision).toBe(1);
+    // r1 discovers a cell; r2's revision must not move with it.
+    h.bodies.set('r1', { ...body(2), knownTerrain: [{ x: 7, y: 7, kind: 'floor' }] });
+    expect(h.dispatcher.publishView('r1', 'change', 'PLAYING')?.knowledgeRevision).toBe(2);
+    h.bodies.set('r2', { ...body(5), visibleCells: [{ x: 5, y: 2 }] });
+    const r2 = h.dispatcher.publishView('r2', 'change', 'PLAYING')!;
+    expect(r2.knowledgeRevision).toBe(1);
+    expect(r2.knownTerrain).toBeUndefined();
+    // A rematch clears what was delivered, so the next view starts a fresh revision in full.
+    h.dispatcher.resetForMatch();
+    const fresh = h.dispatcher.publishView('r1', 'initial', 'PLAYING')!;
+    expect(fresh.knowledgeRevision).toBe(1);
+    expect(fresh.knownTerrain).toEqual([{ x: 7, y: 7, kind: 'floor' }]);
+  });
+
   it('delivers events only to recipients scoped to the producing instance with their current scope', () => {
     const h = setup();
     const practice = h.context.createInstance('practice', 'runner');

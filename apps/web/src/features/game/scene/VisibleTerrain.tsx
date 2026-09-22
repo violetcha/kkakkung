@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { visibilityMask } from './visibility-mask';
 import { ScenePrimitives } from './primitives';
@@ -27,9 +28,12 @@ export function VisibleTerrain({
   theme?: SceneThemeId;
   quality?: QualityPreset;
 }) {
+  // S15P21C204-327. 이 화면은 서버 패치마다, 즉 초당 20번 다시 렌더된다. 마스크를 그때마다 새
+  // 객체로 만들면 시야가 하나도 안 바뀐 판에서도 R3F 가 지형 메시를 통째로 재조정한다.
+  const mask = useMemo(() => visibilityMask(view), [view]);
   return (
     <>
-      <ScenePrimitives {...visibilityMask(view)} players={[]} theme={theme} quality={quality} />
+      <ScenePrimitives {...mask} players={[]} theme={theme} quality={quality} />
       <VisibleExits view={view} ownerNames={ownerNames} />
       <EquipmentObjects view={view} />
       <FaceAvatars view={view} faces={faces} standIn={standIn} renderTick={renderTick} />

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   cancelSessionReservation,
+  consumeDemoSession,
   consumeInvitation,
+  forgetDemoSession,
   requestDemoRoom,
   requestSession,
 } from './product-session';
@@ -90,4 +92,64 @@ describe('product admission', () => {
     expect(init.headers).not.toHaveProperty('authorization');
     expect(JSON.parse(String(init.body))).toEqual({ role: 'runner', nickname: '관리자' });
   });
+});
+
+// S15P21C204-312. 조각은 곧바로 지우므로, 새로고침(F5)은 이 탭에 남긴 세션으로 돌아와야 한다.
+describe('demo link across a refresh', () => {
+  const memory = () => {
+    const values = new Map<string, string>();
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+      removeItem: (key: string) => void values.delete(key),
+    };
+  };
+  const history = () => ({ replaceState: vi.fn() });
+  const link = {
+    hash: '#demo=token-1&room=ABCDEF&player=player-1',
+    pathname: '/play',
+    search: '',
+  };
+
+  it('clears the fragment and comes back to the same session after a refresh', () => {
+    const storage = memory();
+    const first = history();
+    expect(consumeDemoSession(link, first, storage)?.sessionToken).toBe('token-1');
+    expect(first.replaceState).toHaveBeenCalledWith(null, '', '/play');
+    // 새로고침한 주소에는 토큰이 없다.
+    const again = consumeDemoSession({ ...link, hash: '' }, history(), storage);
+    expect(again).toMatchObject({
+      sessionToken: 'token-1',
+      roomCode: 'ABCDEF',
+      playerId: 'player-1',
+    });
+  });
+
+  it('forgets the session when the operator leaves, so a refresh goes home', () => {
+    const storage = memory();
+    consumeDemoSession(link, history(), storage);
+    forgetDemoSession(storage);
+    expect(consumeDemoSession({ ...link, hash: '' }, history(), storage)).toBeNull();
+  });
+
+  it('ignores a damaged stored value and removes it', () => {
+    const storage = memory();
+    storage.setItem('kkakkung.demo-session', '{"sessionToken":"t","roomCode":"bad"}');
+    expect(consumeDemoSession({ ...link, hash: '' }, history(), storage)).toBeNull();
+    expect(storage.getItem('kkakkung.demo-session')).toBeNull();
+  });
+});
+
+// S15P21C204-312. 503 은 "다른 데모 방이 열려 있음"과 "서비스가 참"을 함께 뜻한다. 코드를 붙여 넘긴다.
+it('keeps the server reason when the demo room cannot be opened', async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ error: 'DEMO_ROOM_LIMIT' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      }),
+  );
+  await expect(
+    requestDemoRoom({ role: 'runner' }, fetcher as unknown as typeof fetch),
+  ).rejects.toThrow('DEMO_REQUEST_FAILED:503:DEMO_ROOM_LIMIT');
 });

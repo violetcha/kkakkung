@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { privateEventSchema, type PrivateEvent } from '@kkakkung/protocol/game-messages';
+import { restorePrivateView, type ViewKnowledge } from '@kkakkung/protocol/game-schema';
 import { matchCore } from '../../packages/game-core/src/match/engine.js';
 import {
   command,
@@ -24,6 +25,7 @@ it('applies actual core exchange and hunter events exactly once across server pr
     createId: () => state.gameInstanceId,
   });
   context.createInstance('game');
+  const held = new Map<string, ViewKnowledge>();
   const received: { id: string; event: PrivateEvent }[] = [];
   const applied: { id: string; event: PrivateEvent }[] = [];
   const resyncs: string[] = [];
@@ -43,7 +45,13 @@ it('applies actual core exchange and hunter events exactly once across server pr
     now: () => 0,
     viewBody: (id) => projectPrivateBody(matchCore, state, id, null),
     sender: {
-      sendView: (id, view) => clients.get(id)!.update(view, state.matchId),
+      // S15P21C204-326. The recipient reassembles before it reduces, as the real client does.
+      sendView: (id, view) => {
+        const restored = restorePrivateView(view, held.get(id) ?? null);
+        if (!restored) throw new Error(`${id}: view could not be reassembled`);
+        held.set(id, restored.knowledge);
+        clients.get(id)!.update(restored.view, state.matchId);
+      },
       sendEvent: (id, event) => {
         expect(privateEventSchema.safeParse(event).success).toBe(true);
         received.push({ id, event });

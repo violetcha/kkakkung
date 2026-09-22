@@ -29,11 +29,16 @@ function viewConsumer(v: ViewHarness) {
   return { views, changes, resyncs };
 }
 
-/** Feeds the round state and every not-yet-delivered view of `id`; returns the accept results. */
+/**
+ * Feeds the round state and every not-yet-delivered view of `id`; returns the accept results.
+ *
+ * S15P21C204-326. It feeds the views **as they went out**, so the consumer does its own
+ * reassembly of any accumulated knowledge the dispatcher left off.
+ */
 function deliver(v: ViewHarness, c: ReturnType<typeof viewConsumer>, id: string, from: number) {
   c.views.round(v.publicState());
   return v
-    .viewsOf(id)
+    .wireViewsOf(id)
     .slice(from)
     .map((view) => c.views.receive(view));
 }
@@ -71,12 +76,12 @@ describe('protocol private view → C createProductView', () => {
     v.tickAndPublish(1);
     deliver(v, c, 't1', 1);
     const before = c.changes.length;
-    const all = v.viewsOf('t1');
+    const all = v.wireViewsOf('t1');
     expect(all.length).toBeGreaterThanOrEqual(2);
     expect(c.views.receive(all[all.length - 1]!)).toBe(false); // duplicate of the current view
     expect(c.views.receive(all[0]!)).toBe(false); // older state version
     expect(c.changes).toHaveLength(before);
-    expect(c.views.view).toEqual(all[all.length - 1]);
+    expect(c.views.view).toEqual(v.latestView('t1'));
     expect(c.resyncs).toEqual([]);
   });
 
@@ -89,15 +94,15 @@ describe('protocol private view → C createProductView', () => {
     const before = c.changes.length;
     v.h.move('t1');
     v.tickAndPublish(1);
-    const ahead = v.latestView('t1');
-    expect(ahead.stateVersion).toBeGreaterThan(v.viewsOf('t1')[0]!.stateVersion);
+    const ahead = v.latestWireView('t1');
+    expect(ahead.stateVersion).toBeGreaterThan(v.wireViewsOf('t1')[0]!.stateVersion);
     // The consumer still knows the older round: the newer view is not shown yet.
     expect(c.views.receive(ahead)).toBe(false);
     expect(c.changes).toHaveLength(before);
     // The public round state arrives: the pending view is accepted without a redelivery.
     c.views.round(v.publicState());
     expect(c.changes).toHaveLength(before + 1);
-    expect(c.views.view).toEqual(ahead);
+    expect(c.views.view).toEqual(v.latestView('t1'));
     expect(c.resyncs).toEqual([]);
   });
 

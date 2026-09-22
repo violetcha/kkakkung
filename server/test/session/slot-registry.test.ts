@@ -77,6 +77,38 @@ describe('SlotRegistry', () => {
     expect(slots.optionsOf('MISSING')).toBeNull();
   });
 
+  // S15P21C204-312. 데모 방은 미디어를 쓰지 않고 좌석도 하나뿐이다. 경기 방 예산에서 빼고 따로 센다.
+  it('counts demo rooms apart from the match room and seat budgets', () => {
+    const slots = new SlotRegistry({ maxRooms: 1, serviceCapacity: 6, maxDemoRooms: 1 });
+    const demo = { create: true, demo: { operatorRole: 'runner' as const } };
+    expect(slots.reserve('D00001', 'operator', 0, demo)).toBe('reserved');
+    // 데모 방이 열려 있어도 경기 방 하나와 그 여섯 좌석은 온전히 남는다.
+    expect(slots.reserve('M00001', 'p0', 0, { create: true })).toBe('reserved');
+    for (let index = 1; index < 6; index++)
+      expect(slots.reserve('M00001', `p${index}`, 0)).toBe('reserved');
+    expect(slots.playerOccupied()).toBe(6);
+    expect(slots.totalOccupied()).toBe(7);
+    expect(slots.reserve('M00002', 'q0', 0, { create: true })).toBe('ROOM_LIMIT');
+    // 데모 방은 자기 상한으로만 막힌다.
+    expect(slots.reserve('D00002', 'operator-2', 0, demo)).toBe('DEMO_LIMIT');
+    slots.release('D00001', 'operator');
+    expect(slots.closeRoom('D00001')).toBe(true);
+    expect(slots.reserve('D00002', 'operator-2', 0, demo)).toBe('reserved');
+  });
+
+  // 시연 방(331)은 실제 사람이 뛰므로 경기 방과 같은 예산을 쓴다. 데모 방만 따로 센다.
+  it('counts showcase rooms in the player budget, not the demo budget', () => {
+    const slots = new SlotRegistry({ maxRooms: 1, maxDemoRooms: 1 });
+    expect(slots.reserve('S00001', 'a', 0, { create: true, showcase: { role: 'runner' } })).toBe(
+      'reserved',
+    );
+    expect(slots.reserve('M00001', 'p0', 0, { create: true })).toBe('ROOM_LIMIT');
+    expect(
+      slots.reserve('D00001', 'operator', 0, { create: true, demo: { operatorRole: 'runner' } }),
+    ).toBe('reserved');
+    expect(slots.playerOccupied()).toBe(1);
+  });
+
   it('exposes join order and read-only activity counts without double counting', () => {
     const slots = new SlotRegistry({ maxRooms: 2 });
     slots.reserve('A00001', 'p0', 0, { create: true });

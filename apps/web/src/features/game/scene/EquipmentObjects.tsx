@@ -2,7 +2,7 @@ import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { visibleEquipment } from '../equipment/equipment-presenter';
 import { wallModel } from './scene-model';
 import { EQUIPMENT_COLORS } from './facility-theme';
-import { TRAP_MODEL, trapJawHeight } from './equipment-model';
+import { TRAP_MODEL, trapJawHeight, trapTopHeight } from './equipment-model';
 
 export function EquipmentObjects({ view }: { view: PrivateView }) {
   const { plate, inner, jaw, post, lamp } = TRAP_MODEL;
@@ -76,7 +76,10 @@ export function EquipmentObjects({ view }: { view: PrivateView }) {
                 roughness={0.55}
               />
             </mesh>
-            <mesh position={[0, plate.height / 2 + post.height + lamp.size / 2, 0]}>
+            {/* S15P21C204-329. 표시등 윗면이 곧 `trapTopHeight()` 다. 그 높이가 인접 셀에서
+                시야에 드는지를 equipment-model 시험이 고정하므로, 같은 값을 여기서도 써서
+                시험이 실제로 그려지는 것을 보게 한다. */}
+            <mesh position={[0, trapTopHeight() - plate.height / 2 - lamp.size / 2, 0]}>
               <boxGeometry args={[lamp.size, lamp.size, lamp.size]} />
               <meshBasicMaterial
                 color={item.state === 'ARMED' ? EQUIPMENT_COLORS.armed : EQUIPMENT_COLORS.idle}

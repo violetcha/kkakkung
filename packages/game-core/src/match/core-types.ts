@@ -277,7 +277,14 @@ export type CreateMatchInput = Readonly<{
    * never starts a round clock.
    */
   deadline?: DeadlineMode;
+  /**
+   * 시연 방(showcase). `'timeout-only'` 는 탈출·포획 수로 경기를 일찍 끝내지 않고 제한시간까지
+   * 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다. 생략이나 `'rules'` 는 규칙 그대로다.
+   */
+  result?: ResultPolicy;
 }>;
+
+export type ResultPolicy = 'rules' | 'timeout-only';
 
 export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 

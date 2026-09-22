@@ -7,6 +7,7 @@ import type {
   OwnedEquipment,
   RoundResult,
   AbortReason,
+  ResultPolicy,
   VisibleSurfaces,
 } from './core-types.js';
 import type { PendingInstallations } from './equipment/types.js';
@@ -83,6 +84,8 @@ export type MatchState = Readonly<{
    * is always `'round'` and refuses that control.
    */
   deadline: DeadlineMode;
+  /** 시연 방은 제한시간까지만 판정한다. 일반 경기는 `'rules'`. */
+  resultPolicy: ResultPolicy;
   /** Last processed tick, or null before the first step. */
   tick: number | null;
   startTick: number | null;

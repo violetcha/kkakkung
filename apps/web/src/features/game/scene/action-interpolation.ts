@@ -1,4 +1,4 @@
-import type { Action, ActiveSelf, Cell, Dir } from '@kkakkung/protocol/game-schema';
+import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
 import { directionYaw } from './scene-model';
 export function sampleAction(action: Action, tick: number) {
   const alpha = Math.min(
@@ -13,9 +13,6 @@ export function sampleAction(action: Action, tick: number) {
     // S15P21C204-262. 이동 진행도. 걷기 모션이 같은 값에서 파생되며 위치·방향에는 영향이 없다.
     stride: action.kind === 'move' ? alpha : null,
   };
-}
-export function sampleSelf(self: ActiveSelf, tick: number | null) {
-  return sampleActor(self, tick);
 }
 /** The head, face and body share this one authoritative transform. No extrapolation. */
 export function sampleActor(

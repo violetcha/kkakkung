@@ -10,6 +10,7 @@ import {
   roleMarkColor,
   wallBandRect,
   windowOrigin,
+  minimapDrawKey,
   MINIMAP_WINDOW_CELLS,
   type MinimapContext,
 } from './minimap-render';
@@ -292,10 +293,105 @@ describe('drawMinimap window mode', () => {
     expect(calls.some((call) => call.op === 'fillText' && call.args[0] === 'N')).toBe(true);
   });
 
+  // S15P21C204-314. 창 모드는 내 주변 좌표로 그린다. 절대 좌표로 그리면 엉뚱한 칸에 찍힌다.
+  it('places the operator exit relative to me in the window, and drops it outside', () => {
+    const self = viewFixture().self;
+    if (self?.status !== 'ACTIVE') throw new Error('fixture self');
+    const near = recorder();
+    const layout = drawMinimap(near.ctx, {
+      view: before(),
+      size: 165,
+      window: 11,
+      operatorExit: { x: self.cell.x + 1, y: self.cell.y },
+    });
+    const me = near.calls.find((call) => call.op === 'translate')!.args as number[];
+    const marker = near.calls.find(
+      (call) => call.op === 'arc' && call.stroke === MINIMAP_COLORS.operatorExit,
+    );
+    expect(marker?.args.slice(0, 2)).toEqual([me[0]! + layout.unit, me[1]]);
+
+    const far = recorder();
+    drawMinimap(far.ctx, {
+      view: before(),
+      size: 165,
+      window: 11,
+      operatorExit: { x: self.cell.x + 20, y: self.cell.y },
+    });
+    expect(far.calls.some((call) => call.stroke === MINIMAP_COLORS.operatorExit)).toBe(false);
+  });
+
   it('keeps the full map when no window is requested and still centres nothing', () => {
     const { ctx, calls } = recorder();
     const layout = drawMinimap(ctx, { view: before(), size: 320 });
     expect(layout.cells).toBe(32);
     expect(calls.some((call) => call.op === 'fillText' && call.args[0] === 'N')).toBe(false);
+  });
+});
+
+// S15P21C204-327. 미니맵은 창 모드에서 프레임마다, 전체 지도에서 서버 패치마다 다시 그려지고
+// 있었다. 대부분은 같은 그림이다. 열쇠는 "다시 그릴 필요가 있나"를 판정하되, 움직이는 동안에는
+// 반드시 달라져야 한다 — 그렇지 않으면 내 화살표가 멈춘다.
+describe('minimapDrawKey', () => {
+  const moving = (endTick: number): PrivateView =>
+    viewFixture({
+      self: {
+        ...(viewFixture().self as Extract<PrivateView['self'], { status: 'ACTIVE' }>),
+        action: {
+          kind: 'move',
+          from: { x: 1, y: 1, dir: 0 },
+          to: { x: 1, y: 2, dir: 0 },
+          startTick: 0,
+          endTick,
+        },
+      },
+    });
+
+  it('is the same while nothing that gets drawn has changed', () => {
+    const input = { view: before(), size: 320, tick: 10 };
+    expect(minimapDrawKey(input)).toBe(minimapDrawKey({ ...input, tick: 11 }));
+    // 서 있는 동안에는 tick 이 한참 흘러도 같은 그림이다.
+    expect(minimapDrawKey(input)).toBe(minimapDrawKey({ ...input, tick: 5000 }));
+  });
+
+  it('changes while the player is walking, so the arrow keeps moving', () => {
+    const view = moving(20);
+    const keys = [0, 5, 10, 15, 20].map((tick) => minimapDrawKey({ view, size: 320, tick }));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('changes when the map, the exits, the size or the window change', () => {
+    const base = { view: before(), size: 320, tick: 10 };
+    expect(minimapDrawKey({ ...base, view: after() })).not.toBe(minimapDrawKey(base));
+    expect(minimapDrawKey({ ...base, size: 240 })).not.toBe(minimapDrawKey(base));
+    expect(minimapDrawKey({ ...base, window: MINIMAP_WINDOW_CELLS })).not.toBe(
+      minimapDrawKey(base),
+    );
+    expect(minimapDrawKey({ ...base, view: viewFixture({ knownActiveExits: [] }) })).not.toBe(
+      minimapDrawKey({ ...base, view: viewFixture() }),
+    );
+  });
+
+  it('changes when a tagger’s past-event marker appears and when it expires', () => {
+    const tagger = viewFixture({
+      self: {
+        ...(viewFixture().self as Extract<PrivateView['self'], { status: 'ACTIVE' }>),
+        role: 'tagger',
+      },
+      knownActiveExits: [],
+    });
+    const markers = [
+      {
+        markerId: 'mk',
+        kind: 'sensor' as const,
+        point: { x: 2.5, y: 2 },
+        occurredTick: 100,
+        showAtTick: 100,
+        expiresTick: 140,
+      },
+    ];
+    const at = (tick: number) => minimapDrawKey({ view: tagger, size: 320, tick, markers });
+    expect(at(99)).not.toBe(at(100));
+    expect(at(100)).toBe(at(120));
+    expect(at(120)).not.toBe(at(140));
   });
 });
