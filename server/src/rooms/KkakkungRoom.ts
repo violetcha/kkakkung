@@ -90,6 +90,12 @@ import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
 /**
+ * S15P21C204-333. How long a preparation whose outcome is unknown keeps holding the room. A
+ * generation E allocated for it lives 300s (MediaGenerationRegistry) and E's reconcile retires it
+ * once expired and unjoined; the room never handed its grant to anyone. Past this the room lets go.
+ */
+const UNCERTAIN_PREPARATION_LIMIT_MS = 330_000;
+/**
  * S15P21C204-328. Well past the 3s countdown, because nothing here is meant to be slow: the
  * control the countdown hands over is applied on the very next tick. It is a way out of a phase
  * that would otherwise have none, not a deadline anybody should ever meet.
@@ -262,7 +268,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly pendingPreparations = new Map<string, number>();
     private readonly preparingPlayers = new Map<string, number>();
     private readonly queuedPreparations = new Map<string, string>();
-    private readonly uncertainPreparations = new Set<string>();
+    /** Players whose preparation may have allocated remotely without a cursor, by match. */
+    private readonly uncertainPreparations = new Map<
+      string,
+      { matchId: string; sinceMs: number }
+    >();
     private readonly retiringScopes = new Map<
       string,
       { mediaInstanceId: string; receiverGeneration: number }
@@ -741,6 +751,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.invalidateLayout();
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
       this.media?.releaseMatch?.(this.matchId);
+      this.releaseUncertainPreparations('disposed');
       for (const mediaInstanceId of this.mediaFrameWaiters.keys())
         this.settleMediaFrameWaiters(mediaInstanceId, false);
       deps.coordinator.unregister(this.roomId);
@@ -1028,6 +1039,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     tick() {
       if (this.disposed || this.closing) return;
       const now = deps.monotonicNow();
+      this.expireUncertainPreparations(now);
       if (this.demoAbortRequested) {
         this.demoAbortRequested = false;
         this.demoRunner.stop();
@@ -1197,7 +1209,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           const request = this.rematch.pending;
           if (
             request &&
-            this.rematch.canStart({ mediaRetirementConfirmed: !this.hasUnresolvedMedia() }) &&
+            this.rematch.canStart({
+              mediaRetirementConfirmed: !this.hasUnresolvedMedia(undefined, { uncertain: false }),
+            }) &&
             (gateFor(this.demo)?.() ?? true)
           )
             this.startNewRound();
@@ -1934,20 +1948,58 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         result.code === 'POLICY_UNKNOWN' ||
         result.code === 'REMOTE_UNAVAILABLE'
       ) {
-        // A failed producer may have allocated remotely without returning a cursor.
-        this.uncertainPreparations.add(result.playerId);
+        // A failed producer may have allocated remotely without returning a cursor. Once the room
+        // has released that match (a new round, or disposal) E owns whatever it allocated, so only
+        // the current match of a live room keeps holding.
+        if (!this.disposed && result.matchId === this.matchId)
+          this.uncertainPreparations.set(result.playerId, {
+            matchId: result.matchId,
+            sinceMs: deps.monotonicNow(),
+          });
       }
       this.releaseRetiredSeat(result.playerId);
     }
 
-    private hasUnresolvedMedia(playerId?: string) {
+    /**
+     * `uncertain: false` is for a round transition: startNewRound releases the match to E, which
+     * then owns anything an uncertain preparation allocated, so it is no reason to wait (333).
+     */
+    private hasUnresolvedMedia(playerId?: string, options: { uncertain?: boolean } = {}) {
       const matches = (id: string) => playerId === undefined || id === playerId;
       return (
         [...this.pendingRetirements.values()].some((scope) => matches(scope.playerId)) ||
         [...this.preparingPlayers.keys()].some(matches) ||
         [...this.queuedPreparations.values()].some(matches) ||
-        [...this.uncertainPreparations].some(matches)
+        (options.uncertain !== false && [...this.uncertainPreparations.keys()].some(matches))
       );
+    }
+
+    /** Drops every uncertain preparation, reporting why, and frees seats that were only held by it. */
+    private releaseUncertainPreparations(reason: 'round-ended' | 'disposed') {
+      if (this.uncertainPreparations.size === 0) return;
+      const players = [...this.uncertainPreparations.keys()];
+      this.uncertainPreparations.clear();
+      this.emitEvent('room.media_uncertain_released', 'warn', {
+        phase: this.phase,
+        reason,
+        count: players.length,
+      });
+      for (const playerId of players) this.releaseRetiredSeat(playerId);
+    }
+
+    private expireUncertainPreparations(now: number) {
+      for (const [playerId, entry] of this.uncertainPreparations) {
+        const heldMs = now - entry.sinceMs;
+        if (heldMs < UNCERTAIN_PREPARATION_LIMIT_MS) continue;
+        this.uncertainPreparations.delete(playerId);
+        this.emitEvent('room.media_uncertain_released', 'warn', {
+          phase: this.phase,
+          reason: 'expired',
+          count: 1,
+          durationMs: heldMs,
+        });
+        this.releaseRetiredSeat(playerId);
+      }
     }
 
     private releaseRetiredSeat(playerId: string) {
@@ -1963,7 +2015,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private startNewRound() {
-      if (this.hasUnresolvedMedia()) return;
+      if (this.hasUnresolvedMedia(undefined, { uncertain: false })) return;
       this.lastCounts = { escaped: 0, captured: 0 };
       this.invalidateLayout();
       const request = this.rematch.take();
@@ -1980,6 +2032,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.retireInstance(instance.gameInstanceId, 'round-ended');
       this.driver.cancelAllPending('ROUND_ENDED');
       this.media?.releaseMatch?.(this.matchId);
+      this.releaseUncertainPreparations('round-ended');
       this.context.startNewRound();
       this.queue.reset();
       this.heartbeat.resetForMatch(now);
