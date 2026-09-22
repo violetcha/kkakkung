@@ -1488,6 +1488,86 @@ describe('media generation and participation lifecycle', () => {
     expect(base.runtime.getGenerationState()).toBe('closed');
   });
 
+  // S15P21C204-338. 결과 화면 동안의 컨텍스트 갱신이 풀어 둔 키보드를 다시 묶지 않는다.
+  describe('keyboard listeners after the participation ended', () => {
+    const counting = () => {
+      const bound = new Map<string, number>();
+      const count = (type: string, delta: number) =>
+        bound.set(type, (bound.get(type) ?? 0) + delta);
+      return {
+        target: {
+          addEventListener: (type: 'keydown' | 'keyup') => count(type, 1),
+          removeEventListener: (type: 'keydown' | 'keyup') => count(type, -1),
+        },
+        live: () => [...bound.values()].reduce((sum, n) => sum + n, 0),
+      };
+    };
+    const context = (phase: 'PLAYING' | 'RESULT') =>
+      ({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase,
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'keyboard',
+        pageActive: true,
+      }) as const;
+
+    it('does not rebind on setContext once stopInput ran, and leaves nothing after dispose', async () => {
+      const keys = counting();
+      const base = harness({ keyboardTarget: keys.target });
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.runtime.setContext(context('PLAYING'));
+      expect(keys.live()).toBe(2);
+
+      await base.runtime.endParticipation();
+      expect(keys.live()).toBe(0);
+      // 결과 화면 동안 라운드·개인 뷰 갱신마다 setContext 가 다시 불린다.
+      base.runtime.setContext(context('RESULT'));
+      base.runtime.setContext(context('RESULT'));
+      expect(keys.live()).toBe(0);
+
+      // dispose 는 이미 끝난 정리 Promise 를 공유하므로 stopInput 을 다시 부르지 않는다.
+      await base.runtime.dispose();
+      expect(keys.live()).toBe(0);
+    });
+
+    it('binds again only after a new media generation opens on the same runtime', async () => {
+      const keys = counting();
+      const base = harness({ keyboardTarget: keys.target });
+      try {
+        await base.runtime.startDevices({ microphone: false });
+        base.ready();
+        base.runtime.setContext(context('PLAYING'));
+        await base.runtime.endParticipation();
+        base.runtime.setContext(context('PLAYING'));
+        expect(keys.live()).toBe(0);
+        base.runtime.beginMediaGeneration();
+        base.runtime.setContext(context('PLAYING'));
+        expect(keys.live()).toBe(2);
+      } finally {
+        await base.runtime.dispose();
+      }
+      expect(keys.live()).toBe(0);
+    });
+
+    it('unbinds on dispose even when a rebind slipped in between end and dispose', async () => {
+      const keys = counting();
+      const base = harness({ keyboardTarget: keys.target });
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.runtime.setContext(context('PLAYING'));
+      const ending = base.runtime.endParticipation();
+      // 종료 처리 도중(stopInput 전)에 들어온 갱신은 아직 묶인 상태를 유지한다.
+      base.runtime.setContext(context('RESULT'));
+      await ending;
+      expect(keys.live()).toBe(0);
+      await base.runtime.dispose();
+      expect(keys.live()).toBe(0);
+    });
+  });
+
   it('closes the devices and the worker only on endParticipation', async () => {
     const base = harness();
     await base.runtime.startDevices({ microphone: false });
