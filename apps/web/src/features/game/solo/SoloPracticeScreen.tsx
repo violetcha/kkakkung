@@ -16,7 +16,7 @@ import type { AudioPreferences } from '../../media/audio-preferences';
 import type { Role } from '@kkakkung/protocol/game-schema';
 import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
-import { POSE_LABELS } from '../pose/PoseChallenge';
+import { POSE_LABELS, PoseArmsNotice } from '../pose/PoseChallenge';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS, type Lesson } from './solo-world';
 import { SoloPracticeHud } from './SoloPracticeHud';
@@ -69,6 +69,11 @@ const PostureIcon = (
 export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const session = useRef<ReturnType<typeof createSoloSession> | null>(null);
   const host = useRef<HTMLDivElement | null>(null);
+  /**
+   * S15P21C204-344. 미리보기 창은 하나뿐이라 두 자리가 다툰다(Esc 메뉴의 장치 칸, 탈출 도전).
+   * 자세를 잡는 동안에는 도전 쪽이 이긴다. 도전이 끝나면 원래 자리로 돌아간다.
+   */
+  const poseHost = useRef<HTMLDivElement | null>(null);
   const [hostElement, setHostElement] = useState<HTMLDivElement | null>(null);
   const debugOverlay = useDebugOverlayEnabled();
   useEffect(() => installDebugShortcut(window), []);
@@ -150,7 +155,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
       },
     });
     session.current = current;
-    current.setPreviewHost(host.current);
+    current.setPreviewHost(poseHost.current ?? host.current);
     current.setAudioPreferences({
       ...DEFAULT_AUDIO_PREFERENCES,
       volume: settingsRef.current.volume,
@@ -185,11 +190,24 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
       void current.dispose().catch(() => {});
     };
   }, [stopped, stop]);
-  const preview = useCallback((element: HTMLDivElement | null) => {
-    host.current = element;
-    setHostElement(element);
-    session.current?.setPreviewHost(element);
+  const applyPreview = useCallback(() => {
+    session.current?.setPreviewHost(poseHost.current ?? host.current);
   }, []);
+  const preview = useCallback(
+    (element: HTMLDivElement | null) => {
+      host.current = element;
+      setHostElement(element);
+      applyPreview();
+    },
+    [applyPreview],
+  );
+  const posePreview = useCallback(
+    (element: HTMLDivElement | null) => {
+      poseHost.current = element;
+      applyPreview();
+    },
+    [applyPreview],
+  );
   settingsRef.current = settings;
   const renderTick = useCallback(() => performance.now() / 50, []);
   const faceStream = useCallback(() => session.current?.processedFace() ?? null, []);
@@ -288,8 +306,15 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
     ) : (
       <div>
         <h4>{POSE_LABELS[snapshot.self.challenge.poseKind]}</h4>
-        <p>자세를 1.2초 유지하세요. Esc로 취소하거나 키보드 조작으로 전환할 수 있습니다.</p>
+        <p>
+          두 팔이 카메라에 들어오게 하고 자세를 1.2초 유지하세요. Esc로 취소하거나 키보드 조작으로
+          전환할 수 있습니다.
+        </p>
         <progress aria-label="체험 자세 유지" max={1} value={snapshot.poseProgress} />
+        <PoseArmsNotice />
+        {/* 우상단 창은 상대가 보는 내 아바타라 프레이밍을 알 수 없다. 자세를 잡는 동안에만
+            실제 카메라 화면을 옆에 둔다. 이 영상은 어디로도 전송되지 않는다. */}
+        <div className="pose-preview" ref={posePreview} aria-label="내 웹캠 미리보기" />
       </div>
     ));
   return (

@@ -168,9 +168,30 @@ export function ProductApp({
     pendingSession.current = null;
     if (pending) void cancelSessionReservation(pending);
   }, []);
-  const preview = useCallback(
-    (element: HTMLDivElement | null) => runtime.current?.setPreviewHost(element),
+  /**
+   * S15P21C204-344. 미리보기 창은 하나뿐이라 두 자리가 다툰다(HUD 서랍의 장치 칸, 탈출 도전).
+   * 자세를 잡는 동안에는 도전 쪽이 이긴다. 도전이 끝나면 원래 자리로 돌아간다. 서랍은 닫혀도
+   * 자식이 붙어 있어 ref 만으로는 순서를 보장할 수 없으므로 우선순위를 여기서 정한다.
+   */
+  const drawerHost = useRef<HTMLDivElement | null>(null);
+  const poseHost = useRef<HTMLDivElement | null>(null);
+  const applyPreview = useCallback(
+    () => runtime.current?.setPreviewHost(poseHost.current ?? drawerHost.current),
     [],
+  );
+  const preview = useCallback(
+    (element: HTMLDivElement | null) => {
+      drawerHost.current = element;
+      applyPreview();
+    },
+    [applyPreview],
+  );
+  const posePreview = useCallback(
+    (element: HTMLDivElement | null) => {
+      poseHost.current = element;
+      applyPreview();
+    },
+    [applyPreview],
   );
   const leave = useCallback(async () => {
     generation.current++;
@@ -899,6 +920,17 @@ export function ProductApp({
                           send={(command) => runtime.current?.send(command)}
                         />
                       ))}
+                    {/* 자세를 잡는 동안에만 실제 카메라 화면을 둔다. 캠코더 창은 상대가 보는
+                        내 아바타라 프레이밍을 알 수 없다. 이 영상은 어디로도 전송되지 않는다. */}
+                    {view.self?.status === 'ACTIVE' &&
+                      view.self.challenge !== null &&
+                      snapshot.interaction.mode !== 'keyboard' && (
+                        <div
+                          className="pose-preview"
+                          ref={posePreview}
+                          aria-label="내 웹캠 미리보기"
+                        />
+                      )}
                     <ExchangePanel
                       view={view}
                       selected={snapshot.exchangeTarget}

@@ -6,6 +6,25 @@ export const POSE_LABELS = {
   right: '내 오른팔 들기',
   y: '양팔 Y자',
 } as const;
+
+/**
+ * S15P21C204-344. 팔이 프레임 밖이면 자세가 맞아도 판정이 서지 않는데, 진행 막대만으로는
+ * 그 이유를 알 수 없다. 조건을 항상 적어 둔다.
+ *
+ * 처음에는 팔 가시성을 프레임마다 읽어 안 보일 때만 띄웠다. 그러면 팔이 경계에 걸칠 때마다
+ * 문구가 깜빡인다 — S15P21C204-330 과 같은 실수다. 순간 신호를 화면에 그대로 물리지 않는다.
+ * 조건은 도전 내내 변하지 않으므로 항상 같은 자리에 같은 문구로 둔다.
+ *
+ * 경기와 혼자 체험이 같은 문구를 쓰도록 여기 한 곳에만 둔다.
+ */
+export function PoseArmsNotice() {
+  return (
+    <p className="pose-arms-notice">
+      양팔이 모두 화면에 들어와야 인식됩니다. 한쪽 팔만 드는 자세도 마찬가지입니다. 진행이 오르지
+      않으면 카메라에서 조금 물러나 주세요.
+    </p>
+  );
+}
 export function PoseChallenge({
   view,
   tick,
@@ -30,9 +49,11 @@ export function PoseChallenge({
       {challenge ? (
         <>
           <p>
-            얼굴과 상체를 카메라에 두고 자세를 1.2초 유지하세요. 도전 중에도 포획될 수 있습니다.
+            얼굴과 두 팔이 카메라에 들어오게 하고 자세를 1.2초 유지하세요. 도전 중에도 포획될 수
+            있습니다.
           </p>
           <progress aria-label="유효 자세 유지" max={1} value={progress} />
+          <PoseArmsNotice />
           <p>
             {Math.max(0, Math.ceil((challenge.expiresAtTick - tick) / 20))}초 남음
             {tick < challenge.minSuccessTick ? ' · 최소 수행 시간 확인 중' : ''}
