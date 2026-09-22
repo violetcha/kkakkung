@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ConsentGate } from '../../room/ConsentGate';
 import type { DeviceStatus } from '../../input/InteractionRuntime';
 import type { TestToneResult } from '../../media/audio-preferences';
-import { deviceReady } from './device-readiness';
 import { deviceFeedback } from './device-feedback';
 import { FaceGuidanceNotice } from './FaceGuidanceNotice';
 import type { FaceConditionNotice } from '../../media/face-condition';
@@ -11,6 +10,8 @@ import {
   deviceCheckErrorStep,
   deviceCheckStepAt,
   deviceCheckSteps,
+  latchDeviceCheckSteps,
+  passedDeviceCheckSteps,
   type DeviceCheckStepId,
 } from './device-check-steps';
 import type { MotionCheck } from './motion-check';
@@ -83,10 +84,16 @@ export function DeviceCheckScreen({
   const [busy, setBusy] = useState(false);
   const [pinned, setPinned] = useState<number | null>(null);
   const [tone, setTone] = useState('');
+  const passed = useRef<ReadonlySet<DeviceCheckStepId>>(new Set());
   const steps = deviceCheckSteps({ status, motion });
-  const auto = activeDeviceCheckStep(steps);
+  // 통과 기억은 렌더 중에 누적한다. 같은 steps 로 두 번 불러도 결과가 같아 안전하다.
+  passed.current = passedDeviceCheckSteps(passed.current, steps);
+  const reached = latchDeviceCheckSteps(steps, passed.current);
+  const auto = activeDeviceCheckStep(reached);
   const active = Math.min(pinned ?? auto, steps.length - 1);
   const step = deviceCheckStepAt(steps, active);
+  /** 점검을 통과한 적이 있는가. 지금 이 순간 추적 중인가와 다르다. */
+  const checkPassed = reached[reached.length - 1]?.state === 'done';
   const calibrating = status.calibration === 'running';
   const locked = busy || calibrating;
   const errorStep: DeviceCheckStepId | null = status.errorCode
@@ -266,7 +273,7 @@ export function DeviceCheckScreen({
           <div className="device-check-step">
             <h3>4 · 완료</h3>
             <p>
-              {!deviceReady(status)
+              {!checkPassed
                 ? '아직 통과하지 못한 단계가 있습니다. 위 점을 눌러 그 단계로 돌아가 주세요.'
                 : onReady
                   ? '점검이 끝났습니다. 준비 완료를 누르면 다른 참가자에게 준비 상태가 보입니다.'
@@ -284,7 +291,8 @@ export function DeviceCheckScreen({
             </dl>
             {onReady && (
               <div className="actions">
-                <button disabled={!ready && !deviceReady(status)} onClick={() => onReady(!ready)}>
+                {/* 통과 기억으로 연다. 순간 상태로 열면 단추가 깜빡여 눌러도 먹지 않는다. */}
+                <button disabled={!ready && !checkPassed} onClick={() => onReady(!ready)}>
                   {ready ? '준비 취소' : '준비 완료'}
                 </button>
               </div>
