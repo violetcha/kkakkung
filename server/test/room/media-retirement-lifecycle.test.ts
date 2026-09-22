@@ -710,7 +710,8 @@ it('lets the remaining players start a new round after a preparation of unknown 
     f.room.onCommand(f.players[0]!.client, {
       matchId: previous,
       requestId: randomUUID(),
-      sequence: 2,
+      // 295 뒤로 픽스처의 방장 ROOM_START 가 sequence 2 를 쓰므로 그보다 커야 명령이 받아들여진다.
+      sequence: 20,
       type: 'REMATCH',
       payload: { mode: 'same' },
     });

@@ -55,6 +55,14 @@ function practiceRoom() {
       type: 'READY',
       payload: { ready: true },
     });
+  // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+  room.onCommand(players[0]!.client, {
+    matchId: room.matchId,
+    requestId: randomUUID(),
+    sequence: 2,
+    type: 'ROOM_START',
+    payload: {},
+  });
   room.tick();
   expect(room.phase).toBe('TEAM_PRACTICE');
   return { room, rearmed, events, players, close: () => room.clock.clear() };
