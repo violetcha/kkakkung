@@ -163,21 +163,3 @@ export function composeMediaEvidence(input: EvidenceInput): MediaEvidence {
     attachedFaceCount: input.attachedFaces.length,
   };
 }
-
-/**
- * 관문이 보는 한 줄 판정. 증거가 스스로 통과를 선언하지 않도록 **사실만** 돌려준다.
- * 실제 인수는 F runner 판정기가 한다.
- */
-export function evidenceViolations(evidence: MediaEvidence): readonly string[] {
-  const violations: string[] = [];
-  if (evidence.integrity.forbiddenButSubscribed.length > 0)
-    violations.push(
-      `FORBIDDEN_SUBSCRIPTION:${evidence.integrity.forbiddenButSubscribed.join(',')}`,
-    );
-  if (evidence.attachedFaceCount > evidence.remoteFaceLimit)
-    violations.push(`REMOTE_FACE_LIMIT:${evidence.attachedFaceCount}>${evidence.remoteFaceLimit}`);
-  for (const entry of evidence.received)
-    if (entry.attached && !entry.authorized)
-      violations.push(`ATTACHED_WITHOUT_BINDING:${entry.trackSid}`);
-  return violations;
-}
