@@ -162,6 +162,7 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     // S15P21C204-316. Practice never starts a round clock, so the flag only means something for
     // a game. An absent value is the ordinary tuned round.
     deadline: mode === 'game' ? (input.deadline ?? 'round') : 'round',
+    resultPolicy: mode === 'game' ? (input.result ?? 'rules') : 'rules',
     tick: null,
     startTick: null,
     deadlineTick: null,

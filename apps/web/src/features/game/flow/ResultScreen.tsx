@@ -10,6 +10,8 @@ export function ResultScreen({
   connectedCount,
   demo = false,
   onRematch,
+  rematchAvailable = true,
+  capacity = 6,
 }: {
   round: PublicRoundState;
   self: PrivateView['self'];
@@ -22,8 +24,12 @@ export function ResultScreen({
    */
   demo?: boolean;
   onRematch(mode: 'same' | 'swap' | 'lobby', role?: Role): void;
+  /** 시연 방은 재경기가 없다. 결과만 보이고 단추는 없다. */
+  rematchAvailable?: boolean;
+  /** 방의 자리 수. 도망자 수(절반)로 남은 도망자를 세고, 재입장 안내의 분모가 된다. */
+  capacity?: number;
 }) {
-  const result = resultPresenter(round, self);
+  const result = resultPresenter(round, self, { runners: capacity / 2 });
   const pending =
     round.rematchState === 'requested' ||
     (request !== undefined && ['pending', 'waiting-view', 'applied'].includes(request.status));
@@ -39,7 +45,12 @@ export function ResultScreen({
         {ended ? '종료 시 남은 도망자' : '활동 중인 도망자'} {result.counts.active}
       </p>
       {result.remaining !== null && <p>남은 시간 {result.remaining}초</p>}
-      {ended && (
+      {ended && !rematchAvailable && (
+        <p role="status" className="notice">
+          시연이 끝났습니다. 다음 시연은 /showcase 에서 새 방으로 시작합니다.
+        </p>
+      )}
+      {ended && rematchAvailable && (
         <p role="status" className="notice">
           {pending
             ? '다음 경기를 준비하고 있습니다. 잠시 기다려 주세요.'
@@ -52,11 +63,14 @@ export function ResultScreen({
                   : '방장이 다음 경기를 선택하기를 기다리고 있습니다.'}
         </p>
       )}
-      {ended && !demo && connectedCount < 6 && (
-        <p>현재 {connectedCount}/6명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수 있습니다.</p>
+      {ended && rematchAvailable && !demo && connectedCount < capacity && (
+        <p>
+          현재 {connectedCount}/{capacity}명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수
+          있습니다.
+        </p>
       )}
       {commandFeedback(request) && <p role="status">{commandFeedback(request)}</p>}
-      {host && ended && demo && (
+      {host && ended && rematchAvailable && demo && (
         <div className="actions">
           {(['runner', 'tagger'] as const).map((role) => (
             <button
@@ -70,7 +84,7 @@ export function ResultScreen({
           ))}
         </div>
       )}
-      {host && ended && !demo && (
+      {host && ended && rematchAvailable && !demo && (
         <div className="actions">
           <button disabled={pending} onClick={() => onRematch('same')}>
             같은 팀으로 재경기

@@ -67,11 +67,14 @@ export function ProductApp({
   invitation,
   initialRoom = '',
   demoSession,
+  showcaseSession,
 }: {
   invitation: string;
   initialRoom?: string;
   /** S15P21C204-260. Operator demo session from the address fragment; absent for players. */
   demoSession?: SessionResponse;
+  /** 발표 시연 방 세션. `/showcase` 가 발급해 주소 조각으로 넘긴다. 미디어는 일반 경기와 같다. */
+  showcaseSession?: SessionResponse;
 }) {
   // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
   // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
@@ -239,14 +242,16 @@ export function ProductApp({
   const demoEntry = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     // The operator's demo session opens its room straight away: there is no form for it.
-    if (!demoSession) return;
+    // 시연 방 세션도 같다: 역할과 이름은 /showcase 에서 이미 골랐다.
+    const given = demoSession ?? showcaseSession;
+    if (!given) return;
     // S15P21C204-318. StrictMode (dev) tears effects down once and runs them again. The teardown
     // bumps the generation, so the first entry leaves the room it joined; a guard that entered
     // only once then left the page on "입장 중…" for good. Each run waits for the previous entry to
     // settle, so the second joins after the first has let go of the one demo seat. The server
     // keeps that seat for a demo session across a disconnect (312).
-    demoEntry.current = demoEntry.current.then(() => enter(demoSession));
-  }, [demoSession]);
+    demoEntry.current = demoEntry.current.then(() => enter(given));
+  }, [demoSession, showcaseSession]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
     await enter();
@@ -737,6 +742,7 @@ export function ProductApp({
           {sessionCredential &&
             !snapshot.demo &&
             snapshot.roster?.hostId === selfId &&
+            snapshot.roster?.kind !== 'showcase' &&
             round &&
             ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
               <RoomInvitationControls
@@ -784,6 +790,8 @@ export function ProductApp({
                   payload: role ? { mode, role } : { mode },
                 })
               }
+              rematchAvailable={snapshot.roster?.kind !== 'showcase'}
+              capacity={snapshot.roster?.capacity ?? 6}
             />
           )}
           {round && loadingCovered && (

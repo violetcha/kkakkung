@@ -96,6 +96,10 @@ describe('host nginx (TLS edge)', () => {
       'location = /demo {',
       'location ^~ /demo/ {',
       'location ~* ^/api/demo-admin {',
+      // 발표 시연 방도 같은 SSO 조각 뒤에 있다. 운영 토큰 없이 프로젝트 멤버만 연다.
+      'location = /showcase {',
+      'location ^~ /showcase/ {',
+      'location ~* ^/api/showcase {',
     ]) {
       const route = block(host, location);
       expect(route).toContain('include /etc/nginx/snippets/kkakkung-demo-admin.conf;');

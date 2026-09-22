@@ -10,6 +10,7 @@ export function MapSizeChoice({
   busy = false,
   onSelect,
   editableNote = '방장이 고릅니다. 장치 점검이 시작되면 바꿀 수 없습니다.',
+  note,
 }: {
   value: MapSizeId;
   /** 방장이고 아직 바꿀 수 있는 단계일 때만 true. */
@@ -18,6 +19,8 @@ export function MapSizeChoice({
   onSelect?(size: MapSizeId): void;
   /** 바꿀 수 있을 때의 안내. 데모 방은 준비 단계에서도 고르므로 문구가 다르다(S15P21C204-313). */
   editableNote?: string;
+  /** 단계와 무관하게 상태 문구를 통째로 바꿀 때. 시연 방처럼 맵이 고정된 이유를 적는다. */
+  note?: string;
 }) {
   return (
     <section className="map-size-choice" aria-label="맵 크기">
@@ -38,7 +41,7 @@ export function MapSizeChoice({
           </button>
         ))}
       </div>
-      <p role="status">{canEdit ? editableNote : '방장이 고른 맵입니다.'}</p>
+      <p role="status">{note ?? (canEdit ? editableNote : '방장이 고른 맵입니다.')}</p>
     </section>
   );
 }

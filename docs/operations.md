@@ -35,6 +35,7 @@
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
 | `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                                                               |
+| `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                   |
 | `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
@@ -53,6 +54,20 @@ sudo install -m 644 infra/nginx/demo-admin.conf /etc/nginx/snippets/kkakkung-dem
 sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+### 발표 시연 방 열기 (`/showcase`)
+
+팀원 넷이 **2:2**로 뛰는 발표용 방이다. 각자 서비스의 **`/showcase`**에서 역할(도망자·술래)과
+표시 이름을 고르고 들어가면 지금 열려 있는 시연 방 하나에 모인다(없으면 첫 사람이 연다). 한
+역할은 둘까지라 셋째가 같은 역할을 고르면 `ROLE_FULL`로 다른 역할을 고르게 한다. 맵은 소형
+(16x16)·고정 시드라 매번 같은 미로와 출구가 나오고, 방장도 맵 크기를 바꿀 수 없다. 경기는 탈출·
+포획 수로 일찍 끝나지 않고 3분을 다 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다.
+재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
+
+인증은 `/demo`와 같은 GitLab 프로젝트 멤버 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
+는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
+예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
+배포할 때 `host.conf`를 다시 설치한다.
 
 CLI는 장애 대응·자동화처럼 호스트에서만 쓰는 보조 경로다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이
 함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).

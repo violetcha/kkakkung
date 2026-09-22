@@ -4,6 +4,11 @@ import {
   DEMO_ADMIN_ROOM_ROUTE,
   demoRoomRequestSchema,
   demoRoomResponseSchema,
+  SHOWCASE_ROOM_ROUTE,
+  showcaseRoomRequestSchema,
+  showcaseRoomResponseSchema,
+  type ShowcaseRoomRequest,
+  type ShowcaseRoomResponse,
   ROOM_CODE_PATTERN,
   sessionRequestSchema,
   sessionResponseSchema,
@@ -164,6 +169,36 @@ export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductR
 }
 
 /**
+ * 발표 시연 방 자리를 받는다. `/showcase` 의 SSO 경계를 지난 브라우저만 닿고 운영 토큰은 없다.
+ * 409 ROLE_FULL 은 고른 역할 두 자리가 찼다는 뜻이라 호출 측이 다른 역할을 고르게 안내한다.
+ */
+export async function requestShowcaseRoom(
+  input: ShowcaseRoomRequest,
+  fetcher: typeof fetch = fetch,
+): Promise<ShowcaseRoomResponse> {
+  const parsed = showcaseRoomRequestSchema.safeParse(input);
+  if (!parsed.success) throw new Error('INVALID_REQUEST');
+  let response: Response;
+  try {
+    response = await fetcher(SHOWCASE_ROOM_ROUTE, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(parsed.data),
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(10000),
+      redirect: 'error',
+    });
+  } catch {
+    throw new Error('CONNECTION_FAILED');
+  }
+  if (!response.ok) throw new Error(`SHOWCASE_REQUEST_FAILED:${response.status}`);
+  const result = showcaseRoomResponseSchema.safeParse(await response.json().catch(() => null));
+  if (!result.success) throw new Error('INVALID_RESPONSE');
+  return result.data;
+}
+
+/**
  * S15P21C204-260. Operator-only demo entry. The address fragment carries the session the demo
  * route already issued; it is consumed and cleared exactly like an invitation, and there is no
  * player-facing way to produce one.
@@ -193,13 +228,14 @@ export function consumeDemoSession(
   history: { replaceState(data: unknown, unused: string, url: string): void },
   storage: DemoSessionStorage | null = browserSessionStorage(),
 ): SessionResponse | null {
-  const params = new URLSearchParams(location.hash.slice(1));
-  let sessionToken = params.get('demo') ?? '';
-  let roomCode = params.get('room') ?? '';
-  let playerId = params.get('player') ?? '';
-  if (sessionToken || playerId) {
-    if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) return null;
-    history.replaceState(null, '', location.pathname + location.search);
+  const fragment = readEntryFragment(location, history, 'demo');
+  if (fragment === 'invalid') return null;
+  let { sessionToken, roomCode, playerId } = fragment ?? {
+    sessionToken: '',
+    roomCode: '',
+    playerId: '',
+  };
+  if (fragment) {
     try {
       storage?.setItem(DEMO_SESSION_KEY, JSON.stringify({ sessionToken, roomCode, playerId }));
     } catch {
@@ -230,6 +266,39 @@ export function consumeDemoSession(
     expiresAt: Date.now() + 60_000,
     protocolVersion: PRODUCT_PROTOCOL_VERSION,
   };
+}
+
+/**
+ * 시연 방 진입. `/showcase` 가 만든 `#showcase=…` 조각을 데모와 같은 방식으로 소비·삭제한다.
+ * 데모와 달리 저장하지 않는다: 시연 세션은 일반 경기 세션이라 서버가 끊기면 좌석을 지키지 않고,
+ * 다시 들어오려면 `/showcase` 에서 새로 고른다.
+ */
+export function consumeShowcaseSession(
+  location: { hash: string; pathname: string; search: string },
+  history: { replaceState(data: unknown, unused: string, url: string): void },
+): SessionResponse | null {
+  const fragment = readEntryFragment(location, history, 'showcase');
+  if (!fragment || fragment === 'invalid') return null;
+  return { ...fragment, expiresAt: Date.now() + 60_000, protocolVersion: PRODUCT_PROTOCOL_VERSION };
+}
+
+/**
+ * 주소 조각에서 진입 세션을 읽고 조각을 지운다. 조각이 없으면 null, 있는데 깨졌으면 'invalid'.
+ * 토큰이 주소·기록에 남지 않도록 읽는 즉시 replaceState 로 지운다.
+ */
+function readEntryFragment(
+  location: { hash: string; pathname: string; search: string },
+  history: { replaceState(data: unknown, unused: string, url: string): void },
+  key: 'demo' | 'showcase',
+): { sessionToken: string; roomCode: string; playerId: string } | null | 'invalid' {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const sessionToken = params.get(key) ?? '';
+  const roomCode = params.get('room') ?? '';
+  const playerId = params.get('player') ?? '';
+  if (!sessionToken && !playerId) return null;
+  if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) return 'invalid';
+  history.replaceState(null, '', location.pathname + location.search);
+  return { sessionToken, roomCode, playerId };
 }
 
 /** 나가기·입장 거절 뒤에는 새로고침이 끝난 방으로 돌아가지 않게 지운다. */

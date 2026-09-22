@@ -38,6 +38,8 @@ export function LobbyScreen({
 }) {
   const [removalId, setRemovalId] = useState<string | null>(null);
   const host = roster.hostId === selfId;
+  const capacity = roster.capacity ?? 6;
+  const showcase = roster.kind === 'showcase';
   const busy = [lockRequest, kickRequest, mapSizeRequest].some(
     (request) => request && ['pending', 'waiting-view'].includes(request.status),
   );
@@ -47,9 +49,9 @@ export function LobbyScreen({
   const currentAccess = access?.matchId === roster.matchId ? access : null;
   return (
     <section className="lobby">
-      <h2>친구들을 기다리는 중</h2>
+      <h2>{showcase ? '시연 참가자를 기다리는 중' : '친구들을 기다리는 중'}</h2>
       <p>
-        방 코드 <strong>{roomCode}</strong> · {roster.players.length}/6
+        방 코드 <strong>{roomCode}</strong> · {roster.players.length}/{capacity}
       </p>
       <p role="status">
         {currentAccess
@@ -64,14 +66,15 @@ export function LobbyScreen({
         </button>
       )}
       <MapSizeChoice
-        value={mapSize}
-        canEdit={host && canChooseMapSize}
+        value={showcase ? 'small' : mapSize}
+        canEdit={host && canChooseMapSize && !showcase}
         busy={busy}
         onSelect={onSelectMapSize}
         {...(mapSizeNote ? { editableNote: mapSizeNote } : {})}
+        {...(showcase ? { note: '시연 맵은 16x16으로 고정되어 있습니다.' } : {})}
       />
       <ol>
-        {Array.from({ length: 6 }, (_, index) => {
+        {Array.from({ length: capacity }, (_, index) => {
           const player = roster.players[index];
           return (
             <li key={player?.playerId ?? index}>

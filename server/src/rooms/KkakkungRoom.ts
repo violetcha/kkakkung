@@ -70,7 +70,7 @@ import type {
 import type { ProductSessionStore } from '../session/ProductSessionStore.js';
 import type { RoomExpiry } from '../session/RoomExpiry.js';
 import type { SessionAuth } from '../session/session-types.js';
-import type { SlotRegistry } from '../session/SlotRegistry.js';
+import type { RoomKind, SlotRegistry } from '../session/SlotRegistry.js';
 import { CountdownCoordinator } from './CountdownCoordinator.js';
 import {
   availableScenarios,
@@ -91,6 +91,11 @@ import type { StructuredEvent } from '../observability/StructuredEvents.js';
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
 /** S15P21C204-258. Puppets filling the other five seats of a demo room. */
 const DEMO_PUPPET_COUNT = 5;
+/** 시연 방(showcase)의 고정 맵: 소형 미로, 고정 시드. 발표마다 같은 구조·같은 출구가 나온다. */
+const SHOWCASE_MAP_SIZE: MapSize = 'small';
+const SHOWCASE_SEED = 20260922;
+/** 템플릿의 빈 시작 자리를 채우는 이름 접두. 경기에는 들어오지 않는다. */
+const SHOWCASE_VACANT_PREFIX = 'showcase-vacant-';
 /**
  * S15P21C204-312. How long an empty demo room waits for its operator to come back. A refresh
  * takes seconds; after this the room closes and frees its `MAX_ROOMS` slot, because a demo
@@ -212,7 +217,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       serverEpoch: deps.serverEpoch,
       now: deps.monotonicNow,
     });
-    private readonly lobby = new LobbyCoordinator({ random });
+    private lobby = new LobbyCoordinator({ random });
     private readonly practice = new PracticeCoordinator();
     private readonly loading = new LoadingCoordinator({ requireFace: () => this.media !== null });
     private readonly countdown = new CountdownCoordinator();
@@ -267,6 +272,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private demoAbortRequested = false;
     /** When the demo operator's last connection left; null while connected. */
     private demoVacantSince: number | null = null;
+
+    /** 발표 시연 방. 실제 사람 넷이 2:2 로 고정 소형 미로에서 3분을 온전히 뛴다. */
+    private get showcase() {
+      return deps.slots.optionsOf(this.roomCode)?.kind === 'showcase';
+    }
+
+    private get roomKind(): RoomKind {
+      return deps.slots.optionsOf(this.roomCode)?.kind ?? 'match';
+    }
 
     /** A demo room exists to show game situations to one operator, never to admit players. */
     private get demo() {
@@ -551,6 +565,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (!roomOptions) throw new ServerError(404, 'ROOM_NOT_AVAILABLE');
       this.operatorRole = roomOptions.operatorRole;
       this.maxClients = roomOptions.capacity;
+      if (roomOptions.kind === 'showcase') {
+        // 시연 방: 넷이 2:2 로 모이고, 맵은 소형으로 고정이라 방장도 바꿀 수 없다.
+        this.lobby = new LobbyCoordinator({ random, capacity: roomOptions.capacity });
+        this.roomMapSize = SHOWCASE_MAP_SIZE;
+      }
       // A demo room outlives its operator's socket so a refresh can come back (312). It closes
       // itself after DEMO_REJOIN_GRACE_MS instead; see checkExpiry.
       this.autoDispose = !this.demo;
@@ -800,13 +819,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
         // A demo room passes the lobby at once; it chooses the size during preparation (313).
-        ROOM_MAP_SIZE: this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'],
+        // A showcase room never chooses: its map is fixed.
+        ROOM_MAP_SIZE: this.mapSizePhases(),
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
         SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
+      // 시연 방은 재경기가 없다. 결과 화면까지가 시연이고, 다음 시연은 새 방으로 연다.
+      if (type === 'REMATCH' && this.showcase) return 'NOT_ALLOWED';
       if (
         (type === 'ROOM_LOCK' || type === 'ROOM_KICK' || type === 'ROOM_MAP_SIZE') &&
         playerId !== this.lobby.host
@@ -884,8 +906,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           // 실행 시점에 다시 본다. 받아들인 뒤에 방장이나 단계가 바뀌었을 수 있다.
           // S15P21C204-313. 데모 방은 인형이 곧바로 자리를 채워 로비를 지나치므로, 크기를 고를 수
           // 있는 곳이 준비 단계뿐이다. 맵은 준비가 끝난 뒤 MAP_FINALIZING 에서 정해진다.
-          const choosable = this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'];
-          if (!choosable.includes(this.phase)) return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (!this.mapSizePhases().includes(this.phase))
+            return { result: 'rejected', code: 'INVALID_PHASE' };
           if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
             return { result: 'rejected', code: 'NOT_ALLOWED' };
           if (command.payload.size !== this.roomMapSize) {
@@ -1185,6 +1207,48 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.context.setRolePlan(this.puppetRolePlan(operatorId));
     }
 
+    /**
+     * 맵 크기를 바꿀 수 있는 단계. 일반 방은 LOBBY, 데모 방은 로비를 지나치므로 DEVICE_CHECK 까지
+     * (313), 시연 방은 소형 고정이라 어디서도 바꾸지 않는다.
+     */
+    private mapSizePhases(): readonly Phase[] {
+      if (this.showcase) return [];
+      return this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'];
+    }
+
+    /** 시연 방은 매번 같은 미로·같은 출구를 쓰도록 시드를 고정한다. 다른 방은 무작위다. */
+    private roundSeed(): number {
+      return this.showcase ? SHOWCASE_SEED : randomBytes(4).readUInt32BE(0);
+    }
+
+    /**
+     * 맵 템플릿은 도망자 셋·술래 셋의 시작 자리를 요구한다. 시연 방은 둘씩만 있으므로 비어 있는
+     * 자리를 이름만 있는 참가자로 채워 준비하고, 경기를 만들 때 `showcaseLayout` 이 다시 뗀다.
+     */
+    private layoutRoster(): { playerId: string; role: Role }[] {
+      const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      if (!this.showcase) return players;
+      for (const role of ['runner', 'tagger'] as const) {
+        let missing = 3 - players.filter((p) => p.role === role).length;
+        for (let index = 1; missing > 0; index++, missing--)
+          players.push({ playerId: `${SHOWCASE_VACANT_PREFIX}${role}-${index}`, role });
+      }
+      return players;
+    }
+
+    /** 비어 있는 자리에 붙은 시작 위치·출구·영역을 떼어 실제 참가자만 남긴다. */
+    private showcaseLayout(
+      layout: import('../game/ports.js').MatchLayout,
+    ): import('../game/ports.js').MatchLayout {
+      const real = (playerId: string) => this.roles.has(playerId);
+      return {
+        ...layout,
+        players: layout.players.filter((p) => real(p.playerId)),
+        exits: layout.exits.filter((exit) => real(exit.ownerId)),
+        territories: layout.territories.filter((t) => real(t.playerId)),
+      };
+    }
+
     /** The 3:3 assignment around the operator's chosen role; puppets fill the rest in order. */
     private puppetRolePlan(operatorId: string): Map<string, Role> | null {
       const role = this.operatorRole;
@@ -1412,11 +1476,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
         return;
       }
-      const roles = this.lobby.assignRoles(this.context.takeRolePlan());
+      const roles = this.lobby.assignRoles(
+        this.showcase ? deps.slots.requestedRoles(this.roomCode) : this.context.takeRolePlan(),
+      );
       this.roles.clear();
       for (const [playerId, role] of roles) this.roles.set(playerId, role);
       if (this.context.seed === null)
-        this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
+        this.context.fixRoundInputs({ tuning: deps.tuning, seed: this.roundSeed() });
       const teams = this.practice.start(roles, now);
       for (const role of ['runner', 'tagger'] as const) {
         const players = teams[role].map((playerId) => ({ playerId, role }));
@@ -1473,7 +1539,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.roles.clear();
       for (const [playerId, role] of roles) this.roles.set(playerId, role);
       if (this.context.seed === null)
-        this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
+        this.context.fixRoundInputs({ tuning: deps.tuning, seed: this.roundSeed() });
       this.blockedReason = null;
       this.setPhase('MAP_FINALIZING');
     }
@@ -1571,7 +1637,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.pendingLayout = { status: 'unavailable', diagnostic: 'LAYOUT_PRODUCER_MISSING' };
         return;
       }
-      const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      const players = this.layoutRoster();
       const seed = this.context.seed ?? 0;
       const { loader } = deps.layouts;
       // 방이 로비에서 고른 크기의 템플릿으로 준비한다.
@@ -1609,9 +1675,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         });
     }
 
-    private startLoading(layout: import('../game/ports.js').MatchLayout, now: number) {
+    private startLoading(prepared: import('../game/ports.js').MatchLayout, now: number) {
       if (!deps.core || !deps.tuning) return this.returnToDeviceCheck('CORE_MISSING');
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      const layout = this.showcase ? this.showcaseLayout(prepared) : prepared;
       const instance = this.context.createInstance('game');
       const state = deps.core.createMatch({
         matchId: this.context.matchId,
@@ -1621,6 +1688,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         layout,
         players,
         deadline: this.demo ? 'none' : 'round',
+        ...(this.showcase ? { result: 'timeout-only' as const } : {}),
       });
       const mediaInstanceId = randomUUID();
       this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
@@ -2132,7 +2200,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // The client must observe a new match before its roster; old-match data is rejected.
       this.broadcast(
         PRODUCT_SERVER_MESSAGES.roomRoster,
-        this.lobby.roster(this.context.matchId, this.context.stateVersion, this.phase),
+        {
+          ...this.lobby.roster(this.context.matchId, this.context.stateVersion, this.phase),
+          kind: this.roomKind,
+          capacity: this.lobby.capacity,
+        },
         { afterNextPatch: true },
       );
     }
