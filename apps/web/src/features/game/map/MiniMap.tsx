@@ -3,7 +3,7 @@ import type { Cell, PrivateView } from '@kkakkung/protocol/game-schema';
 import { mapDrawModel } from './map-draw-model';
 import { pastEventMarkers, type HunterMarker } from './past-event-markers';
 import { exitOwnerLabel, type OwnerNames } from '../scene/ExitOwnerLabel';
-import { drawMinimap } from './minimap-render';
+import { drawMinimap, minimapDrawKey } from './minimap-render';
 
 export function MiniMap({
   view,
@@ -33,28 +33,40 @@ export function MiniMap({
     () => {
       const canvas = ref.current;
       if (!canvas) return;
+      // S15P21C204-327. 마지막으로 그린 그림의 열쇠. 창 모드는 프레임마다, 전체 지도는 서버
+      // 패치마다 불려 오는데 그중 대부분은 같은 그림이다. 서 있으면 보간된 내 위치까지 그대로다.
+      let drawn: string | null = null;
       const draw = () => {
         const { view, markers, tick, renderTick, operatorExit } = latest.current;
         // S15P21C204-277. 칸이 정수 픽셀에 앉도록 배율도 정수로 고른다.
         const dpr = Math.max(1, Math.min(Math.floor(window.devicePixelRatio || 1), 2));
-        const size = canvas.clientWidth || 240;
-        canvas.width = size * dpr;
-        canvas.height = size * dpr;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        // 전체 지도는 도트가 살도록, 창 모드는 부채꼴·선이 매끈하도록.
-        ctx.imageSmoothingEnabled = windowCells !== undefined;
-        drawMinimap(ctx, {
+        const size = (canvas.clientWidth || 240) * dpr;
+        const input = {
           view,
-          size: size * dpr,
+          size,
           tick: renderTick?.() ?? tick,
           markers,
           operatorExit,
           ...(windowCells === undefined ? {} : { window: windowCells }),
-        });
+        };
+        const key = minimapDrawKey(input);
+        // 크기가 달라졌으면 백버퍼를 다시 잡아야 하므로 열쇠와 무관하게 그린다.
+        const resized = canvas.width !== size;
+        if (!resized && key === drawn) return;
+        drawn = key;
+        if (resized) {
+          canvas.width = size;
+          canvas.height = size;
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        // 전체 지도는 도트가 살도록, 창 모드는 부채꼴·선이 매끈하도록.
+        ctx.imageSmoothingEnabled = windowCells !== undefined;
+        // `drawMinimap` 은 배경부터 다시 칠하므로 백버퍼를 비우지 않아도 잔상이 남지 않는다.
+        drawMinimap(ctx, input);
       };
       draw();
-      const observer = new ResizeObserver(draw);
+      const observer = new ResizeObserver(() => draw());
       observer.observe(canvas);
       let frame = 0;
       if (continuous && typeof requestAnimationFrame === 'function') {

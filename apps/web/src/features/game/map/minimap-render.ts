@@ -169,20 +169,49 @@ export function windowTerrain(
   return { floors, walls, unknown: 0 };
 }
 
-export function drawMinimap(
-  ctx: MinimapContext,
-  input: {
-    view: PrivateView | null;
-    size: number;
-    tick?: number;
-    markers?: readonly HunterMarker[];
-    /** Supplied only by the operator demo room; ordinary rooms leave this absent. */
-    operatorExit?: Cell | null;
-    cells?: number;
-    /** 홀수 칸 수를 주면 내 주변만 확대해 그린다(창 모드). 없으면 전체 지도. */
-    window?: number;
-  },
-): MinimapLayout {
+export type MinimapInput = {
+  view: PrivateView | null;
+  size: number;
+  tick?: number;
+  markers?: readonly HunterMarker[];
+  /** Supplied only by the operator demo room; ordinary rooms leave this absent. */
+  operatorExit?: Cell | null;
+  cells?: number;
+  /** 홀수 칸 수를 주면 내 주변만 확대해 그린다(창 모드). 없으면 전체 지도. */
+  window?: number;
+};
+
+/**
+ * S15P21C204-327. 같은 그림을 두 번 그리지 않기 위한 열쇠. `drawMinimap` 이 읽는 것만 담는다.
+ *
+ * 미니맵은 서버 패치마다, 즉 초당 20번 다시 그려지고 있었다. 그중 대부분은 **글자 그대로 같은
+ * 그림**이다 — 서 있는 동안에는 보간된 내 위치도 그대로이기 때문이다. 다만 `tick` 자체를
+ * 의존에서 뺄 수는 없다. 이동 중에는 화살표가 tick 마다 실제로 움직이고, 술래의 과거 사건
+ * 표식도 tick 으로 나타났다 사라진다. 그래서 tick 이 아니라 **그려질 결과**를 비교한다.
+ *
+ * 누적 지형은 자라기만 하므로 개수로 갈음한다. 좌표는 캔버스 픽셀보다 잘게 반올림해, 눈에
+ * 보이지 않는 차이로 다시 그리지 않으면서 보이는 차이는 놓치지 않는다.
+ */
+export function minimapDrawKey(input: MinimapInput): string {
+  const tick = input.tick ?? 0;
+  const model = mapDrawModel(input.view, tick, input.operatorExit ?? null);
+  if (!model) return `empty:${input.size}:${input.cells ?? ''}:${input.window ?? ''}`;
+  return JSON.stringify([
+    input.size,
+    input.cells ?? null,
+    input.window ?? null,
+    Math.round(model.self.x * 256),
+    Math.round(model.self.z * 256),
+    Math.round(model.self.yaw * 256),
+    model.terrain.length,
+    model.exits.map((exit) => exit.exitId),
+    model.operatorExit,
+    input.view?.self?.status === 'ACTIVE' ? input.view.self.role : null,
+    pastEventMarkers(input.view, input.markers ?? [], tick).map((marker) => marker.markerId),
+  ]);
+}
+
+export function drawMinimap(ctx: MinimapContext, input: MinimapInput): MinimapLayout {
   const tick = input.tick ?? 0;
   const model = mapDrawModel(input.view, tick, input.operatorExit ?? null);
   const windowed = input.window !== undefined && model !== null;
