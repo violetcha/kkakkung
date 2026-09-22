@@ -1,7 +1,7 @@
 // F-04 / DP-04 CI contract: the Jenkinsfile runs the single entry point, the entry point runs
 // `pnpm verify` exactly once, the expected commit is checked before install, and the toolchain
 // is pinned. Nothing here starts Docker, Jenkins, a browser or the network.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -13,6 +13,7 @@ import {
   touchesImageInputs,
 } from '../../scripts/needs-image-build.mjs';
 import { scanRange } from '../../scripts/secret-scan-range.mjs';
+import { triggerVerdict } from '../../scripts/trigger-commit.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const jenkinsfile = readFileSync(resolve(root, 'Jenkinsfile'), 'utf8');
@@ -98,12 +99,87 @@ describe('ci-verify process (dry run, nothing executed)', () => {
   });
 });
 
+// S15P21C204-345. 연속 머지로 푸시 웹훅이 한 빌드로 합쳐지면 알려온 것은 첫 push 이고 체크아웃은
+// 마지막 develop 이다. 정확 일치만 보던 때는 배포가 통째로 멈췄다(kkakkung #205: 머지 셋, 배포 0).
+describe('trigger commit guard', () => {
+  const HEAD = 'a'.repeat(40);
+  const OLDER = 'f'.repeat(40);
+  const ancestors = (ancestor: string, descendant: string) =>
+    ancestor === OLDER && descendant === HEAD;
+
+  it('accepts a develop checkout that contains the announced push', () => {
+    // 같은 커밋이면 git 을 볼 것도 없다.
+    expect(triggerVerdict({ head: HEAD, push: HEAD }, () => false)).toMatchObject({
+      ok: true,
+      sha: HEAD,
+      announced: true,
+    });
+    // 더 나아갔어도 그 커밋을 포함하면 통과하고, 검증 대상은 실제 체크아웃이다.
+    expect(triggerVerdict({ head: HEAD, push: OLDER }, ancestors)).toMatchObject({
+      ok: true,
+      sha: HEAD,
+      advancedFrom: OLDER,
+    });
+  });
+
+  it('stops a push build whose checkout does not contain the announced commit', () => {
+    const verdict = triggerVerdict({ head: HEAD, push: OLDER }, () => false);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.message).toMatch(/포함하지 않습니다/);
+  });
+
+  // MR 은 중단하면 새 push 의 빌드가 따라온다. 완화하면 오래된 커밋이 성공 상태를 받는다.
+  it('keeps the exact match for MR builds and never consults ancestry', () => {
+    const isAncestor = vi.fn(() => true);
+    const verdict = triggerVerdict({ head: HEAD, mr: OLDER }, isAncestor);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.message).toMatch(/MR 커밋/);
+    expect(isAncestor).not.toHaveBeenCalled();
+    // 짧은 해시로 와도 접두사로 맞으면 통과한다 (ci-verify 와 같은 규칙).
+    expect(triggerVerdict({ head: HEAD, mr: HEAD.slice(0, 8) }, isAncestor)).toMatchObject({
+      ok: true,
+      sha: HEAD,
+    });
+  });
+
+  it('uses the checkout as it is when nothing was announced, and refuses what it cannot read', () => {
+    expect(triggerVerdict({ head: HEAD }, () => false)).toMatchObject({
+      ok: true,
+      sha: HEAD,
+      announced: false,
+    });
+    // 읽을 수 없거나 형식이 이상하면 막는다. 모르는 것이 통과의 이유가 되지 않는다.
+    for (const input of [
+      { head: '' },
+      { head: 'not-a-sha' },
+      { head: HEAD, push: 'nope' },
+      { head: HEAD, mr: 'nope' },
+    ])
+      expect(triggerVerdict(input, () => true).ok, JSON.stringify(input)).toBe(false);
+  });
+});
+
 describe('Jenkinsfile uses the single entry point', () => {
   it('calls scripts/ci-verify.mjs inside the pinned CI image and passes the expected SHA', () => {
     expect(jenkinsfile).toContain('node scripts/ci-verify.mjs');
     expect(jenkinsfile).toContain('infra/docker/Dockerfile.ci');
     expect(jenkinsfile).toContain('EXPECTED_SOURCE_SHA');
     expect(jenkinsfile).toMatch(/gitlabAfter/);
+  });
+  // S15P21C204-345. 대조는 스크립트가 하고 Jenkinsfile 은 결과만 받는다. 두 트리거를 모두 넘겨야
+  // 스크립트가 MR(정확 일치)과 push(포함이면 통과)를 갈라 볼 수 있다.
+  it('decides the trigger match in the script and verifies against the checked-out commit', () => {
+    const prepare = jenkinsfile.slice(
+      jenkinsfile.indexOf("stage('Prepare')"),
+      jenkinsfile.indexOf("stage('Secret scan')"),
+    );
+    expect(prepare).toContain('node scripts/trigger-commit.mjs');
+    expect(prepare).toMatch(/--head "\$GIT_SHA"/);
+    expect(prepare).toContain('TRIGGER_MR=${env.gitlabMergeRequestLastCommit');
+    expect(prepare).toContain('TRIGGER_PUSH=${env.gitlabAfter');
+    expect(prepare).toMatch(/env\.EXPECTED_SOURCE_SHA = sh\(/);
+    // 옛 인라인 비교가 남아 있으면 스크립트의 판단을 덮어쓴다.
+    expect(prepare).not.toMatch(/expected != head/);
   });
   it('does not list the individual verify checks again (regression to the old CI branch)', () => {
     const verifyStage = jenkinsfile.slice(

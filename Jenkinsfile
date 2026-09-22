@@ -51,21 +51,28 @@ pipeline {
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
           env.GIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-          // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃이 같은지 대조합니다 (DP-04).
-          // 웹훅 빌드에서만 값이 오고, 수동 빌드에선 비어 있어 건너뜁니다.
-          def head = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-          def expected = env.gitlabAfter ?: (env.gitlabMergeRequestLastCommit ?: '')
-          if (expected && expected != head) {
-            error("체크아웃된 커밋(${head})이 GitLab 이 보낸 커밋(${expected})과 다릅니다. 배포 중단.")
+          // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃을 대조하고, 이 빌드가 검증 대상으로 삼을
+          // SHA 를 받습니다 (DP-04). 판단은 scripts/trigger-commit.mjs 가 합니다 — MR 빌드는 정확
+          // 일치, develop push 빌드는 체크아웃이 그 커밋을 **포함**하면 통과입니다. 연속 머지로
+          // 푸시 웹훅이 한 빌드로 합쳐지면 알려온 것은 첫 push 인데 체크아웃은 마지막 develop 이라,
+          // 정확 일치만 보던 때는 배포가 통째로 멈췄습니다 (kkakkung #205: 머지 셋, 배포 0).
+          // 알 수 없으면 막는 쪽으로 답하므로 판단이 실패해도 가드가 느슨해지지 않습니다 (345).
+          withEnv([
+            "TRIGGER_MR=${env.gitlabMergeRequestLastCommit ?: ''}",
+            "TRIGGER_PUSH=${env.gitlabAfter ?: ''}",
+          ]) {
+            env.EXPECTED_SOURCE_SHA = sh(
+              script: 'node scripts/trigger-commit.mjs --head "$GIT_SHA" --mr "$TRIGGER_MR" --push "$TRIGGER_PUSH"',
+              returnStdout: true).trim()
           }
           def b = env.BRANCH_NAME ?: (env.GIT_BRANCH ?: '')
           env.IS_DEPLOY = (b == env.DEPLOY_BRANCH || b.endsWith('/' + env.DEPLOY_BRANCH)) ? 'true' : 'false'
           echo "commit=${env.TAG}  branch=${b}  deploy=${env.IS_DEPLOY}"
         }
         sh 'mkdir -p /var/lib/jenkins/.cache/pnpm-store'
-        // 검증 대상 SHA 는 ci-verify.mjs 가 install 전에 다시 대조합니다 (DP-04).
+        // 위에서 정한 검증 대상 SHA 를 ci-verify.mjs 가 install 전에 다시 대조합니다 (DP-04).
+        // 그것은 체크아웃된 커밋이므로, 이 대조가 잡는 것은 Prepare 이후 작업 공간이 움직인 경우입니다.
         script {
-          env.EXPECTED_SOURCE_SHA = env.gitlabAfter ?: (env.gitlabMergeRequestLastCommit ?: '')
           env.CI_TAG = sh(script: 'sha256sum infra/docker/Dockerfile.ci | cut -c1-12', returnStdout: true).trim()
         }
         // 이 빌드가 이미지를 만들어야 하는지, 비밀 스캔이 어디부터 읽으면 되는지 (S15P21C204-322).
