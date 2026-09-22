@@ -3,7 +3,7 @@ import { Mesh, MeshBasicMaterial, Raycaster, Texture, Vector3 } from 'three';
 import { privateViewSchema } from '@kkakkung/protocol/game-messages';
 import { createFacilityResources, FACILITY } from './facility-theme';
 import { RENDER_SCENES, SELF_MOTIONS, renderFixture } from './render-fixture';
-import { sampleSelf } from './action-interpolation';
+import { sampleActor } from './action-interpolation';
 import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
 import { wallModel } from './scene-model';
 import { visibleExitModel } from './visible-exit-model';
@@ -108,13 +108,13 @@ it('self motion fixtures stay valid and interpolate a turn in place and a move f
         );
   const self = (motion: (typeof SELF_MOTIONS)[number]) =>
     renderFixture('코너', 1, motion).self as ActiveSelf;
-  const still = sampleSelf(self('still'), 10);
-  const turn = [0, 10, 20].map((tick) => sampleSelf(self('turn'), tick));
+  const still = sampleActor(self('still'), 10);
+  const turn = [0, 10, 20].map((tick) => sampleActor(self('turn'), tick));
   expect(turn.map((sample) => [sample.x, sample.z])).toEqual(turn.map(() => [still.x, still.z]));
   expect(turn[0]!.yaw).toBe(still.yaw);
   expect(turn[2]!.yaw).not.toBe(turn[0]!.yaw);
   expect(turn[1]!.yaw).toBeCloseTo((turn[0]!.yaw + turn[2]!.yaw) / 2);
-  const move = [0, 10, 20].map((tick) => sampleSelf(self('move'), tick));
+  const move = [0, 10, 20].map((tick) => sampleActor(self('move'), tick));
   expect(move.map((sample) => sample.yaw)).toEqual(move.map(() => still.yaw));
   expect([move[0]!.x, move[0]!.z]).toEqual([still.x, still.z]);
   expect(Math.hypot(move[2]!.x - move[0]!.x, move[2]!.z - move[0]!.z)).toBeCloseTo(1);

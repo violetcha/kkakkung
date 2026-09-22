@@ -2,10 +2,10 @@ import { expect, it } from 'vitest';
 import { Matrix4, PerspectiveCamera, Vector3 } from 'three';
 import { cameraPlacement } from './FirstPersonCamera';
 import { CHARACTER } from './scene-model';
-import { sampleSelf } from './action-interpolation';
+import { sampleActor } from './action-interpolation';
 
 /** 카메라 시점에서 본 점의 깊이(앞이면 음수 z). */
-function viewDepth(sample: ReturnType<typeof sampleSelf>, point: Vector3) {
+function viewDepth(sample: ReturnType<typeof sampleActor>, point: Vector3) {
   const camera = new PerspectiveCamera();
   const placement = cameraPlacement(sample);
   camera.position.set(...placement.position);
@@ -29,7 +29,7 @@ it('never leaves a wall corner exactly on the camera plane mid-turn', () => {
     },
   };
   for (const tick of [10, 30, 50]) {
-    const sample = sampleSelf({ ...self, action: { ...self.action, endTick: tick * 2 } }, tick);
+    const sample = sampleActor({ ...self, action: { ...self.action, endTick: tick * 2 } }, tick);
     for (const corner of [new Vector3(0.5, 0.6, 0.5), new Vector3(-0.5, 0.6, -0.5)])
       expect(viewDepth(sample, corner)).toBeGreaterThan(1e-4);
   }
