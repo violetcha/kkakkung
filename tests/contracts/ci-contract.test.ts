@@ -1,7 +1,7 @@
 // F-04 / DP-04 CI contract: the Jenkinsfile runs the single entry point, the entry point runs
 // `pnpm verify` exactly once, the expected commit is checked before install, and the toolchain
 // is pinned. Nothing here starts Docker, Jenkins, a browser or the network.
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -100,62 +100,53 @@ describe('ci-verify process (dry run, nothing executed)', () => {
 });
 
 // S15P21C204-345. 연속 머지로 푸시 웹훅이 한 빌드로 합쳐지면 알려온 것은 첫 push 이고 체크아웃은
-// 마지막 develop 이다. 정확 일치만 보던 때는 배포가 통째로 멈췄다(kkakkung #205: 머지 셋, 배포 0).
+// 마지막 develop 이다. 대조하던 때는 배포가 통째로 멈췄다(kkakkung #205: 머지 셋, 배포 0). 플러그인은
+// push 빌드에도 MR 커밋 변수를 채우므로 어느 값이 있는지로 트리거를 가를 수도 없었다(#209).
 describe('trigger commit guard', () => {
   const HEAD = 'a'.repeat(40);
   const OLDER = 'f'.repeat(40);
-  const ancestors = (ancestor: string, descendant: string) =>
-    ancestor === OLDER && descendant === HEAD;
 
-  it('accepts a develop checkout that contains the announced push', () => {
-    // 같은 커밋이면 git 을 볼 것도 없다.
-    expect(triggerVerdict({ head: HEAD, push: HEAD }, () => false)).toMatchObject({
+  it('deploys the develop checkout as it is, whatever the folded webhook announced', () => {
+    // #209 그대로: push 빌드인데 MR 커밋 변수에도 같은 값이 들어왔다.
+    expect(triggerVerdict({ head: HEAD, deploy: 'true', mr: OLDER, push: OLDER })).toMatchObject({
       ok: true,
       sha: HEAD,
-      announced: true,
+      announced: OLDER,
     });
-    // 더 나아갔어도 그 커밋을 포함하면 통과하고, 검증 대상은 실제 체크아웃이다.
-    expect(triggerVerdict({ head: HEAD, push: OLDER }, ancestors)).toMatchObject({
+    expect(triggerVerdict({ head: HEAD, deploy: 'true', push: OLDER })).toMatchObject({
       ok: true,
       sha: HEAD,
-      advancedFrom: OLDER,
     });
-  });
-
-  it('stops a push build whose checkout does not contain the announced commit', () => {
-    const verdict = triggerVerdict({ head: HEAD, push: OLDER }, () => false);
-    expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.message).toMatch(/포함하지 않습니다/);
   });
 
   // MR 은 중단하면 새 push 의 빌드가 따라온다. 완화하면 오래된 커밋이 성공 상태를 받는다.
-  it('keeps the exact match for MR builds and never consults ancestry', () => {
-    const isAncestor = vi.fn(() => true);
-    const verdict = triggerVerdict({ head: HEAD, mr: OLDER }, isAncestor);
-    expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.message).toMatch(/MR 커밋/);
-    expect(isAncestor).not.toHaveBeenCalled();
+  it('keeps the exact match for builds that do not deploy', () => {
+    for (const input of [
+      { head: HEAD, deploy: 'false', mr: OLDER },
+      { head: HEAD, deploy: 'false', push: OLDER },
+      { head: HEAD, mr: OLDER },
+    ]) {
+      const verdict = triggerVerdict(input);
+      expect(verdict.ok, JSON.stringify(input)).toBe(false);
+      if (!verdict.ok) expect(verdict.message).toMatch(/다릅니다/);
+    }
     // 짧은 해시로 와도 접두사로 맞으면 통과한다 (ci-verify 와 같은 규칙).
-    expect(triggerVerdict({ head: HEAD, mr: HEAD.slice(0, 8) }, isAncestor)).toMatchObject({
+    expect(triggerVerdict({ head: HEAD, deploy: 'false', mr: HEAD.slice(0, 8) })).toMatchObject({
       ok: true,
       sha: HEAD,
     });
   });
 
   it('uses the checkout as it is when nothing was announced, and refuses what it cannot read', () => {
-    expect(triggerVerdict({ head: HEAD }, () => false)).toMatchObject({
-      ok: true,
-      sha: HEAD,
-      announced: false,
-    });
-    // 읽을 수 없거나 형식이 이상하면 막는다. 모르는 것이 통과의 이유가 되지 않는다.
+    expect(triggerVerdict({ head: HEAD })).toMatchObject({ ok: true, sha: HEAD, announced: '' });
+    // 읽을 수 없거나 형식이 이상하면 배포 빌드라도 막는다. 모르는 것이 통과의 이유가 되지 않는다.
     for (const input of [
       { head: '' },
-      { head: 'not-a-sha' },
-      { head: HEAD, push: 'nope' },
+      { head: 'not-a-sha', deploy: 'true' },
+      { head: HEAD, deploy: 'true', push: 'nope' },
       { head: HEAD, mr: 'nope' },
     ])
-      expect(triggerVerdict(input, () => true).ok, JSON.stringify(input)).toBe(false);
+      expect(triggerVerdict(input).ok, JSON.stringify(input)).toBe(false);
   });
 });
 
@@ -166,8 +157,8 @@ describe('Jenkinsfile uses the single entry point', () => {
     expect(jenkinsfile).toContain('EXPECTED_SOURCE_SHA');
     expect(jenkinsfile).toMatch(/gitlabAfter/);
   });
-  // S15P21C204-345. 대조는 스크립트가 하고 Jenkinsfile 은 결과만 받는다. 두 트리거를 모두 넘겨야
-  // 스크립트가 MR(정확 일치)과 push(포함이면 통과)를 갈라 볼 수 있다.
+  // S15P21C204-345. 대조는 스크립트가 하고 Jenkinsfile 은 결과만 받는다. 배포 여부를 먼저 정해
+  // 넘겨야 스크립트가 MR(정확 일치)과 develop 배포(체크아웃 그대로)를 갈라 볼 수 있다.
   it('decides the trigger match in the script and verifies against the checked-out commit', () => {
     const prepare = jenkinsfile.slice(
       jenkinsfile.indexOf("stage('Prepare')"),
@@ -175,6 +166,8 @@ describe('Jenkinsfile uses the single entry point', () => {
     );
     expect(prepare).toContain('node scripts/trigger-commit.mjs');
     expect(prepare).toMatch(/--head "\$GIT_SHA"/);
+    expect(prepare).toContain('--deploy "$IS_DEPLOY"');
+    expect(prepare.indexOf('env.IS_DEPLOY =')).toBeLessThan(prepare.indexOf('trigger-commit.mjs'));
     expect(prepare).toContain('TRIGGER_MR=${env.gitlabMergeRequestLastCommit');
     expect(prepare).toContain('TRIGGER_PUSH=${env.gitlabAfter');
     expect(prepare).toMatch(/env\.EXPECTED_SOURCE_SHA = sh\(/);
