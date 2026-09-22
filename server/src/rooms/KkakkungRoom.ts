@@ -220,7 +220,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // 시작한다. 실제 템플릿 선택은 크기별 맵이 생긴 뒤에 붙인다.
     private roomMapSize: MapSize = 'large';
     private roomMapRevision = 0;
-    private readonly heartbeat = new HeartbeatTracker({ serverEpoch: deps.serverEpoch });
+    private readonly heartbeat = new HeartbeatTracker({
+      serverEpoch: deps.serverEpoch,
+      // 서버가 멈췄던 시간은 클라이언트 침묵으로 세지 않는다. 멈춘 사실만 남긴다 (337).
+      onStall: (stallMs, connections) =>
+        this.emitEvent('room.heartbeat_stall', 'warn', {
+          phase: this.phase,
+          durationMs: stallMs,
+          count: connections,
+        }),
+    });
     private readonly clockSync = new ClockSync({
       serverEpoch: deps.serverEpoch,
       now: deps.monotonicNow,

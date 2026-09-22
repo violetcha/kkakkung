@@ -71,6 +71,7 @@ export const EVENT_NAMES = Object.freeze([
   'room.preparation_failed',
   'room.command_rejected',
   'room.load_ready',
+  'room.heartbeat_stall',
   'media.prepare_failed',
   'media.api.failed',
   'media.webhook',
