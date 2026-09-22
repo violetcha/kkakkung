@@ -30,6 +30,11 @@ export function createInteractionBridge(
   let devices: DeviceStatus = INITIAL_DEVICES;
   let interaction: InteractionState = { selectedEquipment: 'sensor', mode: 'motion' };
   let readyRequested = false;
+  /**
+   * 데모 방(S15P21C204-260)은 미디어를 발급하지 않아 장치 점검이 성립하지 않는다. 운영자가
+   * 카메라 없이 방을 돌려 보는 것이 그 방의 용도이므로, 그 방에서만 준비 보고를 연다.
+   */
+  let demoRoom = false;
   let deviceRun = 0;
   const canCheckDevices = () =>
     !disposed &&
@@ -52,6 +57,9 @@ export function createInteractionBridge(
       ].includes(context.phase);
     if (visible && host && preview) {
       if (preview.parentElement !== host) host.appendChild(preview);
+      // S15P21C204-295. 자리를 옮기는 동안 재생이 멈추면 마지막 프레임이 그대로 굳는다. 그러면
+      // 얼굴 인식도 합성 화면도 같은 한 장만 보게 되므로, 붙인 뒤에는 재생을 확인한다.
+      if (preview.paused) void preview.play().catch(() => {});
     } else detach();
   };
   const runtime = factory({
@@ -60,7 +68,12 @@ export function createInteractionBridge(
     onDeviceStatus(status) {
       if (disposed) return;
       devices = status;
-      if (context?.phase === 'DEVICE_CHECK' && readyRequested && !deviceReady(status)) {
+      if (
+        context?.phase === 'DEVICE_CHECK' &&
+        readyRequested &&
+        !demoRoom &&
+        !deviceReady(status)
+      ) {
         readyRequested = false;
         deps.sendCommand({ type: 'READY', payload: { ready: false } });
       }
@@ -128,8 +141,15 @@ export function createInteractionBridge(
       if (!consented() || !canCheckDevices()) return;
       await runtime.setMicrophone(microphone);
     },
+    setDemoRoom(value: boolean) {
+      demoRoom = value;
+    },
     ready(value: boolean) {
-      if (disposed || context?.phase !== 'DEVICE_CHECK' || (value && !deviceReady(devices)))
+      if (
+        disposed ||
+        context?.phase !== 'DEVICE_CHECK' ||
+        (value && !demoRoom && !deviceReady(devices))
+      )
         return false;
       readyRequested = value;
       deps.sendCommand({ type: 'READY', payload: { ready: value } });
