@@ -135,10 +135,20 @@ describe('container nginx (web-proxy)', () => {
 });
 
 describe('SSO proxy compose', () => {
-  it('pins the image, binds to localhost, restricts to project members with PKCE', () => {
+  it('pins the image, binds to localhost, restricts to registered emails with PKCE', () => {
     expect(sso).toMatch(/image: quay\.io\/oauth2-proxy\/oauth2-proxy:v7\.\d+\.\d+/);
     expect(sso).toContain("'127.0.0.1:4180:4180'");
-    expect(sso).toContain('OAUTH2_PROXY_GITLAB_PROJECTS: s15-ai-image-sub1/S15P21C204=20');
+    expect(sso).toContain("OAUTH2_PROXY_GITLAB_PROJECTS: ''");
+    expect(sso).toContain("OAUTH2_PROXY_EMAIL_DOMAINS: ''");
+    expect(sso).not.toContain("OAUTH2_PROXY_EMAIL_DOMAINS: '*'");
+    expect(sso).toContain('OAUTH2_PROXY_SCOPE: openid profile email\n');
+    expect(sso).toContain(
+      'OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: /etc/oauth2-proxy/allowed-emails.txt',
+    );
+    expect(sso).toContain('source: /opt/kkakkung/sso-access');
+    expect(sso).toContain('target: /etc/oauth2-proxy');
+    expect(sso).toContain('read_only: true');
+    expect(sso).toContain('create_host_path: false');
     expect(sso).toContain('OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256');
     expect(sso).toContain('OAUTH2_PROXY_REDIRECT_URL: https://j15c204.p.ssafy.io/oauth2/callback');
     expect(sso).toMatch(/OAUTH2_PROXY_COOKIE_SECURE: 'true'/);
