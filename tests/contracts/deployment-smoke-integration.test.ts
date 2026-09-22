@@ -87,7 +87,9 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
     // maze, so the child pins the open grid. Asserted here because the first attempt at that pin
     // set an environment variable the child never reads, and nothing said so: the run stayed on
     // the maze and failed in CI. S15P21C204-308 removes the pin and this expectation with it.
-    expect(server.mapTemplate).toBe('master-v1');
+    // S15P21C204-308. The local contract runs the product default now that in-game audio evidence
+    // no longer depends on where a random walk goes.
+    expect(server.mapTemplate).toBe('maze-v1');
     await expect
       .poll(async () => (await server.inspect()).readiness?.state, { timeout: 5000 })
       .toBe('READY');

@@ -121,17 +121,16 @@ async function dispatch(request: ProductServerRequest): Promise<ProductServerRes
         SESSION_ATTEMPTS_PER_INVITE: '30',
         SESSION_ATTEMPTS_PER_IP: String(Math.max(60, rooms * 6 * 3)),
         ROOM_IDLE_TTL_MS: '600000',
-        // S15P21C204-302. This process carries the deployment and media wiring contracts, not
-        // map behaviour, and its positive in-game audio evidence comes from six synthetic clients
-        // wandering into earshot of each other. On the corridor maze that became a coin flip, and
-        // deliberately walking them together did not fix it, so the cause is not distance. Pinned
-        // to the open grid until S15P21C204-308 makes that evidence map-independent and
-        // S15P21C204-309 answers whether corridor audibility is a product problem. The product
-        // default stays maze-v1 and the real Cloud DP-06 still runs on it.
+        // S15P21C204-308. This runs the product default, the corridor maze, like the real Cloud
+        // DP-06 does. It was pinned to the open grid by 302 because in-game audio evidence came
+        // from six clients wandering into earshot, which the maze turned into a coin flip; 302
+        // recorded that the cause was not distance, and that turned out to be wrong. Measured at
+        // the audibility computation itself, a failing round never produced an audible pair at
+        // all: the closest two got was 8-9 cells against speech range 5. The harness now walks
+        // two same-role clients together (`DeploymentGameRendezvous`) instead of hoping.
         //
-        // The pin belongs here and not in the spawned environment: this config is a literal and
-        // never reads process.env, so an env var set by the parent is silently ignored.
-        PRODUCT_MAP_TEMPLATE: 'master-v1',
+        // This config is a literal and never reads process.env, so a template set by the parent
+        // would be silently ignored; anything pinned for a test belongs here.
         OPS_OPERATING_MODE: request.operatingMode,
         ...(request.audience ? { SERVICE_AUDIENCE: request.audience, TRUST_PROXY_HOPS: '1' } : {}),
         ...(window && !('mode' in window)
