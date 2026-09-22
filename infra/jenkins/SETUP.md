@@ -127,6 +127,7 @@ sudo cp infra/sso.env.example /opt/kkakkung/sso.env && sudo chmod 600 /opt/kkakk
 sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml up -d
 sudo docker logs kkakkung-sso | tail -3    # "OAuthProxy configured for GitLab" 확인
 sudo install -m 644 infra/nginx/audience-team.conf /etc/nginx/snippets/kkakkung-audience.conf   # 공개 대상 조각. 없으면 nginx 가 뜨지 않는다
+sudo install -m 644 infra/nginx/demo-admin.conf /etc/nginx/snippets/kkakkung-demo-admin.conf
 sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung && sudo nginx -t && sudo systemctl reload nginx
 ```
 

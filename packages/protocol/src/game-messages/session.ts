@@ -74,6 +74,12 @@ export type RoomInvitationErrorCode = (typeof ROOM_INVITATION_ERROR_CODES)[numbe
  * session, and the room refuses ordinary admission.
  */
 export const DEMO_ROOM_ROUTE = '/api/operations/demo-rooms';
+/**
+ * Browser-facing administrator entry. The host edge accepts this route only after GitLab SSO and
+ * replaces the administrator identity header itself; it never accepts an operations Bearer from
+ * a browser. The operations route above remains loopback-only for deployment tooling.
+ */
+export const DEMO_ADMIN_ROOM_ROUTE = '/api/demo-admin/rooms';
 export const demoRoomRequestSchema = z.strictObject({
   role: z.enum(['runner', 'tagger']),
   nickname: nicknameSchema.optional(),

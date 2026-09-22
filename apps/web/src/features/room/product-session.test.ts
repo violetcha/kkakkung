@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cancelSessionReservation, consumeInvitation, requestSession } from './product-session';
+import {
+  cancelSessionReservation,
+  consumeInvitation,
+  requestDemoRoom,
+  requestSession,
+} from './product-session';
 describe('product admission', () => {
   it('removes the fragment immediately and stores nothing persistently', () => {
     const replaceState = vi.fn();
@@ -57,5 +62,32 @@ describe('product admission', () => {
     expect(fetcher.mock.calls[0]![1]).not.toHaveProperty('body');
     fetcher.mockRejectedValue(new Error('network lost'));
     await expect(cancelSessionReservation(session, fetcher)).resolves.toBeUndefined();
+  });
+  it('uses the SSO-protected administrator endpoint without an operations Bearer', async () => {
+    const response = {
+      sessionToken: 'demo-session',
+      playerId: 'operator',
+      roomCode: 'ABCDEF',
+      role: 'runner',
+      expiresAt: 1900000000000,
+      protocolVersion: '0.2.0',
+      entryFragment: '#demo=demo-session&room=ABCDEF&player=operator',
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response)));
+    await expect(requestDemoRoom({ role: 'runner', nickname: '관리자' }, fetcher)).resolves.toEqual(
+      response,
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/demo-admin/rooms',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        redirect: 'error',
+      }),
+    );
+    const init = fetcher.mock.calls[0]![1]!;
+    expect(init.headers).not.toHaveProperty('authorization');
+    expect(JSON.parse(String(init.body))).toEqual({ role: 'runner', nickname: '관리자' });
   });
 });

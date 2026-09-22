@@ -1,6 +1,9 @@
 import { Client } from '@colyseus/sdk';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import {
+  DEMO_ADMIN_ROOM_ROUTE,
+  demoRoomRequestSchema,
+  demoRoomResponseSchema,
   ROOM_CODE_PATTERN,
   sessionRequestSchema,
   sessionResponseSchema,
@@ -8,6 +11,8 @@ import {
   SESSION_CANCEL_ROUTE,
   SESSION_ACCESS_ROUTE,
   sessionAccessResponseSchema,
+  type DemoRoomRequest,
+  type DemoRoomResponse,
   type SessionAccessResponse,
   type SessionRequest,
   type SessionResponse,
@@ -71,6 +76,36 @@ export async function requestSession(
     throw new Error(SESSION_ERROR_CODES.find((item) => item === code) ?? 'CONNECTION_FAILED');
   }
   const result = sessionResponseSchema.safeParse(body);
+  if (!result.success) throw new Error('INVALID_RESPONSE');
+  return result.data;
+}
+
+/**
+ * Requests a one-seat operator demo after the host's `/demo` SSO boundary has authorized this
+ * browser. There is deliberately no operations Bearer here: the browser never receives one.
+ */
+export async function requestDemoRoom(
+  input: DemoRoomRequest,
+  fetcher: typeof fetch = fetch,
+): Promise<DemoRoomResponse> {
+  const parsed = demoRoomRequestSchema.safeParse(input);
+  if (!parsed.success) throw new Error('INVALID_REQUEST');
+  let response: Response;
+  try {
+    response = await fetcher(DEMO_ADMIN_ROOM_ROUTE, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(parsed.data),
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(10000),
+      redirect: 'error',
+    });
+  } catch {
+    throw new Error('CONNECTION_FAILED');
+  }
+  if (!response.ok) throw new Error(`DEMO_REQUEST_FAILED:${response.status}`);
+  const result = demoRoomResponseSchema.safeParse(await response.json().catch(() => null));
   if (!result.success) throw new Error('INVALID_RESPONSE');
   return result.data;
 }

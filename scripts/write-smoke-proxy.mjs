@@ -26,6 +26,7 @@ server {
     proxy_set_header X-Forwarded-User "";
     proxy_set_header X-Auth-Request-User "";
     proxy_set_header X-SSO-User "";
+    proxy_set_header X-Demo-Admin "";
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";

@@ -7,6 +7,7 @@
 - `docker/` — 이미지 정의. 개발과 배포가 같은 Dockerfile 을 씁니다.
 - `nginx/default.conf` — web-proxy **컨테이너 안** nginx. 정적파일(캐시 헤더) + API + WebSocket 라우팅, X-Forwarded-* 전달.
 - `nginx/host.conf` — **EC2 호스트** nginx. TLS 종단, `/jenkins`, 운영 API 차단, 나머지는 컨테이너로. 공개 대상에 따라 달라지는 부분은 `/etc/nginx/snippets/kkakkung-audience.conf` 로 뺐습니다.
+- `nginx/demo-admin.conf` — `/demo`과 데모 발급 API에만 적용하는 GitLab SSO 조각. 게임 audience가 public이어도 이 경로는 관리자 전용입니다.
 - `nginx/audience-team.conf` / `nginx/audience-public.conf` — 그 조각의 두 벌. team 은 GitLab SSO 를 강제하고, public 은 로그인 없이 통과시키되 호출자가 보낸 `X-SSO-User` 를 지웁니다. 전환 절차는 [운영 3장](../docs/operations.md).
 - `compose.public.yaml` — 공개 대상 overlay. 배포 러너가 `--audience public` 일 때만 얹습니다. `SERVICE_AUDIENCE` 와 입장 방식만 바꿉니다.
 - `compose.sso.yaml` — **GitLab SSO 게이트**(oauth2-proxy). 앱 배포와 별개 프로젝트. 비밀은 `/opt/kkakkung/sso.env` (토대 `sso.env.example`).
@@ -50,6 +51,7 @@ continuous/attested 제품 Compose overlay가 `ROOM_IDLE_TTL_MS=600000`을 적�
 인터넷 :443 ─ 호스트 nginx (TLS) ─┬─ /jenkins            → 127.0.0.1:18080 Jenkins
                                    ├─ /oauth2/*           → 127.0.0.1:4180 oauth2-proxy (GitLab SSO)
                                    ├─ /health/*           → 127.0.0.1:8080 (SSO 없이, 배포 확인용)
+                                   ├─ /demo,/api/demo-admin → GitLab SSO → 127.0.0.1:8080 (관리자 데모)
                                    ├─ /monitor,/playground → 404
                                    └─ /  (auth_request 로 SSO 통과한 요청만) → 127.0.0.1:8080 web-proxy 컨테이너
                                                                  ├─ 정적파일
@@ -70,7 +72,7 @@ SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested �
 호스트가 `X-SSO-User`를 인증 응답 값으로 덮어쓰고 내부 smoke 프록시는 제거해야 한다.
 게임 포트 비공개·web-proxy loopback 바인딩을 유지한 상태에서만 사용한다.
 
-서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 게이트를 유지한다. 로그인하지 않은 요청은 `/oauth2/start`와 GitLab 인가를 거친다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 심사·시연 참가자는 승인된 프로젝트 접근 권한으로 입장한다. 내부 6인 시험 예외는 SSO 해제를 허용하지 않는다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
+team audience에서 서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인 + 프로젝트 `S15P21C204` 멤버(Reporter 이상)** 게이트를 유지한다. public audience에서는 게임만 게스트로 연다. 반면 `/demo`과 `/api/demo-admin`은 항상 같은 SSO 게이트를 거쳐 호스트가 `X-Demo-Admin`을 덮어쓴다. 이 헤더는 일반 공개 경로와 내부 smoke 경로에서 비우며, 운영 Bearer API(`/api/operations`)는 계속 외부 404다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
 
 ## 파이프라인
 
