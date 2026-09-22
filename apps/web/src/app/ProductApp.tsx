@@ -244,6 +244,14 @@ export function ProductApp({
   const checkPreview = useCallback((element: HTMLDivElement | null) => {
     checkHost.current = element;
   }, []);
+  /**
+   * S15P21C204-344. 자세를 잡는 동안에는 도전 쪽이 미리보기를 가져간다. 우상단 캠코더 창은
+   * 상대가 보는 내 아바타라 프레이밍을 알 수 없어, 팔이 화면에 들어왔는지 여기서만 본다.
+   */
+  const poseHost = useRef<HTMLDivElement | null>(null);
+  const posePreview = useCallback((element: HTMLDivElement | null) => {
+    poseHost.current = element;
+  }, []);
   const leave = useCallback(async () => {
     generation.current++;
     cancelPendingAdmission();
@@ -524,10 +532,18 @@ export function ProductApp({
   // S15P21C204-295. 방 안에서도 Esc 는 같은 설정 창을 연다. 창은 홈과 하나다.
   const inRoom = Boolean(snapshot);
   // 창이 열리고 닫힐 때마다 미리보기가 붙을 자리를 옮긴다. 둘 다 화면 안에 있어야 한다.
+  // S15P21C204-344. 탈출 자세를 잡는 동안에는 도전 쪽이 가져간다. 점검 창이 열려 있으면
+  // 그쪽이 먼저다 — 점검 중에 경기 화면이 보일 일은 없다.
+  const posing =
+    snapshot?.view?.self?.status === 'ACTIVE' &&
+    snapshot.view.self.challenge !== null &&
+    snapshot.interaction.mode !== 'keyboard';
   useEffect(() => {
     if (!inRoom) return;
-    runtime.current?.setPreviewHost(deviceCheck ? checkHost.current : facePump.current);
-  }, [inRoom, deviceCheck]);
+    runtime.current?.setPreviewHost(
+      deviceCheck ? checkHost.current : (poseHost.current ?? facePump.current),
+    );
+  }, [inRoom, deviceCheck, posing]);
   useEffect(() => {
     if (!inRoom) return;
     const onKey = (event: KeyboardEvent) => {
@@ -1127,6 +1143,17 @@ export function ProductApp({
                             send={(command) => runtime.current?.send(command)}
                           />
                         ))}
+                      {/* 자세를 잡는 동안에만 실제 카메라 화면을 둔다. 캠코더 창은 상대가 보는
+                          내 아바타라 프레이밍을 알 수 없다. 이 영상은 어디로도 전송되지 않는다. */}
+                      {view.self?.status === 'ACTIVE' &&
+                        view.self.challenge !== null &&
+                        snapshot.interaction.mode !== 'keyboard' && (
+                          <div
+                            className="pose-preview"
+                            ref={posePreview}
+                            aria-label="내 웹캠 미리보기"
+                          />
+                        )}
                       <ExchangePanel
                         view={view}
                         selected={snapshot.exchangeTarget}
