@@ -162,6 +162,19 @@ it('lets six guests enter through a host invitation and receive publisher-permis
     await player.runtime.startDevices(false);
     player.runtime.ready(true);
   }
+  // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다. 준비 보고가 아직
+  // 다 적용되기 전이면 거절되므로 단계가 바뀔 때까지 다시 누른다.
+  await expect
+    .poll(
+      () => {
+        // 방을 만든 사람이 방장이고, 그가 첫 번째로 들어왔다.
+        const first = players[0]!;
+        first.runtime.send({ type: 'ROOM_START', payload: {} });
+        return first.runtime.getSnapshot().round?.phase;
+      },
+      { timeout: 30_000, interval: 100 },
+    )
+    .toBe('TEAM_PRACTICE');
   await waitAll('TEAM_PRACTICE', 30_000);
   await expect
     .poll(() => players.every((player) => player.grants.length >= 1), { timeout: 30_000 })

@@ -197,6 +197,19 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
       const timer = setInterval(() => players.forEach((player) => player.runtime.poll()), 20);
       closers.push(async () => clearInterval(timer));
       const snapshots = () => players.map((player) => player.runtime.getSnapshot());
+      // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+      const startMatch = () =>
+        expect
+          .poll(
+            () => {
+              const hostId = snapshots()[0]?.roster?.hostId;
+              const host = players.find((player) => player.session.playerId === hostId);
+              host?.runtime.send({ type: 'ROOM_START', payload: {} });
+              return snapshots()[0]?.round?.phase;
+            },
+            { timeout: 15000 },
+          )
+          .toBe('TEAM_PRACTICE');
       const waitPhase = (phase: string) =>
         expect
           .poll(
@@ -232,7 +245,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
         await player.runtime.startDevices(false);
         player.runtime.ready(true);
       }
-      await waitPhase('TEAM_PRACTICE');
+      await startMatch();
       await expect
         .poll(() => players.every((player) => player.grants.length === 1), { timeout: 10000 })
         .toBe(true);
@@ -367,7 +380,7 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
           await player.runtime.startDevices(false);
           player.runtime.ready(true);
         }
-        await waitPhase('TEAM_PRACTICE');
+        await startMatch();
         await expect
           .poll(async () => (await server.inspect()).participantCount, { timeout: 8000 })
           .toBe(6)

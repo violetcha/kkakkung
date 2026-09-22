@@ -167,7 +167,24 @@ describe('room tick fault isolation', () => {
           payload: { ready: true },
         }),
       );
-      await expect.poll(() => host.room.state.phase, { timeout: 20_000 }).toBe('TEAM_PRACTICE');
+      // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다. 준비 보고가
+      // 아직 다 적용되기 전이면 거절되므로, 단계가 바뀔 때까지 다시 누른다.
+      let startSequence = 20;
+      await expect
+        .poll(
+          () => {
+            host.room.send(PRODUCT_CLIENT_MESSAGES.command, {
+              matchId: host.room.state.matchId,
+              requestId: randomUUID(),
+              sequence: startSequence++,
+              type: 'ROOM_START',
+              payload: {},
+            });
+            return host.room.state.phase;
+          },
+          { timeout: 20_000 },
+        )
+        .toBe('TEAM_PRACTICE');
       await expect
         .poll(() => bystander.room.state.serverTick, { timeout: 10_000 })
         .toBeGreaterThan(0);
@@ -180,7 +197,8 @@ describe('room tick fault isolation', () => {
       host.room.send(PRODUCT_CLIENT_MESSAGES.command, {
         matchId: host.room.state.matchId,
         requestId: armed,
-        sequence: 20,
+        // 시작 명령을 여러 번 보냈으므로 그 뒤 번호를 이어 쓴다.
+        sequence: startSequence++,
         type: 'MOVE_INTENT',
         payload: { direction: 'forward' },
       });

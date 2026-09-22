@@ -115,6 +115,10 @@ async function playing(role: Role) {
   };
   await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
   await send({ type: 'READY', payload: { ready: true } });
+  // S15P21C204-295. 방장이 시작하고 팀 연습을 거친다. 인형 몫의 연습 보고는 서버가 대신 적는다.
+  await send({ type: 'ROOM_START', payload: {} });
+  await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 15_000 });
+  await send({ type: 'PRACTICE_READY', payload: { ready: true } });
   await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
   const loading = views.at(-1)?.self;
   const barrier = loading?.status === 'ACTIVE' ? loading.loading : null;
@@ -191,6 +195,11 @@ it('aborts on a puppet connection loss and refills the room for the rematch', as
     ).toBe('accepted');
     await vi.waitFor(() => expect(demo.room.state.phase).toBe('DEVICE_CHECK'), { timeout: 5000 });
     await demo.send({ type: 'READY', payload: { ready: true } });
+    await demo.send({ type: 'ROOM_START', payload: {} });
+    await vi.waitFor(() => expect(demo.room.state.phase).toBe('TEAM_PRACTICE'), {
+      timeout: 10_000,
+    });
+    await demo.send({ type: 'PRACTICE_READY', payload: { ready: true } });
     await vi.waitFor(() => expect(demo.room.state.phase).toBe('GAME_LOADING'), {
       timeout: 10_000,
     });

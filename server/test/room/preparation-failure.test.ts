@@ -55,20 +55,38 @@ it('clears device readiness after preparation fails and waits for new READY repo
       rooms.push(room);
     }
     const waitPhase = (phase: string) => expect.poll(() => rooms[0]!.state.phase).toBe(phase);
-    const sendAll = (type: 'READY' | 'PRACTICE_READY', sequence: number) => {
+    // 명령 번호는 사람마다 계속 커져야 한다. 한 통에서 뽑아 쓴다.
+    let sequence = 0;
+    const sendAll = (type: 'READY' | 'PRACTICE_READY') => {
+      const next = ++sequence;
       for (const room of rooms)
         room.send(PRODUCT_CLIENT_MESSAGES.command, {
           matchId: room.state.matchId,
           requestId: randomUUID(),
-          sequence,
+          sequence: next,
           type,
           payload: { ready: true },
         });
     };
+    // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다. 준비 보고가
+    // 아직 다 적용되기 전이면 거절되므로 단계가 바뀔 때까지 다시 누른다.
+    const start = () =>
+      expect
+        .poll(() => {
+          rooms[0]!.send(PRODUCT_CLIENT_MESSAGES.command, {
+            matchId: rooms[0]!.state.matchId,
+            requestId: randomUUID(),
+            sequence: ++sequence,
+            type: 'ROOM_START',
+            payload: {},
+          });
+          return rooms[0]!.state.phase;
+        })
+        .toBe('TEAM_PRACTICE');
     await waitPhase('DEVICE_CHECK');
-    sendAll('READY', 1);
-    await waitPhase('TEAM_PRACTICE');
-    sendAll('PRACTICE_READY', 2);
+    sendAll('READY');
+    await start();
+    sendAll('PRACTICE_READY');
     await waitPhase('DEVICE_CHECK');
     await expect.poll(() => rosters.at(-1)?.players.every((player) => !player.ready)).toBe(true);
     const serverRoom = app.application.directory.get(roomCode!) as unknown as {
@@ -81,8 +99,8 @@ it('clears device readiness after preparation fails and waits for new READY repo
     expect(JSON.stringify(rooms[0]!.state.toJSON())).not.toContain('LAYOUT_PRODUCER_MISSING');
     for (let index = 0; index < 5; index++) serverRoom.tick();
     expect(serverRoom.phase).toBe('DEVICE_CHECK');
-    sendAll('READY', 3);
-    await waitPhase('TEAM_PRACTICE');
+    sendAll('READY');
+    await start();
     await expect.poll(() => rooms[0]!.state.preparationIssue).toBeUndefined();
   } finally {
     await Promise.allSettled(rooms.map((room) => room.leave()));

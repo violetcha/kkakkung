@@ -111,12 +111,32 @@ it('takes the operator to PLAYING through the web runtime without any media gran
     await expect.poll(() => runtime.getSnapshot().demo?.available.length ?? 0).toBeGreaterThan(0);
     await runtime.startDevices(false);
     runtime.ready(true);
-    await expect.poll(phase, { timeout: 10_000 }).toBe('GAME_LOADING');
+    // S15P21C204-295. 방장이 시작하고 팀 연습을 거친다. 인형 몫의 연습 보고는 서버가 대신 적는다.
+    await expect
+      .poll(
+        () => {
+          runtime.send({ type: 'ROOM_START', payload: {} });
+          return phase();
+        },
+        { timeout: 10_000 },
+      )
+      .toBe('TEAM_PRACTICE');
+    // 연습 보고는 연습 시야가 도착한 뒤에야 나간다. 단계가 바뀔 때까지 다시 누른다.
+    await expect
+      .poll(
+        () => {
+          runtime.send({ type: 'PRACTICE_READY', payload: { ready: true } });
+          return phase();
+        },
+        { timeout: 15_000 },
+      )
+      .toBe('GAME_LOADING');
     // Before this fix the client waited for '카메라 연결 · 내 얼굴 게시 확인' here until the 30 s
     // LOADING_TIMEOUT sent everyone back to DEVICE_CHECK.
     await expect.poll(phase, { timeout: 20_000 }).toBe('PLAYING');
     expect(phases).toEqual([
       'DEVICE_CHECK',
+      'TEAM_PRACTICE',
       'MAP_FINALIZING',
       'GAME_LOADING',
       'COUNTDOWN',

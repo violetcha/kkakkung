@@ -66,6 +66,14 @@ function fixture(
       type: 'READY',
       payload: { ready: true },
     });
+  // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+  room.onCommand(players[0]!.client, {
+    matchId: room.matchId,
+    requestId: randomUUID(),
+    sequence: 2,
+    type: 'ROOM_START',
+    payload: {},
+  });
   room.tick();
   expect(room.phase).toBe('TEAM_PRACTICE');
   now += 50;
@@ -108,7 +116,7 @@ async function pendingFinalization() {
     f.room.onCommand(player.client, {
       matchId: f.room.matchId,
       requestId: randomUUID(),
-      sequence: 2,
+      sequence: 20,
       type: 'PRACTICE_READY',
       payload: { ready: true },
     });
@@ -139,7 +147,7 @@ it('bounds map finalization despite live heartbeats and retains unknown retireme
     f.room.onCommand(f.players[0]!.client, {
       matchId: previous,
       requestId: randomUUID(),
-      sequence: 3,
+      sequence: 30,
       type: 'REMATCH',
       payload: { mode: 'lobby' },
     });
@@ -503,7 +511,7 @@ it('publishes settling and requested rematch states until retirement confirms', 
     f.room.onCommand(f.players[0]!.client, {
       matchId: previous,
       requestId: randomUUID(),
-      sequence: 2,
+      sequence: 20,
       type: 'REMATCH',
       payload: { mode: 'same' },
     });
@@ -571,10 +579,17 @@ it('does not revive confirmed retirements when a rematch replaces a participant'
       f.room.onCommand(player.client, {
         matchId: f.room.matchId,
         requestId: randomUUID(),
-        sequence: 2,
+        sequence: 10,
         type: 'READY',
         payload: { ready: true },
       });
+    f.room.onCommand(currentPlayers[0]!.client, {
+      matchId: f.room.matchId,
+      requestId: randomUUID(),
+      sequence: 11,
+      type: 'ROOM_START',
+      payload: {},
+    });
     f.room.tick();
     expect(f.room.phase).toBe('TEAM_PRACTICE');
     for (const player of currentPlayers) {
@@ -586,7 +601,7 @@ it('does not revive confirmed retirements when a rematch replaces a participant'
       f.room.onCommand(player.client, {
         matchId: f.room.matchId,
         requestId: randomUUID(),
-        sequence: 3,
+        sequence: 40,
         type: 'PRACTICE_READY',
         payload: { ready: true },
       });

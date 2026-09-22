@@ -784,6 +784,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_MAP_SIZE: ['LOBBY'],
+        ROOM_START: ['DEVICE_CHECK'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
@@ -791,7 +792,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
       if (
-        (type === 'ROOM_LOCK' || type === 'ROOM_KICK' || type === 'ROOM_MAP_SIZE') &&
+        (type === 'ROOM_LOCK' ||
+          type === 'ROOM_KICK' ||
+          type === 'ROOM_MAP_SIZE' ||
+          type === 'ROOM_START') &&
         playerId !== this.lobby.host
       )
         return 'NOT_ALLOWED';
@@ -870,6 +874,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             this.roomMapRevision += 1;
           }
           this.broadcastRoster();
+          return { result: 'applied', code: null };
+        }
+        case 'ROOM_START': {
+          // 실행 시점에 다시 본다. 받아들인 뒤에 누가 나가거나 준비를 취소했을 수 있다.
+          if (this.phase !== 'DEVICE_CHECK') return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (this.lobby.evaluate(this.phase) !== 'all-ready')
+            return { result: 'rejected', code: 'NOT_READY' };
+          // S15P21C204-295. 데모 방도 같은 길을 걷는다. 운영자가 보려는 것이 경기 화면만은
+          // 아니다: 팀 연습도 실제 방과 같은 화면이어야 확인할 수 있다. 인형은 준비를 보고하지
+          // 않으므로 연습은 제한 시간(60초)을 다 쓰거나 운영자가 끝내면 다음 단계로 간다.
+          this.startPractice();
           return { result: 'applied', code: null };
         }
         case 'READY': {
@@ -1136,10 +1153,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       else if (verdict === 'to-lobby') {
         this.lobby.clearReady();
         this.setPhase('LOBBY');
-      } else if (verdict === 'all-ready') {
-        if (this.demo) this.startDemoRound();
-        else this.startPractice();
       }
+      // S15P21C204-295. 여섯 명이 다 준비해도 저절로 시작하지 않는다. 방장이 ROOM_START 로
+      // 시작한다: 준비를 마친 사람들이 화면을 보고 있다가 함께 들어가기 위해서다.
     }
 
     // ---- Phase transitions ----
@@ -1392,6 +1408,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (this.context.seed === null)
         this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
       const teams = this.practice.start(roles, now);
+      // S15P21C204-295. 데모 방의 인형은 보고할 클라이언트가 없다. 연습을 마쳤다고 대신 적어
+      // 두어, 운영자가 자기 연습을 끝내면 바로 다음 단계로 넘어가게 한다.
+      for (const playerId of this.puppets) this.practice.applyPracticeReady(playerId, true);
       for (const role of ['runner', 'tagger'] as const) {
         const players = teams[role].map((playerId) => ({ playerId, role }));
         if (players.length === 0) continue;
@@ -1430,28 +1449,6 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     /** Demo rooms have no human teammates or media, so device check goes straight to map setup. */
-    private startDemoRound() {
-      const gate = gateFor(this.demo);
-      if (gate && !gate()) {
-        this.blockedReason = 'NOT_READY';
-        return;
-      }
-      if (!deps.core || !deps.tuning) {
-        this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
-        return;
-      }
-      const operatorId = this.demo ? this.operatorId() : null;
-      const roles = this.lobby.assignRoles(
-        this.demo && operatorId ? this.puppetRolePlan(operatorId) : this.context.takeRolePlan(),
-      );
-      this.roles.clear();
-      for (const [playerId, role] of roles) this.roles.set(playerId, role);
-      if (this.context.seed === null)
-        this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
-      this.blockedReason = null;
-      this.setPhase('MAP_FINALIZING');
-    }
-
     private endPractice(next: 'to-map-finalizing' | 'to-device-check') {
       for (const instance of this.driver.attached().filter((i) => i.kind === 'practice'))
         this.retireInstance(instance.gameInstanceId, 'phase-change');

@@ -381,6 +381,13 @@ export async function runDeploymentSmoke(
       await bounded(player.runtime.startDevices(false));
       player.runtime.ready(true);
     }
+    // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다. 준비 보고가 아직
+    // 다 적용되기 전이면 거절되므로 단계가 바뀔 때까지 다시 누른다.
+    await wait(() => {
+      // 방을 만든 첫 참가자가 방장이다.
+      players[0]?.runtime.send({ type: 'ROOM_START', payload: {} });
+      return snapshot().every((value) => value.round?.phase === 'TEAM_PRACTICE');
+    });
     await waitPhase('TEAM_PRACTICE');
     stage = 'DP06_PRACTICE_MEDIA_UNCONFIRMED';
     let moves = 0;
