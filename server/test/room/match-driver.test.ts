@@ -183,6 +183,22 @@ describe('MatchDriver single tick path', () => {
     });
   });
 
+  // S15P21C204-335. A decided instance used to step and emit a media frame every tick of the
+  // result screen, and each frame asked E to retire the round's media again.
+  it('keeps a settled instance attached but never steps it or emits another frame', () => {
+    const h = setup();
+    const framesBefore = h.frames.length;
+    const stateBefore = h.driver.instance(h.instance.gameInstanceId)!.state;
+    h.driver.settle(h.instance.gameInstanceId);
+    h.driver.enqueueControl(h.instance.gameInstanceId, { type: 'CONNECTION_LOST', playerId: 'r1' });
+    h.accept('r1', h.move('r1', 1));
+    for (let i = 0; i < 5; i++) h.driver.tick();
+    expect(h.frames).toHaveLength(framesBefore);
+    expect(h.driver.instance(h.instance.gameInstanceId)?.state).toBe(stateBefore);
+    expect(h.driver.attached().map((i) => i.gameInstanceId)).toEqual([h.instance.gameInstanceId]);
+    expect(h.outcomes.at(-1)?.outcome).toMatchObject({ result: 'canceled', code: 'ROUND_ENDED' });
+  });
+
   it('cancels pending requests of a detached instance and ignores late results for it', () => {
     const h = setup();
     h.accept('r1', h.move('r1', 1));

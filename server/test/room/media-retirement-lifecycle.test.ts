@@ -793,3 +793,49 @@ it('does not hold a disposed room for a preparation that fails after disposal', 
     f.close();
   }
 });
+
+// S15P21C204-335. After the round is decided nothing may move it again: no stepping, no new
+// media generation, and no late failure turning the winner into ABORTED.
+it('stops a decided round: no more frames, no late generation and no abort over the result', async () => {
+  let resolve!: (value: any) => void;
+  let started!: () => void;
+  const began = new Promise<void>((done) => {
+    started = done;
+  });
+  const f = fixture(
+    (request) =>
+      new Promise((done) => {
+        started();
+        resolve = () =>
+          done({ ...request, status: 'ready', receiverGeneration: 3, grant: {}, code: null });
+      }),
+  );
+  try {
+    const player = f.players[0]!.session.playerId;
+    const preparation = f.room.requestMediaGrant(player, 'practice', null);
+    await began;
+    const [instance] = f.room.driver.attached();
+    f.room.finishMatch();
+    expect(f.room.phase).toBe('RESULT');
+    const revisions = f.room.driver.attached().map((each: any) => each.frameRevision);
+    for (let i = 0; i < 20; i++) f.advance(50);
+    expect(f.room.driver.attached().map((each: any) => each.frameRevision)).toEqual(revisions);
+    expect(f.room.driver.attached()).toContain(instance);
+
+    // A grant finishing during RESULT finds no scope: it is retired, never adopted.
+    expect(f.room.mediaScopeFor(player, 'practice')).toBeNull();
+    resolve(undefined);
+    await preparation;
+    await f.flush();
+    expect(f.room.playerGenerations.has(player)).toBe(false);
+    expect(f.retirementRequests).toEqual([
+      expect.objectContaining({ playerId: player, receiverGeneration: 3 }),
+    ]);
+
+    f.room.abortMatch('MEDIA_UNAVAILABLE', 'LATE_FAILURE');
+    expect(f.room.phase).toBe('RESULT');
+    expect(f.room.abortReason).toBeNull();
+  } finally {
+    f.close();
+  }
+});
