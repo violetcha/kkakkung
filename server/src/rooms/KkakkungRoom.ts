@@ -51,6 +51,7 @@ import type { LayoutLoader } from '../game/LayoutLoader.js';
 import { MatchContext } from '../game/MatchContext.js';
 import { MatchDriver } from '../game/MatchDriver.js';
 import { projectPrivateBody, projectSpectateBody } from '../game/PlayerProjection.js';
+import { createEnemyAliases } from '../game/EnemyAliases.js';
 import { chooseSpectateTarget, spectateCandidates, spectatorLinks } from '../game/Spectate.js';
 import type { RoomTickCoordinator } from '../game/RoomTickCoordinator.js';
 import type {
@@ -248,6 +249,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly clientsByPlayer = new Map<string, Client>();
     private readonly playersByConnection = new Map<string, SessionAuth>();
     private readonly roles = new Map<string, Role>();
+    /** 340. Opaque per-round ids for enemy players; shared by views, bindings and audio policy. */
+    private readonly aliases = createEnemyAliases();
     /**
      * S15P21C204-269. Ended runner → the surviving runner it chose to watch. A missing or
      * ended choice falls back to roster order at read time; cleared with every new round.
@@ -533,8 +536,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         current.receiverGeneration !== message.receiverGeneration
       )
         return;
-      this.lastBindings.set(playerId, message);
-      this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.mediaBindings, message);
+      // 340. Enemy participants go out under the alias their visible entity carries.
+      const concealed: MediaBindings = {
+        ...message,
+        participants: this.concealEnemies(playerId, message.participants),
+      };
+      this.lastBindings.set(playerId, concealed);
+      this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.mediaBindings, concealed);
       const self = message.participants.find((p) => p.playerId === playerId);
       if (self && self.publisherGeneration === message.receiverGeneration)
         this.loading.confirmSelfFace(
@@ -1078,7 +1086,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           current?.mediaInstanceId === message.mediaInstanceId &&
           current.receiverGeneration === message.receiverGeneration
         )
-          this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, message);
+          // 340. Enemy voices are keyed by the same alias as their bindings and visible entity.
+          this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, {
+            ...message,
+            voices: this.concealEnemies(playerId, message.voices),
+          });
       }
       this.driver.tick();
       // The scenario reads the state this tick produced and queues puppet commands for the next.
@@ -1866,6 +1878,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     ) {
       this.driver.detach(gameInstanceId, reason === 'round-ended' ? 'ROUND_ENDED' : 'CANCELED');
       const members = this.context.retireInstance(gameInstanceId);
+      // 340. Aliases live exactly as long as the instance that minted them.
+      this.aliases.clear();
       const mediaInstanceId = this.mediaInstances.get(gameInstanceId);
       this.mediaInstances.delete(gameInstanceId);
       if (mediaInstanceId) {
@@ -2062,6 +2076,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.pendingBindings.length = 0;
       this.pendingAudio.length = 0;
       this.lastBindings.clear();
+      this.aliases.clear();
       this.phase = 'LOBBY';
       this.context.bumpVersion();
       deps.slots.setPhase(this.roomCode, 'LOBBY', now);
@@ -2279,9 +2294,38 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             playerId,
             targetId,
             spectateCandidates(participants, playerId),
+            this.aliases.aliasOf,
           );
       }
-      return projectPrivateBody(deps.core, attached.state, playerId, loading);
+      return projectPrivateBody(deps.core, attached.state, playerId, loading, this.aliases.aliasOf);
+    }
+
+    /**
+     * 340. The ids `receiverId` may see for the members of its instance: real for itself and its
+     * allies, the round's alias for an enemy — the same alias its private view uses, so the
+     * client can join a visible player to its face and voice tracks. Roles are read from the
+     * receiver's own instance state, the same source the view projection reads them from.
+     */
+    private concealEnemies<T extends { playerId: string }>(
+      receiverId: string,
+      entries: readonly T[],
+    ): T[] {
+      const instance = this.context.instanceOf(receiverId);
+      const attached = instance ? this.driver.instance(instance.gameInstanceId) : null;
+      const core = deps.core;
+      if (!attached || !core) return [...entries];
+      const roleOf = (playerId: string) =>
+        core.getPlayerSelf(attached.state, playerId)?.role ?? null;
+      const receiverRole = roleOf(receiverId);
+      return entries.map((entry) => {
+        const visible = this.aliases.visibleId(
+          entry.playerId,
+          roleOf(entry.playerId),
+          receiverId,
+          receiverRole,
+        );
+        return visible === entry.playerId ? entry : { ...entry, playerId: visible };
+      });
     }
 
     private gameInstance() {
