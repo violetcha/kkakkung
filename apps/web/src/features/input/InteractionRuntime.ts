@@ -843,6 +843,13 @@ export const createInteractionRuntime = (
     getPhase: () => context.get()?.phase ?? null,
   });
   let keyboardBound: (() => void) | null = null;
+  /**
+   * S15P21C204-338. 참가 종료(stopInput)가 키보드를 풀어도 결과 화면 동안 setContext 는 계속
+   * 불린다. 무조건 다시 묶으면 종료된 runtime 의 리스너가 window 에 남고, 뒤따르는 dispose 는
+   * 이미 끝난 정리 Promise 를 공유해 stopInput 을 다시 부르지 않아 라운드마다 한 쌍씩 샌다.
+   * 새 세대(beginMediaGeneration)가 열릴 때만 다시 묶을 수 있다.
+   */
+  let inputStopped = false;
   let inputWatchdog: number | null = null;
 
   const move: MoveIntentController = createMoveIntentController({
@@ -936,6 +943,7 @@ export const createInteractionRuntime = (
     },
     participation: {
       stopInput: () => {
+        inputStopped = true;
         unbindKeyboard();
         clearHolds();
         context.clear();
@@ -1531,7 +1539,8 @@ export const createInteractionRuntime = (
       gestures.setMode(next.mode);
       if (next.mode === 'motion' && lastStatus.calibration === 'ready')
         fallback.restoreMotion({ calibrated: true, requestedMode: next.mode });
-      bindKeyboard();
+      // 338. 참가가 끝난 뒤의 컨텍스트 갱신은 키보드를 다시 묶지 않는다.
+      if (!inputStopped) bindKeyboard();
     },
 
     async connectMedia(grant) {
@@ -1721,6 +1730,8 @@ export const createInteractionRuntime = (
     /** 새 미디어 세대 시작. B/E 회수 확인 뒤에만 부른다. */
     beginMediaGeneration() {
       lifecycle.beginGeneration();
+      // 338. 새 세대가 실제로 열렸을 때만 다음 setContext 가 키보드를 다시 묶는다.
+      if (lifecycle.canOperate()) inputStopped = false;
     },
 
     getGenerationState() {
@@ -1732,6 +1743,9 @@ export const createInteractionRuntime = (
       disposed = true;
       audioPreferences = DEFAULT_AUDIO_PREFERENCES;
       await lifecycle.dispose();
+      // 338. 참가 종료 뒤 다시 묶였던 리스너가 있어도 폐기 시점에는 반드시 푼다.
+      inputStopped = true;
+      unbindKeyboard();
       deps.onMediaStatus(IDLE_MEDIA_STATUS);
       await media.dispose();
       // 어댑터는 Room과 함께 버린다. 폐기한 runtime을 다시 쓰지 않는다.
