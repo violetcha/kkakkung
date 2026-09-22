@@ -182,13 +182,15 @@ pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
 | Cloud 자격 오류·할당량 소진·기록 손상·SHA 불일치                      | 계속 차단한다. 숫자 변경, 성공 파일 생성, 빈 원장 재생성으로 풀지 않는다                                                                                                                                                                                                        |
 
 ```bash
-docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|room.load_ready|room.heartbeat_stall|room.media_uncertain_released|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
+docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|room.load_ready|room.heartbeat_stall|room.media_uncertain_released|room.uncaught_exception|process.fault|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
 ```
 
 - `room.preparation_failed`: `outcome`(ABORTED 또는 DEVICE_CHECK 복귀), `reason`(`LOADING_TIMEOUT`, `MAP_FINALIZING_TIMEOUT`, `LAYOUT:…`, `MEDIA_PREPARE:…`), 로딩 집계.
 - `room.command_rejected`: READY·PRACTICE_READY·LOAD_READY·REMATCH 거절 코드와 지점(gate·queue·apply). 실패 시 `room.load_ready`가 0건이면 클라이언트가 보고하지 않은 것이다.
 - `room.heartbeat_stall`: 서버가 하트비트 간격(2초) 이상 멈췄다가 재개됨. `durationMs`는 멈춘 길이, `count`는 그 시간을 침묵으로 세지 않은 연결 수. 이때 연결을 끊지 않으므로 방이 해체되지 않는다.
 - `room.media_uncertain_released`: 결과를 모르는 미디어 준비(커서 없는 TIMEOUT 등)로 잡혀 있던 방을 놓아줌. `reason`은 `round-ended`(새 라운드가 이전 경기를 E에 넘김)·`disposed`(방 폐기)·`expired`(330초 경과, E의 세대 수명 300초 뒤). 자주 보이면 준비 실패 원인을 `media.prepare_failed`에서 찾는다.
+- `room.uncaught_exception`: 방의 메시지 처리·타이머·수명 주기에서 잡히지 않은 예외. `name`은 Colyseus 메서드 이름, `reason`은 원인 메시지. 경기 중(TEAM_PRACTICE~PLAYING)이면 그 방만 `SERVER_TICK_OVERLOAD`로 중단되고, RESULT·ABORTED와 입장 실패(`onJoin` 등)는 결과를 바꾸지 않는다. 입장 거절(`ServerError`)은 기록하지 않는다.
+- `process.fault`: 어느 방에서도 잡히지 않은 예외(`name`=`uncaughtException`·`unhandledRejection`). 기록 뒤 방을 한 번 정리하고(최대 10초) 종료 코드 1로 끝나며 `restart: unless-stopped`가 다시 띄운다.
 - `media.*`: 세대 준비 실패, 회수 미결 사유, LiveKit API 실패(메서드·HTTP 상태), webhook 수신 결과.
 
 운영 HTTP 순서: `GET /api/operations/status` → `POST /api/operations/commands {requestId, action}`(202는 접수) → `GET /api/operations/commands/<requestId>`로 종결 확인. 운영 토큰은 서버 신뢰 경로에서만 쓰고 브라우저로 넘기지 않는다.
