@@ -229,11 +229,34 @@ describe('map exchange cancel and concurrent requests', () => {
     expect(second.exchanges.size).toBe(1);
     const locked = step(second, 102, [command('r-a', 'EXIT_START', { exitId: exit.exitId })]);
     expect(locked.outcomes[0]).toMatchObject({ result: 'applied' });
-    // The challenge locks map exchange: the open session ends in the same tick.
+    // Starting the challenge is r-a's own choice to leave the exchange: the session ends as
+    // CANCELED before the challenge exists, never as an unexplained NOT_ALLOWED (341).
     expect(locked.state.exchanges.size).toBe(0);
     expect(canceledEvents(locked.events)).toEqual([
-      expect.objectContaining({ payload: { exchangeId: 'xch-1', reason: 'NOT_ALLOWED' } }),
+      expect.objectContaining({
+        audience: ['r-a', 'r-b'],
+        payload: { exchangeId: 'xch-1', reason: 'CANCELED' },
+      }),
     ]);
+    const order = locked.events.map((event) => event.type);
+    expect(order.indexOf('EXCHANGE_CANCELED')).toBeLessThan(order.indexOf('EXIT_CHALLENGE'));
+    expect(player(locked.state, 'r-a').exchange).toBeNull();
+    expect(player(locked.state, 'r-b').exchange).toBeNull();
+    expect(player(locked.state, 'r-a').challenge).not.toBeNull();
+  });
+
+  it('keeps the exchange when the exit challenge is rejected', () => {
+    const atExit = place(startedMatch(100), {
+      'r-a': { x: 11, y: 22, dir: 0 },
+      'r-b': { x: 11, y: 21, dir: 2 },
+    });
+    const exit = exitOfOwner(atExit.exits, 'r-a')!;
+    const opened = openSession(atExit);
+    // Facing away from the exit wall: the start is rejected and the session lives on.
+    const rejected = step(opened, 102, [command('r-a', 'EXIT_START', { exitId: exit.exitId })]);
+    expect(rejected.outcomes[0]).toMatchObject({ result: 'rejected', code: 'NOT_ALLOWED' });
+    expect(rejected.state.exchanges.size).toBe(1);
+    expect(canceledEvents(rejected.events)).toEqual([]);
   });
 
   it('never tells taggers that an exchange session ended', () => {

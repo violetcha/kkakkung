@@ -697,6 +697,14 @@ function handleExitStart(ctx: StepContext, command: CoreCommand<'EXIT_START'>): 
   const started = startChallenge(ctx.state, actor, exitId, ctx.tick);
   if (started.status === 'rejected') return outcome(ctx, command, 'rejected', started.code);
   ctx.state = started.state;
+  // A player holds one interaction at a time. Starting a challenge is the actor's own choice to
+  // leave its map exchange, so the session ends here as CANCELED, announced before the challenge,
+  // instead of lingering until the upkeep sweeps it as an unexplained NOT_ALLOWED (341).
+  const session = actor.exchange ? ctx.state.exchanges.get(actor.exchange.exchangeId) : undefined;
+  if (session) {
+    ctx.state = endExchange(ctx.state, session);
+    exchangeCanceled(ctx, session, 'CANCELED');
+  }
   challengeStarted(ctx, command.actorId, started.challenge);
   return outcome(ctx, command, 'applied', null);
 }
