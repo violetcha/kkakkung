@@ -19,7 +19,8 @@ it('distinguishes each abort cause from a loss', () => {
   const results = ABORT_REASONS.map((reason) =>
     resultPresenter(roundFixture({ phase: 'ABORTED', abortReason: reason }), null),
   );
-  expect(new Set(results.map((r) => r.message)).size).toBe(4);
+  // 사유마다 다른 문구를 보여 준다. 관리자 종료(332)도 장애와 구분된다.
+  expect(new Set(results.map((r) => r.message)).size).toBe(ABORT_REASONS.length);
   expect(results.every((r) => r.title === '경기 무효')).toBe(true);
 });
 

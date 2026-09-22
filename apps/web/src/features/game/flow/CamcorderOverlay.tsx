@@ -57,23 +57,25 @@ export function StageClock({
 }) {
   const mountedAtMs = useRef(elapsedFrom ?? Date.now());
   const [clockMs, setClockMs] = useState(() => Date.now());
+  // S15P21C204-342. null 은 "제한시간이 없다"(데모 라운드)는 뜻이다. undefined 와 똑같이 지난
+  // 시간을 흘린다. 전에는 초를 세지 않아 00:00:00 에 멈춘 채 "남은 시간" 으로 읽혔다.
+  const counting = remainingSeconds === undefined || remainingSeconds === null;
   useEffect(() => {
-    if (nowMs !== undefined || remainingSeconds !== undefined) return;
+    if (nowMs !== undefined || !counting) return;
     const interval = window.setInterval(() => setClockMs(Date.now()), 1_000);
     return () => window.clearInterval(interval);
-  }, [nowMs, remainingSeconds]);
-  const text =
-    remainingSeconds === undefined || remainingSeconds === null
-      ? formatRecordingTime(((nowMs ?? clockMs) - (elapsedFrom ?? mountedAtMs.current)) / 1_000)
-      : `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
-          remainingSeconds % 60,
-        ).padStart(2, '0')}`;
+  }, [nowMs, counting]);
+  const text = counting
+    ? formatRecordingTime(((nowMs ?? clockMs) - (elapsedFrom ?? mountedAtMs.current)) / 1_000)
+    : `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
+        remainingSeconds % 60,
+      ).padStart(2, '0')}`;
   const low = typeof remainingSeconds === 'number' && remainingSeconds <= 30;
   return (
     <p
       className="stage-clock"
       role="status"
-      aria-label={remainingSeconds === undefined ? `지난 시간 ${text}` : `남은 시간 ${text}`}
+      aria-label={counting ? `지난 시간 ${text}` : `남은 시간 ${text}`}
       data-low={low}
     >
       {text}

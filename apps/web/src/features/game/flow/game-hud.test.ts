@@ -62,3 +62,18 @@ it('does not present a clock when the demo round has no deadline', () => {
   expect(html).toContain('데모 진행');
   expect(html).not.toContain('시간 확인 중');
 });
+
+// S15P21C204-342. 데모 라운드는 시간 초과로 끝나지 않는다(316). "시간을 버티면 승리" 는 거짓이다.
+it('tells a tagger there is no clock to outlast in a demo round', () => {
+  const self = viewFixture().self!;
+  const tagger = { ...self, role: 'tagger' as const };
+  const demo = renderToStaticMarkup(
+    createElement(GameHud, { round: roundFixture({ deadlineTick: null }), self: tagger }),
+  );
+  expect(demo).toContain('도망자 2명을 포획하면 승리 · 제한시간 없음');
+
+  const ordinary = renderToStaticMarkup(
+    createElement(GameHud, { round: roundFixture({ deadlineTick: 3600 }), self: tagger }),
+  );
+  expect(ordinary).toContain('시간을 버티면 승리');
+});

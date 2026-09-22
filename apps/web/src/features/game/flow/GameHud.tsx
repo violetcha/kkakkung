@@ -52,7 +52,10 @@ export function GameHud({
       <p>
         {self.role === 'runner'
           ? '팀원 2명이 각자의 출구로 탈출하면 승리'
-          : '도망자 2명을 포획하거나 시간을 버티면 승리'}
+          : // S15P21C204-342. 데모 라운드는 시간 초과로 끝나지 않는다(316).
+            remaining === null
+            ? '도망자 2명을 포획하면 승리 · 제한시간 없음'
+            : '도망자 2명을 포획하거나 시간을 버티면 승리'}
       </p>
       <div className="hud-status">
         <span className="hud-outcomes">

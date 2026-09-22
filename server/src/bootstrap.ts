@@ -104,6 +104,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   demoExits?: (state: State) => readonly DemoExit[];
   /** Start cells of a match, so a demo scenario never tries to install where the rules refuse. */
   demoStartCells?: (state: State) => readonly Cell[];
+  /** S15P21C204. 두 참가자에게 아직 나눌 지식이 남았는지. 교환 대본이 상대를 고를 때 쓴다. */
+  demoExchangeGain?: (state: State, from: string, to: string) => boolean;
   layouts: {
     maps: MapPreparationPort;
     selection: LayoutSelectionPort;
@@ -537,6 +539,7 @@ export function createApplication<State = unknown>(
       practice: product.practice,
       ...(product.demoExits ? { demoExits: product.demoExits } : {}),
       ...(product.demoStartCells ? { demoStartCells: product.demoStartCells } : {}),
+      ...(product.demoExchangeGain ? { demoExchangeGain: product.demoExchangeGain } : {}),
       layouts: product.layouts
         ? {
             loader: new LayoutLoader({

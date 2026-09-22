@@ -731,7 +731,7 @@ export function ProductApp({
               {...(snapshot.demo
                 ? {
                     mapSizeNote:
-                      '준비 완료를 누르기 전까지 고를 수 있습니다. 목록은 경기에 들어가면 나옵니다.',
+                      '준비 완료를 누르기 전까지 고를 수 있습니다. 시연은 인형이 덜 걷는 15×15 가 빠릅니다.',
                   }
                 : {})}
               onSelectMapSize={(size) =>
@@ -818,6 +818,7 @@ export function ProductApp({
                 </div>
                 <GameStatusChrome
                   role={activeSelf?.role ?? null}
+                  // 제한시간이 없는 데모 라운드는 null 이다. 시계가 지난 시간을 흘린다(332).
                   remainingSeconds={
                     round && round.deadlineTick !== null
                       ? Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20))
@@ -968,6 +969,7 @@ export function ProductApp({
                     runtime.current?.runDemoScenario(scenario, options)
                   }
                   onAbort={() => runtime.current?.abortDemoRound()}
+                  onCancel={() => runtime.current?.cancelDemoScenario()}
                 />
               )}
             </div>

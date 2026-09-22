@@ -73,7 +73,7 @@ import type { SessionAuth } from '../session/session-types.js';
 import type { RoomKind, SlotRegistry } from '../session/SlotRegistry.js';
 import { CountdownCoordinator } from './CountdownCoordinator.js';
 import {
-  availableScenarios,
+  scenarioOffers,
   createDemoRunner,
   SCENARIO_OPTIONS,
   type DemoExit,
@@ -151,6 +151,8 @@ export type ProductRoomDeps<State> = Readonly<{
   demoExits?: (state: State) => readonly DemoExit[];
   /** Start cells of the match: the rules refuse a device there, so a scenario avoids them. */
   demoStartCells?: (state: State) => readonly Cell[];
+  /** 교환 대본이 아직 나눌 지식이 남은 상대를 고를 수 있게 한다. */
+  demoExchangeGain?: (state: State, from: string, to: string) => boolean;
   canStart?: () => boolean;
   /**
    * Readiness gate for a demo room (S15P21C204-258). A demo room never issues, publishes or
@@ -276,6 +278,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private puppetSequence = 0;
     private demoStateSent: string | null = null;
     private demoAbortRequested = false;
+    /** 마지막으로 읽은 공개 누계. 경기 인스턴스가 내려간 뒤에도 결과 화면이 사실을 말하게 한다. */
+    private lastCounts = { escaped: 0, captured: 0 };
     /** When the demo operator's last connection left; null while connected. */
     private demoVacantSince: number | null = null;
 
@@ -607,7 +611,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         const auth = this.playersByConnection.get(client.sessionId);
         const parsed = demoControlSchema.safeParse(payload);
         if (!auth || !parsed.success || parsed.data.matchId !== this.context.matchId) return;
-        this.abortDemoRound(auth.playerId);
+        if (parsed.data.action === 'cancel-scenario') this.cancelDemoScenario(auth.playerId);
+        else this.abortDemoRound(auth.playerId);
       });
       onInbound(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
         this.heartbeat.ack(client.sessionId, payload, this.context.matchId, deps.monotonicNow());
@@ -1017,7 +1022,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (this.demoAbortRequested) {
         this.demoAbortRequested = false;
         this.demoRunner.stop();
-        this.abortMatch(null, 'DEMO_OPERATOR_ABORT');
+        this.abortMatch('DEMO_OPERATOR_ABORT', 'DEMO_OPERATOR_ABORT');
         return;
       }
       for (const { connectionId, heartbeat } of this.heartbeat.due(
@@ -1367,6 +1372,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         participants: frame.participants,
         exits: deps.demoExits?.(attached.state) ?? [],
         startCells: deps.demoStartCells?.(attached.state) ?? [],
+        ...(deps.demoExchangeGain
+          ? {
+              exchangeGain: (from: string, to: string) =>
+                deps.demoExchangeGain!(attached.state, from, to),
+            }
+          : {}),
         challenges,
         exchanges,
         operatorId,
@@ -1400,6 +1411,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.publishDemoState(world);
     }
 
+    /** S15P21C204-342. 도는 대본만 내린다. 라운드를 끝내지 않고 다른 버튼을 다시 열어 준다. */
+    private cancelDemoScenario(playerId: string) {
+      if (!this.demo || this.puppets.has(playerId) || this.operatorId() !== playerId) return;
+      if (this.demoRunner.status.scenario === null) return;
+      this.demoRunner.cancel();
+      this.publishDemoState(this.demoWorld());
+    }
+
     private abortDemoRound(playerId: string) {
       if (!this.demo || this.puppets.has(playerId) || this.operatorId() !== playerId) return;
       if (!['PLAYING', 'COUNTDOWN', 'GAME_LOADING', 'MAP_FINALIZING'].includes(this.phase)) return;
@@ -1412,9 +1431,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      */
     private publishDemoState(world: DemoWorld | null = null) {
       const status = this.demoRunner.status;
-      const available = (world ? availableScenarios(world) : [...DEMO_SCENARIO_IDS]).map((id) => ({
-        id,
-        options: [...SCENARIO_OPTIONS[id]] as DemoOptionKey[],
+      const available = (
+        world ? scenarioOffers(world) : DEMO_SCENARIO_IDS.map((id) => ({ id }) as const)
+      ).map((offer) => ({
+        id: offer.id,
+        options: [...SCENARIO_OPTIONS[offer.id]] as DemoOptionKey[],
+        ...('unavailable' in offer && offer.unavailable ? { unavailable: offer.unavailable } : {}),
       }));
       const message: DemoStateMessage = {
         matchId: this.context.matchId,
@@ -1422,6 +1444,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         running: status.scenario,
         step: status.step,
         failureCode: status.failure,
+        completed: status.completed,
+        outcomeSeq: status.outcomes,
         operatorExit: world?.operator?.exit?.approach ?? null,
       };
       const fingerprint = JSON.stringify(message);
@@ -1931,6 +1955,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private startNewRound() {
       if (this.hasUnresolvedMedia()) return;
+      this.lastCounts = { escaped: 0, captured: 0 };
       this.invalidateLayout();
       const request = this.rematch.take();
       const operatorId = this.demo ? this.operatorId() : null;
@@ -2259,8 +2284,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const game = this.gameInstance();
       const attached = game ? this.driver.instance(game.gameInstanceId) : null;
       const frame = attached && deps.core ? deps.core.getFrame(attached.state) : null;
-      s.counts.escaped = frame?.counts.escaped ?? 0;
-      s.counts.captured = frame?.counts.captured ?? 0;
+      // S15P21C204-342. 무효 처리는 경기 인스턴스를 내리므로 누계를 읽을 곳이 사라진다. 그대로
+      // 0 을 보내면 결과 화면이 "포획 0" 이라고 말한다. 마지막으로 읽은 값을 남겨 둔다.
+      if (frame)
+        this.lastCounts = { escaped: frame.counts.escaped, captured: frame.counts.captured };
+      s.counts.escaped = frame?.counts.escaped ?? this.lastCounts.escaped;
+      s.counts.captured = frame?.counts.captured ?? this.lastCounts.captured;
       if (frame?.result) {
         if (!s.result) s.result = new RoundResultState();
         s.result.winner = frame.result.winner;

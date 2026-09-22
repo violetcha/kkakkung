@@ -265,12 +265,22 @@ export const demoScenarioRequestSchema = z.strictObject({
 export type DemoScenarioRequest = z.infer<typeof demoScenarioRequestSchema>;
 export const demoControlSchema = z.strictObject({
   matchId: matchIdSchema,
-  action: z.literal('abort-round'),
+  /**
+   * S15P21C204-342. `cancel-scenario` 는 도는 대본만 내린다. 관리자를 기다리는 대본이 2분 동안
+   * 다른 버튼을 잠그던 것을 라운드를 끝내지 않고 풀 수 있다.
+   */
+  action: z.enum(['abort-round', 'cancel-scenario']),
 });
 export type DemoControl = z.infer<typeof demoControlSchema>;
 export const demoAvailableScenarioSchema = z.strictObject({
   id: z.enum(DEMO_SCENARIO_IDS),
   options: z.array(demoScenarioOptionKeySchema).max(5),
+  /**
+   * S15P21C204-342. 지금은 시작할 수 없는 이유(서버의 거절 코드). 있으면 버튼은 잠긴 채 이유와
+   * 함께 남는다. 목록에서 조용히 사라지면 관리자가 무엇이 없어졌는지 알 수 없다. 코드 목록은
+   * 서버(`DemoScenarios.ts`)가 쥐고 웹이 라벨을 붙이므로 여기서는 길이만 제한한다.
+   */
+  unavailable: z.string().max(64).optional(),
 });
 export type DemoAvailableScenario = z.infer<typeof demoAvailableScenarioSchema>;
 export const demoStateSchema = z.strictObject({
@@ -280,6 +290,13 @@ export const demoStateSchema = z.strictObject({
   step: z.string().max(128).nullable(),
   /** Why the last scenario stopped early, in a short code. Cleared when a new one starts. */
   failureCode: z.string().max(128).nullable(),
+  /** S15P21C204-342. 마지막으로 끝까지 간 대본. 실패·취소로 끝났으면 null 이다. */
+  completed: z.enum(DEMO_SCENARIO_IDS).nullable().default(null),
+  /**
+   * 대본이 끝날 때마다 오르는 번호(성공·실패·취소 모두). 같은 이유로 다시 거절돼 문구가 같아도
+   * 화면이 "또 눌렀다"를 알 수 있다.
+   */
+  outcomeSeq: z.number().int().min(0).default(0),
   operatorExit: z.strictObject({ x: z.number().int(), y: z.number().int() }).nullable(),
 });
 export type DemoStateMessage = z.infer<typeof demoStateSchema>;

@@ -25,7 +25,11 @@ it('labels every refusal and stop reason the scenarios can report', () => {
 });
 
 it('labels every step the scenarios can be on', () => {
-  const fixed = [...source.matchAll(/label: '([a-z-]+)'/g)].map((match) => match[1]!);
+  const fixed = [
+    ...source.matchAll(/label: '([a-z-]+)'/g),
+    // 단계 이름을 헬퍼 인자로 넘기는 곳(awaitSession). label: 만 훑다가 offer-pending 을 놓쳤다.
+    ...source.matchAll(/awaitSession\([^,]+, '([a-z-]+)'\)/g),
+  ].map((match) => match[1]!);
   // 인형·장비마다 식별자가 붙는 단계는 접두어로 본다.
   const templated = [...source.matchAll(/label: `([a-z-]+)\$\{/g)].map((match) => match[1]!);
   expect(fixed.length + templated.length).toBeGreaterThan(40);

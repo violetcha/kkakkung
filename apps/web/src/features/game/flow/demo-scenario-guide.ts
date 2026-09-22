@@ -82,7 +82,7 @@ export const DEMO_SCENARIO_GUIDE: Readonly<Record<string, DemoScenarioGuide>> = 
     'C',
     '술래 장비',
     '덫 설치·무장',
-    '인형 또는 내가 덫을 설치하고 발동까지 확인합니다.',
+    '인형 또는 내가 덫을 설치하고 발동까지 확인합니다. 설치자를 "나"로 두면 내가 F 로 놓을 때까지 기다립니다.',
     ['설치 십자선과 핫바 힌트를 확인한다', '무장 대기를 확인한다', '발동 흔적과 소모를 확인한다'],
     ['installer'],
   ),
@@ -91,7 +91,7 @@ export const DEMO_SCENARIO_GUIDE: Readonly<Record<string, DemoScenarioGuide>> = 
     'C',
     '술래 장비',
     '감지기 설치',
-    '인형 또는 내가 감지기를 설치하고 유지 상태를 확인합니다.',
+    '인형 또는 내가 감지기를 설치하고 유지 상태를 확인합니다. 설치자를 "나"로 두면 벽을 보게 세워 둔 뒤 내가 F 로 놓기를 기다립니다.',
     ['설치 가능 여부를 확인한다', '무장 상태를 확인한다', '감지기 유지 표시를 확인한다'],
     ['installer'],
   ),
@@ -133,8 +133,8 @@ export const DEMO_SCENARIO_GUIDE: Readonly<Record<string, DemoScenarioGuide>> = 
     'D',
     '포획·구속',
     '도전 중 포획',
-    '출구 도전 중인 인형 도망자를 술래가 포획합니다.',
-    ['도전이 진행 중이다', '도전이 취소된다', '포획 결과를 확인한다'],
+    '인형이 출구 도전을 시작하면 그 옆으로 나를 옮깁니다. 잡기(G)로 잡으세요.',
+    ['도전이 진행 중이다', '잡기로 포획된다', '도전이 취소된다'],
   ),
   'caught-in-my-challenge': guide(
     'caught-in-my-challenge',
@@ -220,12 +220,14 @@ export const DEMO_SCENARIO_GUIDE: Readonly<Record<string, DemoScenarioGuide>> = 
 
 const FAILURE_LABELS: Readonly<Record<string, string>> = {
   CELL_UNAVAILABLE: '배치할 수 없는 칸입니다.',
+  CANCELED: '관리자가 시나리오를 내렸습니다.',
   FAILED: '규칙이 이 동작을 받아들이지 않았습니다.',
   NEED_ONE_PAIR: '술래 인형과 도망자 인형이 한 쌍 필요합니다.',
   NEED_TWO_PAIRS: '술래 인형과 도망자 인형이 두 쌍 필요합니다.',
   NEED_TWO_RUNNER_PUPPETS: '살아 있는 도망자 인형이 둘 필요합니다.',
   NO_CHALLENGE_FROM_OPERATOR: '관리자의 도전이 시작되지 않았습니다.',
   NO_CROSSING_PATH: '가로지를 수 있는 경로가 없습니다.',
+  NO_EXCHANGE_PARTNER: '이미 지도를 나눈 인형뿐입니다. 서로 모르는 곳이 있어야 교환할 수 있습니다.',
   NO_EXIT_FOR_PUPPET: '인형의 출구를 찾지 못했습니다.',
   NO_INSTALL_FROM_OPERATOR: '관리자가 장비를 설치하지 않았습니다.',
   NO_OPERATOR_EXIT: '관리자의 출구를 찾지 못했습니다.',
@@ -262,9 +264,13 @@ const STEP_LABELS: Readonly<Record<string, string>> = {
   'face-operator': '인형이 나를 보는 중',
   'face-wall': '인형이 벽을 보는 중',
   'first-comes-closer': '첫 인형이 다가오는 중',
-  'hold-challenge': '인형이 도전을 붙들고 있습니다 · 다가가 잡으세요',
+  'hold-challenge': '인형이 도전 중입니다 · 잡기(G)로 잡으세요',
+  'show-my-challenge': '내 도전 화면을 보여 주는 중',
+  'stand-beside-challenge': '도전 중인 인형 옆으로 나를 옮기는 중',
   install: '장비를 설치하는 중',
+  'make-room-beside-me': '내 옆자리를 비우는 중',
   'move-to-side': '인형이 옆 칸으로 비키는 중',
+  'offer-pending': '교환 요청이 열리기를 기다리는 중',
   'offer-shown': '교환 요청을 보여 주는 중',
   'operator-installs': '내가 장비를 놓고 무장하기를 기다리는 중',
   'operator-requests': '내 교환 요청을 기다리는 중',
@@ -275,14 +281,17 @@ const STEP_LABELS: Readonly<Record<string, string>> = {
   'runner-enters': '도망자 인형이 들어오는 중',
   'second-joins': '두 번째 인형이 합류하는 중',
   'show-armed': '무장된 상태를 보여 주는 중',
+  'stand-where-i-can-install': '장비를 놓을 수 있는 자리로 나를 옮기는 중',
   'show-spent': '소모된 상태를 보여 주는 중',
   'show-unarmed': '무장 전 상태를 보여 주는 중',
   'start-challenge': '인형이 출구 도전을 시작하는 중',
+  'step-aside-for-runner': '장비 칸에서 내가 비키는 중',
   'step-back': '설치한 인형이 물러나는 중',
   'trace-visible': '교환 흔적을 보여 주는 중',
   'wait-armed': '장비가 무장되기를 기다리는 중',
   'wait-beside-exit': '술래 인형이 출구 옆에서 기다리는 중',
   'wait-for-spectating': '관전 화면으로 넘어가기를 기다리는 중',
+  'wait-offer-clear': '앞선 교환 요청이 사라지기를 기다리는 중',
   'walk-to-spot': '인형이 자리로 가는 중',
 };
 
@@ -315,6 +324,18 @@ export function demoFailureLabel(failure: string): string {
   return (
     FAILURE_LABELS[code] ?? '시나리오를 완료하지 못했습니다. 조건을 확인하고 다시 시도해 주세요.'
   );
+}
+
+/**
+ * S15P21C204-342. 중단 문구는 이유만 보여 줘서 어느 단계에서 멈췄는지 알 수 없었다. 서버가
+ * `<단계>:<이유>` 로 보내므로 단계 라벨을 앞에 붙인다. 단계를 모르는 코드는 이유만 보여 준다.
+ */
+export function demoFailureDetail(failure: string): string {
+  const parts = failure.split(':');
+  const reason = demoFailureLabel(failure);
+  if (parts.length < 2) return reason;
+  const step = demoStepLabel(parts.slice(0, -1).join(':'));
+  return step === '진행 중' ? reason : `${step} — ${reason}`;
 }
 
 export function demoStepLabel(step: string | null): string {

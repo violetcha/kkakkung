@@ -1395,6 +1395,11 @@ export function bindProductRoom(
       if (!snapshot.round || !snapshot.demo) return;
       send('demo-control', { matchId: snapshot.round.matchId, action: 'abort-round' });
     },
+    /** S15P21C204-342. 도는 대본만 내린다. 라운드는 그대로 둔다. */
+    cancelDemoScenario() {
+      if (!snapshot.round || !snapshot.demo) return;
+      send('demo-control', { matchId: snapshot.round.matchId, action: 'cancel-scenario' });
+    },
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
       publish({ interaction });
