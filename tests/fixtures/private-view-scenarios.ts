@@ -5,12 +5,13 @@
 // recipient. No socket, no Cloud; time is the fake clock of the G3 harness.
 import { matchCore } from '@kkakkung/game-core/match';
 import {
+  completePrivateViewSchema,
   privateEventSchema,
   privateViewSchema,
   type PrivateEvent,
 } from '@kkakkung/protocol/game-messages';
-import type { PrivateView } from '@kkakkung/protocol/game-schema';
-import { readPublicRoundState } from '@kkakkung/protocol/game-schema';
+import type { PrivateView, PrivateViewWire, ViewKnowledge } from '@kkakkung/protocol/game-schema';
+import { readPublicRoundState, restorePrivateView } from '@kkakkung/protocol/game-schema';
 import { EventDispatcher, type ViewReason } from '../../server/src/game/EventDispatcher.ts';
 import { projectPrivateBody, projectSpectateBody } from '../../server/src/game/PlayerProjection.ts';
 import { chooseSpectateTarget, spectateCandidates } from '../../server/src/game/Spectate.ts';
@@ -40,7 +41,10 @@ export const SENTINELS = Object.freeze({
 });
 
 export type Recorded = Readonly<{
+  /** What each recipient ends up holding: the wire view with any omitted knowledge put back. */
   views: Map<string, PrivateView[]>;
+  /** S15P21C204-326. The same views exactly as they went out, omissions and all. */
+  wire: Map<string, PrivateViewWire[]>;
   events: Map<string, PrivateEvent[]>;
 }>;
 
@@ -51,11 +55,27 @@ export type Recorded = Readonly<{
  */
 export function createViewHarness(options: HarnessOptions = {}) {
   const h = createG3Harness(options);
-  const recorded: Recorded = { views: new Map(), events: new Map() };
+  const recorded: Recorded = { views: new Map(), wire: new Map(), events: new Map() };
   const push = <T>(map: Map<string, T[]>, id: string, value: T) => {
     const list = map.get(id) ?? [];
     list.push(value);
     map.set(id, list);
+  };
+  /**
+   * S15P21C204-326. Each recipient reassembles the way the real client does, so the leak checks
+   * below keep reading complete views. A recipient that cannot reassemble records nothing: in
+   * the product that is the moment it resyncs instead of drawing a stale map, and a test that
+   * expects a view there fails loudly rather than reading a half-filled one.
+   */
+  const held = new Map<string, ViewKnowledge>();
+  const lastReceived = new Map<string, PrivateView | null>();
+  const receive = (id: string, view: PrivateViewWire) => {
+    push(recorded.wire, id, view);
+    const restored = restorePrivateView(view, held.get(id) ?? null);
+    lastReceived.set(id, restored?.view ?? null);
+    if (!restored) return;
+    held.set(id, restored.knowledge);
+    push(recorded.views, id, restored.view);
   };
   // S15P21C204-269. The room's spectate choice, mirrored: an ended runner's view body is its
   // target's projection while the match is PLAYING.
@@ -80,7 +100,7 @@ export function createViewHarness(options: HarnessOptions = {}) {
     context: h.context,
     now: h.clock.now,
     sender: {
-      sendView: (id, view) => push(recorded.views, id, view),
+      sendView: receive,
       sendEvent: (id, event) => push(recorded.events, id, event),
       sendOutcome: () => undefined,
       sendStatus: () => undefined,
@@ -97,7 +117,11 @@ export function createViewHarness(options: HarnessOptions = {}) {
     /** Publishes for every recipient with the given reason (KkakkungRoom: initial → change …). */
     publish(reason: ViewReason) {
       const out = new Map<string, PrivateView | null>();
-      for (const id of ids) out.set(id, dispatcher.publishView(id, reason, 'PLAYING'));
+      for (const id of ids) {
+        lastReceived.set(id, null);
+        dispatcher.publishView(id, reason, 'PLAYING');
+        out.set(id, lastReceived.get(id) ?? null);
+      }
       return out;
     },
     /** Fans out every audience event the harness has produced since the last call. */
@@ -127,6 +151,16 @@ export function createViewHarness(options: HarnessOptions = {}) {
       return list[list.length - 1]!;
     },
     viewsOf: (id: string) => recorded.views.get(id) ?? [],
+    /**
+     * S15P21C204-326. The views as they went out, omissions and all. A real consumer is fed
+     * these, not the reassembled ones: reassembly is the consumer's own job.
+     */
+    wireViewsOf: (id: string) => recorded.wire.get(id) ?? [],
+    latestWireView(id: string): PrivateViewWire {
+      const list = recorded.wire.get(id);
+      if (!list || list.length === 0) throw new Error(`no view delivered to ${id}`);
+      return list[list.length - 1]!;
+    },
     eventsOf: (id: string) => recorded.events.get(id) ?? [],
     /** Public round state exactly as the Colyseus schema reader exposes it. */
     publicState() {
@@ -195,7 +229,15 @@ export function coordinatesOutsideSight(view: PrivateView) {
   return coordinatesIn(view).filter((c) => !allowed.has(key(c)));
 }
 
+/** A reassembled view, checked against the shape a recipient is supposed to end up holding. */
 export function parseView(view: PrivateView) {
+  const parsed = completePrivateViewSchema.safeParse(view);
+  if (!parsed.success) throw new Error(JSON.stringify(parsed.error.issues));
+  return parsed.data;
+}
+
+/** S15P21C204-326. The same check for a view as it went out, omissions allowed. */
+export function parseWireView(view: PrivateViewWire) {
   const parsed = privateViewSchema.safeParse(view);
   if (!parsed.success) throw new Error(JSON.stringify(parsed.error.issues));
   return parsed.data;

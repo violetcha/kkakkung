@@ -12,7 +12,12 @@ import {
   type PrivateEvent,
   type RequestStatusResult,
 } from '@kkakkung/protocol/game-messages';
-import type { GameViewScope, Phase, PrivateView } from '@kkakkung/protocol/game-schema';
+import type {
+  GameViewScope,
+  Phase,
+  PrivateView,
+  PrivateViewWire,
+} from '@kkakkung/protocol/game-schema';
 import type { MatchContext } from './MatchContext.js';
 import type { AudienceEvent } from './ports.js';
 
@@ -30,7 +35,7 @@ export const EMPTY_VIEW_BODY: PrivateViewBody = {
 };
 
 export type ViewSender = Readonly<{
-  sendView: (playerId: string, view: PrivateView) => void;
+  sendView: (playerId: string, view: PrivateViewWire) => void;
   sendEvent: (playerId: string, event: PrivateEvent) => void;
   sendOutcome: (playerId: string, outcome: CommandOutcome) => void;
   sendStatus: (playerId: string, status: RequestStatusResult) => void;
@@ -43,6 +48,8 @@ type Delivered = {
   scope: GameViewScope;
   phase: Phase;
   body: PrivateViewBody;
+  /** S15P21C204-326. Rises with each change to the two accumulated-knowledge arrays. */
+  knowledgeRevision: number;
 };
 
 /**
@@ -95,8 +102,14 @@ export class EventDispatcher {
   /**
    * Publishes a full view when required. Content changes bump the shared stateVersion so the
    * new version is strictly newer; phase/scope/resync re-serialize at the current version.
+   *
+   * S15P21C204-326. The two accumulated-knowledge arrays are left off a view that would repeat
+   * them, which on a measured round is 97.5% of the views that go out and 87% of their bytes.
+   * Only a `change` view may omit them: every other reason is a moment the recipient may have
+   * just dropped what it held — a new phase, a new scope, a resync it asked for — so those carry
+   * the pair in full and nothing has to be reassembled across one.
    */
-  publishView(playerId: string, reason: ViewReason, publicPhase: Phase): PrivateView | null {
+  publishView(playerId: string, reason: ViewReason, publicPhase: Phase): PrivateViewWire | null {
     const { context } = this.deps;
     const scope = context.scopeOf(playerId);
     const body =
@@ -115,8 +128,31 @@ export class EventDispatcher {
       reason !== 'phase'
     )
       stateVersion = context.bumpVersion();
-    const view: PrivateView = { ...body, matchId: context.matchId, gameScope: scope, stateVersion };
-    this.delivered.set(playerId, { stateVersion, scope, phase: publicPhase, body });
+    // Only a change to the knowledge itself moves the revision, so a recipient that reuses what
+    // it holds is reusing the very arrays this revision was minted for.
+    const knowledgeChanged =
+      !previous ||
+      !sameContent(previous.body.knownTerrain, body.knownTerrain) ||
+      !sameContent(previous.body.knownActiveExits, body.knownActiveExits);
+    const knowledgeRevision = knowledgeChanged
+      ? (previous?.knowledgeRevision ?? 0) + 1
+      : previous.knowledgeRevision;
+    const { knownTerrain, knownActiveExits, ...rest } = body;
+    const view: PrivateViewWire = {
+      ...rest,
+      matchId: context.matchId,
+      gameScope: scope,
+      stateVersion,
+      knowledgeRevision,
+      ...(knowledgeChanged || forced ? { knownTerrain, knownActiveExits } : {}),
+    };
+    this.delivered.set(playerId, {
+      stateVersion,
+      scope,
+      phase: publicPhase,
+      body,
+      knowledgeRevision,
+    });
     this.deps.sender.sendView(playerId, view);
     return view;
   }
