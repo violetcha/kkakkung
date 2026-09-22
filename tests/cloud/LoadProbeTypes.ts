@@ -64,7 +64,7 @@ export interface LoadProbe {
    * The product's own `MediaEvidence` for this participant (REQ-D-13). Built by the web app's
    * `composeMediaEvidence` from the same binding and policy stores the product uses, so a Cloud
    * runner reads the shape D defined rather than a probe-specific summary. It states facts and
-   * never declares a gate passed; `evidenceViolations` is the caller's judgement step.
+   * never declares a gate passed: judging them is the caller's step.
    */
   evidence(): Promise<MediaEvidence>;
   /** Pins the current marker position of a track, to be passed back as a decision cutoff. */

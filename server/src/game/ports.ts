@@ -156,6 +156,8 @@ export type CreateMatchInput = Readonly<{
   players: readonly { playerId: string; role: Role }[];
   /** S15P21C204-318. Only an operator demo game may omit the round deadline. */
   deadline?: 'round' | 'none';
+  /** 시연 방(showcase)만 `'timeout-only'`: 탈출·포획 수로 일찍 끝내지 않고 제한시간에 판정한다. */
+  result?: 'rules' | 'timeout-only';
 }>;
 export type CreatePracticeInput = CreateMatchInput & Readonly<{ role: Role }>;
 

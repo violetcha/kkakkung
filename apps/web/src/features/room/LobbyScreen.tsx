@@ -13,7 +13,8 @@ import { DEFAULT_MAP_SIZE, type MapSizeId } from './map-size';
 
 export type LobbyDevice = Readonly<{ label: string; state: string }>;
 
-const SEATS = 6;
+/** 자리 수를 명부가 알려 주지 않는 옛 서버를 위한 기본값. 시연 방은 네 자리다. */
+const DEFAULT_SEATS = 6;
 const clock = (at: number) =>
   new Date(at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -70,6 +71,7 @@ export function LobbyScreen({
   canChooseMapSize = false,
   mapSizeRequest,
   onSelectMapSize,
+  mapSizeNote,
   ready = false,
   canReady = false,
   readyHint,
@@ -97,6 +99,7 @@ export function LobbyScreen({
   canChooseMapSize?: boolean;
   mapSizeRequest?: RequestDisplay;
   onSelectMapSize?(size: MapSizeId): void;
+  mapSizeNote?: string;
   /** 내 준비 상태. 서버 명부가 원본이다. */
   ready?: boolean;
   /** 여섯 명이 모여 준비를 받을 수 있는 단계인지. */
@@ -139,6 +142,9 @@ export function LobbyScreen({
     return () => clearTimeout(timer);
   }, [copied]);
   const host = roster.hostId === selfId;
+  // 시연 방(showcase)은 네 명이 2:2 로 뛰고 맵이 고정이다. 자리 수는 명부가 알려 준다.
+  const seats = roster.capacity ?? DEFAULT_SEATS;
+  const showcase = roster.kind === 'showcase';
   const busy = [lockRequest, kickRequest, mapSizeRequest].some(
     (request) => request && ['pending', 'waiting-view'].includes(request.status),
   );
@@ -149,7 +155,7 @@ export function LobbyScreen({
   const readyCount = roster.players.filter((player) => player.ready).length;
   // 여섯 자리가 다 차고 모두 준비했을 때만 방장의 시작 단추가 선다.
   const everyoneReady =
-    roster.players.length === SEATS &&
+    roster.players.length === seats &&
     roster.players.every((player) => player.connected && player.ready);
   const starting = startRequest && ['pending', 'waiting-view'].includes(startRequest.status);
   const log = useRoomLog(roster);
@@ -158,7 +164,7 @@ export function LobbyScreen({
     <section className="lobby">
       <div className="lobby-head">
         <p className="pause-eyebrow">대기실</p>
-        <h2>친구들을 기다리는 중입니다.</h2>
+        <h2>{showcase ? '시연 참가자를 기다리는 중' : '친구들을 기다리는 중입니다.'}</h2>
       </div>
       <div className="lobby-code">
         <p className="pause-eyebrow">방 코드</p>
@@ -184,7 +190,7 @@ export function LobbyScreen({
           </button>
         </p>
         <p className="lobby-code-count">
-          {roster.players.length}/{SEATS} | 준비 {readyCount}/{SEATS}
+          {roster.players.length}/{seats} | 준비 {readyCount}/{seats}
         </p>
       </div>
       <div className="lobby-side">
@@ -239,10 +245,12 @@ export function LobbyScreen({
       )}
       <div className="lobby-panel" aria-label="맵과 방 관리" hidden={panel !== 'map'}>
         <MapSizeChoice
-          value={mapSize}
-          canEdit={host && canChooseMapSize}
+          value={showcase ? 'small' : mapSize}
+          canEdit={host && canChooseMapSize && !showcase}
           busy={busy}
           onSelect={onSelectMapSize}
+          {...(mapSizeNote ? { editableNote: mapSizeNote } : {})}
+          {...(showcase ? { note: '시연 맵은 16x16으로 고정되어 있습니다.' } : {})}
         />
         {ready && devices && devices.length > 0 && (
           <dl className="settings-rows lobby-devices" aria-label="내 장치 상태">
@@ -286,7 +294,7 @@ export function LobbyScreen({
         </div>
       </div>
       <ol className="lobby-seats" aria-label="참가자">
-        {Array.from({ length: SEATS }, (_, index) => {
+        {Array.from({ length: seats }, (_, index) => {
           const player = roster.players[index];
           const state = !player
             ? 'empty'

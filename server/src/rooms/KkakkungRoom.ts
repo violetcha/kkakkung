@@ -70,7 +70,7 @@ import type {
 import type { ProductSessionStore } from '../session/ProductSessionStore.js';
 import type { RoomExpiry } from '../session/RoomExpiry.js';
 import type { SessionAuth } from '../session/session-types.js';
-import type { SlotRegistry } from '../session/SlotRegistry.js';
+import type { RoomKind, SlotRegistry } from '../session/SlotRegistry.js';
 import { CountdownCoordinator } from './CountdownCoordinator.js';
 import {
   availableScenarios,
@@ -89,8 +89,25 @@ import { preparationIssue } from './preparation-issue.js';
 import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
+/**
+ * S15P21C204-328. Well past the 3s countdown, because nothing here is meant to be slow: the
+ * control the countdown hands over is applied on the very next tick. It is a way out of a phase
+ * that would otherwise have none, not a deadline anybody should ever meet.
+ */
+const COUNTDOWN_TIMEOUT_MS = 15_000;
 /** S15P21C204-258. Puppets filling the other five seats of a demo room. */
 const DEMO_PUPPET_COUNT = 5;
+/** 시연 방(showcase)의 고정 맵: 소형 미로, 고정 시드. 발표마다 같은 구조·같은 출구가 나온다. */
+const SHOWCASE_MAP_SIZE: MapSize = 'small';
+const SHOWCASE_SEED = 20260922;
+/** 템플릿의 빈 시작 자리를 채우는 이름 접두. 경기에는 들어오지 않는다. */
+const SHOWCASE_VACANT_PREFIX = 'showcase-vacant-';
+/**
+ * S15P21C204-312. How long an empty demo room waits for its operator to come back. A refresh
+ * takes seconds; after this the room closes and frees its `MAX_ROOMS` slot, because a demo
+ * round has no deadline and would otherwise hold the slot for as long as the process lives.
+ */
+const DEMO_REJOIN_GRACE_MS = 120_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -206,7 +223,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       serverEpoch: deps.serverEpoch,
       now: deps.monotonicNow,
     });
-    private readonly lobby = new LobbyCoordinator({ random });
+    private lobby = new LobbyCoordinator({ random });
     private readonly practice = new PracticeCoordinator();
     private readonly loading = new LoadingCoordinator({ requireFace: () => this.media !== null });
     private readonly countdown = new CountdownCoordinator();
@@ -259,6 +276,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private puppetSequence = 0;
     private demoStateSent: string | null = null;
     private demoAbortRequested = false;
+    /** When the demo operator's last connection left; null while connected. */
+    private demoVacantSince: number | null = null;
+
+    /** 발표 시연 방. 실제 사람 넷이 2:2 로 고정 소형 미로에서 3분을 온전히 뛴다. */
+    private get showcase() {
+      return deps.slots.optionsOf(this.roomCode)?.kind === 'showcase';
+    }
+
+    private get roomKind(): RoomKind {
+      return deps.slots.optionsOf(this.roomCode)?.kind ?? 'match';
+    }
 
     /** A demo room exists to show game situations to one operator, never to admit players. */
     private get demo() {
@@ -543,7 +571,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (!roomOptions) throw new ServerError(404, 'ROOM_NOT_AVAILABLE');
       this.operatorRole = roomOptions.operatorRole;
       this.maxClients = roomOptions.capacity;
-      this.autoDispose = true;
+      if (roomOptions.kind === 'showcase') {
+        // 시연 방: 넷이 2:2 로 모이고, 맵은 소형으로 고정이라 방장도 바꿀 수 없다.
+        this.lobby = new LobbyCoordinator({ random, capacity: roomOptions.capacity });
+        this.roomMapSize = SHOWCASE_MAP_SIZE;
+      }
+      // A demo room outlives its operator's socket so a refresh can come back (312). It closes
+      // itself after DEMO_REJOIN_GRACE_MS instead; see checkExpiry.
+      this.autoDispose = !this.demo;
       this.patchRate = 50;
       this.syncPublic();
       const onInbound = (type: string, handle: (client: Client, payload: unknown) => void) =>
@@ -608,7 +643,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       if (!auth || auth.roomCode !== this.roomCode) throw new ServerError(403, 'WRONG_ROOM');
       if (
         !['LOBBY', 'DEVICE_CHECK'].includes(this.phase) &&
-        !(this.demo && ['RESULT', 'ABORTED'].includes(this.phase))
+        !(this.demo && ['PLAYING', 'RESULT', 'ABORTED'].includes(this.phase))
       )
         throw new ServerError(403, 'ROOM_CLOSED');
       if (this.clientsByPlayer.has(auth.playerId)) throw new ServerError(409, 'SESSION_IN_USE');
@@ -624,6 +659,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       this.clientsByPlayer.set(auth.playerId, client);
       this.playersByConnection.set(client.sessionId, auth);
+      this.demoVacantSince = null;
       this.media?.lifecycle?.setGameConnection({
         matchId: this.matchId,
         playerId: auth.playerId,
@@ -662,10 +698,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.clientsByPlayer.delete(auth.playerId);
       this.lobby.setConnected(auth.playerId, false);
       this.spectateChoices.delete(auth.playerId);
-      if (control || heartbeatLost) this.handleConnectionLost(auth.playerId);
       // Demo sessions are operator tools: keep the single seat and bearer lease so an operator
-      // can reconnect after a browser refresh. Ordinary match sessions remain one-use.
+      // can reconnect after a browser refresh. Ordinary match sessions remain one-use. That
+      // includes the running match: reporting the loss would void it and free the seat, and the
+      // operator would come back to a closed room (S15P21C204-312).
       const preserveDemoSession = this.demo;
+      if ((control || heartbeatLost) && !preserveDemoSession)
+        this.handleConnectionLost(auth.playerId);
+      if (preserveDemoSession && this.clientsByPlayer.size === 0)
+        this.demoVacantSince = deps.monotonicNow();
       if (!preserveDemoSession) this.lobby.remove(auth.playerId);
       this.queue.forgetActor(auth.playerId);
       this.dispatcher.forget(auth.playerId);
@@ -783,7 +824,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         READY: ['DEVICE_CHECK'],
         ROOM_LOCK: ['LOBBY', 'DEVICE_CHECK'],
         ROOM_KICK: ['LOBBY', 'DEVICE_CHECK'],
-        ROOM_MAP_SIZE: ['LOBBY'],
+        // A demo room passes the lobby at once; it chooses the size during preparation (313).
+        // A showcase room never chooses: its map is fixed.
+        ROOM_MAP_SIZE: this.mapSizePhases(),
         ROOM_START: ['DEVICE_CHECK'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
@@ -791,6 +834,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
+      // 시연 방은 재경기가 없다. 결과 화면까지가 시연이고, 다음 시연은 새 방으로 연다.
+      if (type === 'REMATCH' && this.showcase) return 'NOT_ALLOWED';
       if (
         (type === 'ROOM_LOCK' ||
           type === 'ROOM_KICK' ||
@@ -842,6 +887,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       switch (command.type) {
         case 'ROOM_LOCK':
         case 'ROOM_KICK': {
+          // S15P21C204-312. A demo room has one seat and server-owned puppets (D6). A lock would
+          // also refuse the operator's own rejoin after a refresh.
+          if (this.demo) return { result: 'rejected', code: 'NOT_ALLOWED' };
           // Recheck at execution: the host or phase may have changed since acceptance.
           if (!['LOBBY', 'DEVICE_CHECK'].includes(this.phase))
             return { result: 'rejected', code: 'INVALID_PHASE' };
@@ -866,7 +914,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         }
         case 'ROOM_MAP_SIZE': {
           // 실행 시점에 다시 본다. 받아들인 뒤에 방장이나 단계가 바뀌었을 수 있다.
-          if (this.phase !== 'LOBBY') return { result: 'rejected', code: 'INVALID_PHASE' };
+          // S15P21C204-313. 데모 방은 인형이 곧바로 자리를 채워 로비를 지나치므로, 크기를 고를 수
+          // 있는 곳이 준비 단계뿐이다. 맵은 준비가 끝난 뒤 MAP_FINALIZING 에서 정해진다.
+          if (!this.mapSizePhases().includes(this.phase))
+            return { result: 'rejected', code: 'INVALID_PHASE' };
           if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
             return { result: 'rejected', code: 'NOT_ALLOWED' };
           if (command.payload.size !== this.roomMapSize) {
@@ -1103,6 +1154,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         case 'COUNTDOWN': {
           const game = this.gameInstance();
           if (!game) return;
+          // S15P21C204-328. Nothing else gets this room out of COUNTDOWN. `countdown.due` is
+          // true exactly once, `applyStartPlaying` refuses silently (a control carries no
+          // requestId, so there is nothing to answer with), and RoomExpiry keeps the room. Miss
+          // the one control and six people watch a countdown that never ends. Ordinary starts
+          // never come near this: the control below is applied on the very next tick, because
+          // `driver.tick()` runs ahead of this switch and `startRequestedTick` is serverTick + 1.
+          const startedAt = deps.slots.phaseStartedAt(this.roomCode);
+          if (startedAt !== null && now - startedAt >= COUNTDOWN_TIMEOUT_MS) {
+            this.returnToDeviceCheck('COUNTDOWN_TIMEOUT');
+            return;
+          }
           if (this.countdown.due(now)) {
             this.startRequestedTick = this.context.serverTick + 1;
             this.driver.enqueueControl(game.gameInstanceId, {
@@ -1178,6 +1240,48 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.context.setRolePlan(this.puppetRolePlan(operatorId));
     }
 
+    /**
+     * 맵 크기를 바꿀 수 있는 단계. 일반 방은 LOBBY, 데모 방은 로비를 지나치므로 DEVICE_CHECK 까지
+     * (313), 시연 방은 소형 고정이라 어디서도 바꾸지 않는다.
+     */
+    private mapSizePhases(): readonly Phase[] {
+      if (this.showcase) return [];
+      return this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'];
+    }
+
+    /** 시연 방은 매번 같은 미로·같은 출구를 쓰도록 시드를 고정한다. 다른 방은 무작위다. */
+    private roundSeed(): number {
+      return this.showcase ? SHOWCASE_SEED : randomBytes(4).readUInt32BE(0);
+    }
+
+    /**
+     * 맵 템플릿은 도망자 셋·술래 셋의 시작 자리를 요구한다. 시연 방은 둘씩만 있으므로 비어 있는
+     * 자리를 이름만 있는 참가자로 채워 준비하고, 경기를 만들 때 `showcaseLayout` 이 다시 뗀다.
+     */
+    private layoutRoster(): { playerId: string; role: Role }[] {
+      const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      if (!this.showcase) return players;
+      for (const role of ['runner', 'tagger'] as const) {
+        let missing = 3 - players.filter((p) => p.role === role).length;
+        for (let index = 1; missing > 0; index++, missing--)
+          players.push({ playerId: `${SHOWCASE_VACANT_PREFIX}${role}-${index}`, role });
+      }
+      return players;
+    }
+
+    /** 비어 있는 자리에 붙은 시작 위치·출구·영역을 떼어 실제 참가자만 남긴다. */
+    private showcaseLayout(
+      layout: import('../game/ports.js').MatchLayout,
+    ): import('../game/ports.js').MatchLayout {
+      const real = (playerId: string) => this.roles.has(playerId);
+      return {
+        ...layout,
+        players: layout.players.filter((p) => real(p.playerId)),
+        exits: layout.exits.filter((exit) => real(exit.ownerId)),
+        territories: layout.territories.filter((t) => real(t.playerId)),
+      };
+    }
+
     /** The 3:3 assignment around the operator's chosen role; puppets fill the rest in order. */
     private puppetRolePlan(operatorId: string): Map<string, Role> | null {
       const role = this.operatorRole;
@@ -1238,7 +1342,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       cell: Cell,
       dir: import('@kkakkung/protocol/game-schema').Dir,
     ) {
-      if (!this.puppets.has(playerId) || this.closing) return false;
+      // The operator is placed too: `place-me-at-exit` moves the operator, not a puppet. Refusing
+      // everyone but puppets here made that scenario fail on every run (S15P21C204-317).
+      if (this.closing) return false;
+      if (!this.puppets.has(playerId) && playerId !== this.operatorId()) return false;
       const instance = this.context.instanceOf(playerId);
       if (!instance || this.phase !== 'PLAYING') return false;
       this.driver.enqueueControl(instance.gameInstanceId, {
@@ -1402,15 +1509,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
         return;
       }
-      const roles = this.lobby.assignRoles(this.context.takeRolePlan());
+      const roles = this.lobby.assignRoles(
+        this.showcase ? deps.slots.requestedRoles(this.roomCode) : this.context.takeRolePlan(),
+      );
       this.roles.clear();
       for (const [playerId, role] of roles) this.roles.set(playerId, role);
       if (this.context.seed === null)
-        this.context.fixRoundInputs({ tuning: deps.tuning, seed: randomBytes(4).readUInt32BE(0) });
+        this.context.fixRoundInputs({ tuning: deps.tuning, seed: this.roundSeed() });
       const teams = this.practice.start(roles, now);
-      // S15P21C204-295. 데모 방의 인형은 보고할 클라이언트가 없다. 연습을 마쳤다고 대신 적어
-      // 두어, 운영자가 자기 연습을 끝내면 바로 다음 단계로 넘어가게 한다.
-      for (const playerId of this.puppets) this.practice.applyPracticeReady(playerId, true);
       for (const role of ['runner', 'tagger'] as const) {
         const players = teams[role].map((playerId) => ({ playerId, role }));
         if (players.length === 0) continue;
@@ -1542,12 +1648,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.pendingLayout = { status: 'unavailable', diagnostic: 'LAYOUT_PRODUCER_MISSING' };
         return;
       }
-      const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      const players = this.layoutRoster();
       const seed = this.context.seed ?? 0;
       const { loader } = deps.layouts;
       // 방이 로비에서 고른 크기의 템플릿으로 준비한다.
+      // 고르지 않은 방은 PRODUCT_MAP_TEMPLATE 을 따른다(로더의 약속). 크기의 기본값이 'large' 라
+      // 그대로 찾으면 명시한 템플릿(예: master-v1 비교 실행)이 조용히 무시된다.
+      const chosen = this.roomMapRevision > 0;
       const { masterPath, fallbackPath, templateId, templateVersion } =
-        deps.layouts.bySize?.[this.roomMapSize] ?? deps.layouts;
+        (chosen ? deps.layouts.bySize?.[this.roomMapSize] : undefined) ?? deps.layouts;
       const revision = ++this.layoutRevision;
       const matchId = this.matchId;
       this.finalizing = loader
@@ -1577,9 +1686,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         });
     }
 
-    private startLoading(layout: import('../game/ports.js').MatchLayout, now: number) {
+    private startLoading(prepared: import('../game/ports.js').MatchLayout, now: number) {
       if (!deps.core || !deps.tuning) return this.returnToDeviceCheck('CORE_MISSING');
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
+      const layout = this.showcase ? this.showcaseLayout(prepared) : prepared;
       const instance = this.context.createInstance('game');
       const state = deps.core.createMatch({
         matchId: this.context.matchId,
@@ -1589,6 +1699,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         layout,
         players,
         deadline: this.demo ? 'none' : 'round',
+        ...(this.showcase ? { result: 'timeout-only' as const } : {}),
       });
       const mediaInstanceId = randomUUID();
       this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
@@ -1820,6 +1931,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const requestedDemoRole = this.pendingDemoRole;
       this.pendingDemoRole = null;
       if (requestedDemoRole) this.operatorRole = requestedDemoRole;
+      // S15P21C204-318. A demo room plans roles around the operator, not from the swapped plan,
+      // so "swap" has to flip the operator's role itself or it silently keeps the same one.
+      else if (this.demo && request?.mode === 'swap' && this.operatorRole)
+        this.operatorRole = this.operatorRole === 'runner' ? 'tagger' : 'runner';
       const now = deps.monotonicNow();
       for (const instance of this.driver.attached())
         this.retireInstance(instance.gameInstanceId, 'round-ended');
@@ -2020,6 +2135,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private checkExpiry(now: number) {
       if (this.closing) return;
+      if (this.demoVacantSince !== null && now - this.demoVacantSince >= DEMO_REJOIN_GRACE_MS) {
+        this.closing = true;
+        deps.slots.beginClose(this.roomCode);
+        deps.sessions.invalidateRoom(this.roomCode);
+        void this.disconnect(ROOM_EXPIRED_CLOSE_CODE);
+        return;
+      }
       const decision = deps.roomExpiry.decide({
         phase: this.phase,
         connectedCount: this.clientsByPlayer.size,
@@ -2089,7 +2211,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // The client must observe a new match before its roster; old-match data is rejected.
       this.broadcast(
         PRODUCT_SERVER_MESSAGES.roomRoster,
-        this.lobby.roster(this.context.matchId, this.context.stateVersion, this.phase),
+        {
+          ...this.lobby.roster(this.context.matchId, this.context.stateVersion, this.phase),
+          kind: this.roomKind,
+          capacity: this.lobby.capacity,
+        },
         { afterNextPatch: true },
       );
     }

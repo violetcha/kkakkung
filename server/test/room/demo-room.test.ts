@@ -43,7 +43,7 @@ const configuration = (demoRooms: boolean) => ({
   port: 0,
 });
 
-async function fixture(demoRooms = true, strictProduct = false) {
+async function fixture(demoRooms = true, strictProduct = false, clock = { offsetMs: 0 }) {
   const config = configuration(demoRooms);
   const real = await loadProductProfile(config);
   const application = createApplication<MatchState>(config, {
@@ -54,6 +54,7 @@ async function fixture(demoRooms = true, strictProduct = false) {
     publicWindow: { mode: 'continuous' },
     serverEpoch: 'epoch-demo-test',
     maxRooms: 2,
+    monotonicNow: () => performance.now() + clock.offsetMs,
   });
   const port = await application.listen();
   const endpoint = `http://127.0.0.1:${port}`;
@@ -268,6 +269,111 @@ it('opens the demo room on the deployed composition, where a match cannot start'
       'accepted',
     );
     await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 15_000 });
+  } finally {
+    await f.close();
+  }
+}, 60_000);
+
+// S15P21C204-312. A refresh used to end the demo: the room disposed with its only client, the
+// connection loss freed the seat and voided the match, and PLAYING refused the join.
+async function rejoin(f: Awaited<ReturnType<typeof fixture>>, session: DemoRoomResponse) {
+  try {
+    return await f.connect(session);
+  } catch (error) {
+    const refused = error as { code?: number; message?: string };
+    throw new Error(`REJOIN_REFUSED ${refused.code} ${refused.message}`, { cause: error });
+  }
+}
+
+it('lets the operator come back after a refresh before the match', async () => {
+  const f = await fixture();
+  try {
+    const session = demoRoomResponseSchema.parse(await (await f.open({ role: 'runner' })).json());
+    const first = await f.connect(session);
+    await vi.waitFor(() => expect(first.state.phase).toBe('DEVICE_CHECK'));
+    await first.leave(false);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(f.application.slots!.occupied(session.roomCode)).toBe(1);
+
+    const again = await rejoin(f, session);
+    await vi.waitFor(() => expect(again.state.phase).toBe('DEVICE_CHECK'));
+    expect(f.application.slots!.occupied(session.roomCode)).toBe(1);
+  } finally {
+    await f.close();
+  }
+}, 60_000);
+
+it('keeps the running demo match through a refresh and hands it back', async () => {
+  const f = await fixture();
+  try {
+    const session = demoRoomResponseSchema.parse(await (await f.open({ role: 'runner' })).json());
+    const first = await f.connect(session);
+    const views: PrivateView[] = [];
+    first.onMessage('private-view', (value: PrivateView) => views.push(value));
+    await vi.waitFor(() => expect(first.state.phase).toBe('DEVICE_CHECK'));
+    await f.send(first, { type: 'READY', payload: { ready: true } });
+    // S15P21C204-295. 방장이 시작하고 팀 연습을 거친다. 인형 몫의 보고는 서버가 대신 적는다.
+    await f.send(first, { type: 'ROOM_START', payload: {} });
+    await vi.waitFor(() => expect(first.state.phase).toBe('TEAM_PRACTICE'), { timeout: 30_000 });
+    await f.send(first, { type: 'PRACTICE_READY', payload: { ready: true } });
+    await vi.waitFor(() => expect(first.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
+    await f.send(first, { type: 'LOAD_READY', payload: loadPayload(views) });
+    await vi.waitFor(() => expect(first.state.phase).toBe('PLAYING'), { timeout: 30_000 });
+    const matchId = first.state.matchId;
+    await first.leave(false);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const again = await rejoin(f, session);
+    const back: PrivateView[] = [];
+    again.onMessage('private-view', (value: PrivateView) => back.push(value));
+    // The same match, still running: a refresh is not a connection loss that voids the round.
+    await vi.waitFor(() => expect(again.state.phase).toBe('PLAYING'));
+    expect(again.state.matchId).toBe(matchId);
+    expect(again.state.abortReason ?? null).toBeNull();
+    // The operator plays on: the command is judged and the next view shows them still in it.
+    expect((await f.send(again, { type: 'TURN', payload: { direction: 'left' } })).status).toBe(
+      'accepted',
+    );
+    await vi.waitFor(() => expect(back.at(-1)?.self?.status).toBe('ACTIVE'));
+  } finally {
+    await f.close();
+  }
+}, 90_000);
+
+it('closes an abandoned demo room after the rejoin grace and frees its slot', async () => {
+  const clock = { offsetMs: 0 };
+  const f = await fixture(true, false, clock);
+  try {
+    const session = demoRoomResponseSchema.parse(await (await f.open({ role: 'runner' })).json());
+    const first = await f.connect(session);
+    await vi.waitFor(() => expect(first.state.phase).toBe('DEVICE_CHECK'));
+    await first.leave(false);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(f.application.slots!.totalOccupied()).toBe(1);
+
+    clock.offsetMs = 121_000;
+    await vi.waitFor(() => expect(f.application.slots!.totalOccupied()).toBe(0), {
+      timeout: 5000,
+    });
+    await expect(rejoin(f, session)).rejects.toThrow(/REJOIN_REFUSED/);
+  } finally {
+    await f.close();
+  }
+}, 60_000);
+
+// S15P21C204-312. A lock in a one-seat demo room would refuse the operator's own rejoin (D6).
+it('refuses to lock or kick in a demo room, so a refresh can still come back', async () => {
+  const f = await fixture();
+  try {
+    const session = demoRoomResponseSchema.parse(await (await f.open({ role: 'runner' })).json());
+    const first = await f.connect(session);
+    await vi.waitFor(() => expect(first.state.phase).toBe('DEVICE_CHECK'));
+    // The receipt only says the command was queued; the room judges it on the next tick.
+    await f.send(first, { type: 'ROOM_LOCK', payload: { locked: true } });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await first.leave(false);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await rejoin(f, session);
   } finally {
     await f.close();
   }

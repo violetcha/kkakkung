@@ -91,6 +91,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
     strictProduct: true,
     maxRooms: config.maxRooms,
     maxRoomsPerOrigin: config.maxRoomsPerOrigin,
+    demoMaxRooms: config.demoMaxRooms,
     inviteMaxTtlMs: admission?.inviteMaxTtlMs ?? null,
     publicWindow: config.publicWindow,
     sessionAttempts: admission

@@ -4,6 +4,7 @@ import { roundFixture } from '../features/room/product-fixture';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { GameHud } from '../features/game/flow/GameHud';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
+import { SpectatorBar } from '../features/game/flow/SpectatorBar';
 import { Hotbar } from '../features/game/flow/Hotbar';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { crosshairState, installHint } from '../features/game/flow/install-hint';
@@ -51,6 +52,7 @@ export function HudPreview() {
   const [selected, setSelected] = useState<EquipmentKind>('sensor');
   const [drawer, setDrawer] = useState(false);
   const [facingWall, setFacingWall] = useState(false);
+  const [spectating, setSpectating] = useState(false);
   const baseView = previewView(role);
   const baseSelf = baseView.self;
   if (baseSelf?.status !== 'ACTIVE') throw new Error('preview self must be active');
@@ -80,6 +82,9 @@ export function HudPreview() {
         <button aria-pressed={facingWall} onClick={() => setFacingWall(!facingWall)}>
           설치 가능 칸 {facingWall ? '끄기' : '켜기'}
         </button>
+        <button aria-pressed={spectating} onClick={() => setSpectating(!spectating)}>
+          관전 {spectating ? '끄기' : '켜기'}
+        </button>
       </div>
       <section className="game-stage">
         <div className="product-canvas">
@@ -90,20 +95,35 @@ export function HudPreview() {
           nowMs={4_000}
           status={<GameHud round={round} self={self} mode="motion" />}
         />
-        <div
-          className="crosshair"
-          aria-hidden="true"
-          data-install={crosshairState(installHint(view, selected, TICK))}
-        />
-        <Hotbar
-          view={view}
-          tick={TICK}
-          selected={selected}
-          hint={installHint(view, selected, TICK)}
-          onSelectEquipment={(kind) => setSelected(kind)}
-        />
+        {spectating ? (
+          <SpectatorBar
+            spectating={{
+              targetId: 'preview-runner-a',
+              cell: self.cell,
+              dir: self.dir,
+              action: null,
+              candidates: ['preview-runner-a', 'preview-runner-b'],
+            }}
+            playerNames={{ 'preview-runner-a': '유리', 'preview-runner-b': '초록' }}
+          />
+        ) : (
+          <>
+            <div
+              className="crosshair"
+              aria-hidden="true"
+              data-install={crosshairState(installHint(view, selected, TICK))}
+            />
+            <Hotbar
+              view={view}
+              tick={TICK}
+              selected={selected}
+              hint={installHint(view, selected, TICK)}
+              onSelectEquipment={(kind) => setSelected(kind)}
+            />
+          </>
+        )}
         <MiniMap view={view} tick={TICK} />
-        <details className="hud-drawer" open={drawer}>
+        <details className="hud-drawer" open={drawer} hidden={spectating}>
           <summary>교환 · 도전 · 장치 · 소리</summary>
           <div className="hud-drawer-body">
             <ExchangePanel

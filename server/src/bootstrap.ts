@@ -44,7 +44,13 @@ import { AdmissionLimiter } from './session/AdmissionLimiter.js';
 import { checkOrigin, installHttpBoundary } from './session/HttpBoundary.js';
 import { InviteStore } from './session/InviteStore.js';
 import { RoomInvitations } from './session/RoomInvitations.js';
-import { createDemoRoutes, createDemoUnavailableRoutes } from './session/DemoRoutes.js';
+import {
+  createDemoAdminRoutes,
+  createDemoAdminUnavailableRoutes,
+  createDemoRoutes,
+  createDemoUnavailableRoutes,
+} from './session/DemoRoutes.js';
+import { createShowcaseRoutes, createShowcaseUnavailableRoutes } from './session/ShowcaseRoutes.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -77,6 +83,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   maxRooms: number;
   /** 한 출처가 동시에 열어 둘 수 있는 방 수(S15P21C204-300). 생략하면 레지스트리 기본값. */
   maxRoomsPerOrigin?: number;
+  /** S15P21C204-312. Demo rooms counted apart from maxRooms. */
+  demoMaxRooms?: number;
   inviteMaxTtlMs: number | null;
   publicWindow:
     | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
@@ -183,6 +191,7 @@ export function createApplication<State = unknown>(
         ...(product.maxRoomsPerOrigin === undefined
           ? {}
           : { maxRoomsPerOwner: product.maxRoomsPerOrigin }),
+        ...(product.demoMaxRooms === undefined ? {} : { maxDemoRooms: product.demoMaxRooms }),
       })
     : null;
   const directory = new RoomDirectory();
@@ -399,6 +408,19 @@ export function createApplication<State = unknown>(
               directory.get(session.roomCode)?.canManageInvitations(session.playerId) === true,
           }),
         );
+        // 발표 시연 방. `/demo` 와 같은 SSO 경계 뒤의 브라우저 진입이며 운영 토큰과 무관하다.
+        app.use(
+          config.showcaseRooms
+            ? createShowcaseRoutes({
+                sessions: productSessions,
+                slots,
+                trustedProxy: product.trustProxy,
+                monotonicNow,
+                admissionTtlMs: config.demoAdmissionTtlMs,
+                cleanupReservations,
+              })
+            : createShowcaseUnavailableRoutes(product.trustProxy),
+        );
         if (authorize) {
           app.use(createInvitationRoutes({ invites, authorize }));
           // Demo rooms stay closed unless the deployment enabled them (S15P21C204-258).
@@ -413,6 +435,21 @@ export function createApplication<State = unknown>(
                   cleanupReservations,
                 })
               : createDemoUnavailableRoutes(authorize),
+          );
+          // `/demo` is deliberately separate from the Bearer-only operations route. The host
+          // nginx supplies this header only after GitLab SSO, and the game server remains private
+          // behind that proxy. Public player traffic never carries this header.
+          app.use(
+            config.demoRooms
+              ? createDemoAdminRoutes({
+                  sessions: productSessions,
+                  slots,
+                  trustedProxy: product.trustProxy,
+                  monotonicNow,
+                  demoAdmissionTtlMs: config.demoAdmissionTtlMs,
+                  cleanupReservations,
+                })
+              : createDemoAdminUnavailableRoutes(product.trustProxy),
           );
           if (media?.createOperationsHandlers) {
             const handlers = media.createOperationsHandlers(authorize);
@@ -512,6 +549,8 @@ export function createApplication<State = unknown>(
             fallbackPath: product.layouts.fallbackPath,
             templateId: product.layouts.templateId,
             templateVersion: product.layouts.templateVersion,
+            // S15P21C204-321. 이것이 빠져 방이 고른 크기를 찾지 못하고 늘 기본 맵으로 경기했다.
+            ...(product.layouts.bySize ? { bySize: product.layouts.bySize } : {}),
           }
         : null,
       media,

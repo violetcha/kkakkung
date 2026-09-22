@@ -1,46 +1,19 @@
-import type { ActiveSelf, PublicRoundState, SpectateView } from '@kkakkung/protocol/game-schema';
+import type { ActiveSelf, PublicRoundState } from '@kkakkung/protocol/game-schema';
 
+/**
+ * 활성 플레이어의 상태 문구. 279 이후 화면에는 핫바·십자선·미니맵이 같은 정보를 보여 주고
+ * 이 컴포넌트는 접근성 레이어에만 남는다. 관전은 화면에 보여야 하므로 `SpectatorBar` 가
+ * 무대 위에서 따로 맡는다(320).
+ */
 export function GameHud({
   round,
   self,
   mode,
-  spectating,
-  playerNames = {},
-  onSpectate,
 }: {
   round: PublicRoundState;
   self?: ActiveSelf;
   mode?: 'motion' | 'keyboard';
-  spectating?: SpectateView;
-  playerNames?: Readonly<Record<string, string>>;
-  onSpectate?(targetPlayerId: string): void;
 }) {
-  if (spectating) {
-    const targetName = playerNames[spectating.targetId] ?? '생존 도망자';
-    return (
-      <section className="game-hud spectator-hud" aria-label="관전 상태">
-        <div>
-          <span className="role-badge">관전</span>
-          <strong>관전 중 · {targetName} 시점</strong>
-        </div>
-        <p>생존 도망자가 보고 듣는 범위만 함께 봅니다.</p>
-        <div className="spectator-targets" aria-label="관전 대상 선택">
-          {spectating.candidates.map((playerId) => (
-            <button
-              key={playerId}
-              type="button"
-              data-spectate-target={playerId}
-              aria-pressed={playerId === spectating.targetId}
-              disabled={playerId === spectating.targetId}
-              onClick={() => onSpectate?.(playerId)}
-            >
-              {playerNames[playerId] ?? '도망자'}
-            </button>
-          ))}
-        </div>
-      </section>
-    );
-  }
   if (!self) return null;
   const practice = round.phase === 'TEAM_PRACTICE';
   const remaining =

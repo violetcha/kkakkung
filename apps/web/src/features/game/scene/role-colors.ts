@@ -26,7 +26,14 @@ export const ROLE_SILHOUETTE = Object.freeze({
 export const roleColorsCss = () =>
   `--role-tagger: ${ROLE_COLORS.tagger.cloth}; --role-runner: ${ROLE_COLORS.runner.cloth};`;
 
-/** Relative luminance (sRGB, WCAG) of a #rrggbb colour; used by tests to keep both roles bright. */
+/**
+ * Relative luminance (sRGB, WCAG) of a #rrggbb colour.
+ *
+ * S15P21C204-329. Nothing at runtime calls this, and that is on purpose: it exists so
+ * `role-colors.test` and `block-theme.test` can hold the shipped palettes to a brightness and a
+ * cloth/accent separation that a hex value alone does not show. Deleting it as an unused export
+ * would delete those checks, so it stays here beside the colours it is about.
+ */
 export function relativeLuminance(hex: string): number {
   const channel = (index: number) => {
     const value = parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16) / 255;

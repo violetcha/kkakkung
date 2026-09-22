@@ -6,6 +6,9 @@ import {
   deviceCheckErrorStep,
   deviceCheckStepAt,
   deviceCheckSteps,
+  latchDeviceCheckSteps,
+  passedDeviceCheckSteps,
+  type DeviceCheckStepId,
 } from './device-check-steps';
 
 const at = (status: DeviceStatus, motion?: { lean: boolean; turn: boolean }) =>
@@ -83,5 +86,55 @@ describe('deviceCheckErrorStep', () => {
     expect(deviceCheckErrorStep('MODEL_LOAD_TIMEOUT')).toBe('camera');
     // 분류를 모르는 code 는 점검을 처음부터 다시 하게 한다.
     expect(deviceCheckErrorStep('DEVICE_ERROR')).toBe('camera');
+  });
+});
+
+describe('passedDeviceCheckSteps / latchDeviceCheckSteps', () => {
+  const ids = (steps: readonly { id: string; state: string }[]) =>
+    Object.fromEntries(steps.map((step) => [step.id, step.state]));
+  const walk = (...statuses: readonly DeviceStatus[]) => {
+    let passed: ReadonlySet<DeviceCheckStepId> = new Set();
+    let steps = deviceCheckSteps({ status: statuses[0]! });
+    for (const status of statuses) {
+      steps = deviceCheckSteps({ status });
+      passed = passedDeviceCheckSteps(passed, steps);
+    }
+    return { passed, steps, reached: latchDeviceCheckSteps(steps, passed) };
+  };
+
+  it('keeps a passed group passed when tracking flickers', () => {
+    // S15P21C204-330. vision 이 잠깐 loading 으로 떨어지는 것은 정상이다(눈 깜빡임, 고개 돌리기,
+    // 4단계 단추를 누르려고 화면 아래를 보기). 그때마다 1단계로 되감기지 않아야 한다.
+    const flicker = { ...allReady, vision: 'loading' } as const;
+    expect(at(flicker).camera).toBe('busy');
+    expect(activeDeviceCheckStep(deviceCheckSteps({ status: flicker }))).toBe(0);
+
+    const { reached } = walk(allReady, flicker);
+    expect(ids(reached).camera).toBe('done');
+    expect(activeDeviceCheckStep(reached)).toBe(3);
+  });
+
+  it('forgets a group that actually failed and closes ready with it', () => {
+    const { passed, reached } = walk(allReady, { ...allReady, camera: 'failed' });
+    expect(passed.has('camera')).toBe(false);
+    expect(passed.has('done')).toBe(false);
+    expect(ids(reached).camera).toBe('blocked');
+    // 막힌 단계가 있으면 그 단계로 돌려보낸다. 준비 완료도 열리지 않는다.
+    expect(activeDeviceCheckStep(reached)).toBe(0);
+    expect(ids(reached).done).not.toBe('done');
+  });
+
+  it('never latches a blocked group even if the memory still holds it', () => {
+    const steps = deviceCheckSteps({ status: { ...cameraReady, camera: 'failed' } });
+    const reached = latchDeviceCheckSteps(steps, new Set<DeviceCheckStepId>(['camera']));
+    expect(ids(reached).camera).toBe('blocked');
+  });
+
+  it('gives the same memory when the same steps are folded twice', () => {
+    // 렌더 중에 불러도 안전해야 한다(StrictMode 는 같은 렌더를 두 번 돌린다).
+    const steps = deviceCheckSteps({ status: allReady });
+    const once = passedDeviceCheckSteps(new Set(), steps);
+    const twice = passedDeviceCheckSteps(once, steps);
+    expect([...twice].sort()).toEqual([...once].sort());
   });
 });

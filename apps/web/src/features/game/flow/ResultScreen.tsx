@@ -1,4 +1,4 @@
-import type { PrivateView, PublicRoundState } from '@kkakkung/protocol/game-schema';
+import type { PrivateView, PublicRoundState, Role } from '@kkakkung/protocol/game-schema';
 import { resultPresenter } from './result-presenter';
 import type { RequestDisplay } from '../../room/command-lifecycle';
 import { commandFeedback } from './command-feedback';
@@ -8,16 +8,28 @@ export function ResultScreen({
   host,
   request,
   connectedCount,
+  demo = false,
   onRematch,
+  rematchAvailable = true,
+  capacity = 6,
 }: {
   round: PublicRoundState;
   self: PrivateView['self'];
   host: boolean;
   request?: RequestDisplay;
   connectedCount: number;
-  onRematch(mode: 'same' | 'swap' | 'lobby'): void;
+  /**
+   * S15P21C204-318. 데모 방은 관리자 한 명과 인형 다섯이라 팀·인원 안내가 맞지 않는다. 대신 다음
+   * 경기에서 관리자가 맡을 역할을 고른다. 술래 쪽 대본을 보려고 링크를 새로 만들 필요가 없다.
+   */
+  demo?: boolean;
+  onRematch(mode: 'same' | 'swap' | 'lobby', role?: Role): void;
+  /** 시연 방은 재경기가 없다. 결과만 보이고 단추는 없다. */
+  rematchAvailable?: boolean;
+  /** 방의 자리 수. 도망자 수(절반)로 남은 도망자를 세고, 재입장 안내의 분모가 된다. */
+  capacity?: number;
 }) {
-  const result = resultPresenter(round, self);
+  const result = resultPresenter(round, self, { runners: capacity / 2 });
   const pending =
     round.rematchState === 'requested' ||
     (request !== undefined && ['pending', 'waiting-view', 'applied'].includes(request.status));
@@ -33,22 +45,46 @@ export function ResultScreen({
         {ended ? '종료 시 남은 도망자' : '활동 중인 도망자'} {result.counts.active}
       </p>
       {result.remaining !== null && <p>남은 시간 {result.remaining}초</p>}
-      {ended && (
+      {ended && !rematchAvailable && (
+        <p role="status" className="notice">
+          시연이 끝났습니다. 다음 시연은 /showcase 에서 새 방으로 시작합니다.
+        </p>
+      )}
+      {ended && rematchAvailable && (
         <p role="status" className="notice">
           {pending
             ? '다음 경기를 준비하고 있습니다. 잠시 기다려 주세요.'
             : round.rematchState === 'settling'
               ? '다음 경기를 위해 연결을 정리하고 있습니다. 재경기를 선택하면 준비되는 대로 이동합니다.'
-              : host
-                ? '재경기 방식을 선택해 주세요. 모두 다시 준비한 뒤 시작합니다.'
-                : '방장이 다음 경기를 선택하기를 기다리고 있습니다.'}
+              : demo
+                ? '다음 경기에서 맡을 역할을 고르세요. 인형이 준비를 대신합니다.'
+                : host
+                  ? '재경기 방식을 선택해 주세요. 모두 다시 준비한 뒤 시작합니다.'
+                  : '방장이 다음 경기를 선택하기를 기다리고 있습니다.'}
         </p>
       )}
-      {ended && connectedCount < 6 && (
-        <p>현재 {connectedCount}/6명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수 있습니다.</p>
+      {ended && rematchAvailable && !demo && connectedCount < capacity && (
+        <p>
+          현재 {connectedCount}/{capacity}명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수
+          있습니다.
+        </p>
       )}
       {commandFeedback(request) && <p role="status">{commandFeedback(request)}</p>}
-      {host && ended && (
+      {host && ended && rematchAvailable && demo && (
+        <div className="actions">
+          {(['runner', 'tagger'] as const).map((role) => (
+            <button
+              key={role}
+              disabled={pending}
+              aria-pressed={self?.role === role}
+              onClick={() => onRematch('same', role)}
+            >
+              {role === 'runner' ? '도망자로 재경기' : '술래로 재경기'}
+            </button>
+          ))}
+        </div>
+      )}
+      {host && ended && rematchAvailable && !demo && (
         <div className="actions">
           <button disabled={pending} onClick={() => onRematch('same')}>
             같은 팀으로 재경기

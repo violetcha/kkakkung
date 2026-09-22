@@ -82,12 +82,15 @@ it.each(['DRAINING', 'LOCKED'])(
 it('DP06 local harness follows real six-client grant/phase/input/retirement APIs', async () => {
   const opsToken = randomUUID();
   const server = await startProductServerProcess(opsToken);
+  let probes = 0;
   try {
     // S15P21C204-302. This run's positive in-game audio evidence is a coin flip on the corridor
     // maze, so the child pins the open grid. Asserted here because the first attempt at that pin
     // set an environment variable the child never reads, and nothing said so: the run stayed on
     // the maze and failed in CI. S15P21C204-308 removes the pin and this expectation with it.
-    expect(server.mapTemplate).toBe('master-v1');
+    // S15P21C204-308. The local contract runs the product default now that in-game audio evidence
+    // no longer depends on where a random walk goes.
+    expect(server.mapTemplate).toBe('maze-v1');
     await expect
       .poll(async () => (await server.inspect()).readiness?.state, { timeout: 5000 })
       .toBe('READY');
@@ -126,10 +129,20 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
         let published = false;
         let bindings: MediaBindings | null = null;
         let audio: AudioPolicy | null = null;
+        // S15P21C204-324. The first client fails its first close after the game scope opened,
+        // which is the teardown every client starts the moment it sees RESULT. That used to flip
+        // the harness's media-failure flag while the other five were still arriving at RESULT and
+        // report a failed game for a round that had just finished. The run must still pass, with
+        // the stumble recorded, because the closure below is re-verified afterwards.
+        const chosen = probes++ === 0;
+        let connects = 0;
+        let closesInGame = 0;
+        const failsTeardownOnce = () => chosen && connects === 2 && ++closesInGame === 1;
         return {
           async connect(value) {
             grant = value;
             published = false;
+            connects++;
           },
           async publish() {
             if (!grant) throw new Error('LOCAL_NOT_CONNECTED');
@@ -180,6 +193,9 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
             };
           },
           async close() {
+            // Leaves the probe reporting itself open, which is how an unconfirmed retirement
+            // looks; the very next close succeeds, as a slow browser call would.
+            if (failsTeardownOnce()) return;
             grant = null;
             published = false;
             bindings = null;
@@ -194,7 +210,9 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
       participants: 6,
       received: { practiceVideo: true, practiceAudio: true, gameVideo: true, gameAudio: true },
       mediaRooms: { practice: 2, game: 1 },
-      cleanup: { clientsClosed: 6, drainConfirmed: true, resumed: true },
+      // S15P21C204-324. The injected teardown stumble is recorded, and every client is still
+      // confirmed closed: the round's verdict does not hang on that first attempt.
+      cleanup: { clientsClosed: 6, drainConfirmed: true, resumed: true, retirementUnconfirmed: 1 },
     });
     expect(report.gameInputsApplied).toBeGreaterThan(0);
     expect(report.phaseCoverage).toEqual(

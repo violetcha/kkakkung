@@ -18,6 +18,7 @@ import {
 } from './DeploymentInteraction.js';
 import { validateDeploymentSmokePlan } from './DeploymentSmokePlan.js';
 import { DeploymentPracticeApproach } from './DeploymentPracticeApproach.js';
+import { DeploymentGameRendezvous, type RendezvousView } from './DeploymentGameRendezvous.js';
 import type { CloudPreflight } from './CloudPreflight.js';
 
 export type DeploymentSmokeReport = {
@@ -54,7 +55,17 @@ export type DeploymentSmokeReport = {
     gameVideo: boolean;
     gameAudio: boolean;
   };
-  cleanup: { clientsClosed: number; drainConfirmed: boolean; resumed: boolean };
+  cleanup: {
+    clientsClosed: number;
+    drainConfirmed: boolean;
+    resumed: boolean;
+    /**
+     * S15P21C204-324. Clients whose media teardown after the round did not confirm on the first
+     * attempt. Recorded, not fatal: `clientsClosed` is the verdict, and it is reached by asking
+     * the probe whether it actually closed rather than by trusting that first attempt.
+     */
+    retirementUnconfirmed: number;
+  };
   durationMs: number;
 };
 
@@ -103,14 +114,14 @@ export async function runDeploymentSmoke(
     gameInputsApplied: 0,
     mediaRooms: { practice: 0, game: 0 },
     received: { practiceVideo: false, practiceAudio: false, gameVideo: false, gameAudio: false },
-    cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false },
+    cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false, retirementUnconfirmed: 0 },
     durationMs: 0,
   };
   // The local contract run is capped so a broken harness cannot hang `pnpm verify`; the real
-  // Cloud run uses the preflight's own budget. S15P21C204-302 raised the local cap from 120s,
-  // which left only about 90s of playing: too little for six wandering clients to find each
-  // other on the corridor maze. The local run is pinned to the open grid for now and finishes
-  // well inside this, so the headroom is for S15P21C204-308, which removes that pin.
+  // Cloud run uses the preflight's own budget. S15P21C204-302 raised the local cap from 120s
+  // because six wandering clients needed the room to find each other on the corridor maze.
+  // S15P21C204-308 now walks two of them together instead, so the cap is headroom rather than
+  // the thing the run depends on.
   const until =
     started +
     Math.min(
@@ -125,6 +136,7 @@ export async function runDeploymentSmoke(
   const createdProbes: DeploymentMediaProbe[] = [];
   const gameInputs = new Set<string>();
   const practiceApproach = new DeploymentPracticeApproach(6);
+  const rendezvous = new DeploymentGameRendezvous();
   const cloudRooms = { practice: new Set<string>(), game: new Set<string>() };
   let timer: ReturnType<typeof setInterval> | undefined;
   let stage = 'DP06_INITIALIZATION_FAILED';
@@ -212,6 +224,11 @@ export async function runDeploymentSmoke(
     if (!condition) throw new Error('DP06_CLEANUP_UNCONFIRMED');
   };
   const snapshot = () => players.map((player) => player.runtime.getSnapshot());
+  /**
+   * S15P21C204-324. The server has decided the round as soon as one client sees RESULT; the rest
+   * follow within a tick or two and all of them start folding media up at that moment.
+   */
+  const roundDecided = () => snapshot().some((value) => value.round?.phase === 'RESULT');
   const waitPhase = (phase: string) =>
     wait(() => {
       const all = snapshot();
@@ -219,6 +236,17 @@ export async function runDeploymentSmoke(
         throw new Error('DP06_PRODUCT_RUNTIME_FAILED');
       return all.length === 6 && all.every((value) => value.round?.phase === phase);
     });
+  /**
+   * What a client has been told about the ground. Walls are cells in this game and a known wall
+   * face names the wall cell itself, so both sides come out as plain cells.
+   */
+  const knownGround = (value: ReturnType<typeof snapshot>[number]) => {
+    const floors: { x: number; y: number }[] = [];
+    const walls: { x: number; y: number }[] = [];
+    for (const entry of value.view?.knownTerrain ?? [])
+      (entry.kind === 'floor' ? floors : walls).push({ x: entry.x, y: entry.y });
+    return { floors, walls };
+  };
   /** The request id of each client's last forward intent, and whether a wall refused it. */
   const lastMoveRequest = new Map<number, string>();
   const walled = new Set<number>();
@@ -246,6 +274,41 @@ export async function runDeploymentSmoke(
       if (player.runtime.getSnapshot().round?.phase === 'PLAYING') gameInputs.add(moveId);
     }
     if (round % (5 + index) === 0) turn();
+  };
+  /**
+   * S15P21C204-308. During the round the clients are steered instead of wandering: two of the
+   * same role walk together so the rules open a voice, which they did not reliably do on the
+   * corridor maze. Everything still goes out as an ordinary TURN / MOVE_INTENT.
+   */
+  const steer = (round: number) => {
+    const views: RendezvousView[] = snapshot().map((value) => {
+      const self = value.view?.self;
+      // Null is reserved for a client that has left the round; one the rules are still moving
+      // reports itself so its partner keeps walking toward it.
+      if (!self || self.status !== 'ACTIVE') return null;
+      return {
+        cell: self.cell,
+        dir: self.dir,
+        role: self.role,
+        acting: self.action !== null,
+        ...knownGround(value),
+      };
+    });
+    const steps = rendezvous.plan(views);
+    steps.forEach((step, index) => {
+      const player = players[index]!;
+      // A refused forward means the pooled map had a gap here; fall back to the wandering rule.
+      if (!step || walled.has(index)) return move(index, round);
+      if (step.kind === 'hold') return;
+      const sent =
+        step.kind === 'turn'
+          ? player.runtime.send({ type: 'TURN', payload: { direction: step.direction } })
+          : player.runtime.send({ type: 'MOVE_INTENT', payload: { direction: 'forward' } });
+      if (!sent) return;
+      if (step.kind === 'forward') lastMoveRequest.set(index, sent);
+      report.commandsSent++;
+      if (player.runtime.getSnapshot().round?.phase === 'PLAYING') gameInputs.add(sent);
+    });
   };
   const sampleMedia = async (purpose: 'practice' | 'game') => {
     const samples = await bounded(Promise.all(players.map((player) => player.probe.snapshot())));
@@ -355,8 +418,14 @@ export async function runDeploymentSmoke(
         uuid: randomUUID,
         fetcher,
         interactionFactory: createDeploymentInteractionFactory(probe, {
+          // S15P21C204-324. Once the round is decided every client folds its media up, and they
+          // do not reach RESULT on the same tick. A stumble in that teardown used to set the flag
+          // the game loop reads and report a failed game for a round that had just completed.
+          // After the round it is a cleanup fact: counted here, and the closure of every client
+          // is re-verified in the cleanup pass, which is what the run is actually judged on.
           onFailure: () => {
-            mediaFailure = true;
+            if (roundDecided()) report.cleanup.retirementUnconfirmed++;
+            else mediaFailure = true;
           },
         }),
         changed: (value) => {
@@ -416,7 +485,7 @@ export async function runDeploymentSmoke(
         snapshot().some((s) => s.error || s.lost || s.round?.phase === 'ABORTED')
       )
         throw new Error('DP06_GAME_FAILED');
-      players.forEach((_, index) => move(index, moves));
+      steer(moves);
       moves++;
       await sampleMedia('game');
       if (
@@ -466,7 +535,11 @@ export async function runDeploymentSmoke(
     // Real normal retirement reports happen before each game socket is closed by C runtime.leave.
     for (const player of players) {
       try {
-        await bounded(player.runtime.leave());
+        // S15P21C204-324. A retirement that failed once is cached as a rejection and `leave`
+        // hands it back, which used to skip the checks below and call the whole cleanup failed.
+        // `leave` still leaves the room on that path (SessionRuntime), so the verdict belongs to
+        // what the probe actually reports: closed and holding no local track.
+        await bounded(player.runtime.leave()).catch(() => {});
         await bounded(player.probe.close());
         const closed = await bounded(player.probe.snapshot());
         checkCleanup(!closed.connected && closed.localTracks.length === 0);

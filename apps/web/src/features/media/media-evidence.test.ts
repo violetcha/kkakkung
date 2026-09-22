@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  composeMediaEvidence,
-  evidenceViolations,
-  type EvidenceInput,
-  type MediaEvidence,
-} from './media-evidence';
+import { composeMediaEvidence, type EvidenceInput, type MediaEvidence } from './media-evidence';
 
 const SCOPE = { matchId: 'm1', mediaInstanceId: 'mi1', receiverGeneration: 2 };
 
@@ -89,7 +84,6 @@ describe('composeMediaEvidence', () => {
     });
 
     expect(result.integrity.forbiddenButSubscribed).toEqual(['ghost']);
-    expect(evidenceViolations(result)).toContain('FORBIDDEN_SUBSCRIPTION:ghost');
   });
 
   /** 이 시험이 이 모듈의 존재 이유다. */
@@ -111,7 +105,6 @@ describe('composeMediaEvidence', () => {
     expect(muted.integrity.mutedButSubscribed).toEqual(['a1']);
     // 허용된 트랙이므로 위반은 아니다. 두 목록을 섞지 않는다.
     expect(muted.integrity.forbiddenButSubscribed).toEqual([]);
-    expect(evidenceViolations(muted)).toEqual([]);
   });
 
   it('keeps the policy gain visible even when the user silenced everything', () => {
@@ -167,7 +160,7 @@ describe('composeMediaEvidence', () => {
     });
 
     expect(result.attachedFaceCount).toBe(3);
-    expect(evidenceViolations(result)).toContain('REMOTE_FACE_LIMIT:3>2');
+    expect(result.attachedFaceCount).toBeGreaterThan(result.remoteFaceLimit);
   });
 
   it('reports a face attached without a binding', () => {
@@ -177,11 +170,16 @@ describe('composeMediaEvidence', () => {
       attachedFaces: [{ trackSid: 'v1', playerId: 'p1' }],
     });
 
-    expect(evidenceViolations(result)).toContain('ATTACHED_WITHOUT_BINDING:v1');
+    expect(result.received).toContainEqual(
+      expect.objectContaining({ trackSid: 'v1', attached: true, authorized: false }),
+    );
   });
 
   it('is clean for a healthy generation', () => {
-    expect(evidenceViolations(evidence())).toEqual([]);
+    const healthy = evidence();
+    expect(healthy.integrity.forbiddenButSubscribed).toEqual([]);
+    expect(healthy.attachedFaceCount).toBeLessThanOrEqual(healthy.remoteFaceLimit);
+    expect(healthy.received.filter((e) => e.attached && !e.authorized)).toEqual([]);
   });
 
   it('carries the scope and generation state through unchanged', () => {

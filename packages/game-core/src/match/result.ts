@@ -28,15 +28,21 @@ export function evaluateResult(
   if (counts.escaped + counts.captured > 3 || (counts.escaped >= 2 && counts.captured >= 2)) {
     throw new Error(`impossible runner counts ${counts.escaped}/${counts.captured}`);
   }
-  if (counts.escaped >= 2) return { winner: 'runners', reason: 'two-escaped' };
-  if (counts.captured >= 2) return { winner: 'taggers', reason: 'two-captured' };
-  if (
+  const timedOut =
     options.includeTimeout &&
     state.mode === 'game' &&
     state.deadlineTick !== null &&
-    tick >= state.deadlineTick
-  ) {
-    return { winner: 'taggers', reason: 'timeout' };
+    tick >= state.deadlineTick;
+  // 시연 방: 탈출·포획으로 일찍 끝내지 않는다. 제한시간에 탈출이 더 많으면 도망자, 아니면 술래다.
+  if (state.resultPolicy === 'timeout-only') {
+    if (!timedOut) return null;
+    return {
+      winner: counts.escaped > counts.captured ? 'runners' : 'taggers',
+      reason: 'timeout',
+    };
   }
+  if (counts.escaped >= 2) return { winner: 'runners', reason: 'two-escaped' };
+  if (counts.captured >= 2) return { winner: 'taggers', reason: 'two-captured' };
+  if (timedOut) return { winner: 'taggers', reason: 'timeout' };
   return null;
 }

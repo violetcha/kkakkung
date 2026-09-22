@@ -262,6 +262,20 @@ export function bindProductRoom(
    */
   const isDemoRoom = () => snapshot.demo != null;
   let pendingDemo: DemoStateMessage | null = null;
+  /**
+   * S15P21C204-313. 데모 방은 기본 키보드로 시연한다(D3). 이동·회전·E 는 키보드 모드에서만 받는데
+   * (265) 모드의 기본값이 모션이라, 카메라 없이 들어온 관리자는 아무 키도 먹지 않았다. 출구 앞에
+   * 서도 E 로 탈출을 시작할 수 없었다. 보정을 마친 경우에만 모션을 유지한다.
+   */
+  const publishDemo = (demo: DemoStateMessage) => {
+    const first = snapshot.demo == null;
+    publish({ demo });
+    if (first && interaction.mode === 'motion' && snapshot.devices.calibration !== 'ready') {
+      interaction = { ...interaction, mode: 'keyboard' };
+      publish({ interaction });
+      updateContext();
+    }
+  };
   const publish = (patch: Partial<ProductSnapshot>) => {
     if (active) {
       snapshot = { ...snapshot, ...patch };
@@ -640,6 +654,8 @@ export function bindProductRoom(
         },
       },
       deps.interactionFactory,
+      undefined,
+      isDemoRoom,
     );
     created.runtime.setAudioPreferences(audioPreferences);
     created.runtime.setQualityPreset(snapshot.quality);
@@ -705,8 +721,6 @@ export function bindProductRoom(
   function updateContext() {
     const round = snapshot.round;
     if (!bridge || !round) return;
-    // 데모 방은 장치 점검이 성립하지 않는다. 준비 보고의 장치 조건을 그 방에서만 연다.
-    bridge.setDemoRoom(isDemoRoom());
     const self = snapshot.view?.self;
     const own = self?.status === 'ACTIVE' ? self : null;
     const exit = exitCandidate(snapshot.view);
@@ -1134,7 +1148,7 @@ export function bindProductRoom(
     }
     publish({ round });
     if (pendingDemo) {
-      if (pendingDemo.matchId === round.matchId) publish({ demo: pendingDemo });
+      if (pendingDemo.matchId === round.matchId) publishDemo(pendingDemo);
       pendingDemo = null;
     }
     // One measurement bucket per match: a rematch opens a new one and a decided
@@ -1171,7 +1185,7 @@ export function bindProductRoom(
     // 서버는 입장 직후 보내므로 첫 상태 패치(50ms 주기)보다 먼저 올 수 있다. 그때 버리면 이 방을
     // 데모 방으로 알지 못해 미디어를 기다리게 되니, 라운드를 알 때까지 들고 있다가 맞춰 본다.
     if (!snapshot.round) pendingDemo = result.data;
-    else if (result.data.matchId === snapshot.round.matchId) publish({ demo: result.data });
+    else if (result.data.matchId === snapshot.round.matchId) publishDemo(result.data);
   });
   on('room-access', (value) => {
     const result = roomAccessSchema.safeParse(value);

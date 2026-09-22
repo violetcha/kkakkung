@@ -8,26 +8,43 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import {
+  DEMO_ADMIN_ROOM_ROUTE,
   DEMO_ROOM_ROUTE,
   demoRoomRequestSchema,
   type DemoRoomResponse,
 } from '@kkakkung/protocol/game-messages';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
-import { requireOperator, type OperatorAuthorize } from './InvitationRoutes.js';
+import type { OperatorAuthorize } from './InvitationRoutes.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import { generateRoomCode } from './SessionRoutes.js';
 import type { SlotRegistry } from './SlotRegistry.js';
 
-export function createDemoRoutes(deps: {
+type DemoRouteDependencies = {
   sessions: ProductSessionStore;
   slots: SlotRegistry;
-  authorize: OperatorAuthorize;
   monotonicNow: () => number;
   demoAdmissionTtlMs: number;
   cleanupReservations?: () => void;
-}): Router {
+};
+
+type DemoAuthorize = (request: Request) => boolean;
+
+function requireDemoAccess(authorize: DemoAuthorize) {
+  return (req: Request, res: Response, next: () => void) => {
+    if (!authorize(req)) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(401).json({ error: 'UNAUTHORIZED' });
+      return;
+    }
+    next();
+  };
+}
+
+function createDemoRoute(
+  deps: DemoRouteDependencies & Readonly<{ route: string; authorize: DemoAuthorize }>,
+): Router {
   const router = Router();
-  router.post(DEMO_ROOM_ROUTE, requireOperator(deps.authorize), (req: Request, res: Response) => {
+  router.post(deps.route, requireDemoAccess(deps.authorize), (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     const parsed = demoRoomRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {}));
     if (!parsed.success) return void res.status(400).json({ error: 'INVALID_REQUEST' });
@@ -51,7 +68,11 @@ export function createDemoRoutes(deps: {
     });
     if (outcome !== 'reserved') {
       deps.sessions.invalidate(issued.sessionId);
-      return void res.status(503).json({ error: 'CAPACITY' });
+      // S15P21C204-312. 데모 방은 자기 예산이 따로 있다. 다른 데모 방이 열려 있어서 못 여는 것과
+      // 서비스 전체가 찬 것은 운영자가 할 일이 다르므로 나눠 답한다.
+      return void res
+        .status(503)
+        .json({ error: outcome === 'DEMO_LIMIT' ? 'DEMO_ROOM_LIMIT' : 'CAPACITY' });
     }
     const response: DemoRoomResponse = {
       sessionToken: issued.sessionToken,
@@ -76,12 +97,67 @@ export function createDemoRoutes(deps: {
   return router;
 }
 
+/** Operations/loopback entry. Its Bearer is never accepted by the browser administrator route. */
+export function createDemoRoutes(
+  deps: DemoRouteDependencies & { authorize: OperatorAuthorize },
+): Router {
+  return createDemoRoute({
+    ...deps,
+    route: DEMO_ROOM_ROUTE,
+    authorize: (request) => deps.authorize(request.headers.authorization),
+  });
+}
+
+/**
+ * Public-browser administrator entry. `X-Demo-Admin` is an assertion made by the host nginx only
+ * after its GitLab project-member check. Requiring `trustedProxy` keeps an accidentally exposed
+ * server port from treating a caller-supplied HTTP header as an administrator credential.
+ */
+export function createDemoAdminRoutes(
+  deps: DemoRouteDependencies & Readonly<{ trustedProxy: boolean }>,
+): Router {
+  return createDemoRoute({
+    ...deps,
+    route: DEMO_ADMIN_ROOM_ROUTE,
+    authorize: (request) => {
+      const identity = request.headers['x-demo-admin'];
+      return (
+        deps.trustedProxy &&
+        typeof identity === 'string' &&
+        identity.trim().length > 0 &&
+        identity.length <= 256
+      );
+    },
+  });
+}
+
 /** Mounted in place of the route when demo rooms are not enabled, so nothing is ever opened. */
 export function createDemoUnavailableRoutes(authorize: OperatorAuthorize): Router {
   const router = Router();
-  router.use(DEMO_ROOM_ROUTE, requireOperator(authorize), (_req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(503).json({ error: 'DEMO_UNAVAILABLE' });
-  });
+  router.use(
+    DEMO_ROOM_ROUTE,
+    requireDemoAccess((request) => authorize(request.headers.authorization)),
+    (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'DEMO_UNAVAILABLE' });
+    },
+  );
+  return router;
+}
+
+/** Same unavailable response for an SSO-authorized browser administrator. */
+export function createDemoAdminUnavailableRoutes(trustedProxy: boolean): Router {
+  const router = Router();
+  router.use(
+    DEMO_ADMIN_ROOM_ROUTE,
+    requireDemoAccess((request) => {
+      const identity = request.headers['x-demo-admin'];
+      return trustedProxy && typeof identity === 'string' && identity.trim().length > 0;
+    }),
+    (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'DEMO_UNAVAILABLE' });
+    },
+  );
   return router;
 }

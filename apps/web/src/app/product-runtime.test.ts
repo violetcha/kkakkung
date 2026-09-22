@@ -1461,6 +1461,40 @@ it('in a demo room skips media grants and reports LOAD_READY from assets and the
   }
 });
 
+// S15P21C204-313. 데모 방의 "장치 점검 없이 준비 완료"는 카메라 없이 READY 를 보내야 한다(D3).
+// 전에는 단추만 있고 브리지가 장치 미준비로 조용히 거절해 관리자가 대기 화면에 갇혔다.
+it('sends READY without a device check only in a demo room', async () => {
+  const f = fixture();
+  try {
+    f.state({ phase: 'DEVICE_CHECK', stateVersion: 11 });
+    f.messages.get('private-view')!(viewFixture({ stateVersion: 11 }));
+    const readies = () =>
+      f.send.mock.calls.filter(
+        ([channel, value]) => channel === 'command' && (value as { type: string }).type === 'READY',
+      );
+    // 일반 방: 장치가 준비되지 않았으면 여전히 막고, 모드도 바꾸지 않는다.
+    expect(f.runtime.ready(true)).toBe(false);
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('motion');
+    expect(readies()).toHaveLength(0);
+
+    f.messages.get('demo-state')!({
+      matchId: f.runtime.getSnapshot().round!.matchId,
+      available: [],
+      running: null,
+      step: null,
+      failureCode: null,
+      operatorExit: null,
+    });
+    // 카메라 없이 들어온 관리자는 키보드로 조작한다. 모션 모드면 이동·회전·E 가 먹지 않는다.
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    expect(f.runtime.ready(true)).toBe(true);
+    expect(readies()).toHaveLength(1);
+    expect((readies()[0]![1] as { payload: unknown }).payload).toEqual({ ready: true });
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
 it('keeps a demo-state that arrives before the first round until the round confirms its match', async () => {
   const room: ProductRoomPort = {
     state: { matchId: '' } as unknown as PublicMatchState,

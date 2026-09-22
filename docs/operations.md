@@ -34,25 +34,59 @@
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                               |
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
-| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                                                               |
+| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                              |
+| `DEMO_MAX_ROOMS`                           | `1`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                            |
+| `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                   |
 | `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
 
 ### 관리자 데모 방 열기
 
-홈에 진입점이 없으므로 주소를 `scripts/open-demo.mjs`로 받는다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이 함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).
+관리자는 서비스의 **`/demo`**에서 역할과 화면 표시 이름을 고른 뒤 데모 방을 연다. 이 경로와
+`/api/demo-admin/rooms`만은 게임 audience가 `public`이어도 GitLab 프로젝트 멤버 SSO를 계속
+요구한다. SSO를 통과한 호스트 nginx가 관리자 신원을 서버에 다시 쓰므로, 브라우저에는
+`OPS_TOKEN`이 전달되지 않는다. 홈에는 이 페이지로 가는 링크가 없다.
+
+호스트 설정을 처음 적용할 때는 `host.conf`와 함께 전용 조각을 설치한다.
+
+```bash
+sudo install -m 644 infra/nginx/demo-admin.conf /etc/nginx/snippets/kkakkung-demo-admin.conf
+sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 발표 시연 방 열기 (`/showcase`)
+
+팀원 넷이 **2:2**로 뛰는 발표용 방이다. 각자 서비스의 **`/showcase`**에서 역할(도망자·술래)과
+표시 이름을 고르고 들어가면 지금 열려 있는 시연 방 하나에 모인다(없으면 첫 사람이 연다). 한
+역할은 둘까지라 셋째가 같은 역할을 고르면 `ROLE_FULL`로 다른 역할을 고르게 한다. 맵은 소형
+(16x16)·고정 시드라 매번 같은 미로와 출구가 나오고, 방장도 맵 크기를 바꿀 수 없다. 경기는 탈출·
+포획 수로 일찍 끝나지 않고 3분을 다 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다.
+재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
+
+인증은 `/demo`와 같은 GitLab 프로젝트 멤버 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
+는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
+예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
+배포할 때 `host.conf`를 다시 설치한다.
+
+CLI는 장애 대응·자동화처럼 호스트에서만 쓰는 보조 경로다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이
+함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).
 
 ```bash
 OPS_TOKEN=... node scripts/open-demo.mjs \
   --base-url http://127.0.0.1:2567 --public-url http://127.0.0.1:5173 --role runner
 ```
 
-주소에 살아 있는 세션이 들어 있어 내 기기(loopback)에서만 화면에 찍고, 그 밖의 대상은 `--output`으로 비공개 파일(0600)에 쓴다. 실패는 원인별로 답한다: `DEMO_UNAVAILABLE`은 `DEMO_ROOMS=0`, `CAPACITY`는 방 예산 소진(열린 데모 방을 닫는다), `401`은 토큰이다. 데모 방도 `MAX_ROOMS`를 함께 쓰므로 열려 있는 동안 실제 경기가 쓸 수 있는 방이 하나 줄어든다.
+주소에 살아 있는 세션이 들어 있어 내 기기(loopback)에서만 화면에 찍고, 그 밖의 대상은 `--output`으로 비공개 파일(0600)에 쓴다. 실패는 원인별로 답한다: `DEMO_UNAVAILABLE`은 `DEMO_ROOMS=0`, `DEMO_ROOM_LIMIT`는 다른 데모 방이 아직 열려 있음(그 방에서 라운드를 끝내고 나가거나 2분 뒤 다시), `CAPACITY`는 서버의 세션 예산 소진, `401`은 토큰이다. 데모 방은 경기 방 예산을 쓰지 않으므로 시연 중에도 실제 경기가 쓸 수 있는 방 수는 그대로다.
+
+관리자가 새로고침하거나 잠시 끊겨도 같은 주소로 다시 들어오면 경기 중이라도 그 경기로 돌아간다. 끊긴 뒤 2분 안에 돌아오지 않으면 방을 닫고 데모 방 자리(`DEMO_MAX_ROOMS`)를 돌려준다(데모 라운드는 제한시간이 없어 닫지 않으면 자리를 계속 차지한다).
 
 ## 3. 배포와 헬스
 
 배포 순서: 매니페스트(SHA·digest) → SSO 격리 확인 → drain → 이미지 교체 → `/health/ready` → resume/OPEN → 실제 Cloud DP-06(1방·6 합성 클라이언트, 시험 600초+정리 60초, 계획 유효 30분) → 공개 재검사 → last-good 기록. 실패하면 새 requestId로 다시 drain한 뒤에만 이전 digest로 복귀하며, 조건을 확인할 수 없으면 `ROLLBACK_BLOCKED`로 둔다. 세부 장벽은 [인프라 안내](../infra/README.md)의 “배포 장벽”을 따른다.
+
+되돌린 뒤의 확인은 DP-06이 아니라 **HTTP 스모크**(리다이렉트·TLS·live/ready·Origin 허용거부·WSS 입장·정적 MIME)로 한다(S15P21C204-343). DP-06은 배포 잡의 작업 공간에 있는 웹 클라이언트 소스를 실행하는데 롤백이 되돌리는 것은 **이전** 서버 이미지라, 프로토콜이 바뀐 배포를 되돌리면 아무도 쓰지 않을 조합(새 클라이언트 ↔ 옛 서버)을 보고 무조건 실패한다. 실사용자는 web 이미지도 함께 되돌아가 짝이 맞는다. 되돌린 뒤의 `readiness`·`admission`·미정리 세대·예산 재검사는 그대로 돌므로, 복구가 실제로 열렸는지는 여전히 증명된다.
 
 - **drain은 진행 중 경기·연습·입장 대기가 모두 0이어야 끝나고, 최대 5분까지 기다린다**(S15P21C204-291). 경기가 없으면 즉시 끝나 배포 시간이 달라지지 않는다. 경기가 돌고 있으면 그 판이 끝날 때까지 기다리며, 그동안 새 입장은 막힌다. 곧 교체될 서버에 사람을 더 들이지 않는 것이다. drain 중에는 `startCountdown`이 admission OPEN을 요구하므로 재경기로 시작되는 새 라운드는 없다.
 - `/health/live`는 프로세스 생존, `/health/ready`는 복구·저널·예약·capability 준비다. READY만으로 입장하지 않고 admission=OPEN이 따로 필요하다.

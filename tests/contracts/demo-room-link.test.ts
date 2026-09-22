@@ -2,6 +2,8 @@
 // `scripts/lib/demo-room.mjs` builds is parsed back by the real web consumer, so the fragment
 // format cannot drift on one side only. The route constant and the response schema come from the
 // protocol package, so a server-side rename fails here rather than at the demo.
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { openDemoRoom } from '../../scripts/lib/demo-room.mjs';
 import {
@@ -138,5 +140,27 @@ describe('operator demo room link', () => {
     // If the server response schema gains a required field, this fixture stops parsing and the
     // library above has to learn about it.
     expect(demoRoomResponseSchema.safeParse(body()).success).toBe(true);
+  });
+});
+
+// S15P21C204-312. 역할을 빼먹으면 서버까지 가서 일반 실패로 돌아왔다. 방을 열기 전에 막는다.
+describe('open-demo command', () => {
+  it('refuses a missing role before it opens a room, and says which flag to give', () => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL('../../scripts/open-demo.mjs', import.meta.url)),
+        // 닫힌 포트다. 요청을 보냈다면 연결 오류가 났을 것이다.
+        '--base-url',
+        'http://127.0.0.1:1',
+        '--public-url',
+        'http://127.0.0.1:5173',
+      ],
+      { encoding: 'utf8', env: { ...process.env, OPS_TOKEN: 'unused' } },
+    );
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      'DEMO_ROOM_FAILED (ROLE_REQUIRED): give --role runner or --role tagger.',
+    );
   });
 });

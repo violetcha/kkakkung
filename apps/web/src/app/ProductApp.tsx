@@ -5,6 +5,7 @@ import {
   joinProductRoom,
   productRoomPort,
   cancelSessionReservation,
+  forgetDemoSession,
 } from '../features/room/product-session';
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
@@ -26,6 +27,7 @@ import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
+import { SpectatorBar } from '../features/game/flow/SpectatorBar';
 import { EventLog } from '../features/game/flow/EventLog';
 import { GameStatusChrome } from '../features/game/flow/CamcorderOverlay';
 import { Hotbar } from '../features/game/flow/Hotbar';
@@ -70,11 +72,14 @@ export function ProductApp({
   invitation,
   initialRoom = '',
   demoSession,
+  showcaseSession,
 }: {
   invitation: string;
   initialRoom?: string;
   /** S15P21C204-260. Operator demo session from the address fragment; absent for players. */
   demoSession?: SessionResponse;
+  /** 발표 시연 방 세션. `/showcase` 가 발급해 주소 조각으로 넘긴다. 미디어는 일반 경기와 같다. */
+  showcaseSession?: SessionResponse;
 }) {
   // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
   // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
@@ -251,6 +256,12 @@ export function ProductApp({
       ?.leave()
       .catch(() => setError('연결 정리를 확인하지 못했습니다. 페이지를 새로고침해 주세요.'));
   }, [cancelPendingAdmission]);
+  // S15P21C204-312. 관리자가 직접 나가면 이 탭에 남긴 데모 세션도 지운다. 새로고침(pagehide)은
+  // 나가는 것이 아니므로 그대로 두어 같은 경기로 돌아오게 한다.
+  const leaveByChoice = useCallback(() => {
+    if (demoSession) forgetDemoSession();
+    void leave();
+  }, [demoSession, leave]);
   useEffect(() => {
     const previous = appliedInvitation.current;
     // Keep a new invitation for the next admission; never evict an active participant.
@@ -296,21 +307,19 @@ export function ProductApp({
       void old?.leave().catch(() => {});
     };
   }, [leave, cancelPendingAdmission]);
-  const entered = useRef(false);
   const demoEntry = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     // The operator's demo session opens its room straight away: there is no form for it.
-    if (!demoSession || entered.current) return;
-    entered.current = true;
-    // The session is fixed for the life of the page, so this runs once.
-    // 효과가 한 번 정리됐다가 다시 실행되면(개발 StrictMode) 앞 입장은 방을 떠난다. 표시를
-    // 내려 두지 않으면 두 번째 실행이 입장을 건너뛰어 '입장 중…'에서 멈추고, 앞 입장이 방을
-    // 떠나기 전에 다시 들어가면 같은 세션이 두 번 붙어 거절당한다. 그래서 차례로 잇는다.
-    demoEntry.current = demoEntry.current.then(() => enter(demoSession));
-    return () => {
-      entered.current = false;
-    };
-  }, [demoSession]);
+    // 시연 방 세션도 같다: 역할과 이름은 /showcase 에서 이미 골랐다.
+    const given = demoSession ?? showcaseSession;
+    if (!given) return;
+    // S15P21C204-318. StrictMode (dev) tears effects down once and runs them again. The teardown
+    // bumps the generation, so the first entry leaves the room it joined; a guard that entered
+    // only once then left the page on "입장 중…" for good. Each run waits for the previous entry to
+    // settle, so the second joins after the first has let go of the one demo seat. The server
+    // keeps that seat for a demo session across a disconnect (312).
+    demoEntry.current = demoEntry.current.then(() => enter(given));
+  }, [demoSession, showcaseSession]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
     await enter();
@@ -372,6 +381,8 @@ export function ProductApp({
       setCode(session.roomCode);
       setSessionCredential(session.sessionToken);
     } catch (cause) {
+      // 끝났거나 닫힌 데모 방이다. 새로고침이 거기로 다시 가지 않게 한다.
+      if (!owned) forgetDemoSession();
       if (joined)
         await productRoomPort(joined)
           .leave()
@@ -614,7 +625,7 @@ export function ProductApp({
             <span className="room-head-actions">
               {/* 설정은 방 안에서도 한 창이다. Esc 로도 같은 창이 열린다. */}
               <button onClick={() => setRoomMenu(true)}>설정</button>
-              <button className="quiet" onClick={() => void leave()}>
+              <button className="quiet" onClick={leaveByChoice}>
                 나가기
               </button>
             </span>
@@ -783,7 +794,7 @@ export function ProductApp({
                             {joining ? '입장 중…' : createRoom ? '방 만들기' : '방 참가'}
                           </button>
                           {joining && (
-                            <button type="button" onClick={() => void leave()}>
+                            <button type="button" onClick={leaveByChoice}>
                               입장 취소
                             </button>
                           )}
@@ -858,7 +869,7 @@ export function ProductApp({
         </>
       ) : snapshot.lost ? (
         <ConnectionLostScreen
-          onLeave={() => void leave()}
+          onLeave={leaveByChoice}
           expired={snapshot.roomExpired}
           removed={snapshot.removedByHost}
         />
@@ -884,10 +895,29 @@ export function ProductApp({
               access={snapshot.roomAccess}
               lockRequest={snapshot.requests.ROOM_LOCK}
               kickRequest={snapshot.requests.ROOM_KICK}
-              onLock={(locked) => runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } })}
+              // S15P21C204-312. 데모 방은 초대·잠금·강퇴가 범위 밖이다(D6). 잠그면 관리자 자신의
+              // 새로고침 재입장까지 막히므로 단추를 두지 않는다.
+              {...(snapshot.demo
+                ? {}
+                : {
+                    onLock: (locked: boolean) =>
+                      runtime.current?.send({ type: 'ROOM_LOCK', payload: { locked } }),
+                    onKick: (targetPlayerId: string) =>
+                      runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } }),
+                  })}
               mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
-              canChooseMapSize={round.phase === 'LOBBY'}
+              // 데모 방은 로비를 곧바로 지나므로 준비 단계에서 맵 크기를 고른다(313).
+              canChooseMapSize={
+                round.phase === 'LOBBY' ||
+                (Boolean(snapshot.demo) && round.phase === 'DEVICE_CHECK')
+              }
               mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
+              {...(snapshot.demo
+                ? {
+                    mapSizeNote:
+                      '준비 완료를 누르기 전까지 고를 수 있습니다. 목록은 경기에 들어가면 나옵니다.',
+                  }
+                : {})}
               onSelectMapSize={(size) =>
                 runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
               }
@@ -898,7 +928,7 @@ export function ProductApp({
               canReady={round.phase === 'DEVICE_CHECK' && !joining && !readying}
               readyHint={
                 round.phase === 'LOBBY'
-                  ? '여섯 명이 모이면 준비를 누를 수 있어요. 그때 카메라가 켜집니다.'
+                  ? '자리가 다 차면 준비를 누를 수 있어요. 그때 카메라가 켜집니다.'
                   : undefined
               }
               onReady={(next) => void reportReady(next)}
@@ -908,9 +938,13 @@ export function ProductApp({
               faceOf={lobbyFace}
               pumpHost={holdPreview}
               onSettings={() => setRoomMenu(true)}
-              onLeave={() => void leave()}
+              onLeave={leaveByChoice}
               invite={
-                sessionCredential && snapshot.roster?.hostId === selfId ? (
+                // 시연 방은 /showcase 로 들어오고, 데모 방은 인형이 자리를 채운다. 초대가 없다.
+                sessionCredential &&
+                !snapshot.demo &&
+                snapshot.roster?.hostId === selfId &&
+                snapshot.roster?.kind !== 'showcase' ? (
                   <RoomInvitationControls
                     key={`${code}:${selfId}`}
                     sessionToken={sessionCredential}
@@ -930,187 +964,207 @@ export function ProductApp({
               connectedCount={
                 snapshot.roster?.players.filter((player) => player.connected).length ?? 0
               }
-              onRematch={(mode) => runtime.current?.send({ type: 'REMATCH', payload: { mode } })}
+              demo={Boolean(snapshot.demo)}
+              onRematch={(mode, role) =>
+                runtime.current?.send({
+                  type: 'REMATCH',
+                  payload: role ? { mode, role } : { mode },
+                })
+              }
+              rematchAvailable={snapshot.roster?.kind !== 'showcase'}
+              capacity={snapshot.roster?.capacity ?? 6}
             />
           )}
           {round && loadingCovered && (
             <LoadingOverlay round={round} serverNow={clockTime} pending={snapshot.loadingPending} />
           )}
           {worldVisible && view && (
-            <section className="game-stage" data-restrained={restrained || undefined}>
-              <div className="product-canvas">
-                <WorldCanvas
-                  view={view}
-                  faces={runtime.current?.faces}
-                  ownerNames={playerNames}
-                  quality={snapshot.quality}
-                  standIn={demoFace.current}
-                  grabAnimationId={snapshot.grabAnimationId}
-                  renderTick={() => runtime.current?.renderTick() ?? null}
-                  {...(metrics.current
-                    ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
-                    : {})}
-                />
-              </div>
-              {practicePhase && activeSelf && (
-                <PracticeQuests
-                  role={activeSelf.role}
-                  completed={lessons.completed}
-                  canReady={deviceReady(snapshot.devices)}
-                  request={snapshot.requests.PRACTICE_READY}
-                  readyReported={snapshot.practiceReady}
-                  onReady={() =>
-                    runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
+            // S15P21C204-313. 데모의 관리자 패널은 무대 위에 얹지 않고 옆 열로 뺀다. 무대 위에서는
+            // 미니맵·HUD 와 겹쳐 시연 화면을 가렸다. 일반 방은 감싸개가 레이아웃에 끼지 않는다.
+            <div className={snapshot.demo ? 'demo-layout' : 'stage-layout'}>
+              <section className="game-stage" data-restrained={restrained || undefined}>
+                <div className="product-canvas">
+                  <WorldCanvas
+                    view={view}
+                    faces={runtime.current?.faces}
+                    ownerNames={playerNames}
+                    quality={snapshot.quality}
+                    standIn={demoFace.current}
+                    grabAnimationId={snapshot.grabAnimationId}
+                    renderTick={() => runtime.current?.renderTick() ?? null}
+                    {...(metrics.current
+                      ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
+                      : {})}
+                  />
+                </div>
+                <GameStatusChrome
+                  role={activeSelf?.role ?? null}
+                  remainingSeconds={
+                    round && round.deadlineTick !== null
+                      ? Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20))
+                      : null
+                  }
+                  status={
+                    round ? (
+                      <>
+                        <GameHud
+                          round={round}
+                          {...(activeSelf
+                            ? { self: activeSelf, mode: snapshot.interaction.mode }
+                            : {})}
+                        />
+                        {interactiveWorld && <EventLog events={snapshot.events} />}
+                      </>
+                    ) : null
                   }
                 />
-              )}
-              <GameStatusChrome
-                role={activeSelf?.role ?? null}
-                remainingSeconds={
-                  round && round.deadlineTick !== null
-                    ? Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20))
-                    : null
-                }
-                status={
-                  round ? (
-                    <>
-                      <GameHud
-                        round={round}
-                        {...(activeSelf
-                          ? { self: activeSelf, mode: snapshot.interaction.mode }
-                          : {
-                              spectating: spectating!,
-                              playerNames,
-                              onSpectate: (targetPlayerId: string) =>
-                                runtime.current?.send({
-                                  type: 'SPECTATE',
-                                  payload: { targetPlayerId },
-                                }),
-                            })}
+                {/* S15P21C204-295. 팀 연습의 할 일 목록. 혼자 연습과 같은 목록을 무대 왼쪽에 둔다. */}
+                {practicePhase && activeSelf && (
+                  <PracticeQuests
+                    role={activeSelf.role}
+                    completed={lessons.completed}
+                    canReady={deviceReady(snapshot.devices)}
+                    request={snapshot.requests.PRACTICE_READY}
+                    readyReported={snapshot.practiceReady}
+                    onReady={() =>
+                      runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
+                    }
+                  />
+                )}
+                {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
+                {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
+                {interactiveWorld && (
+                  <div
+                    className="crosshair"
+                    aria-hidden="true"
+                    data-install={crosshairState(equipmentHint)}
+                  />
+                )}
+                {/* 십자선 아래 상호작용 줄. 아이템(핫바)과 달리 지금 앞에 있는 것에 쓰는 키다. */}
+                {interactiveWorld && interact && (
+                  <p className="interact-prompt" role="status">
+                    <kbd>{interact.key}</kbd>
+                    {interact.label}
+                  </p>
+                )}
+                {/* 아래 가운데 핫바. 사건 기록은 접근성 레이어에만 남기고 시야를 가리지 않는다. */}
+                {interactiveWorld && (
+                  <Hotbar
+                    view={view}
+                    tick={renderTick()}
+                    selected={snapshot.interaction.selectedEquipment}
+                    exchangeTarget={snapshot.exchangeTarget}
+                    hint={equipmentHint}
+                    onSelectEquipment={(kind) => runtime.current?.selectEquipment(kind)}
+                  />
+                )}
+                {/* 관전 오버레이. 핫바가 없는 관전자에게 아래 가운데를 그대로 쓴다(320). */}
+                {spectating && (
+                  <SpectatorBar
+                    spectating={spectating}
+                    playerNames={playerNames}
+                    onSpectate={(targetPlayerId) =>
+                      runtime.current?.send({ type: 'SPECTATE', payload: { targetPlayerId } })
+                    }
+                  />
+                )}
+                {/* 5 우하단 미니맵 */}
+                <MiniMap
+                  view={view}
+                  markers={snapshot.markers}
+                  tick={renderTick()}
+                  ownerNames={playerNames}
+                  windowCells={MINIMAP_WINDOW_CELLS}
+                  renderTick={renderTick}
+                  operatorExit={snapshot.demo?.operatorExit ?? null}
+                />
+                {/* 6 접히는 오버레이. 급한 일이 있을 때만 펼쳐진 채로 시작한다. */}
+                {interactiveWorld && (
+                  <details className="hud-drawer" open={drawerUrgent}>
+                    <summary>교환 · 도전 · 장치 · 소리</summary>
+                    <div className="hud-drawer-body">
+                      {round?.phase === 'TEAM_PRACTICE' && (
+                        <PracticeScreen
+                          round={round}
+                          view={view}
+                          devices={snapshot.devices}
+                          request={snapshot.requests.PRACTICE_READY}
+                          readyReported={snapshot.practiceReady}
+                          readSensors={readSensors}
+                          onReady={() =>
+                            runtime.current?.send({
+                              type: 'PRACTICE_READY',
+                              payload: { ready: true },
+                            })
+                          }
+                        />
+                      )}
+                      {round?.phase === 'PLAYING' &&
+                        (view.self?.status === 'ACTIVE' &&
+                        view.self.challenge &&
+                        snapshot.interaction.mode === 'keyboard' ? (
+                          <KeyChallenge
+                            challenge={view.self.challenge}
+                            index={snapshot.keyIndex}
+                            tick={renderTick()}
+                            onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
+                            onCancel={() =>
+                              view.self?.status === 'ACTIVE' &&
+                              view.self.challenge &&
+                              runtime.current?.send({
+                                type: 'EXIT_CANCEL',
+                                payload: { challengeId: view.self.challenge.challengeId },
+                              })
+                            }
+                          />
+                        ) : (
+                          <PoseChallenge
+                            view={view}
+                            tick={renderTick()}
+                            progress={snapshot.poseProgress}
+                            starting={snapshot.exitStarting}
+                            send={(command) => runtime.current?.send(command)}
+                          />
+                        ))}
+                      <ExchangePanel
+                        view={view}
+                        selected={snapshot.exchangeTarget}
+                        tick={renderTick()}
+                        request={
+                          view.self?.status === 'ACTIVE' &&
+                          view.self.exchange?.direction === 'incoming'
+                            ? snapshot.requests.EXCHANGE_ACCEPT
+                            : snapshot.requests.EXCHANGE_REQUEST
+                        }
+                        onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
+                        send={(command) => runtime.current?.send(command)}
                       />
-                      {interactiveWorld && <EventLog events={snapshot.events} />}
-                    </>
-                  ) : null
-                }
-              />
+                      {snapshot.exchangeNotice && <p role="status">{snapshot.exchangeNotice}</p>}
+                      <EquipmentHud
+                        view={view}
+                        tick={renderTick()}
+                        selected={snapshot.interaction.selectedEquipment}
+                        request={snapshot.requests.INSTALL}
+                        onSelect={(kind) => runtime.current?.selectEquipment(kind)}
+                        send={(command) => runtime.current?.send(command)}
+                      />
+                      {localControls}
+                    </div>
+                  </details>
+                )}
+              </section>
               {snapshot.demo && (
                 <DemoPanel
                   demo={snapshot.demo}
                   phase={round.phase}
                   onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
+                  onRunWithOptions={(scenario, options) =>
+                    runtime.current?.runDemoScenario(scenario, options)
+                  }
+                  onAbort={() => runtime.current?.abortDemoRound()}
                 />
               )}
-              {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
-              {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
-              {interactiveWorld && (
-                <div
-                  className="crosshair"
-                  aria-hidden="true"
-                  data-install={crosshairState(equipmentHint)}
-                />
-              )}
-              {/* 십자선 아래 상호작용 줄. 아이템(핫바)과 달리 지금 앞에 있는 것에 쓰는 키다. */}
-              {interactiveWorld && interact && (
-                <p className="interact-prompt" role="status">
-                  <kbd>{interact.key}</kbd>
-                  {interact.label}
-                </p>
-              )}
-              {/* 아래 가운데 핫바. 사건 기록은 접근성 레이어에만 남기고 시야를 가리지 않는다. */}
-              {interactiveWorld && (
-                <Hotbar
-                  view={view}
-                  tick={renderTick()}
-                  selected={snapshot.interaction.selectedEquipment}
-                  exchangeTarget={snapshot.exchangeTarget}
-                  hint={equipmentHint}
-                  onSelectEquipment={(kind) => runtime.current?.selectEquipment(kind)}
-                />
-              )}
-              {/* 5 우하단 미니맵 */}
-              <MiniMap
-                view={view}
-                markers={snapshot.markers}
-                tick={renderTick()}
-                ownerNames={playerNames}
-                windowCells={MINIMAP_WINDOW_CELLS}
-                renderTick={renderTick}
-              />
-              {/* 6 접히는 오버레이. 급한 일이 있을 때만 펼쳐진 채로 시작한다. */}
-              {interactiveWorld && (
-                <details className="hud-drawer" open={drawerUrgent}>
-                  <summary>교환 · 도전 · 장치 · 소리</summary>
-                  <div className="hud-drawer-body">
-                    {round?.phase === 'TEAM_PRACTICE' && (
-                      <PracticeScreen
-                        round={round}
-                        view={view}
-                        devices={snapshot.devices}
-                        request={snapshot.requests.PRACTICE_READY}
-                        readyReported={snapshot.practiceReady}
-                        readSensors={readSensors}
-                        onReady={() =>
-                          runtime.current?.send({
-                            type: 'PRACTICE_READY',
-                            payload: { ready: true },
-                          })
-                        }
-                      />
-                    )}
-                    {round?.phase === 'PLAYING' &&
-                      (view.self?.status === 'ACTIVE' &&
-                      view.self.challenge &&
-                      snapshot.interaction.mode === 'keyboard' ? (
-                        <KeyChallenge
-                          challenge={view.self.challenge}
-                          index={snapshot.keyIndex}
-                          tick={renderTick()}
-                          onKey={(key, repeat) => runtime.current?.challengeKey(key, repeat)}
-                          onCancel={() =>
-                            view.self?.status === 'ACTIVE' &&
-                            view.self.challenge &&
-                            runtime.current?.send({
-                              type: 'EXIT_CANCEL',
-                              payload: { challengeId: view.self.challenge.challengeId },
-                            })
-                          }
-                        />
-                      ) : (
-                        <PoseChallenge
-                          view={view}
-                          tick={renderTick()}
-                          progress={snapshot.poseProgress}
-                          starting={snapshot.exitStarting}
-                          send={(command) => runtime.current?.send(command)}
-                        />
-                      ))}
-                    <ExchangePanel
-                      view={view}
-                      selected={snapshot.exchangeTarget}
-                      tick={renderTick()}
-                      request={
-                        view.self?.status === 'ACTIVE' &&
-                        view.self.exchange?.direction === 'incoming'
-                          ? snapshot.requests.EXCHANGE_ACCEPT
-                          : snapshot.requests.EXCHANGE_REQUEST
-                      }
-                      onSelect={(id) => runtime.current?.selectExchangeTarget(id)}
-                      send={(command) => runtime.current?.send(command)}
-                    />
-                    {snapshot.exchangeNotice && <p role="status">{snapshot.exchangeNotice}</p>}
-                    <EquipmentHud
-                      view={view}
-                      tick={renderTick()}
-                      selected={snapshot.interaction.selectedEquipment}
-                      request={snapshot.requests.INSTALL}
-                      onSelect={(kind) => runtime.current?.selectEquipment(kind)}
-                      send={(command) => runtime.current?.send(command)}
-                    />
-                    {localControls}
-                  </div>
-                </details>
-              )}
-            </section>
+            </div>
           )}
           <CueFlash flash={snapshot.cueFlash} />
           {/* 문구가 생기고 사라져도 페이지 높이가 바뀌지 않도록 자리를 항상 잡아 둔다 */}
@@ -1184,22 +1238,6 @@ export function ProductApp({
                       />
                     ),
                   },
-                  // 운영자 시연 방에서만 보이는 탭이다. 실제 경기 방에는 없다.
-                  ...(snapshot.demo && round
-                    ? [
-                        {
-                          id: 'demo',
-                          label: '데모',
-                          content: (
-                            <DemoPanel
-                              demo={snapshot.demo}
-                              phase={round.phase}
-                              onRun={(scenario) => runtime.current?.runDemoScenario(scenario)}
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
                 ]}
               />
             </aside>

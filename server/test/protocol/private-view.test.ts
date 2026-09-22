@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { privateViewSchema } from '@kkakkung/protocol/game-messages';
+import { completePrivateViewSchema } from '@kkakkung/protocol/game-messages';
 import { projectPrivateBody, projectVisibleEntities } from '../../src/game/PlayerProjection.js';
 import { FakeCore, layoutFor, testTuning } from '../room/test-harness.js';
 
@@ -38,7 +38,7 @@ describe('private view projection (allowlist)', () => {
     expect(runner.knownTerrain).toHaveLength(1);
     expect(runner.visibleEntities.map((e) => e.id)).not.toContain('t1');
     expect(
-      privateViewSchema.safeParse({
+      completePrivateViewSchema.safeParse({
         ...runner,
         matchId: 'm',
         gameScope: { gameInstanceId: 'g', kind: 'game', revision: 1 },

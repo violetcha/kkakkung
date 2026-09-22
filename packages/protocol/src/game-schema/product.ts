@@ -203,6 +203,53 @@ export type PrivateView = PlayerKnowledge &
     /** Present only while `self` is an ended runner watching a surviving one (269). */
     spectating?: SpectateView;
   }>;
+/**
+ * S15P21C204-326. What actually goes on the wire. The accumulated knowledge is the bulk of a
+ * view (87% of its bytes) but changes in 2.5% of the views that go out, so B leaves the two
+ * arrays off a view that would repeat them and the recipient reuses what it already holds.
+ *
+ * `knowledgeRevision` rises only when that knowledge changes, and it is what makes the reuse
+ * safe: a recipient that missed the view carrying a change sees a revision it does not hold and
+ * must resync instead of drawing a stale map. Both arrays travel together or not at all.
+ */
+export type PrivateViewWire = Omit<PrivateView, 'knownTerrain' | 'knownActiveExits'> &
+  Readonly<{
+    knowledgeRevision: number;
+    knownTerrain?: readonly KnownTerrain[];
+    knownActiveExits?: readonly KnownExit[];
+  }>;
+/** S15P21C204-326. The knowledge pair a recipient holds, and the revision it was minted for. */
+export type ViewKnowledge = Readonly<{
+  revision: number;
+  knownTerrain: readonly KnownTerrain[];
+  knownActiveExits: readonly KnownExit[];
+}>;
+/**
+ * S15P21C204-326. Puts an omitted knowledge pair back, so that everything downstream of here
+ * sees the view the sender meant. `held` is what the recipient carries from an earlier view.
+ *
+ * **Returns null when it cannot say what the sender meant** — the pair is absent and `held` is a
+ * different revision, so the view that carried the change was missed. The caller resyncs; it
+ * must never fall back to the stale pair, because a map that is quietly out of date is worse
+ * than one that is briefly missing.
+ */
+export function restorePrivateView(
+  message: PrivateViewWire,
+  held: ViewKnowledge | null,
+): Readonly<{ view: PrivateView; knowledge: ViewKnowledge }> | null {
+  const { knowledgeRevision, knownTerrain, knownActiveExits, ...rest } = message;
+  if (knownTerrain !== undefined && knownActiveExits !== undefined) {
+    const knowledge = { revision: knowledgeRevision, knownTerrain, knownActiveExits };
+    return { view: { ...rest, knownTerrain, knownActiveExits }, knowledge };
+  }
+  // The two always travel together; one without the other is a sender this reader does not know.
+  if (knownTerrain !== undefined || knownActiveExits !== undefined) return null;
+  if (!held || held.revision !== knowledgeRevision) return null;
+  return {
+    view: { ...rest, knownTerrain: held.knownTerrain, knownActiveExits: held.knownActiveExits },
+    knowledge: held,
+  };
+}
 export type RoomRoster = Readonly<{
   matchId: string;
   stateVersion: number;

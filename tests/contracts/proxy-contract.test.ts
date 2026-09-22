@@ -76,9 +76,35 @@ describe('host nginx (TLS edge)', () => {
     expect(team).not.toContain('$http_x_sso_user');
     // public has no login check, so the caller's own header is cleared instead of replaced.
     expect(read('infra/nginx/audience-public.conf')).toContain('proxy_set_header X-SSO-User "";');
+    expect(read('infra/nginx/audience-team.conf')).toContain('proxy_set_header X-Demo-Admin "";');
+    expect(read('infra/nginx/audience-public.conf')).toContain('proxy_set_header X-Demo-Admin "";');
     expect(read('scripts/write-smoke-proxy.mjs')).toContain('proxy_set_header X-SSO-User "";');
+    expect(read('scripts/write-smoke-proxy.mjs')).toContain('proxy_set_header X-Demo-Admin "";');
     expect(read('infra/compose.yaml')).toContain('127.0.0.1:8080:80');
     expect(read('infra/compose.continuous.yaml')).toContain('SESSION_ADMISSION_MODE: gitlab-sso');
+  });
+  it('keeps only the administrator demo page and its issuing endpoint behind SSO after public launch', () => {
+    const admin = read('infra/nginx/demo-admin.conf');
+    expect(admin).toContain('auth_request /oauth2/auth;');
+    expect(admin).toContain('error_page 401 = @sso_signin;');
+    expect(admin).toContain(
+      'auth_request_set $demo_admin_user $upstream_http_x_auth_request_user;',
+    );
+    expect(admin).toContain('proxy_set_header X-Demo-Admin $demo_admin_user;');
+    expect(admin).toContain('proxy_set_header X-SSO-User "";');
+    for (const location of [
+      'location = /demo {',
+      'location ^~ /demo/ {',
+      'location ~* ^/api/demo-admin {',
+      // 발표 시연 방도 같은 SSO 조각 뒤에 있다. 운영 토큰 없이 프로젝트 멤버만 연다.
+      'location = /showcase {',
+      'location ^~ /showcase/ {',
+      'location ~* ^/api/showcase {',
+    ]) {
+      const route = block(host, location);
+      expect(route).toContain('include /etc/nginx/snippets/kkakkung-demo-admin.conf;');
+      expect(route).toContain('proxy_pass http://127.0.0.1:8080;');
+    }
   });
 });
 
