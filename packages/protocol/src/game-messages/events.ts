@@ -211,7 +211,7 @@ export const spectateViewSchema = z.strictObject({
   action: actionSchema.nullable(),
   candidates: z.array(idSchema).max(3),
 });
-export const privateViewSchema = z.strictObject({
+const privateViewFields = {
   mapVersion: z.number().int().nonnegative().safe(),
   knownTerrain: z.array(knownTerrainSchema),
   knownActiveExits: z.array(knownExitSchema),
@@ -223,5 +223,19 @@ export const privateViewSchema = z.strictObject({
   visibleWallFaces: z.array(wallFaceSchema),
   visibleEntities: z.array(visibleEntitySchema),
   spectating: spectateViewSchema.optional(),
+};
+/**
+ * S15P21C204-326. What B puts on the wire. `knowledgeRevision` rises only when the accumulated
+ * knowledge changes, and the two knowledge arrays are absent from a view that would repeat them.
+ * A recipient reuses the pair it holds for that revision and resyncs when it holds another one;
+ * `restorePrivateView` is the one implementation of that rule.
+ */
+export const privateViewSchema = z.strictObject({
+  ...privateViewFields,
+  knowledgeRevision: z.number().int().nonnegative().safe(),
+  knownTerrain: privateViewFields.knownTerrain.optional(),
+  knownActiveExits: privateViewFields.knownActiveExits.optional(),
 });
+/** The restored shape a recipient holds: the knowledge pair is always there, the revision is not. */
+export const completePrivateViewSchema = z.strictObject(privateViewFields);
 export type PrivateViewMessage = z.infer<typeof privateViewSchema>;

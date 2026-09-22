@@ -5,7 +5,7 @@
 // point instead of a position feed. No socket, no Cloud, no browser bundle here (g4-bundle covers it).
 import { describe, expect, it } from 'vitest';
 import { PUBLIC_MATCH_STATE_FIELDS } from '@kkakkung/protocol/game-schema';
-import { activeExits } from '@kkakkung/game-core/match';
+import { activeExits, matchCore } from '@kkakkung/game-core/match';
 import { G3_TUNING } from '../fixtures/g3-scenarios.ts';
 import {
   EXCHANGE_PLACEMENTS,
@@ -16,6 +16,7 @@ import {
   createViewHarness,
   parseEvent,
   parseView,
+  parseWireView,
   type ViewHarness,
 } from '../fixtures/private-view-scenarios.ts';
 
@@ -359,5 +360,35 @@ describe('public state and versioning', () => {
     expect(versions.length).toBe(before + 1);
     for (let i = 1; i < versions.length; i++)
       expect(versions[i]!).toBeGreaterThan(versions[i - 1]!);
+  });
+
+  // S15P21C204-326. The recipients above read reassembled views; this is what actually went out.
+  it('leaves the accumulated knowledge off ordinary change views and reassembles every one', () => {
+    const v = createViewHarness();
+    v.h.start();
+    v.publish('initial');
+    v.h.move('t1');
+    v.tickAndPublish(MOVE * 2);
+    const wire = v.wireViewsOf('t1');
+    expect(wire.length).toBeGreaterThan(4);
+    // Every view that went out is a valid wire view, omissions and all.
+    for (const view of wire) expect(() => parseWireView(view)).not.toThrow();
+    // The first one carries the pair; many of the rest do not. This fixture is an open 12x12
+    // room, where a walking tagger uncovers new terrain on most steps, so it omits far less than
+    // the product corridor maze does (measured there: 97.5% of views).
+    expect(wire[0]!.knownTerrain).toBeDefined();
+    const omitted = wire.filter((view) => view.knownTerrain === undefined);
+    expect(omitted.length).toBeGreaterThanOrEqual(3);
+    // Every recipient reassembled: the fixture records nothing for a view it cannot put back.
+    expect(v.viewsOf('t1')).toHaveLength(wire.length);
+    // What was reassembled is the memory the engine actually holds, not a stale copy of it.
+    const memory = matchCore.getPlayerKnowledge(v.h.state(), 't1').knownTerrain;
+    expect(v.latestView('t1').knownTerrain).toEqual(memory);
+    // The revision never goes backwards, which is what lets a recipient tell "same memory as the
+    // one I hold" from "a memory I have not seen". That it holds still across an unchanged
+    // stretch is pinned in server/test/protocol/event-dispatcher.test.ts; this open room uncovers
+    // terrain too often to show it.
+    const revisions = wire.map((view) => view.knowledgeRevision);
+    expect(revisions).toEqual([...revisions].sort((a, b) => a - b));
   });
 });

@@ -5,6 +5,7 @@ import {
   FUTURE_EVENT_WAIT_MS,
   gameViewScopeSchema,
   privateEventSchema,
+  completePrivateViewSchema,
   privateViewSchema,
   viewResyncSchema,
 } from '../src/game-messages/events.js';
@@ -62,6 +63,7 @@ describe('private events and views', () => {
   it('requires wall on visible sensors and forbids wall on traps', () => {
     const view = {
       mapVersion: 1,
+      knowledgeRevision: 3,
       knownTerrain: [
         { x: 1, y: 1, kind: 'floor' },
         { x: 1, y: 0, side: 2, kind: 'wall' },
@@ -113,6 +115,20 @@ describe('private events and views', () => {
         self: { playerId: 'p', role: 'runner', status: 'ESCAPED' },
       }).success,
     ).toBe(true);
+    // S15P21C204-326. The wire form may leave the accumulated knowledge off, but never the
+    // revision that says which knowledge the view belongs to.
+    const omitted: Record<string, unknown> = { ...view };
+    delete omitted.knownTerrain;
+    delete omitted.knownActiveExits;
+    expect(privateViewSchema.safeParse(omitted).success).toBe(true);
+    expect(privateViewSchema.parse(omitted)).not.toHaveProperty('knownTerrain');
+    const revisionless: Record<string, unknown> = { ...view };
+    delete revisionless.knowledgeRevision;
+    expect(privateViewSchema.safeParse(revisionless).success).toBe(false);
+    // The shape a recipient ends up holding is the other way round.
+    expect(completePrivateViewSchema.safeParse(omitted).success).toBe(false);
+    expect(completePrivateViewSchema.safeParse(revisionless).success).toBe(true);
+    expect(completePrivateViewSchema.safeParse(view).success).toBe(false);
   });
 
   it('validates resync and media channel shapes', () => {

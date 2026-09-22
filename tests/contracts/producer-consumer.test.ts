@@ -1,9 +1,14 @@
 // F-12 / QA-07 producer→consumer boundary on real modules: A `matchCore` (producer) → B
-// MatchDriver/MatchContext/PlayerProjection (serializer) → protocol `privateViewSchema` (the
-// wire contract C's reducer consumes). This suite stops at the strict wire boundary; the consumer
-// half on C's real reducers is tests/contracts/consumer-reducer.test.ts (F-REQ-09), never a fake.
+// MatchDriver/MatchContext/PlayerProjection (serializer) → the protocol view contract C's reducer
+// consumes. This suite stops at the strict wire boundary; the consumer half on C's real reducers
+// is tests/contracts/consumer-reducer.test.ts (F-REQ-09), never a fake.
+//
+// S15P21C204-326. It checks `completePrivateViewSchema`, the shape a recipient ends up holding,
+// because `viewFor` builds the view straight off the projection. What B actually puts on the
+// wire — where the accumulated knowledge may be left off — is the dispatcher's business and is
+// checked in tests/contracts/g4-packets.test.ts.
 import { describe, expect, it } from 'vitest';
-import { privateViewSchema, commandOutcomeSchema } from '@kkakkung/protocol/game-messages';
+import { completePrivateViewSchema, commandOutcomeSchema } from '@kkakkung/protocol/game-messages';
 import { matchCore } from '@kkakkung/game-core/match';
 import { projectPrivateBody } from '../../server/src/game/PlayerProjection.ts';
 import { createG3Harness, type G3Harness } from '../fixtures/g3-scenarios.ts';
@@ -23,7 +28,7 @@ describe('A state → B projection → protocol private view', () => {
     const h = createG3Harness();
     h.start();
     for (const id of ['r1', 'r2', 'r3', 't1', 't2', 't3']) {
-      const parsed = privateViewSchema.safeParse(viewFor(h, id));
+      const parsed = completePrivateViewSchema.safeParse(viewFor(h, id));
       expect(parsed.success, `${id}: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
       const view = parsed.data!;
       expect(view.self?.status).toBe('ACTIVE');
@@ -37,7 +42,7 @@ describe('A state → B projection → protocol private view', () => {
     h.start();
     const raw = JSON.stringify(viewFor(h, 'r2'));
     expect(raw).not.toMatch(/"seed"|"layout"|"topology"|"walkable"|"priority"/);
-    const view = privateViewSchema.parse(viewFor(h, 'r2'));
+    const view = completePrivateViewSchema.parse(viewFor(h, 'r2'));
     // r2 faces north at (2,8); t2 stands behind it at (2,9) and must not be visible.
     expect(view.visibleEntities.map((e) => e.id)).not.toContain('t2');
     expect(view.knownActiveExits.every((e) => e.ownerId === 'r2' || e.ownerId !== 't1')).toBe(true);
@@ -48,7 +53,7 @@ describe('A state → B projection → protocol private view', () => {
     h.start();
     h.capture('t1');
     expect(h.player('r1').status).toBe('CAPTURED');
-    const view = privateViewSchema.parse(viewFor(h, 'r1'));
+    const view = completePrivateViewSchema.parse(viewFor(h, 'r1'));
     expect(view.self).toEqual({ playerId: 'r1', role: 'runner', status: 'CAPTURED' });
     expect(view.knownTerrain).toEqual([]);
     expect(view.visibleEntities).toEqual([]);
