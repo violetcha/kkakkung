@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { roundFixture, viewFixture } from '../../room/product-fixture';
 import {
+  carryRole,
   cueState,
   captureProgressFlash,
   CAPTURE_PROGRESS_FLASHES,
@@ -151,6 +152,47 @@ describe('detectCues', () => {
       endedSelf: ended('CAPTURED'),
     });
     expect(detectCues(capturedSelf, { ...taggersWin, status: 'CAPTURED' })).toEqual(['defeat']);
+  });
+  // S15P21C204-334. 경기 종료 전이로 self 가 비워진 생존자.
+  it('gives a survivor whose view was emptied at RESULT the team result, never an abort', () => {
+    const playing = state();
+    const emptied = state({
+      self: null,
+      round: roundFixture({
+        phase: 'RESULT',
+        counts: { escaped: 1, captured: 1 },
+        result: { winner: 'runners', reason: 'timeout' },
+      }),
+    });
+    expect(emptied.role).toBeNull();
+    expect(detectCues(playing, emptied)).toEqual(['victory']);
+    const tagger = state({ self: active({ role: 'tagger' }) });
+    expect(detectCues(tagger, emptied)).toEqual(['defeat']);
+  });
+  it('does not call a decided match void for someone whose role was never known', () => {
+    const unknown = state({ self: null });
+    const decided = state({
+      self: null,
+      round: roundFixture({ phase: 'RESULT', result: { winner: 'runners', reason: 'timeout' } }),
+    });
+    expect(detectCues(unknown, decided)).toEqual([]);
+  });
+  it('carries the role forward within a match once the view is emptied', () => {
+    const playing = state();
+    const emptied = state({ self: null });
+    expect(carryRole(playing, emptied)).toMatchObject({ role: 'runner', status: null });
+    expect(carryRole(null, emptied).role).toBeNull();
+    expect(carryRole(playing, { ...emptied, matchId: 'next' }).role).toBeNull();
+    // 이미 아는 역할은 덮지 않는다.
+    const tagger = state({ self: active({ role: 'tagger' }) });
+    expect(carryRole(playing, tagger).role).toBe('tagger');
+    // self 가 비워진 뷰가 결과보다 먼저 와도 결과 전이에서 역할이 남아 있다.
+    const held = carryRole(playing, emptied);
+    const decided = state({
+      self: null,
+      round: roundFixture({ phase: 'RESULT', result: { winner: 'taggers', reason: 'timeout' } }),
+    });
+    expect(detectCues(held, carryRole(held, decided))).toEqual(['defeat']);
   });
   it('flags exactly the cues that also flash the screen', () => {
     expect(FLASH_CUES).toEqual([

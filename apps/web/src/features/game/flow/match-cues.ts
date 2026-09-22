@@ -50,6 +50,18 @@ const teamOf = (role: CueState['role']) =>
   role === 'runner' ? 'runners' : role === 'tagger' ? 'taggers' : null;
 
 /**
+ * S15P21C204-334. 경기가 끝나면 서버가 게임 인스턴스를 회수하며 모든 참가자에게 self 가 비워진
+ * 뷰를 보낸다. 포획·탈출로 끝난 사람은 endedSelf 가 역할을 기억하지만 끝까지 남은 생존자는
+ * 그 순간 역할을 잃어 승패 대신 '경기 무효' 안내음을 듣게 된다. 같은 경기 안에서 한 번 본 역할은
+ * 그대로 이어 둔다. 경기가 바뀌면 이어 가지 않는다.
+ */
+export function carryRole(prev: CueState | null, next: CueState): CueState {
+  if (next.role !== null || !prev || prev.matchId !== next.matchId || prev.role === null)
+    return next;
+  return { ...next, role: prev.role };
+}
+
+/**
  * 이전 상태와 비교해 이번에 울릴 안내음을 고른다. 같은 전이에서 자기 종료와 누계 변화, 승패와
  * 누계 변화가 겹치면 더 구체적인 것(자기 종료·승패) 하나만 낸다. 경기가 바뀌면 비교하지 않는다.
  */
@@ -77,8 +89,9 @@ export function detectCues(prev: CueState | null, next: CueState): CueKind[] {
 
   let decided = false;
   if (!ENDED.includes(prev.phase) && next.phase === 'RESULT' && next.winner) {
-    const team = teamOf(next.role);
-    cues.push(team === null ? 'aborted' : team === next.winner ? 'victory' : 'defeat');
+    // 승자가 정해진 경기는 무효가 아니다. 역할을 끝내 모르는 관전자에게는 팀 결과를 지어내지 않는다.
+    const team = teamOf(next.role ?? prev.role);
+    if (team !== null) cues.push(team === next.winner ? 'victory' : 'defeat');
     decided = true;
   } else if (!ENDED.includes(prev.phase) && next.phase === 'ABORTED') {
     cues.push('aborted');
