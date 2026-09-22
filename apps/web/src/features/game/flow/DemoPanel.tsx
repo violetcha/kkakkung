@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DemoScenarioId, DemoStateMessage } from '@kkakkung/protocol/game-messages';
 import { demoFailureLabel, demoScenarioGuide, demoStepLabel } from './demo-scenario-guide';
 
@@ -46,6 +46,19 @@ const OPTION_VALUE_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * S15P21C204-313. 방금 끝난 시나리오가 성공했는지. 서버는 성공을 따로 알리지 않고 `running` 을
+ * 비우기만 하므로, 도는 중이던 것이 실패 없이 사라지면 완료로 본다. 다음 실행·실패에서 지운다.
+ */
+export function completedScenario(
+  previousRunning: string | null,
+  demo: Pick<DemoStateMessage, 'running' | 'failureCode'>,
+  current: string | null,
+): string | null {
+  if (demo.running !== null || demo.failureCode !== null) return null;
+  return previousRunning ?? current;
+}
+
+/**
  * S15P21C204-260. Operator-only scenario buttons. The list comes from the server, so this panel
  * never invents a scenario, and a player room never receives the state that shows it.
  */
@@ -63,6 +76,12 @@ export function DemoPanel({
   phase?: string | null;
 }) {
   const [options, setOptions] = useState<Record<string, DemoOptionValues>>({});
+  const [completed, setCompleted] = useState<string | null>(null);
+  const previousRunning = useRef<string | null>(demo.running);
+  useEffect(() => {
+    setCompleted((current) => completedScenario(previousRunning.current, demo, current));
+    previousRunning.current = demo.running;
+  }, [demo]);
   const running = demo.running !== null;
   const beforeGame = phase != null && !['PLAYING', 'RESULT'].includes(phase);
   const available = demo.available as readonly AvailableScenario[];
@@ -94,10 +113,11 @@ export function DemoPanel({
           <h2>데모 시나리오</h2>
         </div>
         {onAbort && (
+          // 대본이 도는 중에도 누를 수 있다. 막힌 대본을 끝내는 유일한 길이 이 단추다(313).
           <button
             type="button"
             className="demo-abort"
-            disabled={running || beforeGame}
+            disabled={beforeGame || phase === 'RESULT'}
             onClick={onAbort}
           >
             라운드 종료
@@ -182,7 +202,9 @@ export function DemoPanel({
           ? `진행 중: ${demoScenarioGuide(demo.running!).label} · ${demoStepLabel(demo.step)}`
           : demo.failureCode
             ? `직전 시나리오 중단: ${demoFailureLabel(demo.failureCode)}`
-            : '시나리오를 고르면 인형이 실제 규칙으로 움직입니다.'}
+            : completed
+              ? `완료: ${demoScenarioGuide(completed).label}`
+              : '시나리오를 고르면 인형이 실제 규칙으로 움직입니다.'}
       </p>
     </section>
   );

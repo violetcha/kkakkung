@@ -79,6 +79,8 @@ OPS_TOKEN=... node scripts/open-demo.mjs \
 
 주소에 살아 있는 세션이 들어 있어 내 기기(loopback)에서만 화면에 찍고, 그 밖의 대상은 `--output`으로 비공개 파일(0600)에 쓴다. 실패는 원인별로 답한다: `DEMO_UNAVAILABLE`은 `DEMO_ROOMS=0`, `CAPACITY`는 방 예산 소진(열린 데모 방을 닫는다), `401`은 토큰이다. 데모 방도 `MAX_ROOMS`를 함께 쓰므로 열려 있는 동안 실제 경기가 쓸 수 있는 방이 하나 줄어든다.
 
+관리자가 새로고침하거나 잠시 끊겨도 같은 주소로 다시 들어오면 경기 중이라도 그 경기로 돌아간다. 끊긴 뒤 2분 안에 돌아오지 않으면 방을 닫고 `MAX_ROOMS` 자리를 돌려준다(데모 라운드는 제한시간이 없어 닫지 않으면 자리를 계속 차지한다).
+
 ## 3. 배포와 헬스
 
 배포 순서: 매니페스트(SHA·digest) → SSO 격리 확인 → drain → 이미지 교체 → `/health/ready` → resume/OPEN → 실제 Cloud DP-06(1방·6 합성 클라이언트, 시험 600초+정리 60초, 계획 유효 30분) → 공개 재검사 → last-good 기록. 실패하면 새 requestId로 다시 drain한 뒤에만 이전 digest로 복귀하며, 조건을 확인할 수 없으면 `ROLLBACK_BLOCKED`로 둔다. 세부 장벽은 [인프라 안내](../infra/README.md)의 “배포 장벽”을 따른다.

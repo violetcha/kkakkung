@@ -98,3 +98,17 @@ it('locks the choice for the host once the lobby phase is over', () => {
   expect(render(true)).toContain('장치 점검이 시작되면 바꿀 수 없습니다');
   expect(render(false)).toContain('방장이 고른 맵입니다');
 });
+
+// S15P21C204-313. 데모 방은 준비 단계에서도 고르므로 "장치 점검이 시작되면 바꿀 수 없다"가 틀린다.
+it('lets the caller say when the size can still be changed', () => {
+  const html = renderToStaticMarkup(
+    createElement(MapSizeChoice, {
+      value: 'large',
+      canEdit: true,
+      onSelect: () => {},
+      editableNote: '준비 완료를 누르기 전까지 고를 수 있습니다.',
+    }),
+  );
+  expect(html).toContain('준비 완료를 누르기 전까지 고를 수 있습니다.');
+  expect(html).not.toContain('바꿀 수 없습니다');
+});

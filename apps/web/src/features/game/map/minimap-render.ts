@@ -312,9 +312,11 @@ export function drawMinimap(
     }
   }
 
-  if (model.operatorExit) {
-    const centerX = offset + (model.operatorExit.x + 0.5) * unit;
-    const centerY = offset + (model.operatorExit.y + 0.5) * unit;
+  // S15P21C204-314. 창 모드(295)에서는 다른 표시처럼 내 주변 좌표로 옮기고, 창 밖이면 그리지 않는다.
+  const operatorAt = model.operatorExit ? local(model.operatorExit.x, model.operatorExit.y) : null;
+  if (operatorAt && inside(operatorAt.x, operatorAt.y)) {
+    const centerX = offset + (operatorAt.x + 0.5) * unit;
+    const centerY = offset + (operatorAt.y + 0.5) * unit;
     const radius = Math.max(3, unit * 0.38);
     // A diamond-within-circle is intentionally different from the square normal-exit marker.
     ctx.strokeStyle = MINIMAP_COLORS.operatorExit;

@@ -203,32 +203,62 @@ export async function requestShowcaseRoom(
  * route already issued; it is consumed and cleared exactly like an invitation, and there is no
  * player-facing way to produce one.
  */
+type DemoSessionStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+const DEMO_SESSION_KEY = 'kkakkung.demo-session';
+
+/** 이 탭의 sessionStorage. 접근 자체가 던지는 환경(비공개 창 제한 등)에서는 null. */
+function browserSessionStorage(): DemoSessionStorage | null {
+  try {
+    return globalThis.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 관리자 데모 링크의 세션을 읽는다. 토큰이 주소에 남지 않도록 조각은 곧바로 지운다.
+ *
+ * S15P21C204-312. 조각을 지우면 브라우저 새로고침(F5)이 토큰 없는 주소로 돌아와 홈으로
+ * 떨어졌다. 서버는 끊긴 데모 세션의 좌석을 지켜 두는데 화면이 열쇠를 잃었다. 그래서 이 탭의
+ * sessionStorage 에 둔다. 탭을 닫으면 사라지고 다른 탭·기기와 나누지 않는다. 유효한지는 서버가
+ * 판정하며, 나가거나 거절되면 `forgetDemoSession` 이 지운다.
+ */
 export function consumeDemoSession(
   location: { hash: string; pathname: string; search: string },
   history: { replaceState(data: unknown, unused: string, url: string): void },
+  storage: DemoSessionStorage | null = browserSessionStorage(),
 ): SessionResponse | null {
-  return consumeEntrySession(location, history, 'demo');
-}
-
-/** 시연 방 진입. `/showcase` 가 만든 `#showcase=…` 조각을 데모와 같은 방식으로 소비·삭제한다. */
-export function consumeShowcaseSession(
-  location: { hash: string; pathname: string; search: string },
-  history: { replaceState(data: unknown, unused: string, url: string): void },
-): SessionResponse | null {
-  return consumeEntrySession(location, history, 'showcase');
-}
-
-function consumeEntrySession(
-  location: { hash: string; pathname: string; search: string },
-  history: { replaceState(data: unknown, unused: string, url: string): void },
-  key: 'demo' | 'showcase',
-): SessionResponse | null {
-  const params = new URLSearchParams(location.hash.slice(1));
-  const sessionToken = params.get(key) ?? '';
-  const roomCode = params.get('room') ?? '';
-  const playerId = params.get('player') ?? '';
-  if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) return null;
-  history.replaceState(null, '', location.pathname + location.search);
+  const fragment = readEntryFragment(location, history, 'demo');
+  if (fragment === 'invalid') return null;
+  let { sessionToken, roomCode, playerId } = fragment ?? {
+    sessionToken: '',
+    roomCode: '',
+    playerId: '',
+  };
+  if (fragment) {
+    try {
+      storage?.setItem(DEMO_SESSION_KEY, JSON.stringify({ sessionToken, roomCode, playerId }));
+    } catch {
+      // 저장하지 못하면 새로고침 재입장만 안 된다. 이번 입장은 그대로 한다.
+    }
+  } else {
+    // 조각이 없으면 이 탭이 앞서 연 데모 세션으로 돌아간다(새로고침).
+    let stored: unknown;
+    try {
+      stored = JSON.parse(storage?.getItem(DEMO_SESSION_KEY) ?? 'null');
+    } catch {
+      stored = null;
+    }
+    if (!stored || typeof stored !== 'object') return null;
+    const value = stored as Record<string, unknown>;
+    sessionToken = typeof value.sessionToken === 'string' ? value.sessionToken : '';
+    roomCode = typeof value.roomCode === 'string' ? value.roomCode : '';
+    playerId = typeof value.playerId === 'string' ? value.playerId : '';
+    if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) {
+      forgetDemoSession(storage);
+      return null;
+    }
+  }
   return {
     sessionToken,
     playerId,
@@ -236,4 +266,46 @@ function consumeEntrySession(
     expiresAt: Date.now() + 60_000,
     protocolVersion: PRODUCT_PROTOCOL_VERSION,
   };
+}
+
+/**
+ * 시연 방 진입. `/showcase` 가 만든 `#showcase=…` 조각을 데모와 같은 방식으로 소비·삭제한다.
+ * 데모와 달리 저장하지 않는다: 시연 세션은 일반 경기 세션이라 서버가 끊기면 좌석을 지키지 않고,
+ * 다시 들어오려면 `/showcase` 에서 새로 고른다.
+ */
+export function consumeShowcaseSession(
+  location: { hash: string; pathname: string; search: string },
+  history: { replaceState(data: unknown, unused: string, url: string): void },
+): SessionResponse | null {
+  const fragment = readEntryFragment(location, history, 'showcase');
+  if (!fragment || fragment === 'invalid') return null;
+  return { ...fragment, expiresAt: Date.now() + 60_000, protocolVersion: PRODUCT_PROTOCOL_VERSION };
+}
+
+/**
+ * 주소 조각에서 진입 세션을 읽고 조각을 지운다. 조각이 없으면 null, 있는데 깨졌으면 'invalid'.
+ * 토큰이 주소·기록에 남지 않도록 읽는 즉시 replaceState 로 지운다.
+ */
+function readEntryFragment(
+  location: { hash: string; pathname: string; search: string },
+  history: { replaceState(data: unknown, unused: string, url: string): void },
+  key: 'demo' | 'showcase',
+): { sessionToken: string; roomCode: string; playerId: string } | null | 'invalid' {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const sessionToken = params.get(key) ?? '';
+  const roomCode = params.get('room') ?? '';
+  const playerId = params.get('player') ?? '';
+  if (!sessionToken && !playerId) return null;
+  if (!sessionToken || !playerId || !ROOM_CODE_PATTERN.test(roomCode)) return 'invalid';
+  history.replaceState(null, '', location.pathname + location.search);
+  return { sessionToken, roomCode, playerId };
+}
+
+/** 나가기·입장 거절 뒤에는 새로고침이 끝난 방으로 돌아가지 않게 지운다. */
+export function forgetDemoSession(storage: DemoSessionStorage | null = browserSessionStorage()) {
+  try {
+    storage?.removeItem(DEMO_SESSION_KEY);
+  } catch {
+    // 지우지 못해도 서버가 끝난 세션을 거절한다.
+  }
 }

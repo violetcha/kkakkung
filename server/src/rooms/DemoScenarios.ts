@@ -216,6 +216,17 @@ const TRACE_SHOW_TICKS = 60;
 const CHALLENGE_HOLD_TICKS = 400;
 /** Long enough for the operator to see an incoming offer before the puppet withdraws it. */
 const CANCEL_AFTER_TICKS = 20;
+/**
+ * A grab window lasts `grabTicks + 1` (7) ticks. A puppet re-arms only after it has closed, so a
+ * prey that stepped away is grabbed again once the tagger is back in front of it.
+ */
+const GRAB_RETRY_TICKS = 8;
+/**
+ * S15P21C204-316. A placement lands on the next tick. The core refuses one silently (a busy
+ * participant, an occupied or start cell), so a placement not read back by then was refused, and
+ * the step says so instead of asking again until the two-minute budget runs out.
+ */
+const PLACE_CONFIRM_TICKS = 10;
 
 type Target = Cell | ((world: DemoWorld) => Cell | null);
 
@@ -223,6 +234,12 @@ type Step =
   /** `stopWithin` cells from the target is close enough; 0 means the target cell itself. */
   | { kind: 'walk'; actor: string; target: Target; stopWithin?: number; label: string }
   | { kind: 'face'; actor: string; target: Target; label: string }
+  /**
+   * S15P21C204-317. Catches `prey` by the grab rule (319): the tagger comes to a cell beside it,
+   * faces it and arms its grab, following the prey if it moves. Since 319 stepping onto a runner
+   * without an armed grab is not a capture, so a plain `walk` onto the prey never ends.
+   */
+  | { kind: 'grab'; actor: string; prey: string; label: string }
   | {
       kind: 'send';
       actor: string;
@@ -312,23 +329,32 @@ export function createDemoRunner(): DemoRunner {
    * cell wide (S15P21C204-267) the overshoot otherwise never converges on a neighbouring cell.
    */
   const releasing = new Set<string>();
+  /** The tick each puppet tagger last armed its grab. */
+  const grabbedAt = new Map<string, number>();
 
   const finish = (reason: string | null) => {
     if (reason) failure = reason;
     scenario = null;
     tracks = [];
     releasing.clear();
+    grabbedAt.clear();
   };
   return {
     start(next, world, options = {}) {
-      const unsupported = checkOptions(next, options);
-      if (unsupported) return unsupported;
-      const built = build(next, world, options);
-      if (typeof built === 'string') return built;
+      // S15P21C204-313. A refusal is reported like a stop, `<scenario>:<reason>`. The room used to
+      // drop the return value, so a button refused by its options answered with nothing at all.
+      // A scenario already running keeps running.
+      const refused = checkOptions(next, options) ?? build(next, world, options);
+      if (typeof refused === 'string') {
+        failure = `${next}:${refused}`;
+        return refused;
+      }
+      const built = refused;
       scenario = next;
       tracks = built.map((steps) => ({ steps, index: 0, enteredAt: world.tick }));
       failure = null;
       releasing.clear();
+      grabbedAt.clear();
       return null;
     },
     stop: () => finish(null),
@@ -346,7 +372,7 @@ export function createDemoRunner(): DemoRunner {
           const reason = step.kind === 'until' ? (step.failure ?? 'TIMEOUT') : 'TIMEOUT';
           return finish(`${step.label}:${reason}`);
         }
-        const outcome = run(step, world, io, elapsed, releasing);
+        const outcome = run(step, world, io, elapsed, releasing, grabbedAt);
         if (outcome === 'failed') return finish(`${step.label}:FAILED`);
         if (outcome === 'done') {
           track.index += 1;
@@ -370,6 +396,7 @@ function run(
   { send, drop, place }: DemoIo,
   elapsed: number,
   releasing: Set<string>,
+  grabbedAt: Map<string, number>,
 ): 'done' | 'running' | 'failed' {
   if (step.kind === 'wait') return elapsed >= step.ticks ? 'done' : 'running';
   if (step.kind === 'until') return step.done(world) ? 'done' : 'running';
@@ -382,6 +409,7 @@ function run(
     // The core refuses silently, so the arrival is confirmed by reading the position back on a
     // later tick rather than by the return value, which only says the room took the request.
     if (sameCell(actor.cell, target) && actor.dir === dir) return 'done';
+    if (elapsed > PLACE_CONFIRM_TICKS) return 'failed';
     return place(step.actor, target, dir) ? 'running' : 'failed';
   }
   // The tick after a forward intent: let go of it before the first cell completes, so the
@@ -397,12 +425,19 @@ function run(
     if (!command) return 'failed';
     return send(step.actor, command) ? 'done' : 'failed';
   }
+  if (step.kind === 'grab') {
+    const prey = subject(world, step.prey);
+    if (!prey) return 'failed';
+    if (prey.status !== 'ACTIVE') return 'done';
+    if (actor.action) return 'running';
+    return grab(actor, prey, world, send, releasing, grabbedAt, place);
+  }
   // A puppet in the middle of a move, turn or installation is left to finish it.
   if (actor.action) return 'running';
   const target = typeof step.target === 'function' ? step.target(world) : step.target;
   if (!target) return 'failed';
   if (step.kind === 'face') return turnToward(actor, target, send) ?? 'done';
-  return walk(actor, target, step.stopWithin ?? 0, world, send, releasing);
+  return walk(actor, target, step.stopWithin ?? 0, world, send, releasing, place);
 }
 
 /**
@@ -434,11 +469,12 @@ function walk(
   world: DemoWorld,
   send: (actor: string, command: PuppetCommand) => boolean,
   releasing: Set<string>,
+  place?: DemoIo['place'],
 ): 'done' | 'running' | 'failed' {
   if (sameCell(actor.cell, target)) return 'done';
   const next = pathStep(world, actor, target, stopWithin);
   if (next === 'arrived') return 'done';
-  if (!next) return 'failed';
+  if (!next) return placeInstead(actor, target, stopWithin, world, place);
   const turn = turnToward(actor, next, send);
   if (turn) return turn;
   // Facing the next cell: one forward intent starts one move under the server's timing, and the
@@ -446,6 +482,54 @@ function walk(
   if (!send(actor.playerId, { type: 'MOVE_INTENT', payload: { direction: 'forward' } }))
     return 'failed';
   releasing.add(actor.playerId);
+  return 'running';
+}
+
+/**
+ * S15P21C204-321. On the size-scaled mazes the corridors are one cell wide and the puppets stand
+ * still outside their scripts, so their bodies can leave no route at all. A demo shows what the
+ * rules do at the destination, not the walk, so a walk with no route jumps there instead. The
+ * core still refuses an occupied cell, and the walk keeps asking until the move is read back.
+ */
+function placeInstead(
+  actor: GameSubject,
+  target: Cell,
+  stopWithin: number,
+  world: DemoWorld,
+  place: DemoIo['place'] | undefined,
+): 'running' | 'failed' {
+  if (!place) return 'failed';
+  const spot =
+    stopWithin === 0 || !occupied(world, target) ? target : nearestFreeCell(world, target);
+  if (!spot || (stopWithin === 0 && occupied(world, target))) return 'failed';
+  return place(actor.playerId, spot, actor.dir) ? 'running' : 'failed';
+}
+
+/**
+ * One tick of a `grab` step. The rules capture a runner that is one walkable cell in front of a
+ * tagger whose grab window is open, so the tagger stops beside the prey instead of on it, faces
+ * it and arms. The grab window (7 ticks) is shorter than a move (12), so arming first and then
+ * walking in closes the window before the tagger arrives.
+ */
+function grab(
+  actor: GameSubject,
+  prey: GameSubject,
+  world: DemoWorld,
+  send: (actor: string, command: PuppetCommand) => boolean,
+  releasing: Set<string>,
+  grabbedAt: Map<string, number>,
+  place?: DemoIo['place'],
+): 'running' | 'failed' {
+  if (!sameCell(actor.cell, prey.cell)) {
+    const moved = walk(actor, prey.cell, 1, world, send, releasing, place);
+    if (moved !== 'done') return moved;
+    const turn = turnToward(actor, prey.cell, send);
+    if (turn) return turn;
+  }
+  const last = grabbedAt.get(actor.playerId);
+  if (last !== undefined && world.tick - last < GRAB_RETRY_TICKS) return 'running';
+  if (!send(actor.playerId, { type: 'GRAB_INTENT', payload: {} })) return 'failed';
+  grabbedAt.set(actor.playerId, world.tick);
   return 'running';
 }
 
@@ -546,6 +630,21 @@ function occupied(world: DemoWorld, cell: Cell): boolean {
 }
 
 /** A passage cell a device may go on: not a start cell and nobody standing there. */
+/** The closest free cell by walking distance from `from`, excluding `from` itself. */
+function nearestFreeCell(world: DemoWorld, from: Cell): Cell | null {
+  const seen = new Set<string>([key(from)]);
+  const queue: Cell[] = [from];
+  for (let index = 0; index < queue.length; index++) {
+    for (const next of neighbours(world.topology, queue[index]!)) {
+      if (seen.has(key(next))) continue;
+      seen.add(key(next));
+      if (isFree(world, next)) return next;
+      queue.push(next);
+    }
+  }
+  return null;
+}
+
 function isFree(world: DemoWorld, cell: Cell): boolean {
   return !world.startCells.some((start) => sameCell(start, cell)) && !occupied(world, cell);
 }
@@ -603,8 +702,30 @@ function build(
       if (!world.operator) return 'NO_OPERATOR_STATE';
       const exit = world.operator.exit;
       if (!exit) return 'NO_OPERATOR_EXIT';
+      // S15P21C204-321. 작은 미로에서는 출구 앞 칸이 누군가의 시작 칸인 배치가 13% 나오고,
+      // 인형은 대본 밖에서 움직이지 않으므로 그 자리에 그대로 서 있다. 먼저 비키게 한다.
+      const blocker = world.participants.find(
+        (player) =>
+          player.playerId !== world.operatorId &&
+          player.status === 'ACTIVE' &&
+          sameCell(player.cell, exit.approach),
+      );
+      const clearing: Step[] = [];
+      if (blocker) {
+        if (!world.puppetIds.includes(blocker.playerId)) return 'CELL_UNAVAILABLE';
+        const spot = nearestFreeCell(world, exit.approach);
+        if (!spot) return 'CELL_UNAVAILABLE';
+        clearing.push({
+          kind: 'place',
+          actor: blocker.playerId,
+          target: spot,
+          dir: () => blocker.dir,
+          label: 'clear-exit',
+        });
+      }
       return [
         [
+          ...clearing,
           {
             kind: 'place',
             actor: world.operatorId,
@@ -772,11 +893,11 @@ function build(
       if (!tagger) return 'NO_TAGGER_PUPPET';
       return [
         [
-          { kind: 'walk', actor: tagger.playerId, target: operatorCell, label: 'chase-operator' },
           {
-            kind: 'until',
-            done: (now) => subject(now, world.operatorId)?.status !== 'ACTIVE',
-            label: 'captured',
+            kind: 'grab',
+            actor: tagger.playerId,
+            prey: world.operatorId,
+            label: 'chase-operator',
           },
         ],
       ];
@@ -1020,7 +1141,12 @@ function build(
             failure: 'NO_CHALLENGE_FROM_OPERATOR',
             label: 'operator-starts-challenge',
           },
-          { kind: 'walk', actor: tagger.playerId, target: operatorCell, label: 'capture-operator' },
+          {
+            kind: 'grab',
+            actor: tagger.playerId,
+            prey: world.operatorId,
+            label: 'capture-operator',
+          },
         ],
       ];
     }
@@ -1070,15 +1196,10 @@ function build(
       return [
         [
           {
-            kind: 'walk',
+            kind: 'grab',
             actor: firstTagger.playerId,
-            target: operatorCell,
+            prey: world.operatorId,
             label: 'capture-operator',
-          },
-          {
-            kind: 'until',
-            done: (now) => subject(now, world.operatorId)?.status !== 'ACTIVE',
-            label: 'operator-captured',
           },
         ],
         [
@@ -1089,15 +1210,10 @@ function build(
             label: 'wait-for-spectating',
           },
           {
-            kind: 'walk',
+            kind: 'grab',
             actor: secondTagger.playerId,
-            target: (now) => subject(now, prey.playerId)?.cell ?? null,
+            prey: prey.playerId,
             label: 'capture-watched',
-          },
-          {
-            kind: 'until',
-            done: (now) => subject(now, prey.playerId)?.status !== 'ACTIVE',
-            label: 'watched-captured',
           },
         ],
       ];
@@ -1123,7 +1239,7 @@ function build(
   }
 }
 
-/** Puppet taggers approach, arm their grab, then take the final step onto a runner. */
+/** Each puppet tagger catches its own puppet runner by the grab rule. */
 function captureTracks(
   taggers: readonly GameSubject[],
   runners: readonly GameSubject[],
@@ -1136,28 +1252,10 @@ function captureTracks(
   if (pairs.length < count) return count === 1 ? 'NEED_ONE_PAIR' : 'NEED_TWO_PAIRS';
   return pairs.map(({ tagger, prey }) => [
     {
-      kind: 'walk' as const,
+      kind: 'grab' as const,
       actor: tagger.playerId,
-      target: (now: DemoWorld) => subject(now, prey.playerId)?.cell ?? null,
-      adjacent: true,
-      label: `approach-${prey.playerId}`,
-    },
-    {
-      kind: 'send' as const,
-      actor: tagger.playerId,
-      command: () => ({ type: 'GRAB_INTENT' as const, payload: {} }),
-      label: `grab-${prey.playerId}`,
-    },
-    {
-      kind: 'walk' as const,
-      actor: tagger.playerId,
-      target: (now: DemoWorld) => subject(now, prey.playerId)?.cell ?? null,
+      prey: prey.playerId,
       label: `capture-${prey.playerId}`,
-    },
-    {
-      kind: 'until' as const,
-      done: (now: DemoWorld) => subject(now, prey.playerId)?.status !== 'ACTIVE',
-      label: `caught-${prey.playerId}`,
     },
   ]);
 }

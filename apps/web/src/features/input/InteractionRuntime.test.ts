@@ -17,6 +17,7 @@ import {
 import type { ReadinessStage, ReadinessTrace } from '../devices/readiness-trace';
 import { INPUT_TUNING } from './input-tuning';
 import { MOVE_REFRESH_MS } from './move-intent';
+import { FACE_INVALID_MS } from './input-fallback';
 import { POSE_KEY_POINTS } from '../vision/pose-sensor';
 
 function videoTrack() {
@@ -1231,6 +1232,51 @@ describe('createInteractionRuntime', () => {
 
     expect(base.statuses.at(-1)!.vision).toBe('ready');
     expect(base.sensors).toHaveLength(1);
+  });
+
+  it('holds ready through a short face loss and only then reports loading', async () => {
+    // S15P21C204-330. 표본 하나가 흐리다고 바로 떨어지면 장치 점검 단계와 복구 배너가 깜빡인다.
+    // 입력 층이 모션을 그만 믿는 시점(FACE_INVALID_MS)과 같은 기준으로 내린다.
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.emit(1);
+      expect(base.statuses.at(-1)!.vision).toBe('ready');
+
+      base.advance(FACE_INVALID_MS - 100);
+      base.emitMissing(2);
+      base.fireTimers();
+      expect(base.statuses.at(-1)!.vision).toBe('ready');
+
+      base.advance(200);
+      base.fireTimers();
+      expect(base.statuses.at(-1)!.vision).toBe('loading');
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
+  it('returns to ready without waiting when the face comes back inside the grace', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      base.emit(1);
+      expect(base.statuses.at(-1)!.vision).toBe('ready');
+      // 기동 중의 loading 은 정상이다. ready 가 된 뒤부터만 본다.
+      const from = base.statuses.length;
+
+      base.advance(400);
+      base.emitMissing(2);
+      base.advance(40);
+      base.emit(3);
+
+      expect(base.statuses.at(-1)!.vision).toBe('ready');
+      expect(base.statuses.slice(from).map((status) => status.vision)).not.toContain('loading');
+    } finally {
+      await base.runtime.dispose();
+    }
   });
 
   it('drops back from ready when the processed track is no longer live', async () => {

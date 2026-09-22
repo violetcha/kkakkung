@@ -292,6 +292,33 @@ describe('drawMinimap window mode', () => {
     expect(calls.some((call) => call.op === 'fillText' && call.args[0] === 'N')).toBe(true);
   });
 
+  // S15P21C204-314. 창 모드는 내 주변 좌표로 그린다. 절대 좌표로 그리면 엉뚱한 칸에 찍힌다.
+  it('places the operator exit relative to me in the window, and drops it outside', () => {
+    const self = viewFixture().self;
+    if (self?.status !== 'ACTIVE') throw new Error('fixture self');
+    const near = recorder();
+    const layout = drawMinimap(near.ctx, {
+      view: before(),
+      size: 165,
+      window: 11,
+      operatorExit: { x: self.cell.x + 1, y: self.cell.y },
+    });
+    const me = near.calls.find((call) => call.op === 'translate')!.args as number[];
+    const marker = near.calls.find(
+      (call) => call.op === 'arc' && call.stroke === MINIMAP_COLORS.operatorExit,
+    );
+    expect(marker?.args.slice(0, 2)).toEqual([me[0]! + layout.unit, me[1]]);
+
+    const far = recorder();
+    drawMinimap(far.ctx, {
+      view: before(),
+      size: 165,
+      window: 11,
+      operatorExit: { x: self.cell.x + 20, y: self.cell.y },
+    });
+    expect(far.calls.some((call) => call.stroke === MINIMAP_COLORS.operatorExit)).toBe(false);
+  });
+
   it('keeps the full map when no window is requested and still centres nothing', () => {
     const { ctx, calls } = recorder();
     const layout = drawMinimap(ctx, { view: before(), size: 320 });

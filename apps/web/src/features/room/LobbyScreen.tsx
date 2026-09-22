@@ -18,6 +18,7 @@ export function LobbyScreen({
   canChooseMapSize = false,
   mapSizeRequest,
   onSelectMapSize,
+  mapSizeNote,
 }: {
   roster: RoomRosterMessage;
   selfId: string;
@@ -33,6 +34,7 @@ export function LobbyScreen({
   canChooseMapSize?: boolean;
   mapSizeRequest?: RequestDisplay;
   onSelectMapSize?(size: MapSizeId): void;
+  mapSizeNote?: string;
 }) {
   const [removalId, setRemovalId] = useState<string | null>(null);
   const host = roster.hostId === selfId;
@@ -68,6 +70,7 @@ export function LobbyScreen({
         canEdit={host && canChooseMapSize && !showcase}
         busy={busy}
         onSelect={onSelectMapSize}
+        {...(mapSizeNote ? { editableNote: mapSizeNote } : {})}
         {...(showcase ? { note: '시연 맵은 16x16으로 고정되어 있습니다.' } : {})}
       />
       <ol>

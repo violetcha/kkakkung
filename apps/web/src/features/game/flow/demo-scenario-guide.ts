@@ -220,6 +220,10 @@ export const DEMO_SCENARIO_GUIDE: Readonly<Record<string, DemoScenarioGuide>> = 
 
 const FAILURE_LABELS: Readonly<Record<string, string>> = {
   CELL_UNAVAILABLE: '배치할 수 없는 칸입니다.',
+  FAILED: '규칙이 이 동작을 받아들이지 않았습니다.',
+  NEED_ONE_PAIR: '술래 인형과 도망자 인형이 한 쌍 필요합니다.',
+  NEED_TWO_PAIRS: '술래 인형과 도망자 인형이 두 쌍 필요합니다.',
+  NEED_TWO_RUNNER_PUPPETS: '살아 있는 도망자 인형이 둘 필요합니다.',
   NO_CHALLENGE_FROM_OPERATOR: '관리자의 도전이 시작되지 않았습니다.',
   NO_CROSSING_PATH: '가로지를 수 있는 경로가 없습니다.',
   NO_EXIT_FOR_PUPPET: '인형의 출구를 찾지 못했습니다.',
@@ -230,21 +234,72 @@ const FAILURE_LABELS: Readonly<Record<string, string>> = {
   NO_REQUEST_FROM_OPERATOR: '관리자의 교환 요청이 없습니다.',
   NO_ROOM_FOR_TWO_TRAPS: '연속으로 놓을 공간이 부족합니다.',
   NO_ROOM_TO_INSTALL: '장비를 설치할 공간이 없습니다.',
+  NO_ROOM_TO_RETREAT: '설치한 인형이 물러날 칸이 없습니다.',
+  NO_RUNNER_PUPPET: '살아 있는 도망자 인형이 없습니다.',
+  NO_TAGGER_PUPPET: '술래 인형이 없습니다.',
+  NO_WALL_TO_MOUNT: '감지기를 붙일 벽이 없습니다.',
   OPERATOR_MUST_BE_RUNNER: '이 시나리오는 도망자일 때만 실행할 수 있습니다.',
+  OPERATOR_MUST_BE_TAGGER: '이 시나리오는 술래일 때만 실행할 수 있습니다.',
+  OPERATOR_NOT_ACTIVE: '관리자가 이미 포획되었거나 탈출해 실행할 수 없습니다.',
   PATH_BLOCKED: '인형의 이동 경로가 막혔습니다.',
   TIMEOUT: '정해진 시간 안에 조건을 확인하지 못했습니다.',
   UNSUPPORTED_OPTION: '이 시나리오에서 지원하지 않는 선택입니다.',
 };
 
+/** S15P21C204-313. 서버 대본의 단계 이름(`server/src/rooms/DemoScenarios.ts`)과 같은 키다. */
 const STEP_LABELS: Readonly<Record<string, string>> = {
-  'await-condition': '조건을 기다리는 중',
+  'accept-exchange': '인형이 교환을 수락하는 중',
+  'approach-exit': '인형이 출구로 가는 중',
+  'cancel-exchange': '인형이 교환 요청을 취소하는 중',
+  'capture-operator': '술래 인형이 나를 잡으러 오는 중',
+  'capture-watched': '술래 인형이 관전 대상을 잡으러 가는 중',
+  'clear-exit': '출구 앞에 선 인형을 비키는 중',
   'chase-operator': '관리자에게 접근하는 중',
-  completed: '완료 확인 중',
+  'come-closer': '인형이 옆으로 오는 중',
+  cross: '인형이 시야를 가로지르는 중',
+  'drop-connection': '인형의 연결을 끊는 중',
+  'face-exit': '인형이 출구를 보는 중',
+  'face-operator': '인형이 나를 보는 중',
+  'face-wall': '인형이 벽을 보는 중',
+  'first-comes-closer': '첫 인형이 다가오는 중',
+  'hold-challenge': '인형이 도전을 붙들고 있습니다 · 다가가 잡으세요',
   install: '장비를 설치하는 중',
-  place: '인형을 배치하는 중',
-  setup: '시나리오를 준비하는 중',
-  walk: '인형이 이동하는 중',
+  'move-to-side': '인형이 옆 칸으로 비키는 중',
+  'offer-shown': '교환 요청을 보여 주는 중',
+  'operator-installs': '내가 장비를 놓고 무장하기를 기다리는 중',
+  'operator-requests': '내 교환 요청을 기다리는 중',
+  'operator-starts-challenge': '내가 출구 도전을 시작하기를 기다리는 중',
+  'place-at-exit': '나를 출구 앞으로 옮기는 중',
+  'place-puppet': '인형을 배치하는 중',
+  'request-exchange': '인형이 교환을 요청하는 중',
+  'runner-enters': '도망자 인형이 들어오는 중',
+  'second-joins': '두 번째 인형이 합류하는 중',
+  'show-armed': '무장된 상태를 보여 주는 중',
+  'show-spent': '소모된 상태를 보여 주는 중',
+  'show-unarmed': '무장 전 상태를 보여 주는 중',
+  'start-challenge': '인형이 출구 도전을 시작하는 중',
+  'step-back': '설치한 인형이 물러나는 중',
+  'trace-visible': '교환 흔적을 보여 주는 중',
+  'wait-armed': '장비가 무장되기를 기다리는 중',
+  'wait-beside-exit': '술래 인형이 출구 옆에서 기다리는 중',
+  'wait-for-spectating': '관전 화면으로 넘어가기를 기다리는 중',
+  'walk-to-spot': '인형이 자리로 가는 중',
 };
+
+/** 인형·장비마다 뒤에 식별자가 붙는 단계. 긴 접두어부터 맞춘다. */
+const STEP_PREFIX_LABELS: readonly (readonly [string, string])[] = [
+  ['walk-to-trap-', '덫 자리로 가는 중'],
+  ['install-trap-', '덫을 설치하는 중'],
+  ['face-exit-', '인형이 출구를 보는 중'],
+  ['arm-trap-', '덫이 무장되기를 기다리는 중'],
+  ['approach-', '인형이 다가가는 중'],
+  ['capture-', '술래 인형이 잡으러 가는 중'],
+  ['complete-', '인형이 탈출을 마치는 중'],
+  ['escaped-', '인형의 탈출을 확인하는 중'],
+  ['start-', '인형이 출구 도전을 시작하는 중'],
+  ['hold-', '인형이 탈출 자세를 유지하는 중'],
+  ['turn-', '인형이 방향을 바꾸는 중'],
+];
 
 export function demoScenarioGuide(id: string): DemoScenarioGuide {
   return (
@@ -264,9 +319,18 @@ export function demoFailureLabel(failure: string): string {
 
 export function demoStepLabel(step: string | null): string {
   if (!step) return '준비';
-  return STEP_LABELS[step] ?? '진행 중';
+  return (
+    STEP_LABELS[step] ??
+    STEP_PREFIX_LABELS.find(([prefix]) => step.startsWith(prefix))?.[1] ??
+    '진행 중'
+  );
 }
 
 export function demoFailureCodes(): readonly string[] {
   return Object.keys(FAILURE_LABELS);
+}
+
+/** 라벨이 있는 단계 이름. 서버 대본과 맞는지 계약 시험이 본다. */
+export function demoStepLabelKeys(): readonly string[] {
+  return [...Object.keys(STEP_LABELS), ...STEP_PREFIX_LABELS.map(([prefix]) => prefix)];
 }
