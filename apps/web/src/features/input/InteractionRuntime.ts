@@ -133,7 +133,7 @@ import {
   type GameKey,
   type GestureIntentController,
 } from './gesture-intent';
-import { createInputFallback, type InputFallback } from './input-fallback';
+import { createInputFallback, FACE_INVALID_MS, type InputFallback } from './input-fallback';
 import { createMoveIntentController, type MoveIntentController } from './move-intent';
 import { createTurnIntentController, type TurnIntentController } from './turn-intent';
 import { INPUT_TUNING, headTurnedForMove, type InputTuning } from './input-tuning';
@@ -1082,7 +1082,8 @@ export const createInteractionRuntime = (
         }
         if (modelsLoaded && !lastSnapshot && now - modelReadyAt > FIRST_INFERENCE_TIMEOUT_MS)
           failVision('INFERENCE_STALLED');
-        if (lastStatus.vision === 'ready' && !hasFreshValidFace()) patch({ vision: 'loading' });
+        // 프레임이 끊겨도 이 감시가 계속 돌아, 유예가 지나면 강등이 실제로 일어난다.
+        if (lastStatus.vision === 'ready' && !hasFreshValidFace()) dropVisionAfterFaceGrace(now);
       }
       if (!isSampleFresh(lastSnapshot?.pose ?? null, 'pose', now)) {
         leanFilter.reset();
@@ -1104,18 +1105,46 @@ export const createInteractionRuntime = (
   };
 
   /**
+   * S15P21C204-330. 얼굴만 빠졌을 때의 ready → loading 강등에 유예를 준다.
+   * 이 상태는 화면에만 쓰이는데(장치 점검 단계, 복구 배너) 표본 하나가 흐려도 즉시 떨어지면
+   * 눈 깜빡임·고개 돌리기마다 화면이 깜빡인다. 입력 층이 모션을 그만 믿는 시점과 같은 기준을
+   * 써서, `loading` 이 "추적이 끊겼다"는 뜻을 유지하게 한다. 승격은 그대로 즉시다.
+   */
+  let visionFaceOkAtMs: number | null = null;
+
+  /**
    * vision 상태를 다시 계산한다.
    * D-07 가공 프레임과 D-08 안전 프레임이 붙기 전에는 ready가 될 수 없다.
    */
   const refreshVisionStatus = () => {
     if (!scheduler) return;
-    const ready = isVisionReady({
+    const parts = {
       modelsLoaded,
       hasFreshValidFace: hasFreshValidFace(),
       hasFirstSafeFrame: compositor?.hasFirstSafeFrame === true,
       hasLiveProcessedTrack: compositor?.isTrackLive === true,
-    });
-    patch({ vision: ready ? 'ready' : 'loading' });
+    };
+    if (parts.hasFreshValidFace) visionFaceOkAtMs = vision.now();
+    if (isVisionReady(parts)) {
+      patch({ vision: 'ready' });
+      return;
+    }
+    // 얼굴 하나만 빠진 경우인지. 모델·안전 프레임·가공 트랙이 빠진 것은 순간 잡음이 아니라
+    // 장애이므로 유예 없이 떨어뜨린다.
+    const faceOnly =
+      !parts.hasFreshValidFace && isVisionReady({ ...parts, hasFreshValidFace: true });
+    if (faceOnly) dropVisionAfterFaceGrace(vision.now());
+    else patch({ vision: 'loading' });
+  };
+
+  /**
+   * 얼굴만 빠진 상태. 관측 주기가 아니라 마지막으로 얼굴이 멀쩡했던 시각부터 재어,
+   * FACE_INVALID_MS 를 넘겨야 loading 으로 내린다.
+   */
+  const dropVisionAfterFaceGrace = (nowMs: number) => {
+    const since = visionFaceOkAtMs;
+    if (lastStatus.vision === 'ready' && since !== null && nowMs - since < FACE_INVALID_MS) return;
+    patch({ vision: 'loading' });
   };
 
   /**

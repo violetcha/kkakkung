@@ -87,6 +87,45 @@ export function activeDeviceCheckStep(steps: readonly DeviceCheckStep[]): number
 }
 
 /**
+ * S15P21C204-330. 통과한 단계를 기억한다.
+ * 점검이 묻는 것은 "지금 추적 중인가"가 아니라 "이 묶음을 통과한 적 있는가"다. 얼굴이 잠깐
+ * 벗어나 vision 이 loading 으로 떨어지는 일은 정상이고 — 4단계 단추를 누르려고 화면 아래를
+ * 보면 그렇게 된다 — 그때마다 통과가 취소되면 화면이 1단계로 되돌아간다.
+ *
+ * 같은 `steps` 로 두 번 불러도 결과가 같아, 렌더 중에 불러도 안전하다.
+ */
+export function passedDeviceCheckSteps(
+  previous: ReadonlySet<DeviceCheckStepId>,
+  steps: readonly DeviceCheckStep[],
+): ReadonlySet<DeviceCheckStepId> {
+  const next = new Set(previous);
+  for (const step of steps) {
+    if (step.state === 'done') next.add(step.id);
+    // blocked 는 순간 잡음이 아니라 실패다. 기억을 지우고 그 단계로 돌려보낸다.
+    if (step.state === 'blocked') next.delete(step.id);
+  }
+  // 한 단계라도 막혀 있으면 '완료'는 통과로 두지 않는다. 준비 완료가 열려서는 안 된다.
+  if (steps.some((step) => step.state === 'blocked')) next.delete('done');
+  return next;
+}
+
+/**
+ * 기억한 통과를 입힌 단계들. 진행(어느 단계를 볼지)과 준비 완료 개방만 이걸로 정하고,
+ * 점에는 살아 있는 상태를 그대로 그린다 — 되돌아간 것은 알리되 진행을 되감지는 않는다.
+ * blocked 는 어떤 기억보다 우선한다.
+ */
+export function latchDeviceCheckSteps(
+  steps: readonly DeviceCheckStep[],
+  passed: ReadonlySet<DeviceCheckStepId>,
+): readonly DeviceCheckStep[] {
+  return steps.map((step) =>
+    step.state === 'done' || step.state === 'blocked' || !passed.has(step.id)
+      ? step
+      : Object.freeze({ ...step, state: 'done' as const }),
+  );
+}
+
+/**
  * 오류 code 를 낸 단계. 문구가 다른 단계로 새지 않게 여기서 한 번만 정한다.
  * 분류를 모르는 code 는 첫 단계로 보내 점검을 처음부터 다시 하게 한다.
  */
