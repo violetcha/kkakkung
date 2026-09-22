@@ -147,6 +147,39 @@ describe('RoomTickCoordinator', () => {
     expect(bTicks).toEqual([0]);
   });
 
+  // S15P21C204-336. The overload callback aborts a match. A throw there used to leave the 10ms
+  // interval and end the process with every room in it.
+  it('contains an overload callback that throws and reports it as a failed room', () => {
+    const clock = fakeClock(0);
+    const reported: string[] = [];
+    const coordinator = new RoomTickCoordinator({
+      now: clock.now,
+      onTickError: (id) => reported.push(id),
+    });
+    const failures: unknown[] = [];
+    coordinator.register('a', {
+      onTick: () => undefined,
+      onOverload: () => {
+        throw new Error('abort failed');
+      },
+      onTickFailed: (error) => failures.push(error),
+    });
+    const bTicks: number[] = [];
+    coordinator.register('b', { onTick: (lag) => bTicks.push(lag), onOverload: () => undefined });
+    clock.set(400);
+    // 'b' is just as late, so it overloads too; only 'a' throws.
+    let result!: ReturnType<RoomTickCoordinator['run']>;
+    expect(() => (result = coordinator.run())).not.toThrow();
+    expect(result.overloaded.sort()).toEqual(['a', 'b']);
+    expect(result.failed).toEqual(['a']);
+    expect(reported).toEqual(['a']);
+    expect((failures[0] as Error).message).toBe('abort failed');
+    coordinator.rearm('b');
+    clock.advance(50);
+    coordinator.run();
+    expect(bTicks).toHaveLength(1);
+  });
+
   it('treats exactly 250ms as late but valid and emits allow-listed metric names', () => {
     const h = setup();
     h.register('a');

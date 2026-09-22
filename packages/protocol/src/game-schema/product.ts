@@ -66,6 +66,8 @@ export const ABORT_REASONS = [
   'SERVER_TICK_OVERLOAD',
   'MEDIA_POLICY_UNCERTAIN',
   'MEDIA_UNAVAILABLE',
+  /** S15P21C204-342. 관리자가 데모 라운드를 끝냈다. 장애가 아니라 사람이 누른 것이다. */
+  'DEMO_OPERATOR_ABORT',
 ] as const;
 export type AbortReason = (typeof ABORT_REASONS)[number];
 export const PREPARATION_ISSUES = [

@@ -7,13 +7,13 @@
 ### 입장
 
 1. 클라이언트가 `GET /api/sessions/access`로 해당 요청의 `{method: 'gitlab-sso' | 'invitation' | 'guest'}`을 확인한다. no-store이며 실제 신원·토큰은 반환하지 않는다. 기본 invitation에서는 운영자가 `POST /api/operations/invitations`(OPS_TOKEN)로 발급한 초대 토큰이 필요하다. 토큰은 방 코드와 다른 고엔트로피 값이며 서버는 해시만 저장한다.
-2. 클라이언트가 `POST /api/sessions`에 strict `SessionRequest`를 보낸다. 생성은 `{nickname, inviteToken?, createRoom: true}`(roomCode 금지), 참가는 `{nickname, inviteToken?, createRoom: false, roomCode}`다. inviteToken 생략은 명시적 GitLab SSO 모드에서 신뢰 프록시가 확인한 프로젝트 멤버 또는 명시적 guest 모드의 새 방 생성에서 가능하다. 게스트 친구 참가에는 방별 초대가 필요하며 명시한 링크는 생성/SSO 요청에서도 검증한다. POST는 매번 인증을 검사하며 access 응답이나 본문의 신원 주장으로 인증하지 않는다. 응답은 `SessionResponse {sessionToken, playerId, roomCode, expiresAt(epoch ms), protocolVersion: '0.2.0'}`이고 `Cache-Control: no-store`다.
+2. 클라이언트가 `POST /api/sessions`에 strict `SessionRequest`를 보낸다. 생성은 `{nickname, inviteToken?, createRoom: true}`(roomCode 금지), 참가는 `{nickname, inviteToken?, createRoom: false, roomCode}`다. inviteToken 생략은 명시적 GitLab SSO 모드에서 신뢰 프록시가 확인한 운영 등록 이메일 또는 명시적 guest 모드의 새 방 생성에서 가능하다. 게스트 친구 참가에는 방별 초대가 필요하며 명시한 링크는 생성/SSO 요청에서도 검증한다. POST는 매번 인증을 검사하며 access 응답이나 본문의 신원 주장으로 인증하지 않는다. 응답은 `SessionResponse {sessionToken, playerId, roomCode, expiresAt(epoch ms), protocolVersion: '0.2.0'}`이고 `Cache-Control: no-store`다.
 3. `Client.joinOrCreate('kkakkung', { token: sessionToken, roomCode, protocolVersion: '0.2.0' })`. 서버는 매칭 전에 세션·방 코드·버전·좌석·중복 연결을 검사한다(400 INVALID_JOIN, 409 PROTOCOL_MISMATCH, 401 INVALID_SESSION, 403 WRONG_ROOM/ROOM_CLOSED, 409 SESSION_IN_USE).
 
 새 참가는 LOBBY/DEVICE_CHECK에서만 허용하며 진행 중 충원과 같은 세션의 재접속 재개는 거절한다.
 
 SSO 인증은 `SESSION_ADMISSION_MODE=gitlab-sso`와 제품·프록시 신뢰 설정이 모두 필요하다.
-호스트 Nginx는 GitLab 프로젝트 멤버 검사를 통과한 값으로 `X-SSO-User`를 덮어쓴다.
+호스트 Nginx는 운영 등록 이메일 검사를 통과한 GitLab 신원으로 `X-SSO-User`를 덮어쓴다.
 게임 포트는 외부에 공개하지 않고 web-proxy는 loopback에만 바인딩한다.
 내부 smoke 프록시는 이 헤더를 제거하여 기존 초대 인증을 사용한다.
 SSO 회원의 해시를 기존 inviteId 제한 버킷에 사용하고 IP·인원·방 상태·운영 잠금 검사는 동일하다.

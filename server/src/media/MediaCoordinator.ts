@@ -96,6 +96,8 @@ class Coordinator implements MediaCoordinatorRuntime {
   private readonly transition: GenerationTransition;
   private readonly pruneGrantRequests: () => void;
   private readonly pendingRetirements = new Map<Generation, number>();
+  /** S15P21C204-332: scopes whose last result B saw was not `confirmed`, so the room still holds them. */
+  private readonly unconfirmedRetirements = new Set<string>();
   private readonly retirements = new Map<Generation, Promise<RetirementResult>>();
   private readonly roomCleanups = new Map<string, Promise<void>>();
   private readonly failures = new WeakMap<Generation, Set<MediaFailureCode>>();
@@ -266,6 +268,18 @@ class Coordinator implements MediaCoordinatorRuntime {
           }
         : {}),
       onOccupancyEnded: async (g) => {
+        // S15P21C204-332. The room only clears a scope from its pendingRetirements on a
+        // confirmed MEDIA_RETIRED. When the first bounded retire returned `unknown` the retry
+        // engine confirms the remote boundary here, and without this notice the room keeps the
+        // scope forever: its seat stays RETIRING, closeRoom is refused and the MAX_ROOMS budget
+        // never comes back. Only a scope B last heard was unconfirmed is announced again, so the
+        // healthy first-try path still emits exactly one result per B request id.
+        if (this.unconfirmedRetirements.has(this.retirementScope(g)))
+          this.finishRetirement({
+            ...this.retirement(g, 'shutdown'),
+            status: 'confirmed',
+            code: null,
+          });
         const group = this.registry
           .all()
           .filter(
@@ -925,7 +939,38 @@ class Coordinator implements MediaCoordinatorRuntime {
     return result;
   }
 
+  /** The four fields a room keys its pendingRetirements by; reason and request id are not part of it. */
+  private retirementScope(
+    scope:
+      | Generation
+      | Readonly<{
+          matchId: string;
+          mediaInstanceId: string;
+          playerId: string;
+          receiverGeneration: number;
+        }>,
+  ): string {
+    const value =
+      'request' in scope
+        ? {
+            matchId: scope.request.matchId,
+            mediaInstanceId: scope.request.mediaInstanceId,
+            playerId: scope.request.playerId,
+            receiverGeneration: scope.generation,
+          }
+        : scope;
+    return JSON.stringify([
+      value.matchId,
+      value.mediaInstanceId,
+      value.playerId,
+      value.receiverGeneration,
+    ]);
+  }
+
   private finishRetirement(result: RetirementResult): RetirementResult {
+    const scope = this.retirementScope(result);
+    if (result.status === 'confirmed') this.unconfirmedRetirements.delete(scope);
+    else this.unconfirmedRetirements.add(scope);
     const key = JSON.stringify([
       result.requestId,
       result.matchId,

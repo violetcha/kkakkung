@@ -11,7 +11,14 @@
  * phase it can serve and records `blockedReason` instead of faking progress.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
+import {
+  Room,
+  ServerError,
+  type AuthContext,
+  type Client,
+  type RoomException,
+  type RoomMethodName,
+} from '@colyseus/core';
 import {
   DEMO_SCENARIO_IDS,
   PRODUCT_CLIENT_MESSAGES,
@@ -51,6 +58,7 @@ import type { LayoutLoader } from '../game/LayoutLoader.js';
 import { MatchContext } from '../game/MatchContext.js';
 import { MatchDriver } from '../game/MatchDriver.js';
 import { projectPrivateBody, projectSpectateBody } from '../game/PlayerProjection.js';
+import { createEnemyAliases } from '../game/EnemyAliases.js';
 import { chooseSpectateTarget, spectateCandidates, spectatorLinks } from '../game/Spectate.js';
 import type { RoomTickCoordinator } from '../game/RoomTickCoordinator.js';
 import type {
@@ -73,7 +81,7 @@ import type { SessionAuth } from '../session/session-types.js';
 import type { RoomKind, SlotRegistry } from '../session/SlotRegistry.js';
 import { CountdownCoordinator } from './CountdownCoordinator.js';
 import {
-  availableScenarios,
+  scenarioOffers,
   createDemoRunner,
   SCENARIO_OPTIONS,
   type DemoExit,
@@ -89,6 +97,12 @@ import { preparationIssue } from './preparation-issue.js';
 import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
+/**
+ * S15P21C204-333. How long a preparation whose outcome is unknown keeps holding the room. A
+ * generation E allocated for it lives 300s (MediaGenerationRegistry) and E's reconcile retires it
+ * once expired and unjoined; the room never handed its grant to anyone. Past this the room lets go.
+ */
+const UNCERTAIN_PREPARATION_LIMIT_MS = 330_000;
 /**
  * S15P21C204-328. Well past the 3s countdown, because nothing here is meant to be slow: the
  * control the countdown hands over is applied on the very next tick. It is a way out of a phase
@@ -151,6 +165,8 @@ export type ProductRoomDeps<State> = Readonly<{
   demoExits?: (state: State) => readonly DemoExit[];
   /** Start cells of the match: the rules refuse a device there, so a scenario avoids them. */
   demoStartCells?: (state: State) => readonly Cell[];
+  /** 교환 대본이 아직 나눌 지식이 남은 상대를 고를 수 있게 한다. */
+  demoExchangeGain?: (state: State, from: string, to: string) => boolean;
   canStart?: () => boolean;
   /**
    * Readiness gate for a demo room (S15P21C204-258). A demo room never issues, publishes or
@@ -218,7 +234,16 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     // 시작한다. 실제 템플릿 선택은 크기별 맵이 생긴 뒤에 붙인다.
     private roomMapSize: MapSize = 'large';
     private roomMapRevision = 0;
-    private readonly heartbeat = new HeartbeatTracker({ serverEpoch: deps.serverEpoch });
+    private readonly heartbeat = new HeartbeatTracker({
+      serverEpoch: deps.serverEpoch,
+      // 서버가 멈췄던 시간은 클라이언트 침묵으로 세지 않는다. 멈춘 사실만 남긴다 (337).
+      onStall: (stallMs, connections) =>
+        this.emitEvent('room.heartbeat_stall', 'warn', {
+          phase: this.phase,
+          durationMs: stallMs,
+          count: connections,
+        }),
+    });
     private readonly clockSync = new ClockSync({
       serverEpoch: deps.serverEpoch,
       now: deps.monotonicNow,
@@ -231,6 +256,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly clientsByPlayer = new Map<string, Client>();
     private readonly playersByConnection = new Map<string, SessionAuth>();
     private readonly roles = new Map<string, Role>();
+    /** 340. Opaque per-round ids for enemy players; shared by views, bindings and audio policy. */
+    private readonly aliases = createEnemyAliases();
     /**
      * S15P21C204-269. Ended runner → the surviving runner it chose to watch. A missing or
      * ended choice falls back to roster order at read time; cleared with every new round.
@@ -251,7 +278,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly pendingPreparations = new Map<string, number>();
     private readonly preparingPlayers = new Map<string, number>();
     private readonly queuedPreparations = new Map<string, string>();
-    private readonly uncertainPreparations = new Set<string>();
+    /** Players whose preparation may have allocated remotely without a cursor, by match. */
+    private readonly uncertainPreparations = new Map<
+      string,
+      { matchId: string; sinceMs: number }
+    >();
     private readonly retiringScopes = new Map<
       string,
       { mediaInstanceId: string; receiverGeneration: number }
@@ -276,6 +307,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private puppetSequence = 0;
     private demoStateSent: string | null = null;
     private demoAbortRequested = false;
+    /** 마지막으로 읽은 공개 누계. 경기 인스턴스가 내려간 뒤에도 결과 화면이 사실을 말하게 한다. */
+    private lastCounts = { escaped: 0, captured: 0 };
     /** When the demo operator's last connection left; null while connected. */
     private demoVacantSince: number | null = null;
 
@@ -365,6 +398,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     mediaScopeFor(playerId: string, purpose: 'practice' | 'game') {
+      // A decided or aborted round issues no media. A grant or MEDIA_PREPARED arriving now finds no
+      // scope and is retired as an orphan instead of becoming a new generation (335).
+      if (this.phase === 'RESULT' || this.phase === 'ABORTED') return null;
       if (!this.clientsByPlayer.has(playerId)) return null;
       const instance = this.context.instanceOf(playerId);
       if (!instance || instance.kind !== purpose) return null;
@@ -510,8 +546,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         current.receiverGeneration !== message.receiverGeneration
       )
         return;
-      this.lastBindings.set(playerId, message);
-      this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.mediaBindings, message);
+      // 340. Enemy participants go out under the alias their visible entity carries.
+      const concealed: MediaBindings = {
+        ...message,
+        participants: this.concealEnemies(playerId, message.participants),
+      };
+      this.lastBindings.set(playerId, concealed);
+      this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.mediaBindings, concealed);
       const self = message.participants.find((p) => p.playerId === playerId);
       if (self && self.publisherGeneration === message.receiverGeneration)
         this.loading.confirmSelfFace(
@@ -607,7 +648,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         const auth = this.playersByConnection.get(client.sessionId);
         const parsed = demoControlSchema.safeParse(payload);
         if (!auth || !parsed.success || parsed.data.matchId !== this.context.matchId) return;
-        this.abortDemoRound(auth.playerId);
+        if (parsed.data.action === 'cancel-scenario') this.cancelDemoScenario(auth.playerId);
+        else this.abortDemoRound(auth.playerId);
       });
       onInbound(PRODUCT_CLIENT_MESSAGES.heartbeatAck, (client, payload: unknown) => {
         this.heartbeat.ack(client.sessionId, payload, this.context.matchId, deps.monotonicNow());
@@ -727,6 +769,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.invalidateLayout();
       for (const control of this.driver.drainMediaControls()) this.applyMediaControl(control);
       this.media?.releaseMatch?.(this.matchId);
+      this.releaseUncertainPreparations('disposed');
       for (const mediaInstanceId of this.mediaFrameWaiters.keys())
         this.settleMediaFrameWaiters(mediaInstanceId, false);
       deps.coordinator.unregister(this.roomId);
@@ -827,6 +870,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         // A demo room passes the lobby at once; it chooses the size during preparation (313).
         // A showcase room never chooses: its map is fixed.
         ROOM_MAP_SIZE: this.mapSizePhases(),
+        ROOM_START: ['DEVICE_CHECK'],
         PRACTICE_READY: ['TEAM_PRACTICE'],
         LOAD_READY: ['GAME_LOADING'],
         REMATCH: ['RESULT', 'ABORTED'],
@@ -836,7 +880,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // 시연 방은 재경기가 없다. 결과 화면까지가 시연이고, 다음 시연은 새 방으로 연다.
       if (type === 'REMATCH' && this.showcase) return 'NOT_ALLOWED';
       if (
-        (type === 'ROOM_LOCK' || type === 'ROOM_KICK' || type === 'ROOM_MAP_SIZE') &&
+        (type === 'ROOM_LOCK' ||
+          type === 'ROOM_KICK' ||
+          type === 'ROOM_MAP_SIZE' ||
+          type === 'ROOM_START') &&
         playerId !== this.lobby.host
       )
         return 'NOT_ALLOWED';
@@ -921,6 +968,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             this.roomMapRevision += 1;
           }
           this.broadcastRoster();
+          return { result: 'applied', code: null };
+        }
+        case 'ROOM_START': {
+          // 실행 시점에 다시 본다. 받아들인 뒤에 누가 나가거나 준비를 취소했을 수 있다.
+          if (this.phase !== 'DEVICE_CHECK') return { result: 'rejected', code: 'INVALID_PHASE' };
+          if (entry.actorId !== this.lobby.host || !this.clientsByPlayer.has(entry.actorId))
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
+          if (this.lobby.evaluate(this.phase) !== 'all-ready')
+            return { result: 'rejected', code: 'NOT_READY' };
+          // S15P21C204-295. 데모 방도 같은 길을 걷는다. 운영자가 보려는 것이 경기 화면만은
+          // 아니다: 팀 연습도 실제 방과 같은 화면이어야 확인할 수 있다. 인형은 준비를 보고하지
+          // 않으므로 연습은 제한 시간(60초)을 다 쓰거나 운영자가 끝내면 다음 단계로 간다.
+          this.startPractice();
           return { result: 'applied', code: null };
         }
         case 'READY': {
@@ -1014,10 +1074,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     tick() {
       if (this.disposed || this.closing) return;
       const now = deps.monotonicNow();
+      this.expireUncertainPreparations(now);
       if (this.demoAbortRequested) {
         this.demoAbortRequested = false;
         this.demoRunner.stop();
-        this.abortMatch(null, 'DEMO_OPERATOR_ABORT');
+        this.abortMatch('DEMO_OPERATOR_ABORT', 'DEMO_OPERATOR_ABORT');
         return;
       }
       for (const { connectionId, heartbeat } of this.heartbeat.due(
@@ -1052,7 +1113,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           current?.mediaInstanceId === message.mediaInstanceId &&
           current.receiverGeneration === message.receiverGeneration
         )
-          this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, message);
+          // 340. Enemy voices are keyed by the same alias as their bindings and visible entity.
+          this.clientsByPlayer.get(playerId)?.send(PRODUCT_SERVER_MESSAGES.audioPolicy, {
+            ...message,
+            voices: this.concealEnemies(playerId, message.voices),
+          });
       }
       this.driver.tick();
       // The scenario reads the state this tick produced and queues puppet commands for the next.
@@ -1183,7 +1248,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           const request = this.rematch.pending;
           if (
             request &&
-            this.rematch.canStart({ mediaRetirementConfirmed: !this.hasUnresolvedMedia() }) &&
+            this.rematch.canStart({
+              mediaRetirementConfirmed: !this.hasUnresolvedMedia(undefined, { uncertain: false }),
+            }) &&
             (gateFor(this.demo)?.() ?? true)
           )
             this.startNewRound();
@@ -1198,10 +1265,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       else if (verdict === 'to-lobby') {
         this.lobby.clearReady();
         this.setPhase('LOBBY');
-      } else if (verdict === 'all-ready') {
-        if (this.demo) this.startDemoRound();
-        else this.startPractice();
       }
+      // S15P21C204-295. 여섯 명이 다 준비해도 저절로 시작하지 않는다. 방장이 ROOM_START 로
+      // 시작한다: 준비를 마친 사람들이 화면을 보고 있다가 함께 들어가기 위해서다.
     }
 
     // ---- Phase transitions ----
@@ -1367,6 +1433,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         participants: frame.participants,
         exits: deps.demoExits?.(attached.state) ?? [],
         startCells: deps.demoStartCells?.(attached.state) ?? [],
+        ...(deps.demoExchangeGain
+          ? {
+              exchangeGain: (from: string, to: string) =>
+                deps.demoExchangeGain!(attached.state, from, to),
+            }
+          : {}),
         challenges,
         exchanges,
         operatorId,
@@ -1400,6 +1472,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.publishDemoState(world);
     }
 
+    /** S15P21C204-342. 도는 대본만 내린다. 라운드를 끝내지 않고 다른 버튼을 다시 열어 준다. */
+    private cancelDemoScenario(playerId: string) {
+      if (!this.demo || this.puppets.has(playerId) || this.operatorId() !== playerId) return;
+      if (this.demoRunner.status.scenario === null) return;
+      this.demoRunner.cancel();
+      this.publishDemoState(this.demoWorld());
+    }
+
     private abortDemoRound(playerId: string) {
       if (!this.demo || this.puppets.has(playerId) || this.operatorId() !== playerId) return;
       if (!['PLAYING', 'COUNTDOWN', 'GAME_LOADING', 'MAP_FINALIZING'].includes(this.phase)) return;
@@ -1412,9 +1492,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      */
     private publishDemoState(world: DemoWorld | null = null) {
       const status = this.demoRunner.status;
-      const available = (world ? availableScenarios(world) : [...DEMO_SCENARIO_IDS]).map((id) => ({
-        id,
-        options: [...SCENARIO_OPTIONS[id]] as DemoOptionKey[],
+      const available = (
+        world ? scenarioOffers(world) : DEMO_SCENARIO_IDS.map((id) => ({ id }) as const)
+      ).map((offer) => ({
+        id: offer.id,
+        options: [...SCENARIO_OPTIONS[offer.id]] as DemoOptionKey[],
+        ...('unavailable' in offer && offer.unavailable ? { unavailable: offer.unavailable } : {}),
       }));
       const message: DemoStateMessage = {
         matchId: this.context.matchId,
@@ -1422,6 +1505,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         running: status.scenario,
         step: status.step,
         failureCode: status.failure,
+        completed: status.completed,
+        outcomeSeq: status.outcomes,
         operatorExit: world?.operator?.exit?.approach ?? null,
       };
       const fingerprint = JSON.stringify(message);
@@ -1539,28 +1624,6 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     /** Demo rooms have no human teammates or media, so device check goes straight to map setup. */
-    private startDemoRound() {
-      const gate = gateFor(this.demo);
-      if (gate && !gate()) {
-        this.blockedReason = 'NOT_READY';
-        return;
-      }
-      if (!deps.core || !deps.tuning) {
-        this.blockedReason = 'PRACTICE_PRODUCER_MISSING';
-        return;
-      }
-      const operatorId = this.demo ? this.operatorId() : null;
-      const roles = this.lobby.assignRoles(
-        this.demo && operatorId ? this.puppetRolePlan(operatorId) : this.context.takeRolePlan(),
-      );
-      this.roles.clear();
-      for (const [playerId, role] of roles) this.roles.set(playerId, role);
-      if (this.context.seed === null)
-        this.context.fixRoundInputs({ tuning: deps.tuning, seed: this.roundSeed() });
-      this.blockedReason = null;
-      this.setPhase('MAP_FINALIZING');
-    }
-
     private endPractice(next: 'to-map-finalizing' | 'to-device-check') {
       for (const instance of this.driver.attached().filter((i) => i.kind === 'practice'))
         this.retireInstance(instance.gameInstanceId, 'phase-change');
@@ -1740,6 +1803,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private finishMatch() {
       this.driver.cancelAllPending('ROUND_ENDED');
+      // Without this the decided instance stepped for the whole result screen (up to 5 minutes)
+      // and every frame asked E to retire the round's media again, 20 times a second (335).
+      for (const instance of this.driver.attached()) this.driver.settle(instance.gameInstanceId);
       this.setPhase('RESULT');
     }
 
@@ -1780,6 +1846,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private abortMatch(reason: PublicMatchState['abortReason'] | null, diagnostic: string) {
+      // A decided round stays decided: a late failure must not turn its winner into ABORTED (335).
+      if (this.phase === 'RESULT') return;
       this.reportPreparationFailure('ABORTED', diagnostic, reason);
       this.invalidateLayout();
       this.blockedReason = diagnostic;
@@ -1819,6 +1887,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     ) {
       this.driver.detach(gameInstanceId, reason === 'round-ended' ? 'ROUND_ENDED' : 'CANCELED');
       const members = this.context.retireInstance(gameInstanceId);
+      // 340. Aliases live exactly as long as the instance that minted them.
+      this.aliases.clear();
       const mediaInstanceId = this.mediaInstances.get(gameInstanceId);
       this.mediaInstances.delete(gameInstanceId);
       if (mediaInstanceId) {
@@ -1901,20 +1971,58 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         result.code === 'POLICY_UNKNOWN' ||
         result.code === 'REMOTE_UNAVAILABLE'
       ) {
-        // A failed producer may have allocated remotely without returning a cursor.
-        this.uncertainPreparations.add(result.playerId);
+        // A failed producer may have allocated remotely without returning a cursor. Once the room
+        // has released that match (a new round, or disposal) E owns whatever it allocated, so only
+        // the current match of a live room keeps holding.
+        if (!this.disposed && result.matchId === this.matchId)
+          this.uncertainPreparations.set(result.playerId, {
+            matchId: result.matchId,
+            sinceMs: deps.monotonicNow(),
+          });
       }
       this.releaseRetiredSeat(result.playerId);
     }
 
-    private hasUnresolvedMedia(playerId?: string) {
+    /**
+     * `uncertain: false` is for a round transition: startNewRound releases the match to E, which
+     * then owns anything an uncertain preparation allocated, so it is no reason to wait (333).
+     */
+    private hasUnresolvedMedia(playerId?: string, options: { uncertain?: boolean } = {}) {
       const matches = (id: string) => playerId === undefined || id === playerId;
       return (
         [...this.pendingRetirements.values()].some((scope) => matches(scope.playerId)) ||
         [...this.preparingPlayers.keys()].some(matches) ||
         [...this.queuedPreparations.values()].some(matches) ||
-        [...this.uncertainPreparations].some(matches)
+        (options.uncertain !== false && [...this.uncertainPreparations.keys()].some(matches))
       );
+    }
+
+    /** Drops every uncertain preparation, reporting why, and frees seats that were only held by it. */
+    private releaseUncertainPreparations(reason: 'round-ended' | 'disposed') {
+      if (this.uncertainPreparations.size === 0) return;
+      const players = [...this.uncertainPreparations.keys()];
+      this.uncertainPreparations.clear();
+      this.emitEvent('room.media_uncertain_released', 'warn', {
+        phase: this.phase,
+        reason,
+        count: players.length,
+      });
+      for (const playerId of players) this.releaseRetiredSeat(playerId);
+    }
+
+    private expireUncertainPreparations(now: number) {
+      for (const [playerId, entry] of this.uncertainPreparations) {
+        const heldMs = now - entry.sinceMs;
+        if (heldMs < UNCERTAIN_PREPARATION_LIMIT_MS) continue;
+        this.uncertainPreparations.delete(playerId);
+        this.emitEvent('room.media_uncertain_released', 'warn', {
+          phase: this.phase,
+          reason: 'expired',
+          count: 1,
+          durationMs: heldMs,
+        });
+        this.releaseRetiredSeat(playerId);
+      }
     }
 
     private releaseRetiredSeat(playerId: string) {
@@ -1930,7 +2038,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private startNewRound() {
-      if (this.hasUnresolvedMedia()) return;
+      if (this.hasUnresolvedMedia(undefined, { uncertain: false })) return;
+      this.lastCounts = { escaped: 0, captured: 0 };
       this.invalidateLayout();
       const request = this.rematch.take();
       const operatorId = this.demo ? this.operatorId() : null;
@@ -1946,6 +2055,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.retireInstance(instance.gameInstanceId, 'round-ended');
       this.driver.cancelAllPending('ROUND_ENDED');
       this.media?.releaseMatch?.(this.matchId);
+      this.releaseUncertainPreparations('round-ended');
       this.context.startNewRound();
       this.queue.reset();
       this.heartbeat.resetForMatch(now);
@@ -1975,6 +2085,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.pendingBindings.length = 0;
       this.pendingAudio.length = 0;
       this.lastBindings.clear();
+      this.aliases.clear();
       this.phase = 'LOBBY';
       this.context.bumpVersion();
       deps.slots.setPhase(this.roomCode, 'LOBBY', now);
@@ -2192,9 +2303,38 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
             playerId,
             targetId,
             spectateCandidates(participants, playerId),
+            this.aliases.aliasOf,
           );
       }
-      return projectPrivateBody(deps.core, attached.state, playerId, loading);
+      return projectPrivateBody(deps.core, attached.state, playerId, loading, this.aliases.aliasOf);
+    }
+
+    /**
+     * 340. The ids `receiverId` may see for the members of its instance: real for itself and its
+     * allies, the round's alias for an enemy — the same alias its private view uses, so the
+     * client can join a visible player to its face and voice tracks. Roles are read from the
+     * receiver's own instance state, the same source the view projection reads them from.
+     */
+    private concealEnemies<T extends { playerId: string }>(
+      receiverId: string,
+      entries: readonly T[],
+    ): T[] {
+      const instance = this.context.instanceOf(receiverId);
+      const attached = instance ? this.driver.instance(instance.gameInstanceId) : null;
+      const core = deps.core;
+      if (!attached || !core) return [...entries];
+      const roleOf = (playerId: string) =>
+        core.getPlayerSelf(attached.state, playerId)?.role ?? null;
+      const receiverRole = roleOf(receiverId);
+      return entries.map((entry) => {
+        const visible = this.aliases.visibleId(
+          entry.playerId,
+          roleOf(entry.playerId),
+          receiverId,
+          receiverRole,
+        );
+        return visible === entry.playerId ? entry : { ...entry, playerId: visible };
+      });
     }
 
     private gameInstance() {
@@ -2259,8 +2399,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const game = this.gameInstance();
       const attached = game ? this.driver.instance(game.gameInstanceId) : null;
       const frame = attached && deps.core ? deps.core.getFrame(attached.state) : null;
-      s.counts.escaped = frame?.counts.escaped ?? 0;
-      s.counts.captured = frame?.counts.captured ?? 0;
+      // S15P21C204-342. 무효 처리는 경기 인스턴스를 내리므로 누계를 읽을 곳이 사라진다. 그대로
+      // 0 을 보내면 결과 화면이 "포획 0" 이라고 말한다. 마지막으로 읽은 값을 남겨 둔다.
+      if (frame)
+        this.lastCounts = { escaped: frame.counts.escaped, captured: frame.counts.captured };
+      s.counts.escaped = frame?.counts.escaped ?? this.lastCounts.escaped;
+      s.counts.captured = frame?.counts.captured ?? this.lastCounts.captured;
       if (frame?.result) {
         if (!s.result) s.result = new RoundResultState();
         s.result.winner = frame.result.winner;
@@ -2272,9 +2416,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private overload(lagMs: number) {
-      if (ABORTABLE_PHASES.includes(this.phase))
-        this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
-      deps.coordinator.rearm(this.roomId);
+      // Re-arm even if the abort throws, or the room never ticks again: no heartbeat, expiry or
+      // media control would run for it until the process restarts (336).
+      try {
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
+      } finally {
+        deps.coordinator.rearm(this.roomId);
+      }
     }
 
     private invalidateLayout() {
@@ -2312,9 +2461,39 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      */
     private tickFailed(error: unknown) {
       const cause = error instanceof Error ? error.message : String(error);
-      if (ABORTABLE_PHASES.includes(this.phase))
-        this.abortMatch('SERVER_TICK_OVERLOAD', `TICK_FAILED:${cause}`);
-      deps.coordinator.rearm(this.roomId);
+      try {
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `TICK_FAILED:${cause}`);
+      } finally {
+        deps.coordinator.rearm(this.roomId);
+      }
+    }
+
+    /**
+     * S15P21C204-336. Once this exists Colyseus routes every throw from message handlers, clock
+     * callbacks and lifecycle hooks here instead of letting it escape the room. A deliberate
+     * `ServerError` (a refused join) is not a fault. onCreate/onAuth/onJoin are rethrown to their
+     * caller by Colyseus, so only that attempt fails and the match is left alone. Anything else
+     * leaves the match in a state nobody checked, so a running match aborts like a failed tick;
+     * RESULT and ABORTED are kept, the same rule the overload and tick paths follow. Nothing here
+     * may throw: Colyseus calls it from inside its own catch.
+     */
+    onUncaughtException(error: RoomException, methodName: RoomMethodName) {
+      const cause: unknown = error.cause ?? error;
+      if (cause instanceof ServerError) return;
+      try {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        this.emitEvent('room.uncaught_exception', 'error', {
+          phase: this.phase,
+          name: methodName,
+          reason: message,
+        });
+        if (this.disposed || ['onCreate', 'onAuth', 'onJoin'].includes(methodName)) return;
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `UNCAUGHT:${methodName}:${message}`);
+      } catch {
+        // The room already failed once; a second failure here must not escape either.
+      }
     }
   }
 

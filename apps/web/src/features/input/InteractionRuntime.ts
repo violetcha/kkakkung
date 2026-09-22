@@ -306,6 +306,11 @@ export interface InteractionRuntime {
    * 로컬 표시용이며 게시 경로는 여전히 handle 검사를 거친다. 장치를 켜기 전에는 null.
    */
   getProcessedFaceStream?(): MediaStream | null;
+  /**
+   * S15P21C204-295. 같은 가공 얼굴을 그리는 면 그대로. 브라우저는 화면에 그려지지 않는 video 에
+   * 새 프레임을 주지 않아 대기실 타일이 한 장에서 멈췄다. 면을 직접 그리면 그런 사정이 없다.
+   */
+  getProcessedFaceSurface?(): HTMLCanvasElement | null;
   /** D-15. SDK 구독 사건을 넘긴다. */
   addRemoteTrack(track: RemoteTrack): void;
   removeRemoteTrack(trackSid: string): void;
@@ -400,22 +405,40 @@ function browserEnvironment(createAudioUnlock: () => AudioUnlockPort | null): De
   };
 }
 
+/** 프레임 콜백이 조용할 때 대신 표본을 뽑는 간격. 10fps 면 얼굴이 살아 있기에 충분하다. */
+const FRAME_WATCHDOG_MS = 100;
+
 function browserVision(): VisionEnvironment {
   return {
     createWorker: () => createVisionWorker() as unknown as WorkerPort,
     createFrameSource: (video) => ({
       schedule: (callback) => {
-        // requestVideoFrameCallback이 있으면 표시 프레임에 맞춘다.
+        // requestVideoFrameCallback이 있으면 표시 프레임에 맞춘다. 다만 그 콜백은 미리보기가
+        // 화면에 그려질 때만 울린다: 문서에서 떼거나 다른 것이 덮으면 조용해진다
+        // (S15P21C204-295: 대기실에서 점검 창을 닫으면 미리보기가 타일 뒤로 들어간다).
+        // 표본이 끊기면 안전 얼굴 규칙이 기본 얼굴로 내려가 버리므로 타이머로 받친다.
+        // 둘 중 먼저 오는 하나만 쓴다. 탭이 숨으면 둘 다 느려지는 것은 같다.
+        let fired = false;
+        const fire = () => {
+          if (fired) return;
+          fired = true;
+          callback();
+        };
         const withCallback = video as HTMLVideoElement & {
           requestVideoFrameCallback?: (handler: () => void) => number;
           cancelVideoFrameCallback?: (handle: number) => void;
         };
+        let cancelFrame = () => {};
         if (typeof withCallback.requestVideoFrameCallback === 'function') {
-          const handle = withCallback.requestVideoFrameCallback(callback);
-          return () => withCallback.cancelVideoFrameCallback?.(handle);
+          const handle = withCallback.requestVideoFrameCallback(fire);
+          cancelFrame = () => withCallback.cancelVideoFrameCallback?.(handle);
         }
-        const handle = requestAnimationFrame(() => callback());
-        return () => cancelAnimationFrame(handle);
+        const timer = window.setTimeout(fire, FRAME_WATCHDOG_MS);
+        return () => {
+          fired = true;
+          cancelFrame();
+          window.clearTimeout(timer);
+        };
       },
       grab: async () => {
         if (video.readyState < 2 || video.videoWidth === 0) return null;
@@ -441,6 +464,7 @@ function browserCompositor(): CompositorEnvironment {
         height,
         getContext: (id) => canvas.getContext(id) as unknown as CompositorContext | null,
         captureStream: (frameRate) => canvas.captureStream(frameRate),
+        element: canvas,
       };
     },
     now: () => performance.now(),
@@ -843,6 +867,13 @@ export const createInteractionRuntime = (
     getPhase: () => context.get()?.phase ?? null,
   });
   let keyboardBound: (() => void) | null = null;
+  /**
+   * S15P21C204-338. 참가 종료(stopInput)가 키보드를 풀어도 결과 화면 동안 setContext 는 계속
+   * 불린다. 무조건 다시 묶으면 종료된 runtime 의 리스너가 window 에 남고, 뒤따르는 dispose 는
+   * 이미 끝난 정리 Promise 를 공유해 stopInput 을 다시 부르지 않아 라운드마다 한 쌍씩 샌다.
+   * 새 세대(beginMediaGeneration)가 열릴 때만 다시 묶을 수 있다.
+   */
+  let inputStopped = false;
   let inputWatchdog: number | null = null;
 
   const move: MoveIntentController = createMoveIntentController({
@@ -936,6 +967,7 @@ export const createInteractionRuntime = (
     },
     participation: {
       stopInput: () => {
+        inputStopped = true;
         unbindKeyboard();
         clearHolds();
         context.clear();
@@ -1074,6 +1106,10 @@ export const createInteractionRuntime = (
     const checkInputAndOutput = () => {
       if (disposed || !compositor) return;
       const now = vision.now();
+      // 미리보기가 멈추면 같은 한 장만 남는다(화면에서 자리를 옮기다 멈추는 경우가 있다).
+      // 얼굴 인식도 합성 화면도 그 한 장을 보게 되므로 멈춘 것을 발견하면 다시 재생한다.
+      const source = devices?.getPreviewElement();
+      if (source && source.paused) void source.play().catch(() => {});
       drawSafeOutput();
       if (scheduler) {
         if (lastSnapshot && context.acceptsInput) {
@@ -1531,7 +1567,8 @@ export const createInteractionRuntime = (
       gestures.setMode(next.mode);
       if (next.mode === 'motion' && lastStatus.calibration === 'ready')
         fallback.restoreMotion({ calibrated: true, requestedMode: next.mode });
-      bindKeyboard();
+      // 338. 참가가 끝난 뒤의 컨텍스트 갱신은 키보드를 다시 묶지 않는다.
+      if (!inputStopped) bindKeyboard();
     },
 
     async connectMedia(grant) {
@@ -1702,6 +1739,9 @@ export const createInteractionRuntime = (
     getProcessedFaceStream() {
       return compositor?.getHandle()?.stream ?? null;
     },
+    getProcessedFaceSurface() {
+      return compositor?.getSurface() ?? null;
+    },
 
     /**
      * 미디어 세대만 끝낸다. playerId·게임 Room·원본 카메라와 센서는 유지한다.
@@ -1721,6 +1761,8 @@ export const createInteractionRuntime = (
     /** 새 미디어 세대 시작. B/E 회수 확인 뒤에만 부른다. */
     beginMediaGeneration() {
       lifecycle.beginGeneration();
+      // 338. 새 세대가 실제로 열렸을 때만 다음 setContext 가 키보드를 다시 묶는다.
+      if (lifecycle.canOperate()) inputStopped = false;
     },
 
     getGenerationState() {
@@ -1732,6 +1774,9 @@ export const createInteractionRuntime = (
       disposed = true;
       audioPreferences = DEFAULT_AUDIO_PREFERENCES;
       await lifecycle.dispose();
+      // 338. 참가 종료 뒤 다시 묶였던 리스너가 있어도 폐기 시점에는 반드시 푼다.
+      inputStopped = true;
+      unbindKeyboard();
       deps.onMediaStatus(IDLE_MEDIA_STATUS);
       await media.dispose();
       // 어댑터는 Room과 함께 버린다. 폐기한 runtime을 다시 쓰지 않는다.

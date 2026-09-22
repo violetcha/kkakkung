@@ -36,3 +36,27 @@ it('exposes the recording state while keeping four frame corners decorative', ()
   expect(html).toContain('class="camcorder-rec-dot"');
   expect(html.match(/camcorder-corner/g)).toHaveLength(4);
 });
+
+// S15P21C204-342. 제한시간 없는 데모 라운드는 남은 시간이 null 이다. 전에는 00:00:00 에 멈춘 채
+// "남은 시간" 으로 읽혀, 시간이 흐르지 않는 것처럼 보였다.
+it('counts elapsed time when the round has no deadline', () => {
+  const html = renderToStaticMarkup(
+    createElement(GameStatusChrome, {
+      remainingSeconds: null,
+      startedAtMs: 1_000,
+      nowMs: 125_000,
+      status: null,
+    }),
+  );
+  expect(html).toContain('00:02:04');
+  expect(html).toContain('지난 시간');
+  expect(html).not.toContain('남은 시간');
+});
+
+it('still counts down when the round has a deadline', () => {
+  const html = renderToStaticMarkup(
+    createElement(GameStatusChrome, { remainingSeconds: 95, status: null }),
+  );
+  expect(html).toContain('01:35');
+  expect(html).toContain('남은 시간');
+});

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { PanelSection } from './SettingsPanes';
 import { useEffect, useId, useState } from 'react';
 import type {
   AudioPreferences,
@@ -14,6 +15,7 @@ export function AudioControls({
   participants = [],
   canTestTone,
   compact = false,
+  bare = false,
   sections = 'all',
 }: {
   readStatus(): LocalAudioStatus | null;
@@ -22,6 +24,8 @@ export function AudioControls({
   participants?: readonly Participant[];
   canTestTone: boolean;
   compact?: boolean;
+  /** 설정 창 안에서는 접는 상자 없이 내용만 둔다. 갈래 이름이 이미 제목이다. */
+  bare?: boolean;
   /**
    * S15P21C204-295. 'live' 는 살아 있는 장치가 있어야 하는 것(마이크 입력·확인음·참가자별 끄기)만
    * 그린다. 음량과 전체 끄기는 설정 창이 저장소와 함께 맡으므로 같은 줄이 두 번 나오지 않는다.
@@ -48,8 +52,7 @@ export function AudioControls({
   };
   return (
     <aside className="audio-controls" aria-label="소리 설정">
-      <details open={!compact}>
-        <summary>소리 점검 · 음량</summary>
+      <PanelSection bare={bare} open={!compact} title="소리 점검 · 음량">
         {sections === 'all' && (
           <>
             <label htmlFor={id}>
@@ -144,7 +147,7 @@ export function AudioControls({
             <small>내가 듣는 소리에만 적용됩니다.</small>
           </fieldset>
         )}
-      </details>
+      </PanelSection>
     </aside>
   );
 }

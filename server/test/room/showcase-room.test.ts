@@ -137,6 +137,9 @@ it('seats four, keeps their chosen roles as the 2:2 plan and tells clients the r
     expect(f.room.roomMapSize).toBe('small');
     for (const [index, player] of f.players.entries())
       f.command(player, 'READY', { ready: true }, index + 2);
+    // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+    f.tick();
+    f.command(f.players[0]!, 'ROOM_START', {}, 20);
     f.tick();
     expect(f.room.phase).toBe('TEAM_PRACTICE');
     for (const player of f.players)
@@ -152,6 +155,8 @@ it('prepares the small maze with a fixed seed and six template slots, then creat
     f.join();
     for (const [index, player] of f.players.entries())
       f.command(player, 'READY', { ready: true }, index + 1);
+    f.tick();
+    f.command(f.players[0]!, 'ROOM_START', {}, 6);
     f.tick();
     expect(f.room.phase).toBe('TEAM_PRACTICE');
     for (const [index, player] of f.players.entries())

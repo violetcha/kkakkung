@@ -4,6 +4,7 @@ const ABORT_LABELS: Record<AbortReason, string> = {
   SERVER_TICK_OVERLOAD: '서버 지연으로 경기가 무효 처리되었습니다.',
   MEDIA_POLICY_UNCERTAIN: '미디어 권한을 확인하지 못해 경기가 무효 처리되었습니다.',
   MEDIA_UNAVAILABLE: '미디어 연결을 사용할 수 없어 경기가 무효 처리되었습니다.',
+  DEMO_OPERATOR_ABORT: '관리자가 라운드를 끝냈습니다.',
 };
 export function resultPresenter(
   round: PublicRoundState,

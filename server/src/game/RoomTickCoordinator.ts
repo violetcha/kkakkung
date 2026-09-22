@@ -6,7 +6,8 @@
  * the coordinator yields to the event loop. Observability is emitted through the injected
  * F-owned callback; the coordinator never performs IO itself. A tick that throws is contained:
  * `run()` never propagates it, the failing room is not replayed until it re-arms, and every
- * other room in the rotation still ticks.
+ * other room in the rotation still ticks. The overload callback is contained the same way: it
+ * aborts a match, and a throw there used to leave the 10ms interval and end the process (336).
  */
 import type { EmitMetric } from './ports.js';
 
@@ -100,7 +101,14 @@ export class RoomTickCoordinator {
           overloaded.push(id);
           this.emit('tick.overload', 1, 'count', now, id);
           this.emit('eventLoop.lag', lag, 'ms', now, id);
-          room.onOverload(lag);
+          try {
+            room.onOverload(lag);
+          } catch (error) {
+            // The room is already stopped; a failed overload goes the way of a failed tick.
+            failed.push(id);
+            this.options.onTickError?.(id, error);
+            this.notifyFailure(room, error);
+          }
           continue;
         }
         room.executed += 1;

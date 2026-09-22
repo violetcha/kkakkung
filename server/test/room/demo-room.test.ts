@@ -150,8 +150,14 @@ it('takes one operator through the real phases into a match with five puppets', 
     // The roster never reveals a role, not even for puppets.
     expect(JSON.stringify(rosters.at(-1))).not.toMatch(/runner|tagger/);
 
-    // Demo rooms skip team practice: there are no human teammates or media to prepare.
-    // A real match still goes through map selection, the 3:3 assignment and the operator's exit.
+    // S15P21C204-295. 데모 방도 실제 방과 같은 길을 걷는다: 방장이 시작하고, 팀 연습을 거친다.
+    // 인형은 보고할 클라이언트가 없어 서버가 대신 연습을 마쳤다고 적어 두므로, 운영자가 자기
+    // 연습을 끝내면 바로 넘어간다.
+    expect((await f.send(room, { type: 'ROOM_START', payload: {} })).status).toBe('accepted');
+    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 30_000 });
+    expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
+      'accepted',
+    );
     await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
     expect((await f.send(room, { type: 'LOAD_READY', payload: loadPayload(views) })).status).toBe(
       'accepted',
@@ -249,8 +255,13 @@ it('opens the demo room on the deployed composition, where a match cannot start'
     room.onMessage('private-view', (value: PrivateView) => views.push(value));
     await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'));
     expect(f.application.slots!.occupied(session.roomCode)).toBe(1);
-    // The demo gate still applies while the practice phase is skipped.
+    // The demo gate still applies on the deployed composition.
     expect((await f.send(room, { type: 'READY', payload: { ready: true } })).status).toBe(
+      'accepted',
+    );
+    expect((await f.send(room, { type: 'ROOM_START', payload: {} })).status).toBe('accepted');
+    await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 15_000 });
+    expect((await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } })).status).toBe(
       'accepted',
     );
     await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 15_000 });
@@ -301,6 +312,10 @@ it('keeps the running demo match through a refresh and hands it back', async () 
     first.onMessage('private-view', (value: PrivateView) => views.push(value));
     await vi.waitFor(() => expect(first.state.phase).toBe('DEVICE_CHECK'));
     await f.send(first, { type: 'READY', payload: { ready: true } });
+    // S15P21C204-295. 방장이 시작하고 팀 연습을 거친다. 인형 몫의 보고는 서버가 대신 적는다.
+    await f.send(first, { type: 'ROOM_START', payload: {} });
+    await vi.waitFor(() => expect(first.state.phase).toBe('TEAM_PRACTICE'), { timeout: 30_000 });
+    await f.send(first, { type: 'PRACTICE_READY', payload: { ready: true } });
     await vi.waitFor(() => expect(first.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
     await f.send(first, { type: 'LOAD_READY', payload: loadPayload(views) });
     await vi.waitFor(() => expect(first.state.phase).toBe('PLAYING'), { timeout: 30_000 });

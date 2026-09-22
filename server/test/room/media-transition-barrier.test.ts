@@ -170,12 +170,27 @@ it('waits for first grants and in-flight E preparation before retiring practice,
     };
     await waitPhase('DEVICE_CHECK');
     send('READY', 1);
-    await waitPhase('TEAM_PRACTICE');
-    send('PRACTICE_READY', 2);
+    // S15P21C204-295. 전원 준비가 적용된 뒤 방장이 직접 시작한다.
     await expect
       .poll(() =>
         players.every((p) =>
-          p.outcomes.some((outcome) => outcome.sequence === 2 && outcome.result === 'applied'),
+          p.outcomes.some((outcome) => outcome.sequence === 1 && outcome.result === 'applied'),
+        ),
+      )
+      .toBe(true);
+    players[0]!.room.send(PRODUCT_CLIENT_MESSAGES.command, {
+      matchId: serverRoom.matchId,
+      requestId: randomUUID(),
+      sequence: 2,
+      type: 'ROOM_START',
+      payload: {},
+    });
+    await waitPhase('TEAM_PRACTICE');
+    send('PRACTICE_READY', 3);
+    await expect
+      .poll(() =>
+        players.every((p) =>
+          p.outcomes.some((outcome) => outcome.sequence === 3 && outcome.result === 'applied'),
         ),
       )
       .toBe(true);

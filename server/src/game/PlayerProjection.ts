@@ -74,10 +74,18 @@ function projectOwned(equipment: OwnedEquipment): OwnedEquipment {
     : { ...base, kind: 'trap', cell: cell(equipment.cell) };
 }
 
+/**
+ * S15P21C204-340. Maps an enemy's real playerId to the opaque id the recipient may see. The
+ * identity mapping keeps a caller that has no aliases (tests, tools) on the real ids.
+ */
+export type EnemyAlias = (playerId: string) => string;
+export const revealIds: EnemyAlias = (playerId) => playerId;
+
 /** Visible entities by explicit allowlist. Sensors require a wall face; traps never carry one. */
 export function projectVisibleEntities(
   entities: readonly VisibleEntity[],
   selfRole: ActiveSelf['role'] | null,
+  alias: EnemyAlias = revealIds,
 ): VisibleEntity[] {
   const out: VisibleEntity[] = [];
   for (const entity of entities) {
@@ -90,9 +98,11 @@ export function projectVisibleEntities(
         action: action(entity.action),
       };
       // Only allied role markers are exposed; enemy roles and name tags never leave the server.
+      // An enemy's playerId does not leave either (340): with the roster's id → nickname table
+      // it named the other team. The alias is what the media bindings use for the same player.
       if (entity.role !== undefined && selfRole !== null && entity.role === selfRole)
         out.push({ ...projected, role: entity.role });
-      else out.push(projected);
+      else out.push({ ...projected, id: alias(entity.id) });
     } else if (entity.kind === 'sensor') {
       if (!entity.wall) continue;
       out.push({
@@ -179,11 +189,12 @@ export function projectSpectateBody<State>(
   playerId: string,
   targetId: string,
   candidates: readonly string[],
+  alias: EnemyAlias = revealIds,
 ): PrivateViewBody {
   const self = projectSelf(core.getPlayerSelf(state, playerId), null);
   const target = core.getPlayerSelf(state, targetId);
   if (!self || self.status === 'ACTIVE' || !target || target.status !== 'ACTIVE')
-    return projectPrivateBody(core, state, playerId, null);
+    return projectPrivateBody(core, state, playerId, null, alias);
   const knowledge = core.getPlayerKnowledge(state, targetId);
   const surfaces = core.getVisibleSurfaces(state, targetId);
   return {
@@ -193,7 +204,11 @@ export function projectSpectateBody<State>(
     self,
     visibleCells: surfaces.visibleCells.map(cell),
     visibleWallFaces: surfaces.visibleWallFaces.map(wall),
-    visibleEntities: projectVisibleEntities(core.getVisibleEntities(state, targetId), target.role),
+    visibleEntities: projectVisibleEntities(
+      core.getVisibleEntities(state, targetId),
+      target.role,
+      alias,
+    ),
     spectating: {
       targetId,
       cell: cell(target.cell),
@@ -213,6 +228,7 @@ export function projectPrivateBody<State>(
   state: State,
   playerId: string,
   loading: LoadingView | null,
+  alias: EnemyAlias = revealIds,
 ): PrivateViewBody {
   const self = projectSelf(core.getPlayerSelf(state, playerId), loading);
   if (!self || self.status !== 'ACTIVE') {
@@ -235,6 +251,10 @@ export function projectPrivateBody<State>(
     self,
     visibleCells: surfaces.visibleCells.map(cell),
     visibleWallFaces: surfaces.visibleWallFaces.map(wall),
-    visibleEntities: projectVisibleEntities(core.getVisibleEntities(state, playerId), self.role),
+    visibleEntities: projectVisibleEntities(
+      core.getVisibleEntities(state, playerId),
+      self.role,
+      alias,
+    ),
   };
 }

@@ -7,7 +7,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { demoStateSchema, type DemoStateMessage } from '@kkakkung/protocol/game-messages';
-import { DemoPanel, completedScenario } from './DemoPanel';
+import { DemoPanel } from './DemoPanel';
 import { DEMO_SCENARIO_GUIDE, demoFailureCodes } from './demo-scenario-guide';
 
 const state = (over: Partial<DemoStateMessage> = {}): DemoStateMessage =>
@@ -42,7 +42,7 @@ it('locks the buttons while one runs and reports a stopped scenario', () => {
       onRun: () => {},
     }),
   );
-  expect(running).toContain('진행 중: 술래가 나를 포획 · 관리자에게 접근하는 중');
+  expect(running).toContain('진행 중: 술래가 나를 포획 — 관리자에게 접근하는 중');
   expect(running.match(/disabled/g)).toHaveLength(3);
   const stopped = renderToStaticMarkup(
     createElement(DemoPanel, {
@@ -50,7 +50,8 @@ it('locks the buttons while one runs and reports a stopped scenario', () => {
       onRun: () => {},
     }),
   );
-  expect(stopped).toContain('직전 시나리오 중단: 정해진 시간 안에 조건을 확인하지 못했습니다.');
+  // S15P21C204-342. 어느 단계에서 멈췄는지까지 보여 준다.
+  expect(stopped).toContain('중단: 관리자에게 접근하는 중 — 정해진 시간 안에 조건을 확인하지');
   expect(stopped).not.toContain('disabled');
 });
 
@@ -70,6 +71,26 @@ it('keeps a Korean label and at least one checklist for every planned scenario',
     expect(item.checklist.length).toBeGreaterThan(0);
     expect(item.description).not.toBe('');
   }
+});
+
+// S15P21C204-342. 시작할 수 없는 대본을 목록에서 빼면 버튼이 조용히 사라진다. 잠근 채 이유를 단다.
+it('keeps a scenario it cannot start, disabled and with the reason', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, {
+      demo: state({
+        available: [
+          { id: 'trap', options: [] },
+          { id: 'capture', options: [], unavailable: 'NO_TAGGER_PUPPET' },
+        ],
+      }),
+      phase: 'PLAYING',
+      onRun: () => {},
+    }),
+  );
+  expect(html).toContain('술래가 나를 포획');
+  expect(html).toContain('술래 인형이 없습니다.');
+  // 잠긴 것은 그 버튼뿐이다.
+  expect(html.match(/disabled=""/g)).toHaveLength(1);
 });
 
 it('has a user-facing label for every known failure code', () => {
@@ -106,6 +127,35 @@ it('lets the operator end the round even while a scenario is stuck', () => {
   expect(abort(render({}, 'RESULT'))).toContain('disabled');
 });
 
+// S15P21C204-342. 관리자를 기다리는 대본은 2분 동안 다른 버튼을 잠근다. 라운드를 끝내지 않고
+// 그 대본만 내릴 수 있어야 한다.
+it('cancels only while a scenario is running', () => {
+  const render = (over: Partial<DemoStateMessage>) =>
+    renderToStaticMarkup(
+      createElement(DemoPanel, {
+        demo: state(over),
+        phase: 'PLAYING',
+        onRun: () => {},
+        onCancel: () => {},
+      }),
+    );
+  const cancel = (html: string) => {
+    const at = html.indexOf('시나리오 취소');
+    return at < 0 ? '' : html.slice(html.lastIndexOf('<button', at), at);
+  };
+  expect(cancel(render({ running: 'capture', step: 'chase-operator' }))).not.toContain('disabled');
+  expect(cancel(render({}))).toContain('disabled');
+});
+
+// S15P21C204-342. 제한시간 없는 라운드는 남은 시간이 null 이고, 그때 시계가 지난 시간을 흘린다.
+// 값을 아예 넘기지 않으면 시계가 화면에서 사라진다.
+it('hands the stage clock a null deadline in a demo round', () => {
+  const app = readFileSync(new URL('../../../app/ProductApp.tsx', import.meta.url), 'utf8');
+  const chrome = /<GameStatusChrome[\s\S]*?\/>/.exec(app)?.[0] ?? '';
+  expect(chrome).toContain('round.deadlineTick !== null');
+  expect(chrome).toMatch(/remainingSeconds=\{[\s\S]*: null\s*\}/);
+});
+
 it('is mounted with the options and round-end callbacks the panel offers', () => {
   const app = readFileSync(new URL('../../../app/ProductApp.tsx', import.meta.url), 'utf8');
   const mounts = [...app.matchAll(/<DemoPanel[\s\S]*?\/>/g)].map((match) => match[0]);
@@ -113,6 +163,7 @@ it('is mounted with the options and round-end callbacks the panel offers', () =>
   expect(mounts).toHaveLength(1);
   expect(mounts[0]).toContain('onRunWithOptions=');
   expect(mounts[0]).toContain('onAbort=');
+  expect(mounts[0]).toContain('onCancel=');
   const stage = app.slice(app.indexOf('<section className="game-stage"'));
   expect(stage.indexOf('<DemoPanel')).toBeGreaterThan(stage.indexOf('</section>'));
   // S15P21C204-314. 서버가 보내고 미니맵이 그릴 줄 아는 관리자 출구를 앱이 넘기지 않았다.
@@ -120,14 +171,26 @@ it('is mounted with the options and round-end callbacks the panel offers', () =>
   expect(minimap).toContain('operatorExit={snapshot.demo?.operatorExit');
 });
 
-// S15P21C204-313. 성공한 시나리오가 아무 표시 없이 목록으로 돌아가 됐는지 알 수 없었다.
-it('remembers a scenario that ended without a failure as completed', () => {
-  const idle = { running: null, failureCode: null };
-  expect(completedScenario('capture', idle, null)).toBe('capture');
-  // 다음 갱신에서도 남아 있다가, 새 실행이나 실패가 오면 지운다.
-  expect(completedScenario(null, idle, 'capture')).toBe('capture');
-  expect(completedScenario(null, { running: 'trap', failureCode: null }, 'capture')).toBeNull();
-  expect(
-    completedScenario('capture', { running: null, failureCode: 'chase-operator:TIMEOUT' }, null),
-  ).toBeNull();
+// S15P21C204-342. 완료는 서버가 알려 준다. 웹이 "도는 중이던 것이 사라짐" 으로 추론하던 때는
+// 한 틱에 끝나는 배치처럼 진행 중을 본 적 없는 대본이 표시되지 않았다.
+it('shows the scenario the server reports as completed', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, {
+      demo: state({ completed: 'place-puppet' }),
+      phase: 'PLAYING',
+      onRun: () => {},
+    }),
+  );
+  expect(html).toContain('완료: 인형 배치');
+});
+
+it('keeps a failure visible over a stale completion', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, {
+      demo: state({ completed: null, failureCode: 'come-closer:NO_EXCHANGE_PARTNER' }),
+      phase: 'PLAYING',
+      onRun: () => {},
+    }),
+  );
+  expect(html).toContain('중단: 인형이 옆으로 오는 중 — 이미 지도를 나눈 인형뿐입니다.');
 });

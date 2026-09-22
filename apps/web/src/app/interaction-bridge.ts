@@ -58,6 +58,9 @@ export function createInteractionBridge(
       ].includes(context.phase);
     if (visible && host && preview) {
       if (preview.parentElement !== host) host.appendChild(preview);
+      // S15P21C204-295. 자리를 옮기는 동안 재생이 멈추면 마지막 프레임이 그대로 굳는다. 그러면
+      // 얼굴 인식도 합성 화면도 같은 한 장만 보게 되므로, 붙인 뒤에는 재생을 확인한다.
+      if (preview.paused) void preview.play().catch(() => {});
     } else detach();
   };
   const runtime = factory({

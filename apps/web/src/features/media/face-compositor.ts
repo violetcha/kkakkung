@@ -44,6 +44,11 @@ export type CompositorCanvas = Readonly<{
   height: number;
   getContext(id: '2d'): CompositorContext | null;
   captureStream(frameRate: number): MediaStream;
+  /**
+   * S15P21C204-295. 그리는 면 그 자체. 내 화면에 그대로 그릴 때만 쓴다(대기실 타일).
+   * 게시 경로는 여전히 handle 검사를 거치므로 이 값으로는 아무것도 내보낼 수 없다.
+   */
+  element?: HTMLCanvasElement;
 }>;
 
 /** draw에 실제로 쓰는 2D 문맥의 최소 인터페이스. */
@@ -93,6 +98,8 @@ export interface FaceCompositor {
   /** D-08. hold는 마지막 안전 프레임을 그대로 두고 default는 기본 얼굴을 그린다. */
   drawMode(mode: 'live' | 'hold' | 'default', face: FaceSensor | null): DrawResult;
   getHandle(): ProcessedFaceHandle | null;
+  /** 로컬 표시용 그리는 면. 없으면 null(시험 환경). */
+  getSurface(): HTMLCanvasElement | null;
   readonly hasFirstSafeFrame: boolean;
   readonly isTrackLive: boolean;
   dispose(): void;
@@ -204,6 +211,8 @@ export function createFaceCompositor(deps: FaceCompositorDeps): FaceCompositor {
     },
 
     getHandle: () => handle,
+
+    getSurface: () => canvas.element ?? null,
 
     get hasFirstSafeFrame() {
       return firstSafeFrame;

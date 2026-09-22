@@ -215,6 +215,11 @@ describe('product kkakkung room (0.2.0) with the harness core', () => {
       await expect
         .poll(() => player.outcomes.find((o) => o.requestId === ids[i])?.result, { timeout: 5000 })
         .toBe('applied');
+    // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+    const started = send(first, 'ROOM_START', {}, 16);
+    await expect
+      .poll(() => first.outcomes.find((o) => o.requestId === started)?.result, { timeout: 5000 })
+      .toBe('applied');
     await waitPhase('TEAM_PRACTICE');
     await expect
       .poll(() => players.every((p) => latestView(p)?.gameScope.kind === 'practice'), {

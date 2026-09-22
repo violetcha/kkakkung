@@ -479,6 +479,838 @@
 .product-shell .pause-tabs .pause-quit[data-danger='true']:hover:not(:disabled) {
   color: var(--rec);
 }
+/* S15P21C204-295. 대기실. 여섯 칸에 캐릭터가 서고 준비한 사람에게는 도장이 찍힌다.
+   게임 화면처럼 스크롤 없이 한 화면에 들어간다: 자리 격자가 남는 높이를 가져간다. */
+.product-shell.room-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  height: 100svh;
+  padding: 0 clamp(20px, 3.4vw, 56px) 22px;
+  overflow: hidden;
+}
+.room-shell > header {
+  flex: none;
+  margin-bottom: 4px;
+}
+.room-shell .brand-logo img {
+  width: 92px;
+}
+/* 복도는 화면 뒤에 깔린다. 흐름 안에 두면 위쪽을 통째로 차지한다.
+   바탕색은 홈과 같은 나무 빛이다: 장면은 그 위에 어둡게 얹힌다. */
+/* 음수 z-index 는 body 바탕(불투명) 아래로 내려가 보이지 않는다. 0 위에 쌓고 내용이 그 위에 선다. */
+.room-shell .lobby-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  filter: brightness(0.65);
+  background: linear-gradient(170deg, #14170f, #2a281a 55%, var(--ink-0));
+}
+.room-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, #050504a6, #050504e0 50%, #050504fa);
+}
+.preview-room .lobby-backdrop,
+.preview-room::before {
+  position: absolute;
+}
+.room-shell > header,
+.room-shell .lobby {
+  position: relative;
+  z-index: 2;
+}
+.product-shell.room-shell .lobby {
+  display: grid;
+  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head  head  code'
+    'side  panel panel'
+    'seats seats seats'
+    'log   log   log';
+  flex: 1;
+  min-height: 0;
+  gap: 18px 32px;
+  margin-top: 8px;
+  max-width: none;
+}
+.lobby-head {
+  grid-area: head;
+  align-self: start;
+}
+.lobby-head h2 {
+  margin: 6px 0 0;
+}
+.lobby-code {
+  grid-area: code;
+  justify-self: end;
+  text-align: right;
+}
+.lobby-code p {
+  margin: 0;
+}
+.lobby-code-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: clamp(20px, 2.4vw, 28px);
+  letter-spacing: 0.24em;
+  color: var(--bone);
+}
+.product-shell .lobby-code-copy {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  color: var(--bone-dim);
+}
+.product-shell .lobby-code-copy svg {
+  width: 15px;
+  height: 15px;
+}
+.product-shell .lobby-code-copy:hover {
+  color: var(--sodium);
+  border-color: var(--sodium-dim);
+}
+.lobby-code-count {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--bone-dim);
+}
+.lobby-side {
+  grid-area: side;
+  align-self: start;
+  display: grid;
+  gap: 14px;
+}
+.lobby-menu {
+  display: grid;
+  gap: 10px;
+}
+.product-shell .lobby-menu button {
+  justify-content: flex-start;
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+.lobby-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--bone-dim);
+}
+/* 배경 복도에 선 문의 이름표. 문 자체는 3D 장면에 있다(LobbyBackdrop). */
+.lobby-door {
+  grid-area: panel;
+  align-self: start;
+  justify-self: center;
+  margin: 0;
+  padding: 0 18px 8px;
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  color: var(--bone-dim);
+  text-shadow: 0 2px 10px #000;
+  border-bottom: 1px solid #e6e1d340;
+  pointer-events: none;
+}
+.lobby-panel {
+  grid-area: panel;
+  align-self: start;
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  background: #050504d9;
+  border: 1px solid var(--line);
+}
+.lobby-panel[hidden] {
+  display: none;
+}
+.lobby-log {
+  grid-area: log;
+  align-self: end;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+.lobby-log span {
+  color: #e6e1d359;
+}
+
+@media (max-height: 700px) {
+  .product-shell.room-shell {
+    height: auto;
+    min-height: 100svh;
+    overflow: auto;
+  }
+}
+/* 검수 화면 안에 놓인 대기실은 화면 전체가 아니라 그 자리만 쓴다. */
+.preview-room {
+  height: min(760px, 80svh);
+  width: 100%;
+}
+.product-shell .lobby {
+  margin-top: 0;
+  max-width: min(980px, 100%);
+}
+.lobby .pause-head {
+  padding-top: 0;
+}
+.lobby-seats {
+  grid-area: seats;
+  align-self: end;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lobby-seat {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 8px;
+  padding: 10px 10px 12px;
+  text-align: center;
+  background: #050504bf;
+}
+.lobby-seat-view {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  max-height: 26svh;
+  overflow: hidden;
+  background: var(--ink-1);
+  border: 1px solid var(--line);
+}
+/* 방장 표시. 칸 위에 얹힌 작은 관이다. */
+.lobby-crown {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--sodium);
+  text-shadow: 0 1px 6px #000;
+}
+/* 칸 테두리도 닳은 선이다. 비어 있으면 더 흐리다. */
+.lobby-seat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid #e6e1d340;
+  filter: url(#rough-box);
+}
+.lobby-seat[data-state='empty']::before {
+  border-color: #e6e1d31f;
+}
+.lobby-seat[data-state='empty'] {
+  background: #0b0b0a80;
+}
+.lobby-seat[data-state='lost'] .tile-view {
+  opacity: 0.25;
+}
+.tile-view {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+/* 내 카메라 미리보기가 머무는 자리. 화면에는 보이지 않는다.
+   보여 주려고 두는 것이 아니라, 재생 중인 video 가 문서 안에 남아 있어야 얼굴 표본이
+   끊기지 않기 때문이다(멈춘 미리보기는 InteractionRuntime 의 점검 루프가 다시 재생한다). */
+.lobby-seat-pump {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.lobby-seat-pump video {
+  width: 1px;
+  height: 1px;
+}
+.tile-view canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.lobby-seat-name {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bone);
+}
+.lobby-seat-name span {
+  color: var(--bone-dim);
+}
+.lobby-seat-state {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--bone-faint);
+}
+.lobby-seat-empty {
+  padding: 14px 0;
+}
+.lobby-seat[data-state='lost'] .lobby-seat-state {
+  color: var(--rec);
+}
+/* 준비 표시. 이름 아래에 붙는 눌러 찍은 글씨다. 얼굴을 가리지 않는다. */
+.lobby-stamp {
+  margin: 0;
+  padding: 3px 0;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--sodium);
+  border: 1px solid var(--sodium);
+  filter: url(#rough-box);
+}
+.product-shell .lobby-invite-slot {
+  display: grid;
+  gap: 6px;
+  place-content: center;
+  aspect-ratio: 4 / 3;
+  font-size: 13px;
+  color: var(--bone-dim);
+  border: 1px dashed #e6e1d340;
+}
+.product-shell .lobby-invite-slot span {
+  font-size: 22px;
+  line-height: 1;
+}
+.product-shell .lobby-invite-slot:hover {
+  color: var(--sodium);
+  border-color: var(--sodium-dim);
+}
+.product-shell .lobby-kick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.product-shell .lobby-ready {
+  min-height: 48px;
+  padding: 0 28px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--ink-0);
+  background: var(--bone);
+  border-color: var(--bone);
+}
+.product-shell .lobby-ready:hover:not(:disabled) {
+  color: var(--ink-0);
+  background: var(--sodium);
+  border-color: var(--sodium);
+}
+.product-shell .lobby-ready[aria-pressed='true'] {
+  color: var(--sodium);
+  background: transparent;
+  border-color: var(--sodium-dim);
+}
+.product-shell .lobby-ready:disabled {
+  color: var(--bone-faint);
+  background: transparent;
+  border-color: #e6e1d32e;
+}
+/* 시작 단추는 준비 단추 옆에 선다. 모두 준비했을 때만 나타나므로 더 밝다. */
+.product-shell .lobby-start {
+  min-height: 48px;
+  padding: 0 28px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: var(--ink-0);
+  background: var(--sodium);
+  border-color: var(--sodium);
+}
+.product-shell .lobby-start:hover:not(:disabled) {
+  color: var(--ink-0);
+  background: var(--bone);
+  border-color: var(--bone);
+}
+.product-shell .lobby-start:disabled {
+  color: var(--bone-faint);
+  background: transparent;
+  border-color: #e6e1d32e;
+}
+.lobby-devices {
+  margin: 0;
+  max-width: 520px;
+}
+.lobby-manage {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--bone-dim);
+}
+.lobby-manage p {
+  margin: 0;
+}
+.lobby-notice {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--bone-faint);
+}
+.lobby-notice summary {
+  cursor: pointer;
+  color: var(--bone-dim);
+}
+.lobby-notice ul {
+  max-height: 30svh;
+  overflow: auto;
+  margin: 8px 0 0;
+}
+/* 대기실은 참가자 카드가 주인공이다. 제목 줄은 최소 높이만 차지한다. */
+.product-shell.room-shell .lobby h2 {
+  font-size: clamp(22px, 2vw, 28px);
+}
+.product-shell.room-shell .lobby .pause-eyebrow {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+/* 맵 크기는 한 줄로 눕힌다. */
+.room-shell .lobby .map-size-choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.product-shell.room-shell .lobby .map-size-choice h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bone-dim);
+}
+.room-shell .lobby .map-size-options {
+  display: flex;
+  gap: 8px;
+}
+.product-shell.room-shell .lobby .map-size-options button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.product-shell.room-shell .lobby .map-size-options button span {
+  display: none;
+}
+.room-shell .lobby .map-size-choice > p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--bone-faint);
+}
+/* 장치 상태는 표가 아니라 한 줄짜리 칩이다. */
+.room-shell .lobby-devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: none;
+}
+.room-shell .lobby-devices > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+}
+.room-shell .lobby-devices > div::after {
+  display: none;
+}
+.room-shell .lobby-devices dt {
+  font-size: 12px;
+  color: var(--bone-dim);
+}
+.room-shell .lobby-devices dd {
+  min-width: 0;
+  font: 12px var(--font-mono);
+  color: var(--bone);
+}
+/* 3칸을 유지한다. 아주 좁을 때만 2칸으로 접는다. */
+/* 좁아지면 왼쪽 줄이 위로 올라오고 카드는 세 칸씩 접힌다. */
+@media (max-width: 900px) {
+  .product-shell.room-shell .lobby {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'head'
+      'code'
+      'side'
+      'panel'
+      'seats'
+      'log'
+      'tag';
+  }
+  .lobby-code {
+    justify-self: start;
+    text-align: left;
+  }
+  .lobby-menu {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .lobby-seats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .lobby-menu {
+    grid-auto-flow: row;
+  }
+}
+/* 정면 출구 구도: 왼쪽 메뉴와 오른쪽 아래 명부가 배경의 문을 비워 둔다. */
+.product-shell.room-shell {
+  position: relative;
+  padding: 0;
+  isolation: isolate;
+}
+.room-shell > header {
+  position: absolute;
+  top: 6%;
+  left: 4.2%;
+  margin: 0;
+}
+.room-shell .brand-logo img {
+  width: clamp(125px, 10.5vw, 210px);
+}
+.room-shell::before {
+  background:
+    linear-gradient(90deg, #0505049c, transparent 42%, #05050425),
+    linear-gradient(0deg, #050504eb, #05050432 55%, #05050438);
+}
+.product-shell.room-shell .lobby {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.room-shell .lobby-head {
+  position: absolute;
+  top: 28%;
+  left: 4.4%;
+  max-width: 23%;
+}
+.product-shell.room-shell .lobby h2 {
+  margin-top: 18px;
+  font: 400 clamp(14px, 1.1vw, 21px) / 1.6 var(--font-control);
+  color: var(--bone-dim);
+}
+.room-shell .lobby-code {
+  position: absolute;
+  top: 6.5%;
+  right: 4%;
+  text-align: left;
+}
+.room-shell .lobby-code-value {
+  justify-content: flex-start;
+}
+.room-shell .lobby-code-count {
+  margin-top: 8px;
+  letter-spacing: 0.12em;
+}
+.room-shell .lobby-side {
+  position: absolute;
+  top: 43%;
+  left: 4%;
+  width: 20%;
+}
+.room-shell .lobby-menu {
+  gap: clamp(8px, 1.4vh, 18px);
+}
+.product-shell.room-shell .lobby-menu button {
+  position: relative;
+  min-height: 44px;
+  padding: 4px 0 4px 32px;
+  background: transparent;
+  border: 0;
+  color: var(--bone-faint);
+  font: 400 clamp(17px, 1.4vw, 26px) / 1.5 var(--font-control);
+  letter-spacing: 0.08em;
+}
+.product-shell.room-shell .lobby-menu button:hover:not(:disabled),
+.product-shell.room-shell .lobby-menu button:focus-visible,
+.product-shell.room-shell .lobby-menu .lobby-ready:not(:disabled),
+.product-shell.room-shell .lobby-menu .lobby-start {
+  color: var(--bone);
+}
+.product-shell.room-shell .lobby-menu .lobby-ready::before,
+.product-shell.room-shell .lobby-menu button:focus-visible::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  background: currentColor;
+  box-shadow: 0 0 10px #e6e1d32a;
+}
+.room-shell .lobby-note {
+  font-size: 11px;
+  opacity: 0.65;
+  max-width: 235px;
+}
+.room-shell .lobby-door {
+  position: absolute;
+  top: 21.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(11px, 1vw, 17px);
+}
+.room-shell .lobby-door::after {
+  content: '+';
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+}
+.room-shell .lobby-seats {
+  position: absolute;
+  top: 54%;
+  left: 29%;
+  right: 10.5%;
+  display: flex;
+  gap: clamp(10px, 1.7vw, 34px);
+  align-items: stretch;
+}
+.room-shell .lobby-seat {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px 8px 10px;
+  background: #05050430;
+  grid-template-rows: auto 1fr auto;
+}
+.room-shell .lobby-seat::before {
+  border-color: #e6e1d31a;
+}
+.room-shell .lobby-seat[data-host='true']::before {
+  border-color: #e6e1d36b;
+}
+.room-shell .lobby-seat-view {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 100px;
+  max-width: 100px;
+  justify-self: center;
+  border: 4px solid #141512;
+  box-shadow: 3px 3px 0 #050504aa;
+}
+.lobby-placeholder {
+  background: linear-gradient(135deg, #242522, #151614);
+}
+.lobby-placeholder svg {
+  width: 100%;
+  height: 100%;
+}
+.room-shell .lobby-crown {
+  top: -13px;
+  font-size: 28px;
+}
+.room-shell .lobby-seat-name {
+  font-size: clamp(11px, 0.9vw, 16px);
+  overflow-wrap: anywhere;
+}
+.lobby-seat-role {
+  display: block;
+  font-size: 11px;
+  min-height: 16px;
+}
+.room-shell .lobby-stamp {
+  color: var(--bone-dim);
+  border-color: #e6e1d378;
+  font-family: inherit;
+  font-size: clamp(10px, 0.8vw, 14px);
+  letter-spacing: 0.06em;
+}
+.room-shell .lobby-seat[data-host='true'] .lobby-stamp {
+  color: var(--sodium);
+  border-color: var(--sodium);
+}
+.room-shell .lobby-seat-state {
+  align-self: end;
+  padding: 4px 0;
+}
+.room-shell .lobby-invite-seat {
+  padding: 0;
+  background: transparent;
+  display: flex;
+}
+.product-shell.room-shell .lobby-invite-slot {
+  width: 100%;
+  height: 100%;
+  min-height: 145px;
+  padding: 6px;
+  aspect-ratio: auto;
+  background: transparent;
+  font-size: clamp(11px, 0.85vw, 16px);
+}
+.product-shell.room-shell .lobby-invite-slot span {
+  font-size: 40px;
+  font-weight: 200;
+}
+.product-shell.room-shell .lobby-kick {
+  top: 4px;
+  right: 4px;
+  max-width: calc(100% - 8px);
+  font-size: 10px;
+  opacity: 0;
+}
+.room-shell .lobby-seat:hover .lobby-kick,
+.room-shell .lobby-seat:focus-within .lobby-kick {
+  opacity: 1;
+}
+.room-shell .lobby-log {
+  position: absolute;
+  top: 77%;
+  left: 29%;
+  right: 10.5%;
+  padding: 10px 12px 0;
+  border-top: 1px solid #e6e1d31c;
+  font-family: inherit;
+  font-size: clamp(10px, 0.85vw, 15px);
+  line-height: 1.55;
+  white-space: normal;
+}
+.room-shell .lobby-panel {
+  position: absolute;
+  z-index: 5;
+  top: 17%;
+  left: 29%;
+  right: 10.5%;
+  max-height: 60%;
+  overflow: auto;
+}
+.lobby-footer {
+  position: absolute;
+  bottom: 4%;
+  left: 4%;
+  right: 4%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--bone-faint);
+  font-size: 13px;
+}
+.product-shell .lobby-footer button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.lobby-footer kbd {
+  padding: 3px 5px;
+  border: 1px solid #e6e1d359;
+  margin-right: 8px;
+}
+.lobby-footer > span {
+  margin-left: auto;
+  letter-spacing: 0.14em;
+}
+@media (max-width: 900px), (max-height: 650px) {
+  .product-shell.room-shell {
+    height: auto;
+    min-height: 100svh;
+    overflow: auto;
+    padding: 24px;
+  }
+  .room-shell > header {
+    position: relative;
+    top: auto;
+    left: auto;
+  }
+  .room-shell .brand-logo img {
+    width: 100px;
+  }
+  .product-shell.room-shell .lobby {
+    display: grid;
+    height: auto;
+    gap: 24px;
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: 'head' 'code' 'side' 'panel' 'seats' 'log' 'tag';
+  }
+  .room-shell .lobby-head,
+  .room-shell .lobby-side,
+  .room-shell .lobby-seats,
+  .room-shell .lobby-log,
+  .room-shell .lobby-footer,
+  .room-shell .lobby-panel {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+  }
+  .room-shell .lobby-code {
+    position: static;
+    justify-self: start;
+  }
+  .room-shell .lobby-head {
+    padding-top: 24px;
+    padding-right: 0;
+  }
+  .room-shell .lobby-side {
+    gap: 12px;
+  }
+  .room-shell .lobby-menu {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr 1fr;
+  }
+  .room-shell .lobby-note {
+    max-width: none;
+  }
+  .room-shell .lobby-door {
+    display: none;
+  }
+  .room-shell .lobby-seats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px 12px;
+  }
+  .room-shell .lobby-seat-view {
+    max-height: 90px;
+    max-width: 90px;
+  }
+  .product-shell.room-shell .lobby-kick {
+    opacity: 1;
+  }
+  .room-shell .lobby-footer {
+    grid-area: tag;
+    flex-wrap: wrap;
+  }
+  .lobby-footer > span {
+    width: 100%;
+    margin-left: 0;
+    font-size: 11px;
+  }
+}
 /* 설정 창의 행. 게임 안 장치·키 표와 같은 규칙이다: 왼쪽 이름, 오른쪽 조작, 닳은 선 한 가닥. */
 .settings-rows {
   margin: 0;
@@ -2147,34 +2979,7 @@
   gap: 12px;
   margin-top: 24px;
 }
-.product-shell .lobby ol {
-  list-style: none;
-  padding: 0;
-  margin: 24px 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 32px;
-  border-top: 4px double var(--color-border-strong);
-  border-bottom: 4px double var(--color-border-strong);
-  outline: var(--outline-pixel);
-  outline-offset: 2px;
-  background:
-    linear-gradient(90deg, transparent 0 49.7%, var(--color-seam) 49.7% 50.3%, transparent 50.3%),
-    var(--color-panel);
-  box-shadow: none;
-}
-.product-shell .lobby li {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 18px 0;
-  border-bottom: 2px dashed var(--color-seam);
-  padding-inline: 14px;
-}
-.product-shell .lobby li span:last-child {
-  color: var(--color-muted);
-}
+/* S15P21C204-295. 예전 명부 표 규칙은 자리 격자(.lobby-seats)로 대체됐다. */
 /* S15P21C204-311. 로비의 맵 크기 선택. 방장만 누르고 참가자에게는 고른 것만 보인다. */
 .map-size-choice {
   margin-top: var(--space-4);
@@ -2895,15 +3700,18 @@
   grid-template-columns: minmax(0, 1fr) min(360px, 30vw);
   gap: var(--space-2);
   align-items: start;
+  /* S15P21C204-342. 두 열의 위·아래를 맞춘다. 칸마다 margin 을 주면 서로 다른 규칙이 이겨 어긋난다. */
+  margin-top: var(--space-2);
 }
 .demo-layout > .game-stage {
   min-width: 0;
+  margin-top: 0;
 }
 .demo-layout > .demo-panel {
   height: calc(100dvh - 128px);
   min-height: 360px;
   overflow: auto;
-  margin: var(--space-2) 0 0;
+  margin: 0;
   padding: var(--space-3);
   background: var(--ink-panel);
   border: 1px solid var(--line);
@@ -2985,6 +3793,37 @@
   padding: 5px 8px;
   color: #ffd4cc;
   border-color: #bf695d;
+}
+/* S15P21C204-342. 결과가 새로 나면 짧게 밝아진다. 같은 문구가 다시 와도 눌린 것이 보인다. */
+.demo-panel-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+/* 지금 시작할 수 없는 대본은 잠긴 채 이유와 함께 남는다(S15P21C204-342). */
+.demo-scenario-item[data-blocked] > button {
+  opacity: 0.55;
+}
+.demo-blocked {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--bone-dim);
+}
+@keyframes demo-outcome-flash {
+  from {
+    background: #f4c96b22;
+  }
+  to {
+    background: transparent;
+  }
+}
+.demo-panel > p.demo-outcome {
+  animation: demo-outcome-flash 900ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-panel > p.demo-outcome {
+    animation: none;
+  }
 }
 .demo-panel > p[role='status'] {
   margin: var(--space-3) 0 0;
@@ -3233,9 +4072,6 @@
   .product-stage {
     grid-template-columns: 1fr;
   }
-  .product-shell .lobby ol {
-    grid-template-columns: 1fr;
-  }
   .mini-map {
     width: min(240px, 100%);
   }
@@ -3290,6 +4126,12 @@ header {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 24px;
+}
+/* 방 머리말의 설정·나가기는 오른쪽에 나란히 선다. */
+.room-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 h1 {
   margin: 4px 0 0;
@@ -3826,4 +4668,147 @@ kbd {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* S15P21C204-295. 장치 점검 창. 준비를 누르면 대기실 위에 뜨고, 준비가 보고되면 닫힌다. */
+.device-check-ask-box {
+  width: min(720px, 100%);
+}
+.device-check-ask-box .device-check {
+  margin: 0;
+}
+
+/* S15P21C204-295. 팀 연습의 할 일 목록. 혼자 연습과 같은 모양으로 무대 왼쪽에 선다. */
+.game-stage .practice-quests {
+  position: absolute;
+  top: 50%;
+  left: 18px;
+  z-index: 5;
+  width: min(300px, 26vw);
+  transform: translateY(-50%);
+}
+.game-stage .practice-quests button {
+  width: 100%;
+  margin-top: 12px;
+}
+/* S15P21C204-295. 준비 점검 창. 내 화면과 두 줄, 그게 전부다. */
+.ready-check {
+  display: grid;
+  gap: 16px;
+}
+/* 카메라는 작게. 지시는 그 화면 안에 크게 얹는다. */
+.ready-check-stage {
+  position: relative;
+  width: min(360px, 100%);
+  margin: 0 auto;
+}
+.ready-check-lens {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.ready-check-view {
+  width: 100%;
+  height: 100%;
+  background: var(--ink-1);
+}
+.ready-check-view video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* 캠코더 프레임. 네 귀퉁이만 꺾어 그린다. */
+.ready-check-frame {
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--sodium), var(--sodium)) left top / 18px 1px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) left top / 1px 18px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) right top / 18px 1px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) right top / 1px 18px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) left bottom / 18px 1px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) left bottom / 1px 18px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) right bottom / 18px 1px no-repeat,
+    linear-gradient(var(--sodium), var(--sodium)) right bottom / 1px 18px no-repeat;
+  opacity: 0.65;
+}
+.ready-check-stage[data-done='true'] .ready-check-frame {
+  opacity: 1;
+}
+/* 훑는 선. 위에서 아래로 한 번씩 지나간다. */
+.ready-check-scan {
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 0;
+  height: 44px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, #d9b25a00, #d9b25a26 70%, var(--sodium));
+  animation: ready-scan 2.4s linear infinite;
+}
+@keyframes ready-scan {
+  from {
+    transform: translateY(-44px);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ready-check-scan {
+    animation: none;
+    opacity: 0.35;
+  }
+}
+.ready-check .ready-check-cue {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 14px 12px;
+  font-family: var(--font-display);
+  font-size: clamp(19px, 3.4vw, 25px);
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: #f7f4ec;
+  background: var(--ink-0);
+  border: 1px solid var(--line);
+  border-top: 0;
+}
+.ready-check-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--sodium);
+}
+.ready-check-stage[data-done='true'] .ready-check-cue {
+  color: var(--sodium);
+}
+.ready-check-steps {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  /* 아직 남은 일도 또렷하게 읽혀야 한다. 흐린 회색으로 두지 않는다. */
+  color: var(--bone);
+}
+.ready-check-steps li[data-done='true'] {
+  color: var(--sodium);
+}
+/* 창 아래의 곁다리 안내에만 적용한다. 화면 밑 지시문(.ready-check-cue)은 여기 걸리지 않는다. */
+.ready-check > p[role='status'] {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bone-faint);
+}
+.ready-check .actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
 }

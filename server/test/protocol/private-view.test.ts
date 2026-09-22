@@ -81,6 +81,44 @@ describe('private view projection (allowlist)', () => {
     ]);
   });
 
+  // S15P21C204-340. An enemy's playerId is as telling as its role once the roster is in hand.
+  it('replaces enemy player ids with the alias and keeps allied ids real', () => {
+    const alias = (id: string) => `anon-${id}`;
+    const entities = projectVisibleEntities(
+      [
+        { id: 'ally', kind: 'player', cell: { x: 1, y: 1 }, dir: 0, action: null, role: 'runner' },
+        { id: 'enemy', kind: 'player', cell: { x: 2, y: 1 }, dir: 0, action: null, role: 'tagger' },
+        { id: 'trap', kind: 'trap', cell: { x: 5, y: 1 }, state: 'UNARMED' },
+      ],
+      'runner',
+      alias,
+    );
+    expect(entities.map((e) => e.id)).toEqual(['ally', 'anon-enemy', 'trap']);
+    expect(entities[1]).not.toHaveProperty('role');
+    // Without aliases (tools, tests) the real ids are kept, as before.
+    expect(projectVisibleEntities(entities.slice(0, 2), 'runner').map((e) => e.id)).toEqual([
+      'ally',
+      'anon-enemy',
+    ]);
+  });
+
+  it('never lets an enemy playerId into a projected private view', () => {
+    const { core, state } = match();
+    // Put the tagger next to r1 so it is in sight, and r2 next to it as the ally.
+    const r1 = state.players.get('r1')!;
+    state.players.get('t1')!.cell = { x: r1.cell.x + 1, y: r1.cell.y };
+    state.players.get('r2')!.cell = { x: r1.cell.x, y: r1.cell.y + 1 };
+    const alias = (id: string) => `anon-${id}`;
+    const runner = projectPrivateBody(core, state, 'r1', null, alias);
+    const ids = runner.visibleEntities.map((e) => e.id);
+    expect(ids).toContain('r2');
+    expect(ids).toContain('anon-t1');
+    expect(JSON.stringify(runner)).not.toContain('"t1"');
+    // The tagger, in turn, sees the runners under aliases only.
+    const tagger = projectPrivateBody(core, state, 't1', null, alias);
+    expect(tagger.visibleEntities.map((e) => e.id).sort()).toEqual(['anon-r1', 'anon-r2']);
+  });
+
   it("shows another tagger's sensor with its wall but not the owner's full equipment list", () => {
     const { core, layout } = match();
     const taggers = [

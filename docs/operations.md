@@ -1,6 +1,6 @@
 # 운영
 
-2026-09-15 기준. 실제 서비스는 https://j15c204.p.ssafy.io 이며 GitLab 프로젝트 멤버(Reporter 이상)만 접속한다. 파이프라인·배포 장벽·호스트 구성·비밀값·롤백 명령은 [인프라 안내](../infra/README.md)가 기준이다. 이 문서는 서버가 운영 중에 지키는 정책과 장애 시 판단 기준을 정리한다.
+서비스 주소는 https://j15c204.p.ssafy.io 이다. 2026-09-22 승인된 SSO 기준은 GitLab 로그인과 운영자 등록 이메일이다. 기존 프로젝트 Reporter 이상 정책에서의 서버 전환과 검증은 [SSO 절차](../infra/SSO.md)를 따른다. 일반 공개 전환은 별도이며 `/demo`와 `/showcase` 및 각 관리자 API는 공개 이후에도 이 SSO를 유지한다. 파이프라인·배포 장벽·호스트 구성·비밀값·롤백 명령은 [인프라 안내](../infra/README.md)가 기준이다. 이 문서는 서버가 운영 중에 지키는 정책과 장애 시 판단 기준을 정리한다.
 
 ## 1. 운영 모드와 설정
 
@@ -44,7 +44,7 @@
 ### 관리자 데모 방 열기
 
 관리자는 서비스의 **`/demo`**에서 역할과 화면 표시 이름을 고른 뒤 데모 방을 연다. 이 경로와
-`/api/demo-admin/rooms`만은 게임 audience가 `public`이어도 GitLab 프로젝트 멤버 SSO를 계속
+`/api/demo-admin/rooms`는 게임 audience가 `public`이어도 GitLab 로그인·등록 이메일 SSO를 계속
 요구한다. SSO를 통과한 호스트 nginx가 관리자 신원을 서버에 다시 쓰므로, 브라우저에는
 `OPS_TOKEN`이 전달되지 않는다. 홈에는 이 페이지로 가는 링크가 없다.
 
@@ -65,7 +65,7 @@ sudo nginx -t && sudo systemctl reload nginx
 포획 수로 일찍 끝나지 않고 3분을 다 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다.
 재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
 
-인증은 `/demo`와 같은 GitLab 프로젝트 멤버 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
+인증은 `/demo`와 같은 GitLab 로그인·등록 이메일 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
 는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
 예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
 배포할 때 `host.conf`를 다시 설치한다.
@@ -79,6 +79,8 @@ OPS_TOKEN=... node scripts/open-demo.mjs \
 ```
 
 주소에 살아 있는 세션이 들어 있어 내 기기(loopback)에서만 화면에 찍고, 그 밖의 대상은 `--output`으로 비공개 파일(0600)에 쓴다. 실패는 원인별로 답한다: `DEMO_UNAVAILABLE`은 `DEMO_ROOMS=0`, `DEMO_ROOM_LIMIT`는 다른 데모 방이 아직 열려 있음(그 방에서 라운드를 끝내고 나가거나 2분 뒤 다시), `CAPACITY`는 서버의 세션 예산 소진, `401`은 토큰이다. 데모 방은 경기 방 예산을 쓰지 않으므로 시연 중에도 실제 경기가 쓸 수 있는 방 수는 그대로다.
+
+준비 화면에서 맵 크기를 고른다. 시연은 인형이 덜 걷는 15×15 가 빠르고, 31×31 은 대본 하나에 1~2분이 든다. 목록은 경기에 들어가면 무대 옆 패널에 나오고, 지금 시작할 수 없는 대본은 이유와 함께 잠긴 채 보인다. 관리자를 기다리는 대본은 패널의 "시나리오 취소" 로 라운드를 끝내지 않고 내릴 수 있다.
 
 관리자가 새로고침하거나 잠시 끊겨도 같은 주소로 다시 들어오면 경기 중이라도 그 경기로 돌아간다. 끊긴 뒤 2분 안에 돌아오지 않으면 방을 닫고 데모 방 자리(`DEMO_MAX_ROOMS`)를 돌려준다(데모 라운드는 제한시간이 없어 닫지 않으면 자리를 계속 차지한다).
 
@@ -180,11 +182,15 @@ pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
 | Cloud 자격 오류·할당량 소진·기록 손상·SHA 불일치                      | 계속 차단한다. 숫자 변경, 성공 파일 생성, 빈 원장 재생성으로 풀지 않는다                                                                                                                                                                                                        |
 
 ```bash
-docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|room.load_ready|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
+docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|room.load_ready|room.heartbeat_stall|room.media_uncertain_released|room.uncaught_exception|process.fault|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
 ```
 
 - `room.preparation_failed`: `outcome`(ABORTED 또는 DEVICE_CHECK 복귀), `reason`(`LOADING_TIMEOUT`, `MAP_FINALIZING_TIMEOUT`, `LAYOUT:…`, `MEDIA_PREPARE:…`), 로딩 집계.
 - `room.command_rejected`: READY·PRACTICE_READY·LOAD_READY·REMATCH 거절 코드와 지점(gate·queue·apply). 실패 시 `room.load_ready`가 0건이면 클라이언트가 보고하지 않은 것이다.
+- `room.heartbeat_stall`: 서버가 하트비트 간격(2초) 이상 멈췄다가 재개됨. `durationMs`는 멈춘 길이, `count`는 그 시간을 침묵으로 세지 않은 연결 수. 이때 연결을 끊지 않으므로 방이 해체되지 않는다.
+- `room.media_uncertain_released`: 결과를 모르는 미디어 준비(커서 없는 TIMEOUT 등)로 잡혀 있던 방을 놓아줌. `reason`은 `round-ended`(새 라운드가 이전 경기를 E에 넘김)·`disposed`(방 폐기)·`expired`(330초 경과, E의 세대 수명 300초 뒤). 자주 보이면 준비 실패 원인을 `media.prepare_failed`에서 찾는다.
+- `room.uncaught_exception`: 방의 메시지 처리·타이머·수명 주기에서 잡히지 않은 예외. `name`은 Colyseus 메서드 이름, `reason`은 원인 메시지. 경기 중(TEAM_PRACTICE~PLAYING)이면 그 방만 `SERVER_TICK_OVERLOAD`로 중단되고, RESULT·ABORTED와 입장 실패(`onJoin` 등)는 결과를 바꾸지 않는다. 입장 거절(`ServerError`)은 기록하지 않는다.
+- `process.fault`: 어느 방에서도 잡히지 않은 예외(`name`=`uncaughtException`·`unhandledRejection`). 기록 뒤 방을 한 번 정리하고(최대 10초) 종료 코드 1로 끝나며 `restart: unless-stopped`가 다시 띄운다.
 - `media.*`: 세대 준비 실패, 회수 미결 사유, LiveKit API 실패(메서드·HTTP 상태), webhook 수신 결과.
 
 운영 HTTP 순서: `GET /api/operations/status` → `POST /api/operations/commands {requestId, action}`(202는 접수) → `GET /api/operations/commands/<requestId>`로 종결 확인. 운영 토큰은 서버 신뢰 경로에서만 쓰고 브라우저로 넘기지 않는다.

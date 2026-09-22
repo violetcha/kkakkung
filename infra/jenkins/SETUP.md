@@ -70,11 +70,11 @@ sudo nginx -t && sudo systemctl reload nginx
 
 웹훅: GitLab 프로젝트 Settings → Webhooks, URL `https://j15c204.p.ssafy.io/jenkins/project/kkakkung-mr`, Secret token 은 잡 설정의 것과 동일(서버에서 생성, 문서에 적지 않음), Merge request events 만. Push events 를 켜면 모든 브랜치가 빌드되므로 끈다.
 
-MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을, push 웹훅 빌드는 `gitlabAfter` 를 체크아웃 HEAD 와 대조한다(DP-04). 판단은 `scripts/trigger-commit.mjs` 가 하고 Prepare 는 결과만 받는다. 그 결과가 `EXPECTED_SOURCE_SHA` 이고 `scripts/ci-verify.mjs` 가 install 전에 다시 대조한다.
+MR 빌드는 GitLab 이 보낸 커밋을 체크아웃 HEAD 와 대조하고, develop 배포 빌드는 체크아웃을 그대로 검증·배포한다(DP-04). 판단은 `scripts/trigger-commit.mjs` 가 하고 Prepare 는 결과만 받는다. 그 결과가 `EXPECTED_SOURCE_SHA` 이고 `scripts/ci-verify.mjs` 가 install 전에 다시 대조한다. `EXPECTED_SOURCE_SHA` 는 언제나 **체크아웃된 커밋**이므로, 이 대조가 잡는 것은 Prepare 이후 작업 공간이 움직인 경우다.
 
-**두 트리거의 규칙이 다르다 (2026-09-22, S15P21C204-345)**. MR 빌드는 **정확 일치**여야 한다 — 다르면 소스 브랜치에 새 push 가 온 것이고 그 push 의 빌드가 따로 도니, 멈추는 것이 오래된 커밋에 성공 상태가 붙지 않게 하는 방법이다(#186). develop push 빌드는 체크아웃이 알려온 커밋을 **포함하면** 통과한다. `disableConcurrentBuilds()` 때문에 Jenkins 가 큐에 쌓인 푸시 트리거를 빌드 하나로 합치는데, 그 빌드는 웹훅 하나의 `after` 를 들고 움직이는 `refs/remotes/origin/develop` 를 체크아웃한다. MR 셋을 연달아 머지하면 알려온 것은 첫 머지이고 체크아웃은 셋째 머지라, 정확 일치만 보던 때는 **머지 셋이 배포 0** 이 됐다(`kkakkung #205`. 큐에 남은 것이 없어 재시도도 없었고, #205 가 실행기를 9분 기다리느라 체크아웃 전이던 틈에 폴링이 끼어든 덕에 겨우 배포됐다). 자손이 아니면(force-push·분기) 지금처럼 중단하고, SHA 형식이 이상하거나 `merge-base` 가 실패해도 중단한다 — 판단이 안 되는 것이 통과의 이유가 되지 않는다. `EXPECTED_SOURCE_SHA` 는 알려온 커밋이 아니라 **체크아웃된 커밋**이므로, `ci-verify.mjs` 의 대조가 잡는 것은 Prepare 이후 작업 공간이 움직인 경우다.
+**MR 빌드는 정확 일치 (S15P21C204-345)**. 다르면 소스 브랜치에 새 push 가 온 것이고 그 push 의 빌드가 따로 도니, 멈추는 것이 오래된 커밋에 성공 상태가 붙지 않게 하는 방법이다(#186).
 
-폴링으로 시작한 빌드는 알려온 값이 없어 대조할 대상이 없다. 체크아웃을 그대로 쓴다.
+**develop 배포 빌드는 대조하지 않는다 (S15P21C204-345)**. `disableConcurrentBuilds()` 때문에 Jenkins 가 큐에 쌓인 푸시 트리거를 빌드 하나로 합치는데, 그 빌드는 첫 웹훅의 `after` 를 들고 움직이는 `refs/remotes/origin/develop` 를 체크아웃한다. 대조하면 연속 머지가 통째로 배포되지 않는다(`kkakkung #205`: 머지 셋, 배포 0. 큐에 남은 것이 없어 재시도도 없다). 트리거 종류를 어느 SHA 변수가 채워졌는지로 가를 수도 없다 — GitLab 플러그인은 push 빌드에도 `gitlabMergeRequestLastCommit` 을 `gitlabAfter` 와 같은 값으로 채운다(`kkakkung #209`). 그래서 배포 여부(`IS_DEPLOY`)를 먼저 정하고, 배포 빌드는 폴링 빌드와 같이 HEAD 를 쓴다. 웹훅 내용과 상관없이 체크아웃은 늘 `origin/develop` 이므로 대조가 막아 주던 것은 force-push 뿐이었고, 그것도 다음 폴링이 그대로 배포했다. develop 은 보호 브랜치가 아니므로 force-push 로 머지가 사라지는 것은 Jenkins 가 아니라 GitLab 보호 설정으로 막아야 한다. SHA 형식을 읽지 못하면 배포 빌드라도 중단한다. 스크립트는 받은 `deploy`·`mr`·`push` 값을 콘솔에 한 줄 남긴다.
 
 **develop 트리거 (2026-09-21 변경)**: `H/2` 폴링은 머지하고도 최대 2분을 기다리게 했다. GitLab 프로젝트 Settings → Webhooks 에 URL `https://j15c204.p.ssafy.io/jenkins/project/kkakkung`, **Push events** 에 브랜치 필터 `develop` 로 훅을 하나 더 만들고(Secret token 은 잡 설정의 것과 같게), 잡 설정에서 **Build when a change is pushed to GitLab** 을 켠다. 폴링은 `H/15` 로 낮춰 남겨 둔다 — 웹훅이 끊겨도 15분 안에 따라잡는다. 브랜치 필터를 비우면 모든 브랜치가 develop 잡을 돌리므로 반드시 채운다.
 
@@ -126,6 +126,11 @@ MR 빌드는 GitLab 이 보낸 `gitlabMergeRequestLastCommit` 을, push 웹훅 �
 - 현재 Verify는 Chromium을 준비하고 `pnpm verify`의 Playwright E2E까지 실행한다. 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
 
 ## 8. GitLab SSO 게이트 (2026-09-09 적용)
+
+2026-09-22부터 저장소의 SSO 기준은 프로젝트 역할 대신 등록 이메일이다. 최초 설치 전에
+[SSO 절차](../SSO.md)에 따라 `/opt/kkakkung/sso-access/allowed-emails.txt`를 준비한다.
+기존 운영 서버는 아래 최초 설치 명령으로 비밀 env를 덮어쓰지 말고, 같은 문서의 전환 절차를
+따른다. `/demo`와 `/showcase` 및 두 관리자 API 모두 이 기준을 사용한다.
 
 ```bash
 sudo install -d /opt/kkakkung/sso && sudo cp infra/compose.sso.yaml /opt/kkakkung/sso/

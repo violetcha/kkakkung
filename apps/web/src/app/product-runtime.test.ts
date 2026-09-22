@@ -1620,6 +1620,50 @@ it('plays state cues once, defers count cues behind my own ending and flashes th
   expect(played()).toHaveLength(5);
 });
 
+// S15P21C204-334. 끝까지 남은 생존자는 결과 전이에서 개인 뷰가 비워져 역할을 잃는다.
+it.each([
+  ['runner', 'runners', 'victory', '승리'],
+  ['runner', 'taggers', 'defeat', '패배'],
+  ['tagger', 'taggers', 'victory', '승리'],
+] as const)(
+  'plays a surviving %s the %s result instead of an abort once the view is emptied at RESULT',
+  (role, winner, cue, text) => {
+    const f = fixture();
+    const played = () => vi.mocked(f.fake.playCue!).mock.calls.map(([kind]) => kind);
+    const view = viewFixture();
+    if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+    f.state({ phase: 'PLAYING', stateVersion: 11, counts: { escaped: 0, captured: 0 } });
+    f.messages.get('private-view')!({ ...view, stateVersion: 11, self: { ...view.self, role } });
+    expect(f.runtime.getSnapshot().view?.self?.role).toBe(role);
+    f.state({
+      phase: 'RESULT',
+      stateVersion: 12,
+      counts: { escaped: 1, captured: 1 },
+      result: { winner, reason: 'timeout' },
+    });
+    // 단계 전이로 개인 뷰는 비워졌지만 승패 안내음은 그대로 나온다.
+    expect(f.runtime.getSnapshot().view).toBeNull();
+    expect(f.runtime.getSnapshot().endedSelf).toBeNull();
+    expect(played()).toEqual([cue]);
+    const texts = f.runtime.getSnapshot().events.map((event) => event.text);
+    expect(texts).toContain(text);
+    expect(texts).not.toContain('경기 무효');
+    // 뒤늦게 도착한 빈 뷰가 같은 결과를 다시 내지 않는다.
+    f.messages.get('private-view')!({
+      ...view,
+      stateVersion: 12,
+      gameScope: { gameInstanceId: null, kind: 'none', revision: 4 },
+      self: null,
+      knownTerrain: [],
+      knownActiveExits: [],
+      visibleCells: [],
+      visibleWallFaces: [],
+      visibleEntities: [],
+    });
+    expect(played()).toEqual([cue]);
+  },
+);
+
 it('shows a server-confirmed capture flash to an active tagger', () => {
   const f = fixture();
   const view = viewFixture();

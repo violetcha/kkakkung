@@ -66,6 +66,7 @@ import {
   SCENE_ASSET_VERSION,
 } from '../features/game/flow/loading-controller';
 import {
+  carryRole,
   cueState,
   CUE_FLASH_MS,
   captureProgressFlash,
@@ -389,13 +390,17 @@ export function bindProductRoom(
   const emitCues = () => {
     if (!active || snapshot.lost) return;
     const round = snapshot.round;
-    const next = cueState({
-      round,
-      self: snapshot.view?.self ?? null,
-      endedSelf: snapshot.endedSelf,
-      tick: clock.renderTick() ?? round?.serverTick ?? 0,
-      countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
-    });
+    // 334. 종료 전이로 self 가 비워진 생존자도 같은 경기의 역할을 이어 받아 승패를 듣는다.
+    const next = carryRole(
+      lastCueState,
+      cueState({
+        round,
+        self: snapshot.view?.self ?? null,
+        endedSelf: snapshot.endedSelf,
+        tick: clock.renderTick() ?? round?.serverTick ?? 0,
+        countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
+      }),
+    );
     const cues = detectCues(lastCueState, next);
     const progressFlash = captureProgressFlash(lastCueState, next);
     lastCueState = next;
@@ -471,6 +476,22 @@ export function bindProductRoom(
         playCue('exit-failed');
     },
   });
+  /**
+   * S15P21C204-295. 얼굴 텍스처를 들고 있을 사람들. 경기 중에는 내 시야에 보이는 사람뿐이고,
+   * 대기실(LOBBY·DEVICE_CHECK)에서는 같은 방의 참가자다. 대기실 타일이 준비한 사람의 실제
+   * 가공 얼굴을 보여 주기 때문이다. 방 밖으로는 나가지 않는다: 같은 미디어 scope 안이다.
+   */
+  const visibleFaceIds = (view: PrivateView | null): readonly string[] => {
+    if (view?.self?.status === 'ACTIVE' || view?.spectating)
+      return view.visibleEntities
+        .filter((p) => p.kind === 'player' && p.id !== session.playerId)
+        .map((p) => p.id);
+    if (snapshot.round && ['LOBBY', 'DEVICE_CHECK'].includes(snapshot.round.phase))
+      return (snapshot.roster?.players ?? [])
+        .filter((player) => player.playerId !== session.playerId)
+        .map((player) => player.playerId);
+    return [];
+  };
   const views = createProductView({
     now: deps.now,
     resync: (matchId, lastStateVersion) => send('view-resync', { matchId, lastStateVersion }),
@@ -485,13 +506,7 @@ export function bindProductRoom(
       if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
         publish({ markers: [], exchangeNotice: null });
       publish({ view });
-      faces.visible(
-        view?.self?.status === 'ACTIVE' || view?.spectating
-          ? view.visibleEntities
-              .filter((p) => p.kind === 'player' && p.id !== session.playerId)
-              .map((p) => p.id)
-          : [],
-      );
+      faces.visible(visibleFaceIds(view));
       events.update(view, snapshot.round?.matchId ?? '');
       if (view) commands.view(view.stateVersion);
       if (view?.self?.status === 'ACTIVE' && view.self.challenge?.exitId === startPending?.exitId) {
@@ -1211,6 +1226,7 @@ export function bindProductRoom(
       });
       bridge.runtime.setAudioPreferences(audioPreferences);
       publish({ roster: result.data });
+      faces.visible(visibleFaceIds(snapshot.view ?? null));
     }
   });
   on('private-view', (value) => {
@@ -1251,6 +1267,10 @@ export function bindProductRoom(
   }
   return {
     faces,
+    /** S15P21C204-295. 대기실 내 타일에 쓰는, 게시되는 것과 같은 가공 얼굴 스트림. */
+    processedFace: () => bridge.runtime.getProcessedFaceStream?.() ?? null,
+    /** S15P21C204-295. 대기실 타일이 그대로 그리는, 같은 가공 얼굴의 면. */
+    processedFaceSurface: () => bridge.runtime.getProcessedFaceSurface?.() ?? null,
     get sensors() {
       return bridge.sensors;
     },
@@ -1394,6 +1414,11 @@ export function bindProductRoom(
     abortDemoRound() {
       if (!snapshot.round || !snapshot.demo) return;
       send('demo-control', { matchId: snapshot.round.matchId, action: 'abort-round' });
+    },
+    /** S15P21C204-342. 도는 대본만 내린다. 라운드는 그대로 둔다. */
+    cancelDemoScenario() {
+      if (!snapshot.round || !snapshot.demo) return;
+      send('demo-control', { matchId: snapshot.round.matchId, action: 'cancel-scenario' });
     },
     selectEquipment(value: InteractionState['selectedEquipment']) {
       interaction = { ...interaction, selectedEquipment: value };
