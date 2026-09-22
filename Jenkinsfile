@@ -172,6 +172,26 @@ pipeline {
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
 
+        // 배포 스모크(DP-06)는 **이 작업 공간의 웹 클라이언트 소스**를 그대로 실행하고, 그 소스는
+        // packages/*/dist 를 읽습니다. 그런데 Verify 는 같은 트리를 다른 잡이 검증했으면 건너뜁니다
+        // — 검증 기록은 트리에 딸리고 install·build 산출물은 작업 공간에 딸리는데, 두 잡은 작업
+        // 공간이 다릅니다. 그래서 검증을 건너뛴 배포는 옛 dist 로 스모크를 돌려 무너집니다
+        // (kkakkung #203: `TypeError: restorePrivateView is not a function` 380건, 멀쩡한 커밋이
+        // ROLLBACK_BLOCKED). 검증을 어디서 했든 여기서 한 번 맞춥니다 (S15P21C204-343).
+        //
+        // 조건을 달지 않습니다. "Verify 가 생략됐을 때만" 같은 조건은 이번과 같은 종류의 암묵적
+        // 결합을 다시 만듭니다. 이미 최신이면 몇 초입니다.
+        // Verify 와 같은 컨테이너·같은 pnpm store 라 dist 가 검증 때와 같은 도구체인에서 나옵니다.
+        sh '''
+          # 무거운 단계 잠금: 다른 빌드의 vitest(250ms tick 판정)와 CPU 를 나누지 않는다 (SETUP.md §6).
+          exec 9>/var/lib/jenkins/verify.lock; flock 9
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
+            -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store \
+            -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store \
+            -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG" \
+            sh -c 'pnpm install --frozen-lockfile && pnpm build:packages'
+        '''
+
         // Check all inputs before replacing the runtime env or touching containers.
         script {
           withCredentials([file(credentialsId: 'kkakkung-production-env', variable: 'PROD_ENV_FILE')]) {

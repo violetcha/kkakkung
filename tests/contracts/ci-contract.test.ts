@@ -121,6 +121,22 @@ describe('Jenkinsfile uses the single entry point', () => {
     expect(jenkinsfile).toContain("file(credentialsId: 'kkakkung-production-env'");
     expect(jenkinsfile).not.toMatch(/LIVEKIT_API_SECRET\s*=/);
   });
+  // S15P21C204-343. Verify 는 같은 트리를 다른 잡이 검증했으면 건너뛰는데, 그 잡은 작업 공간이
+  // 다르다. 배포 스모크는 이 작업 공간의 웹 클라이언트 소스를 돌리고 그 소스는 packages/*/dist 를
+  // 읽으므로, 검증을 건너뛴 배포는 옛 dist 로 스모크를 돌려 무너졌다(kkakkung #203).
+  it('brings the deploy workspace up to date before the release scripts read it', () => {
+    const deploy = jenkinsfile.slice(jenkinsfile.indexOf("stage('Deploy')"));
+    const prepare = deploy.slice(0, deploy.indexOf('withCredentials'));
+    expect(prepare).toContain('pnpm install --frozen-lockfile');
+    expect(prepare).toContain('pnpm build:packages');
+    // 검증 때와 같은 도구체인·같은 store 로 만들어야 dist 가 검증된 것과 같다.
+    expect(prepare).toContain('"$CI_IMAGE:$CI_TAG"');
+    expect(prepare).toContain('/var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store');
+    // 무거운 단계는 호스트 잠금 아래에서만 돈다 (SETUP.md §6).
+    expect(prepare).toMatch(/flock 9/);
+    // 조건을 달면 이번 사고와 같은 종류의 암묵적 결합이 되돌아온다.
+    expect(prepare).not.toMatch(/VERIFIED_BY/);
+  });
   it('reports commit status to GitLab for running, success and failure', () => {
     expect(jenkinsfile).toContain("gitLabConnection('ssafy-gitlab')");
     for (const state of ['running', 'failed', 'success'])

@@ -85,6 +85,8 @@ OPS_TOKEN=... node scripts/open-demo.mjs \
 
 배포 순서: 매니페스트(SHA·digest) → SSO 격리 확인 → drain → 이미지 교체 → `/health/ready` → resume/OPEN → 실제 Cloud DP-06(1방·6 합성 클라이언트, 시험 600초+정리 60초, 계획 유효 30분) → 공개 재검사 → last-good 기록. 실패하면 새 requestId로 다시 drain한 뒤에만 이전 digest로 복귀하며, 조건을 확인할 수 없으면 `ROLLBACK_BLOCKED`로 둔다. 세부 장벽은 [인프라 안내](../infra/README.md)의 “배포 장벽”을 따른다.
 
+되돌린 뒤의 확인은 DP-06이 아니라 **HTTP 스모크**(리다이렉트·TLS·live/ready·Origin 허용거부·WSS 입장·정적 MIME)로 한다(S15P21C204-343). DP-06은 배포 잡의 작업 공간에 있는 웹 클라이언트 소스를 실행하는데 롤백이 되돌리는 것은 **이전** 서버 이미지라, 프로토콜이 바뀐 배포를 되돌리면 아무도 쓰지 않을 조합(새 클라이언트 ↔ 옛 서버)을 보고 무조건 실패한다. 실사용자는 web 이미지도 함께 되돌아가 짝이 맞는다. 되돌린 뒤의 `readiness`·`admission`·미정리 세대·예산 재검사는 그대로 돌므로, 복구가 실제로 열렸는지는 여전히 증명된다.
+
 - **drain은 진행 중 경기·연습·입장 대기가 모두 0이어야 끝나고, 최대 5분까지 기다린다**(S15P21C204-291). 경기가 없으면 즉시 끝나 배포 시간이 달라지지 않는다. 경기가 돌고 있으면 그 판이 끝날 때까지 기다리며, 그동안 새 입장은 막힌다. 곧 교체될 서버에 사람을 더 들이지 않는 것이다. drain 중에는 `startCountdown`이 admission OPEN을 요구하므로 재경기로 시작되는 새 라운드는 없다.
 - `/health/live`는 프로세스 생존, `/health/ready`는 복구·저널·예약·capability 준비다. READY만으로 입장하지 않고 admission=OPEN이 따로 필요하다.
 - 배포 성공은 해당 실행의 `release.json=READY`, 실행 이미지 SHA, READY/OPEN, 미해결 회수 0을 대조해 확인한다. CI 성공·MR 병합·배포 성공은 각각 다르다.
