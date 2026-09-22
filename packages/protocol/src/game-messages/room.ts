@@ -18,8 +18,13 @@ export const roomRosterSchema = z.strictObject({
       }),
     )
     .max(6),
+  /** 방의 종류. 없으면 일반 6인 경기다. 시연 방(showcase)은 4인 2:2 로, 화면이 자리 수를 여기서 읽는다. */
+  kind: z.enum(['match', 'demo', 'showcase']).optional(),
+  /** 방이 채워야 하는 자리 수. 없으면 6. */
+  capacity: z.number().int().min(1).max(6).optional(),
 });
 export type RoomRosterMessage = z.infer<typeof roomRosterSchema>;
+export type RoomKind = NonNullable<RoomRosterMessage['kind']>;
 /** Application close code for an expired waiting/result room. */
 export const ROOM_EXPIRED_CLOSE_CODE = 4001;
 /** Host removal during waiting phases; the old logical session is invalidated. */

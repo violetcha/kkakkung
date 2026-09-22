@@ -9,12 +9,15 @@ export function MapSizeChoice({
   canEdit,
   busy = false,
   onSelect,
+  note,
 }: {
   value: MapSizeId;
   /** 방장이고 아직 바꿀 수 있는 단계일 때만 true. */
   canEdit: boolean;
   busy?: boolean;
   onSelect?(size: MapSizeId): void;
+  /** 상태 문구를 바꿔 쓸 때. 시연 방처럼 맵이 고정된 이유를 적는다. */
+  note?: string;
 }) {
   return (
     <section className="map-size-choice" aria-label="맵 크기">
@@ -36,9 +39,10 @@ export function MapSizeChoice({
         ))}
       </div>
       <p role="status">
-        {canEdit
-          ? '방장이 고릅니다. 장치 점검이 시작되면 바꿀 수 없습니다.'
-          : '방장이 고른 맵입니다.'}
+        {note ??
+          (canEdit
+            ? '방장이 고릅니다. 장치 점검이 시작되면 바꿀 수 없습니다.'
+            : '방장이 고른 맵입니다.')}
       </p>
     </section>
   );

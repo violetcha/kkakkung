@@ -97,6 +97,38 @@ export const demoRoomResponseSchema = z.strictObject({
 });
 export type DemoRoomResponse = z.infer<typeof demoRoomResponseSchema>;
 
+/**
+ * 발표 시연 방(showcase). 실제 사람 넷이 2:2 로 고정 소형 미로에서 3분을 온전히 뛰는 경기다.
+ * `/showcase` 를 연 팀원이 모두 같은 방에 모이고, 역할은 각자 고른다. 진입은 `/demo` 와 같은
+ * GitLab SSO 경계 뒤에 있고 브라우저에 운영 토큰은 전달되지 않는다.
+ */
+export const SHOWCASE_ROOM_ROUTE = '/api/showcase/rooms';
+export const showcaseRoomRequestSchema = z.strictObject({
+  role: z.enum(['runner', 'tagger']),
+  nickname: nicknameSchema.optional(),
+});
+export type ShowcaseRoomRequest = z.infer<typeof showcaseRoomRequestSchema>;
+export const showcaseRoomResponseSchema = z.strictObject({
+  sessionToken: z.string().min(1),
+  playerId: z.string().min(1),
+  roomCode: roomCodeSchema,
+  role: z.enum(['runner', 'tagger']),
+  expiresAt: z.number().int().positive().safe(),
+  protocolVersion: z.literal(PRODUCT_PROTOCOL_VERSION),
+  /** 페이지가 열리며 소비·삭제하는 주소 조각. `#showcase=<token>&room=<code>&player=<id>`. */
+  entryFragment: z.string().min(1).max(1024),
+});
+export type ShowcaseRoomResponse = z.infer<typeof showcaseRoomResponseSchema>;
+/** 시연 방 발급 오류. ROLE_FULL 은 고른 역할 두 자리가 이미 찼다는 뜻이라 다른 역할로 다시 고른다. */
+export const SHOWCASE_ERROR_CODES = [
+  'INVALID_REQUEST',
+  'UNAUTHORIZED',
+  'ROLE_FULL',
+  'CAPACITY',
+  'SHOWCASE_UNAVAILABLE',
+] as const;
+export type ShowcaseErrorCode = (typeof SHOWCASE_ERROR_CODES)[number];
+
 /** Safe HTTP error codes for the session route. No hidden room content is ever returned. */
 export const SESSION_ERROR_CODES = [
   'INVALID_REQUEST',

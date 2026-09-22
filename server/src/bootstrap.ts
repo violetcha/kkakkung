@@ -50,6 +50,7 @@ import {
   createDemoRoutes,
   createDemoUnavailableRoutes,
 } from './session/DemoRoutes.js';
+import { createShowcaseRoutes, createShowcaseUnavailableRoutes } from './session/ShowcaseRoutes.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -403,6 +404,19 @@ export function createApplication<State = unknown>(
             canManageInvitations: (session) =>
               directory.get(session.roomCode)?.canManageInvitations(session.playerId) === true,
           }),
+        );
+        // 발표 시연 방. `/demo` 와 같은 SSO 경계 뒤의 브라우저 진입이며 운영 토큰과 무관하다.
+        app.use(
+          config.showcaseRooms
+            ? createShowcaseRoutes({
+                sessions: productSessions,
+                slots,
+                trustedProxy: product.trustProxy,
+                monotonicNow,
+                admissionTtlMs: config.demoAdmissionTtlMs,
+                cleanupReservations,
+              })
+            : createShowcaseUnavailableRoutes(product.trustProxy),
         );
         if (authorize) {
           app.use(createInvitationRoutes({ invites, authorize }));

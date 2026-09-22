@@ -104,6 +104,9 @@ const environment = z.object({
   // S15P21C204-312. A demo session may wait longer for the operator to open it than a player
   // admission; claiming it still changes the session to the ordinary activity lease.
   DEMO_ADMISSION_TTL_MS: positiveSafeInt.default(10 * 60_000),
+  // 발표 시연 방(showcase): 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. `/showcase` 는 GitLab SSO
+  // 뒤에 있고 운영 토큰은 필요 없다. 기본 켜짐이며 0 으로 내리면 발급 API 가 503 으로 답한다.
+  SHOWCASE_ROOMS: z.enum(['0', '1']).default('1'),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -318,6 +321,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     // The operator token is the only way in, so a demo room without it is never opened.
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
+    showcaseRooms: raw.SHOWCASE_ROOMS === '1',
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,
