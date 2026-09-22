@@ -268,13 +268,29 @@ export async function runRelease(input, adapters) {
     ok(`${label} running images`, 'both digests match the manifest');
   };
 
-  const smoke = async (useOperations) => {
+  const smoke = async (mode) => {
     setPhase('SMOKE');
-    const mode = useOperations ? 'cloud' : 'http';
     const result = await adapters.runSmoke(mode);
     if (result.code !== 0) fail('FAILED', 'SMOKE_FAILED', `${mode} smoke exit ${result.code}`);
     ok('smoke', `${mode} smoke passed`);
   };
+
+  /**
+   * S15P21C204-343. 전진 배포는 DP-06(cloud)으로 확인하고, 롤백은 HTTP 스모크로 확인한다.
+   *
+   * DP-06 은 이 작업 공간의 웹 클라이언트 소스를 실행하는데, 롤백이 되돌리는 것은 **이전** 서버
+   * 이미지다. 프로토콜이 바뀐 배포를 되돌리면 새 클라이언트가 옛 서버의 판을 읽지 못해 롤백이
+   * 무조건 실패한다(#203: 326 이 `knowledgeRevision` 을 필수로 만들었고 5d6e5734 서버는 그것을
+   * 보내지 않는다). 그 판정은 아무도 쓰지 않을 조합을 본 것이다 — 실사용자는 web 이미지도 함께
+   * 되돌아가 짝이 맞는다.
+   *
+   * 롤백의 질문은 "사이트가 돌아왔는가"이지 "새 클라이언트가 옛 서버와 되는가"가 아니다. HTTP
+   * 스모크(리다이렉트·TLS·live/ready·Origin 허용거부·WSS 입장·정적 MIME)는 버전에 묶이지 않는다.
+   * 뒤따르는 publicationChecks(readiness·admission·unresolved·예산)도 그대로 돌아, 되돌린 서버가
+   * 실제로 열려 있는지는 여전히 증명된다.
+   */
+  const smokeModeFor = (label, useOperations) =>
+    useOperations && label !== 'ROLLBACK' ? 'cloud' : 'http';
 
   const publicationChecks = async (operatingMode, budgetMaxAgeMs) => {
     const status = await operationsStatus();
@@ -365,7 +381,7 @@ export async function runRelease(input, adapters) {
         'server reports media enabled without operations',
       );
     }
-    await smoke(useOperations);
+    await smoke(smokeModeFor(label, useOperations));
     if (useOperations) await publicationChecks(operatingMode, budgetMaxAgeMs);
   };
 
