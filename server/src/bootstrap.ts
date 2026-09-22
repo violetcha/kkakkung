@@ -608,6 +608,17 @@ export function createApplication<State = unknown>(
     get media() {
       return media;
     },
+    /** S15P21C204-336. Records an exception no room caught; the caller decides to end. */
+    reportProcessFault(kind: 'uncaughtException' | 'unhandledRejection', error: unknown) {
+      const reason = error instanceof Error ? error.message : String(error);
+      eventLogger.emit({
+        event: 'process.fault',
+        level: 'error',
+        atMs: monotonicNow(),
+        fields: { name: kind, reason },
+      });
+      logger.fatal({ err: error, kind }, 'Process fault');
+    },
     async listen() {
       try {
         if (media) {

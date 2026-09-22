@@ -11,7 +11,14 @@
  * phase it can serve and records `blockedReason` instead of faking progress.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
+import {
+  Room,
+  ServerError,
+  type AuthContext,
+  type Client,
+  type RoomException,
+  type RoomMethodName,
+} from '@colyseus/core';
 import {
   DEMO_SCENARIO_IDS,
   PRODUCT_CLIENT_MESSAGES,
@@ -2363,9 +2370,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private overload(lagMs: number) {
-      if (ABORTABLE_PHASES.includes(this.phase))
-        this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
-      deps.coordinator.rearm(this.roomId);
+      // Re-arm even if the abort throws, or the room never ticks again: no heartbeat, expiry or
+      // media control would run for it until the process restarts (336).
+      try {
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `OVERLOAD:${Math.round(lagMs)}`);
+      } finally {
+        deps.coordinator.rearm(this.roomId);
+      }
     }
 
     private invalidateLayout() {
@@ -2403,9 +2415,39 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      */
     private tickFailed(error: unknown) {
       const cause = error instanceof Error ? error.message : String(error);
-      if (ABORTABLE_PHASES.includes(this.phase))
-        this.abortMatch('SERVER_TICK_OVERLOAD', `TICK_FAILED:${cause}`);
-      deps.coordinator.rearm(this.roomId);
+      try {
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `TICK_FAILED:${cause}`);
+      } finally {
+        deps.coordinator.rearm(this.roomId);
+      }
+    }
+
+    /**
+     * S15P21C204-336. Once this exists Colyseus routes every throw from message handlers, clock
+     * callbacks and lifecycle hooks here instead of letting it escape the room. A deliberate
+     * `ServerError` (a refused join) is not a fault. onCreate/onAuth/onJoin are rethrown to their
+     * caller by Colyseus, so only that attempt fails and the match is left alone. Anything else
+     * leaves the match in a state nobody checked, so a running match aborts like a failed tick;
+     * RESULT and ABORTED are kept, the same rule the overload and tick paths follow. Nothing here
+     * may throw: Colyseus calls it from inside its own catch.
+     */
+    onUncaughtException(error: RoomException, methodName: RoomMethodName) {
+      const cause: unknown = error.cause ?? error;
+      if (cause instanceof ServerError) return;
+      try {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        this.emitEvent('room.uncaught_exception', 'error', {
+          phase: this.phase,
+          name: methodName,
+          reason: message,
+        });
+        if (this.disposed || ['onCreate', 'onAuth', 'onJoin'].includes(methodName)) return;
+        if (ABORTABLE_PHASES.includes(this.phase))
+          this.abortMatch('SERVER_TICK_OVERLOAD', `UNCAUGHT:${methodName}:${message}`);
+      } catch {
+        // The room already failed once; a second failure here must not escape either.
+      }
     }
   }
 
