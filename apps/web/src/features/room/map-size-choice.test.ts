@@ -78,7 +78,9 @@ it('shows the chosen map to participants above the seats without letting them ch
   );
   expect(html).toContain('맵 크기');
   expect(html).toContain('방장이 고른 맵입니다');
-  expect(html.match(/disabled=""/g)).toHaveLength(3);
+  // S15P21C204-295. 대기실에는 준비 단추도 있으므로 맵 부분만 떼어 센다.
+  const options = html.slice(html.indexOf('map-size-options'), html.indexOf('lobby-seats'));
+  expect(options.match(/disabled=""/g)).toHaveLength(3);
   // 자리 목록보다 위에 있다.
   expect(html.indexOf('맵 크기')).toBeLessThan(html.indexOf('빈 자리'));
 });
