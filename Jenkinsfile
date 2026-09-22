@@ -51,23 +51,22 @@ pipeline {
         script {
           env.TAG = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
           env.GIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-          // GitLab 이 보낸 검증 대상 SHA 와 실제 체크아웃을 대조하고, 이 빌드가 검증 대상으로 삼을
-          // SHA 를 받습니다 (DP-04). 판단은 scripts/trigger-commit.mjs 가 합니다 — MR 빌드는 정확
-          // 일치, develop push 빌드는 체크아웃이 그 커밋을 **포함**하면 통과입니다. 연속 머지로
-          // 푸시 웹훅이 한 빌드로 합쳐지면 알려온 것은 첫 push 인데 체크아웃은 마지막 develop 이라,
-          // 정확 일치만 보던 때는 배포가 통째로 멈췄습니다 (kkakkung #205: 머지 셋, 배포 0).
-          // 알 수 없으면 막는 쪽으로 답하므로 판단이 실패해도 가드가 느슨해지지 않습니다 (345).
+          def b = env.BRANCH_NAME ?: (env.GIT_BRANCH ?: '')
+          env.IS_DEPLOY = (b == env.DEPLOY_BRANCH || b.endsWith('/' + env.DEPLOY_BRANCH)) ? 'true' : 'false'
+          echo "commit=${env.TAG}  branch=${b}  deploy=${env.IS_DEPLOY}"
+          // 이 빌드가 검증 대상으로 삼을 SHA 를 받습니다 (DP-04). 판단은 scripts/trigger-commit.mjs
+          // 가 합니다 — MR 빌드는 GitLab 이 보낸 커밋과 정확 일치, develop 배포 빌드는 폴링 빌드처럼
+          // 체크아웃을 그대로 씁니다. 연속 머지로 푸시 웹훅이 한 빌드로 합쳐지면 알려온 것은 첫 push
+          // 인데 체크아웃은 마지막 develop 이라, 대조하던 때는 배포가 통째로 멈췄습니다
+          // (kkakkung #205, #209). 형식을 읽지 못하면 막습니다 (345).
           withEnv([
             "TRIGGER_MR=${env.gitlabMergeRequestLastCommit ?: ''}",
             "TRIGGER_PUSH=${env.gitlabAfter ?: ''}",
           ]) {
             env.EXPECTED_SOURCE_SHA = sh(
-              script: 'node scripts/trigger-commit.mjs --head "$GIT_SHA" --mr "$TRIGGER_MR" --push "$TRIGGER_PUSH"',
+              script: 'node scripts/trigger-commit.mjs --head "$GIT_SHA" --deploy "$IS_DEPLOY" --mr "$TRIGGER_MR" --push "$TRIGGER_PUSH"',
               returnStdout: true).trim()
           }
-          def b = env.BRANCH_NAME ?: (env.GIT_BRANCH ?: '')
-          env.IS_DEPLOY = (b == env.DEPLOY_BRANCH || b.endsWith('/' + env.DEPLOY_BRANCH)) ? 'true' : 'false'
-          echo "commit=${env.TAG}  branch=${b}  deploy=${env.IS_DEPLOY}"
         }
         sh 'mkdir -p /var/lib/jenkins/.cache/pnpm-store'
         // 위에서 정한 검증 대상 SHA 를 ci-verify.mjs 가 install 전에 다시 대조합니다 (DP-04).
