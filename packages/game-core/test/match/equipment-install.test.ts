@@ -230,6 +230,39 @@ describe('tagger equipment install, cancel and arming', () => {
     expect(player(after, 't-a').ownedEquipment).toEqual([]);
   });
 
+  // S15P21C204-339. A held move that completes on the install tick must not resume under the pose.
+  it('keeps a reservation made on the tick a held move completed, instead of silently dropping it', () => {
+    // t-b walks back from (5,4) while holding the key: the move runs 10..19 and the hold stays.
+    const walking = step(taggersFacingWalls(), 10, [
+      command('t-b', 'MOVE_INTENT', { direction: 'back' }),
+    ]).state;
+    expect(player(walking, 't-b').heldMove).toMatchObject({ direction: 'back' });
+    const moving = idleUntil(walking, 11, 18);
+    expect(player(moving, 't-b').action).not.toBeNull();
+
+    // The step completes the move, then takes the INSTALL: the installer is standing still.
+    const installed = step(moving, 19, [command('t-b', 'INSTALL', { kind: 'trap' })]);
+    expect(installed.outcomes[0]).toMatchObject({ result: 'applied', code: null });
+    const installer = player(installed.state, 't-b');
+    expect(installer.installation).toMatchObject({ kind: 'trap', startTick: 19, endTick: 29 });
+    // The old hold is gone and no move resumed in the same tick.
+    expect(installer.heldMove).toBeNull();
+    expect(installer.action).toBeNull();
+
+    // The next tick's upkeep sees a standing installer and keeps the slot.
+    const upkeep = step(installed.state, 20);
+    expect(upkeep.state.installations.size).toBe(1);
+    expect(player(upkeep.state, 't-b').installation).not.toBeNull();
+
+    // Standing to the end places the trap and spends one charge, as an ordinary install does.
+    const finished = idleUntil(upkeep.state, 21, 29);
+    expect(player(finished, 't-b').installation).toBeNull();
+    expect(player(finished, 't-b').equipment).toEqual({ sensor: 1, trap: 0 });
+    expect(player(finished, 't-b').ownedEquipment).toEqual([
+      expect.objectContaining({ kind: 'trap', cell: installer.cell }),
+    ]);
+  });
+
   it('rejects a cancel on and after the completion tick without rolling anything back', () => {
     const started = step(taggersFacingWalls(), 10, [
       command('t-a', 'INSTALL', { kind: 'sensor' }),
