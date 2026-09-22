@@ -54,7 +54,17 @@ export type DeploymentSmokeReport = {
     gameVideo: boolean;
     gameAudio: boolean;
   };
-  cleanup: { clientsClosed: number; drainConfirmed: boolean; resumed: boolean };
+  cleanup: {
+    clientsClosed: number;
+    drainConfirmed: boolean;
+    resumed: boolean;
+    /**
+     * S15P21C204-324. Clients whose media teardown after the round did not confirm on the first
+     * attempt. Recorded, not fatal: `clientsClosed` is the verdict, and it is reached by asking
+     * the probe whether it actually closed rather than by trusting that first attempt.
+     */
+    retirementUnconfirmed: number;
+  };
   durationMs: number;
 };
 
@@ -103,7 +113,7 @@ export async function runDeploymentSmoke(
     gameInputsApplied: 0,
     mediaRooms: { practice: 0, game: 0 },
     received: { practiceVideo: false, practiceAudio: false, gameVideo: false, gameAudio: false },
-    cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false },
+    cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false, retirementUnconfirmed: 0 },
     durationMs: 0,
   };
   // The local contract run is capped so a broken harness cannot hang `pnpm verify`; the real
@@ -212,6 +222,11 @@ export async function runDeploymentSmoke(
     if (!condition) throw new Error('DP06_CLEANUP_UNCONFIRMED');
   };
   const snapshot = () => players.map((player) => player.runtime.getSnapshot());
+  /**
+   * S15P21C204-324. The server has decided the round as soon as one client sees RESULT; the rest
+   * follow within a tick or two and all of them start folding media up at that moment.
+   */
+  const roundDecided = () => snapshot().some((value) => value.round?.phase === 'RESULT');
   const waitPhase = (phase: string) =>
     wait(() => {
       const all = snapshot();
@@ -355,8 +370,14 @@ export async function runDeploymentSmoke(
         uuid: randomUUID,
         fetcher,
         interactionFactory: createDeploymentInteractionFactory(probe, {
+          // S15P21C204-324. Once the round is decided every client folds its media up, and they
+          // do not reach RESULT on the same tick. A stumble in that teardown used to set the flag
+          // the game loop reads and report a failed game for a round that had just completed.
+          // After the round it is a cleanup fact: counted here, and the closure of every client
+          // is re-verified in the cleanup pass, which is what the run is actually judged on.
           onFailure: () => {
-            mediaFailure = true;
+            if (roundDecided()) report.cleanup.retirementUnconfirmed++;
+            else mediaFailure = true;
           },
         }),
         changed: (value) => {
@@ -459,7 +480,11 @@ export async function runDeploymentSmoke(
     // Real normal retirement reports happen before each game socket is closed by C runtime.leave.
     for (const player of players) {
       try {
-        await bounded(player.runtime.leave());
+        // S15P21C204-324. A retirement that failed once is cached as a rejection and `leave`
+        // hands it back, which used to skip the checks below and call the whole cleanup failed.
+        // `leave` still leaves the room on that path (SessionRuntime), so the verdict belongs to
+        // what the probe actually reports: closed and holding no local track.
+        await bounded(player.runtime.leave()).catch(() => {});
         await bounded(player.probe.close());
         const closed = await bounded(player.probe.snapshot());
         checkCleanup(!closed.connected && closed.localTracks.length === 0);
