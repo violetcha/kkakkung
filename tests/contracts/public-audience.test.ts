@@ -64,6 +64,7 @@ describe('ingress', () => {
     expect(publicSnippet).not.toContain('auth_request');
     // Without a login check a caller can send the header itself; the edge must clear it.
     expect(publicSnippet).toContain('proxy_set_header X-SSO-User "";');
+    expect(publicSnippet).toContain('proxy_set_header X-Demo-Admin "";');
   });
 });
 

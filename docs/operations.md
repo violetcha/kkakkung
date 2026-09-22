@@ -41,7 +41,21 @@
 
 ### 관리자 데모 방 열기
 
-홈에 진입점이 없으므로 주소를 `scripts/open-demo.mjs`로 받는다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이 함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).
+관리자는 서비스의 **`/demo`**에서 역할과 화면 표시 이름을 고른 뒤 데모 방을 연다. 이 경로와
+`/api/demo-admin/rooms`만은 게임 audience가 `public`이어도 GitLab 프로젝트 멤버 SSO를 계속
+요구한다. SSO를 통과한 호스트 nginx가 관리자 신원을 서버에 다시 쓰므로, 브라우저에는
+`OPS_TOKEN`이 전달되지 않는다. 홈에는 이 페이지로 가는 링크가 없다.
+
+호스트 설정을 처음 적용할 때는 `host.conf`와 함께 전용 조각을 설치한다.
+
+```bash
+sudo install -m 644 infra/nginx/demo-admin.conf /etc/nginx/snippets/kkakkung-demo-admin.conf
+sudo install -m 644 infra/nginx/host.conf /etc/nginx/sites-available/kkakkung
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+CLI는 장애 대응·자동화처럼 호스트에서만 쓰는 보조 경로다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이
+함께 있어야 하고, 토큰은 환경변수로만 준다(명령행 인자는 프로세스 목록에 보인다).
 
 ```bash
 OPS_TOKEN=... node scripts/open-demo.mjs \

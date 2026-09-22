@@ -44,7 +44,12 @@ import { AdmissionLimiter } from './session/AdmissionLimiter.js';
 import { checkOrigin, installHttpBoundary } from './session/HttpBoundary.js';
 import { InviteStore } from './session/InviteStore.js';
 import { RoomInvitations } from './session/RoomInvitations.js';
-import { createDemoRoutes, createDemoUnavailableRoutes } from './session/DemoRoutes.js';
+import {
+  createDemoAdminRoutes,
+  createDemoAdminUnavailableRoutes,
+  createDemoRoutes,
+  createDemoUnavailableRoutes,
+} from './session/DemoRoutes.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -413,6 +418,21 @@ export function createApplication<State = unknown>(
                   cleanupReservations,
                 })
               : createDemoUnavailableRoutes(authorize),
+          );
+          // `/demo` is deliberately separate from the Bearer-only operations route. The host
+          // nginx supplies this header only after GitLab SSO, and the game server remains private
+          // behind that proxy. Public player traffic never carries this header.
+          app.use(
+            config.demoRooms
+              ? createDemoAdminRoutes({
+                  sessions: productSessions,
+                  slots,
+                  trustedProxy: product.trustProxy,
+                  monotonicNow,
+                  demoAdmissionTtlMs: config.demoAdmissionTtlMs,
+                  cleanupReservations,
+                })
+              : createDemoAdminUnavailableRoutes(product.trustProxy),
           );
           if (media?.createOperationsHandlers) {
             const handlers = media.createOperationsHandlers(authorize);

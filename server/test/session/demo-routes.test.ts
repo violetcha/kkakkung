@@ -1,8 +1,12 @@
 import { createServer, type Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_ROOM_ROUTE, demoRoomResponseSchema } from '@kkakkung/protocol/game-messages';
-import { createDemoRoutes } from '../../src/session/DemoRoutes.js';
+import {
+  DEMO_ADMIN_ROOM_ROUTE,
+  DEMO_ROOM_ROUTE,
+  demoRoomResponseSchema,
+} from '@kkakkung/protocol/game-messages';
+import { createDemoAdminRoutes, createDemoRoutes } from '../../src/session/DemoRoutes.js';
 import { ProductSessionStore } from '../../src/session/ProductSessionStore.js';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
 import { TEST_OPS_TOKEN, createTestOperatorAuth } from '../room/test-harness.js';
@@ -12,7 +16,7 @@ describe('operator demo session admission', () => {
   let endpoint: string;
   let now = 1_000_000;
   const sessions = new ProductSessionStore({ now: () => now });
-  const slots = new SlotRegistry({ maxRooms: 1 });
+  const slots = new SlotRegistry({ maxRooms: 2 });
 
   beforeAll(async () => {
     const app = express();
@@ -22,6 +26,15 @@ describe('operator demo session admission', () => {
         sessions,
         slots,
         authorize: createTestOperatorAuth(TEST_OPS_TOKEN),
+        monotonicNow: () => now,
+        demoAdmissionTtlMs: 10 * 60_000,
+      }),
+    );
+    app.use(
+      createDemoAdminRoutes({
+        sessions,
+        slots,
+        trustedProxy: true,
         monotonicNow: () => now,
         demoAdmissionTtlMs: 10 * 60_000,
       }),
@@ -59,5 +72,25 @@ describe('operator demo session admission', () => {
     now += 10 * 60_000;
     expect(sessions.authenticate(body.sessionToken)).toBeNull();
     expect(slots.slotState(body.roomCode, body.playerId)).toBe('RESERVED');
+  });
+
+  it('accepts the separately asserted administrator identity but never a browser Bearer', async () => {
+    const denied = await fetch(endpoint + DEMO_ADMIN_ROOM_ROUTE, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${TEST_OPS_TOKEN}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ role: 'tagger' }),
+    });
+    expect(denied.status).toBe(401);
+
+    const response = await fetch(endpoint + DEMO_ADMIN_ROOM_ROUTE, {
+      method: 'POST',
+      headers: { 'x-demo-admin': 'gitlab-member', 'content-type': 'application/json' },
+      body: JSON.stringify({ role: 'tagger' }),
+    });
+    expect(response.status).toBe(201);
+    expect(demoRoomResponseSchema.parse(await response.json()).role).toBe('tagger');
   });
 });

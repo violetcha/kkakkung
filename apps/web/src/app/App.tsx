@@ -4,17 +4,23 @@ import {
   consumeInvitation,
   invitationRoom,
 } from '../features/room/product-session';
+import { DemoAdminApp } from './DemoAdminApp';
 import { ProductApp } from './ProductApp';
 import '../styles.css';
 
+const isDemoAdmin = window.location.pathname === '/demo' || window.location.pathname === '/demo/';
 const isDiagnostic =
-  import.meta.env.DEV && window.location.pathname !== '/play' && !window.location.hash;
+  !isDemoAdmin &&
+  import.meta.env.DEV &&
+  window.location.pathname !== '/play' &&
+  !window.location.hash;
 const DevelopmentApp = import.meta.env.DEV ? lazy(() => import('./DevelopmentApp')) : null;
 const PreviewApp = import.meta.env.DEV ? lazy(() => import('./PreviewApp')) : null;
-const initialRoom = invitationRoom(window.location.hash);
+const initialRoom = isDemoAdmin ? '' : invitationRoom(window.location.hash);
 // S15P21C204-260. Operator demo entry, consumed before the invitation so its fragment is cleared.
-const demoSession = consumeDemoSession(window.location, window.history);
-const invitation = demoSession ? '' : consumeInvitation(window.location, window.history);
+const demoSession = isDemoAdmin ? null : consumeDemoSession(window.location, window.history);
+const invitation =
+  isDemoAdmin || demoSession ? '' : consumeInvitation(window.location, window.history);
 export default function App() {
   const [navigation, setNavigation] = useState({ invitation, initialRoom, isDiagnostic });
   useEffect(() => {
@@ -37,6 +43,7 @@ export default function App() {
         <PreviewApp />
       </Suspense>
     );
+  if (isDemoAdmin) return <DemoAdminApp />;
   return navigation.isDiagnostic && DevelopmentApp ? (
     <Suspense fallback={<p>불러오는 중…</p>}>
       <DevelopmentApp />

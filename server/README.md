@@ -13,6 +13,8 @@ Node.js + Colyseus 서버 권위형 매치 서버. 제품 계약(0.2.0)은 [프�
 `public`은 게스트 입장(닉네임 방 생성 + 방장 초대)을 선택한다. public+livekit은
 `MEDIA_SUBSCRIPTION_MODE=publisher-permissions`일 때만 부팅하고 server-controlled는 거절한다. 기존 입장 모드와 충돌하는 설정도 거절한다.
 미디어가 비활성인 실제 제품은 게스트 경로가 있어도 readiness/admission을 열지 않는다.
+관리자 데모는 호스트 nginx의 GitLab SSO를 통과한 `/demo`에서만 생성한다. 프록시가 주입하는
+`X-Demo-Admin` 헤더는 신뢰 프록시 뒤에서만 허용하며, 운영 Bearer 토큰은 브라우저에 노출하지 않는다.
 
 아래 명령은 모두 `server/`가 아니라 **저장소 루트**에서 실행한다.
 
