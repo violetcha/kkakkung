@@ -1,6 +1,6 @@
 # 운영
 
-2026-09-15 기준. 실제 서비스는 https://j15c204.p.ssafy.io 이며 GitLab 프로젝트 멤버(Reporter 이상)만 접속한다. 파이프라인·배포 장벽·호스트 구성·비밀값·롤백 명령은 [인프라 안내](../infra/README.md)가 기준이다. 이 문서는 서버가 운영 중에 지키는 정책과 장애 시 판단 기준을 정리한다.
+서비스 주소는 https://j15c204.p.ssafy.io 이다. 2026-09-22 승인된 SSO 기준은 GitLab 로그인과 운영자 등록 이메일이다. 기존 프로젝트 Reporter 이상 정책에서의 서버 전환과 검증은 [SSO 절차](../infra/SSO.md)를 따른다. 일반 공개 전환은 별도이며 `/demo`와 `/showcase` 및 각 관리자 API는 공개 이후에도 이 SSO를 유지한다. 파이프라인·배포 장벽·호스트 구성·비밀값·롤백 명령은 [인프라 안내](../infra/README.md)가 기준이다. 이 문서는 서버가 운영 중에 지키는 정책과 장애 시 판단 기준을 정리한다.
 
 ## 1. 운영 모드와 설정
 
@@ -44,7 +44,7 @@
 ### 관리자 데모 방 열기
 
 관리자는 서비스의 **`/demo`**에서 역할과 화면 표시 이름을 고른 뒤 데모 방을 연다. 이 경로와
-`/api/demo-admin/rooms`만은 게임 audience가 `public`이어도 GitLab 프로젝트 멤버 SSO를 계속
+`/api/demo-admin/rooms`는 게임 audience가 `public`이어도 GitLab 로그인·등록 이메일 SSO를 계속
 요구한다. SSO를 통과한 호스트 nginx가 관리자 신원을 서버에 다시 쓰므로, 브라우저에는
 `OPS_TOKEN`이 전달되지 않는다. 홈에는 이 페이지로 가는 링크가 없다.
 
@@ -65,7 +65,7 @@ sudo nginx -t && sudo systemctl reload nginx
 포획 수로 일찍 끝나지 않고 3분을 다 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다.
 재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
 
-인증은 `/demo`와 같은 GitLab 프로젝트 멤버 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
+인증은 `/demo`와 같은 GitLab 로그인·등록 이메일 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
 는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
 예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
 배포할 때 `host.conf`를 다시 설치한다.
