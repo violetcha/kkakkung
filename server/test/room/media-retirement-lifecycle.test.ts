@@ -17,12 +17,17 @@ function fixture(
   const slots = new SlotRegistry({ maxRooms: 1 });
   const retirementRequests: any[] = [];
   const releasedMatches: string[] = [];
+  const unregistered: string[] = [];
   const RoomClass = createKkakkungRoom({
     serverEpoch: 'diagnostic-epoch',
     monotonicNow: () => now,
     sessions,
     slots,
-    directory: { unregister() {} } as any,
+    directory: {
+      unregister(roomCode: string) {
+        unregistered.push(roomCode);
+      },
+    } as any,
     coordinator: { rearm() {}, unregister() {} } as any,
     roomExpiry: new RoomExpiry(600_000),
     core: new FakeCore(),
@@ -77,6 +82,7 @@ function fixture(
     slots,
     retirementRequests,
     releasedMatches,
+    unregistered,
     advance: (ms: number) => {
       now += ms;
       room.heartbeat.resetForMatch(now);
@@ -599,6 +605,51 @@ it('does not revive confirmed retirements when a rematch replaces a participant'
     // proves the old participant no longer pins the MAP_FINALIZING retirement barrier.
     expect(f.room.phase).toBe('DEVICE_CHECK');
     expect(f.room.blockedReason).toBe('LAYOUT:LAYOUT_PRODUCER_MISSING');
+  } finally {
+    f.close();
+  }
+});
+
+// S15P21C204-332. The first bounded retire can time out; the operations retry engine confirms the
+// remote boundary minutes later, after the room is already disposed. Until E announced that
+// confirmation the seats stayed RETIRING, closeRoom refused, and the room held a MAX_ROOMS slot
+// until the process restarted.
+it('frees a disposed room with unknown retirements once the retry engine confirms them', async () => {
+  const f = await pendingFinalization();
+  try {
+    f.advance(30_000);
+    expect(f.room.phase).toBe('ABORTED');
+
+    // Everyone leaves while E still owes six confirmations, so every seat is RETIRING.
+    for (const player of f.players) f.room.onLeave(player.client);
+    for (const player of f.players)
+      expect(f.slots.slotState('ABCDEF', player.session.playerId)).toBe('RETIRING');
+
+    f.room.onDispose();
+    // A RETIRING seat refuses an unconfirmed release, so the room keeps its MAX_ROOMS slot and
+    // stays reachable for the late confirmation.
+    expect(f.room.pendingRetirements.size).toBe(6);
+    expect(f.unregistered).toHaveLength(0);
+    expect(f.slots.occupied('ABCDEF')).toBe(6);
+    expect(f.slots.reserve('FRESH1', 'newcomer', 400_000, { create: true })).toBe('ROOM_LIMIT');
+
+    // A late confirmation for five scopes must not release the room early.
+    for (const scope of f.retirementRequests.slice(0, 5))
+      f.room.enqueueMediaControl({
+        type: 'MEDIA_RETIRED',
+        result: { ...scope, status: 'confirmed', code: null },
+      });
+    expect(f.slots.occupied('ABCDEF')).toBe(1);
+    expect(f.unregistered).toHaveLength(0);
+
+    f.room.enqueueMediaControl({
+      type: 'MEDIA_RETIRED',
+      result: { ...f.retirementRequests[5]!, status: 'confirmed', code: null },
+    });
+    expect(f.room.pendingRetirements.size).toBe(0);
+    expect(f.slots.occupied('ABCDEF')).toBe(0);
+    expect(f.unregistered).toEqual(['ABCDEF']);
+    expect(f.slots.reserve('FRESH1', 'newcomer', 400_000, { create: true })).toBe('reserved');
   } finally {
     f.close();
   }
