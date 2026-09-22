@@ -21,6 +21,12 @@ export function createInteractionBridge(
    * `LocalControls` 의 복구·마이크 단추를 놓쳤다. 화면을 하나 더 만들어도 이 검사는 지난다.
    */
   consented: () => boolean = consentGiven,
+  /**
+   * S15P21C204-313. 데모 방은 장치 점검을 면제한다(D3). 관리자는 키보드로 시연하므로 카메라 없이도
+   * 준비를 낼 수 있어야 한다. 화면의 "장치 점검 없이 준비 완료" 단추만 있고 여기서 막으면 신호가
+   * 나가지 않은 채 조용히 멈춘다.
+   */
+  deviceExempt: () => boolean = () => false,
 ) {
   let disposed = false;
   let context: InteractionContext | null = null;
@@ -60,7 +66,12 @@ export function createInteractionBridge(
     onDeviceStatus(status) {
       if (disposed) return;
       devices = status;
-      if (context?.phase === 'DEVICE_CHECK' && readyRequested && !deviceReady(status)) {
+      if (
+        context?.phase === 'DEVICE_CHECK' &&
+        readyRequested &&
+        !deviceExempt() &&
+        !deviceReady(status)
+      ) {
         readyRequested = false;
         deps.sendCommand({ type: 'READY', payload: { ready: false } });
       }
@@ -129,7 +140,11 @@ export function createInteractionBridge(
       await runtime.setMicrophone(microphone);
     },
     ready(value: boolean) {
-      if (disposed || context?.phase !== 'DEVICE_CHECK' || (value && !deviceReady(devices)))
+      if (
+        disposed ||
+        context?.phase !== 'DEVICE_CHECK' ||
+        (value && !deviceExempt() && !deviceReady(devices))
+      )
         return false;
       readyRequested = value;
       deps.sendCommand({ type: 'READY', payload: { ready: value } });

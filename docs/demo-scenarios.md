@@ -7,7 +7,10 @@
 ## 1. 전제
 
 - **판정은 전부 코어가 한다.** 대본은 인형에게 보통의 명령(이동·회전·설치·교환·탈출 보고)만 보낸다. 구속·포획·탈출·승패는 실제 경기와 똑같이 규칙이 낸다.
+- **포획은 잡기 규칙을 따른다.** 술래 인형은 상대 옆 칸까지 가서 마주 보고 잡기를 낸다. 상대가 비키면 따라가 다시 잡는다. 칸을 밟는 것만으로는 포획이 아니다(S15P21C204-319).
 - **인형은 대본 밖에서 한 칸도 움직이지 않는다.** 술래 인형이 돌아다니다 도망자 인형을 잡아 버리면 확인하려던 것을 못 보기 때문이다.
+- **맵 크기는 준비 단계에서 고른다.** 데모 방은 인형이 곧바로 자리를 채워 로비를 지나치므로, 장치 점검 화면의 맵 크기(15×15·23×23·31×31 미로)로 고른다. 목록은 경기에 들어간 뒤 무대 옆 패널에 나온다.
+- **길이 몸으로 막히면 옮긴다.** 통로 1칸 미로에서는 가만히 선 인형이 복도를 막아 걸어갈 길이 없을 수 있다. 그때 인형은 목적지로 곧바로 배치된다. 내 출구 앞 칸에 인형이 서 있으면 그 인형을 먼저 비킨다(S15P21C204-321).
 - **제한시간이 없다.** 데모 경기는 `deadline: 'none'`으로 만들어져 시간 초과로 끝나지 않는다. 끝나는 길은 술래 승리·도망자 승리·무효뿐이다(S15P21C204-316).
 - 관리자는 자리 하나를 쓰고 나머지 다섯은 서버가 조종하는 인형이다. 미디어는 발급하지 않는다.
 
@@ -28,8 +31,8 @@
 | `double-trap-immunity`   | 첫 덫에 구속되고 둘째 덫은 면역으로 지나간다                          | —                                 | `OPERATOR_MUST_BE_RUNNER` `NO_TAGGER_PUPPET` `NO_ROOM_FOR_TWO_TRAPS` `NO_ROOM_TO_RETREAT`                                                            |
 | `capture`                | 술래가 나를 포획. 도망자 시점의 포획 화면                             | —                                 | `OPERATOR_MUST_BE_RUNNER` `NO_TAGGER_PUPPET`                                                                                                         |
 | `capture-one`            | 인형끼리 포획. 공개 누계 ◆ 1/2 가 오르고 라운드는 이어진다            | —                                 | `NEED_ONE_PAIR`                                                                                                                                      |
-| `capture-in-challenge`   | 도전 중인 인형을 내가 밟는다. 도전 중에도 포획이 성립                 | —                                 | `OPERATOR_MUST_BE_TAGGER` `NO_RUNNER_PUPPET` `NO_EXIT_FOR_PUPPET`                                                                                    |
-| `caught-in-my-challenge` | 같은 규칙을 내 화면에서. 내가 도전을 시작하면 옆에 있던 술래가 밟는다 | —                                 | `OPERATOR_MUST_BE_RUNNER` `NO_OPERATOR_STATE` `NO_OPERATOR_EXIT` `NO_TAGGER_PUPPET`                                                                  |
+| `capture-in-challenge`   | 도전 중인 인형을 내가 잡는다. 도전 중에도 포획이 성립                 | —                                 | `OPERATOR_MUST_BE_TAGGER` `NO_RUNNER_PUPPET` `NO_EXIT_FOR_PUPPET`                                                                                    |
+| `caught-in-my-challenge` | 같은 규칙을 내 화면에서. 내가 도전을 시작하면 옆에 있던 술래가 잡는다 | —                                 | `OPERATOR_MUST_BE_RUNNER` `NO_OPERATOR_STATE` `NO_OPERATOR_EXIT` `NO_TAGGER_PUPPET`                                                                  |
 | `exit`                   | 인형 도망자가 탈출. 누계가 오른다                                     | —                                 | `NO_RUNNER_PUPPET` `NO_EXIT_FOR_PUPPET`                                                                                                              |
 | `exchange`               | 인형이 나에게 지도 교환을 요청. 받는 쪽 화면                          | —                                 | `OPERATOR_MUST_BE_RUNNER` `NO_RUNNER_PUPPET`                                                                                                         |
 | `exchange-cancel`        | 요청이 요청자 취소로 사라지는 것                                      | —                                 | 위와 같음                                                                                                                                            |

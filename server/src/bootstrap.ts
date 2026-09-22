@@ -532,6 +532,8 @@ export function createApplication<State = unknown>(
             fallbackPath: product.layouts.fallbackPath,
             templateId: product.layouts.templateId,
             templateVersion: product.layouts.templateVersion,
+            // S15P21C204-321. 이것이 빠져 방이 고른 크기를 찾지 못하고 늘 기본 맵으로 경기했다.
+            ...(product.layouts.bySize ? { bySize: product.layouts.bySize } : {}),
           }
         : null,
       media,

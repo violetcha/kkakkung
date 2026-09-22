@@ -23,7 +23,6 @@ import {
   advanceInstallations,
   dropInstall,
   planInstall,
-  isStartCell,
   reserveInstall,
   spendEquipment,
   verifyInstallCancel,
@@ -294,8 +293,13 @@ function applyStartPlaying(ctx: StepContext, startTick: number): void {
  *
  * The guards exist so a placement can never stand in for a judgement the rules own. It cannot
  * move somebody who is mid-action, mid-challenge, mid-exchange or installing, because those are
- * decided by tick arithmetic that a jump would silently invalidate; it cannot land on a start
- * cell, a wall, or a cell somebody occupies, because walking onto a participant is a capture.
+ * decided by tick arithmetic that a jump would silently invalidate; it cannot land on a wall or a
+ * cell somebody occupies, because walking onto a participant is a capture.
+ *
+ * A start cell is allowed once nobody stands on it (S15P21C204-321). Start cells only refuse
+ * devices; during a match they are ordinary floor. On the size-scaled mazes a runner's exit
+ * approach is somebody's start cell in 4-13% of layouts, and refusing it made the demo's
+ * "place me at my exit" fail for exactly those runners.
  */
 function applyPlacePlayer(ctx: StepContext, playerId: string, cell: Cell, dir: Dir): void {
   const state = ctx.state;
@@ -307,7 +311,7 @@ function applyPlacePlayer(ctx: StepContext, playerId: string, cell: Cell, dir: D
   if (!player || player.status !== 'ACTIVE') return;
   if (player.action !== null || player.installation !== null) return;
   if (player.exchange !== null || isChallenging(player)) return;
-  if (!isWalkable(state.layout.topology, cell) || isStartCell(state, cell)) return;
+  if (!isWalkable(state.layout.topology, cell)) return;
   for (const id of state.order) {
     const other = state.players.get(id)!;
     if (other.playerId === playerId || other.status !== 'ACTIVE') continue;

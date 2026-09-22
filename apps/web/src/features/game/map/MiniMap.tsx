@@ -81,17 +81,16 @@ export function MiniMap({
         aria-label={
           windowCells === undefined
             ? `내가 탐색한 지도. 위쪽은 북쪽입니다. 채운 칸은 가 본 바닥, 두꺼운 띠는 벽, 옅은 격자는 아직 안 가 본 곳입니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
-            : `내 주변 ${windowCells}칸 지도. 가운데 흰 점이 나, 점에서 퍼지는 부채꼴이 내가 보는 방향이고 위쪽이 북쪽입니다.`
+            : `내 주변 ${windowCells}칸 지도. 가운데 흰 점이 나, 점에서 퍼지는 부채꼴이 내가 보는 방향이고 위쪽이 북쪽입니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
         }
       />
       <figcaption>
         {windowCells === undefined
           ? '탐색 지도 · 북쪽 고정 · 옅은 격자는 안 가 본 곳'
           : '내 주변 · 흰 점 = 나 · 부채꼴 = 시선 · N = 북쪽'}
-        {operatorExit && <span className="mini-map-operator-exit"> · ◇ 운영자 출구</span>}
+        {operatorExit && <span className="mini-map-operator-exit"> · O 운영자 출구</span>}
       </figcaption>
       {pastEventMarkers(view, markers, tick).length > 0 && <p>빈 원은 과거 사건 위치입니다.</p>}
-      {operatorExit && <p aria-label="운영자 출구">O 운영자 출구</p>}
       {mapDrawModel(view, tick)?.exits.map((exit, index) => (
         <div key={exit.exitId}>
           {index + 1}.{' '}
