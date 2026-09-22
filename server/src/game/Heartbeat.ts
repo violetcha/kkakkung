@@ -4,6 +4,12 @@
  * from another epoch/match, duplicates and unsent future sequence numbers never refresh
  * liveness. Six seconds of silence or an explicit socket close produce exactly one
  * CONNECTION_LOST control per player; the core decides what that means for the match.
+ *
+ * Silence is measured on the server's own clock, so a server that stops running for a while
+ * (GC storm, paused container, debugger) would see every client as silent when it resumes and
+ * drop the whole room. A gap between sweeps of at least one heartbeat interval is therefore the
+ * server's stall, not the clients' silence: the stalled span is not counted, and what each
+ * client had been silent before the stall carries over (S15P21C204-337).
  */
 import {
   HEARTBEAT_INTERVAL_MS,
@@ -26,6 +32,8 @@ export type HeartbeatOptions = Readonly<{
   serverEpoch: string;
   intervalMs?: number;
   timeoutMs?: number;
+  /** Called once per detected stall with its length and how many live connections it spared. */
+  onStall?: (stallMs: number, connections: number) => void;
 }>;
 
 export class HeartbeatTracker {
@@ -33,9 +41,12 @@ export class HeartbeatTracker {
   readonly intervalMs: number;
   readonly timeoutMs: number;
   readonly serverEpoch: string;
+  private readonly onStall: HeartbeatOptions['onStall'];
+  private lastSweepMs: number | null = null;
 
   constructor(options: HeartbeatOptions) {
     this.serverEpoch = options.serverEpoch;
+    this.onStall = options.onStall;
     this.intervalMs = options.intervalMs ?? HEARTBEAT_INTERVAL_MS;
     this.timeoutMs = options.timeoutMs ?? HEARTBEAT_TIMEOUT_MS;
   }
@@ -105,11 +116,31 @@ export class HeartbeatTracker {
   /** Connections silent for the timeout become lost once and yield a single control. */
   sweep(nowMs: number): ControlIntent[] {
     const controls: ControlIntent[] = [];
+    const previousSweepMs = this.lastSweepMs;
+    this.lastSweepMs = nowMs;
+    const stalledFrom =
+      previousSweepMs !== null && nowMs - previousSweepMs >= this.intervalMs
+        ? previousSweepMs
+        : null;
+    let spared = 0;
     for (const connection of this.connections.values()) {
       if (connection.lost) continue;
+      if (stalledFrom !== null) {
+        // Keep the silence observed up to the last sweep; the stalled span itself does not count.
+        const silentBefore = Math.max(0, stalledFrom - connection.lastValidAckMs);
+        connection.lastValidAckMs = nowMs - silentBefore;
+        spared += 1;
+      }
       if (nowMs - connection.lastValidAckMs >= this.timeoutMs) {
         connection.lost = true;
         controls.push({ type: 'CONNECTION_LOST', playerId: connection.playerId });
+      }
+    }
+    if (stalledFrom !== null && spared > 0) {
+      try {
+        this.onStall?.(nowMs - stalledFrom, spared);
+      } catch {
+        // Diagnostics never change liveness.
       }
     }
     return controls;

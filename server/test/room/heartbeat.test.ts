@@ -65,6 +65,41 @@ describe('HeartbeatTracker', () => {
     expect(tracker.size).toBe(0);
   });
 
+  // S15P21C204-337. 서버가 멈췄다 재개하면 모든 연결이 침묵한 것처럼 보인다. 멈춘 시간은 세지 않는다.
+  it('does not count a server stall as client silence, but still loses a client that stays silent', () => {
+    const stalls: [number, number][] = [];
+    const tracker = new HeartbeatTracker({
+      serverEpoch: 'e1',
+      onStall: (stallMs, connections) => stalls.push([stallMs, connections]),
+    });
+    tracker.register('c1', 'p1', 0);
+    tracker.register('c2', 'p2', 0);
+    tracker.due(0, 'm1', 1);
+    tracker.ack('c1', { serverEpoch: 'e1', matchId: 'm1', heartbeatSeq: 1 }, 'm1', 1000);
+    tracker.ack('c2', { serverEpoch: 'e1', matchId: 'm1', heartbeatSeq: 1 }, 'm1', 1000);
+    for (let t = 1000; t <= 3000; t += 50) expect(tracker.sweep(t)).toEqual([]);
+    // 3000ms 에서 서버가 7초 멈춘다. 재개 첫 sweep 은 아무도 끊지 않는다.
+    expect(tracker.sweep(10000)).toEqual([]);
+    expect(stalls).toEqual([[7000, 2]]);
+    // 멈추기 전 2초 침묵은 이어진다. c1 만 응답하면 c2 는 침묵 합계 6초에 정확히 한 번 끊긴다.
+    tracker.due(10000, 'm1', 2);
+    tracker.ack('c1', { serverEpoch: 'e1', matchId: 'm1', heartbeatSeq: 2 }, 'm1', 10100);
+    let lost: unknown[] = [];
+    for (let t = 10050; t <= 14000; t += 50) lost = lost.concat(tracker.sweep(t));
+    expect(lost).toEqual([{ type: 'CONNECTION_LOST', playerId: 'p2' }]);
+    expect(stalls).toHaveLength(1);
+  });
+
+  it('gives a connection registered during a quiet room no extra time', () => {
+    const tracker = new HeartbeatTracker({ serverEpoch: 'e1' });
+    tracker.sweep(0);
+    tracker.register('c1', 'p1', 60000);
+    // 빈 방의 긴 틈은 정지로 잡히지만, 방금 들어온 연결의 대기 시간을 늘리지는 않는다.
+    expect(tracker.sweep(60000)).toEqual([]);
+    for (let t = 60050; t < 66000; t += 50) expect(tracker.sweep(t)).toEqual([]);
+    expect(tracker.sweep(66000)).toEqual([{ type: 'CONNECTION_LOST', playerId: 'p1' }]);
+  });
+
   it('restarts liveness for a new match and drops lost connections', () => {
     const tracker = new HeartbeatTracker({ serverEpoch: 'e1' });
     tracker.register('c1', 'p1', 0);
