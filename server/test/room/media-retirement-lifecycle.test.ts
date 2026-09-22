@@ -18,8 +18,10 @@ function fixture(
   const retirementRequests: any[] = [];
   const releasedMatches: string[] = [];
   const unregistered: string[] = [];
+  const events: any[] = [];
   const RoomClass = createKkakkungRoom({
     serverEpoch: 'diagnostic-epoch',
+    emitEvent: (event: any) => events.push(event),
     monotonicNow: () => now,
     sessions,
     slots,
@@ -83,6 +85,7 @@ function fixture(
     retirementRequests,
     releasedMatches,
     unregistered,
+    events,
     advance: (ms: number) => {
       now += ms;
       room.heartbeat.resetForMatch(now);
@@ -650,6 +653,127 @@ it('frees a disposed room with unknown retirements once the retry engine confirm
     expect(f.slots.occupied('ABCDEF')).toBe(0);
     expect(f.unregistered).toEqual(['ABCDEF']);
     expect(f.slots.reserve('FRESH1', 'newcomer', 400_000, { create: true })).toBe('reserved');
+  } finally {
+    f.close();
+  }
+});
+
+// S15P21C204-333. A producer failure without a cursor used to hold the room forever: nothing ever
+// removed the player from uncertainPreparations.
+async function uncertainLeaver() {
+  let reject!: (reason: Error) => void;
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const f = fixture(() => {
+    started();
+    return new Promise((_resolve, fail) => {
+      reject = fail;
+    });
+  });
+  const leaving = f.players[5]!;
+  const preparation = f.room.requestMediaGrant(leaving.session.playerId, 'practice', null);
+  await began;
+  f.room.onLeave(leaving.client);
+  reject(new Error('unknown allocation'));
+  await preparation;
+  f.room.tick();
+  expect(f.room.uncertainPreparations.has(leaving.session.playerId)).toBe(true);
+  expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBe('RETIRING');
+  return { f, leaving };
+}
+
+const released = (f: { events: any[] }) =>
+  f.events.filter((event) => event.event === 'room.media_uncertain_released');
+
+it('lets the remaining players start a new round after a preparation of unknown outcome', async () => {
+  const { f, leaving } = await uncertainLeaver();
+  try {
+    const previous = f.room.matchId;
+    f.room.setPhase('RESULT');
+    f.room.onCommand(f.players[0]!.client, {
+      matchId: previous,
+      requestId: randomUUID(),
+      sequence: 2,
+      type: 'REMATCH',
+      payload: { mode: 'same' },
+    });
+    f.room.tick();
+    // The rematch releases the old match to E, which owns anything that preparation allocated.
+    expect(f.room.matchId).not.toBe(previous);
+    expect(f.releasedMatches).toContain(previous);
+    expect(f.room.uncertainPreparations.size).toBe(0);
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBeNull();
+    expect(released(f)).toEqual([
+      expect.objectContaining({
+        fields: expect.objectContaining({ reason: 'round-ended', count: 1 }),
+      }),
+    ]);
+  } finally {
+    f.close();
+  }
+});
+
+it('lets go of an uncertain preparation once any allocation it made has expired', async () => {
+  const { f, leaving } = await uncertainLeaver();
+  try {
+    f.advance(329_000);
+    expect(f.room.hasUnresolvedMedia()).toBe(true);
+    expect(released(f)).toEqual([]);
+    f.advance(1_000);
+    expect(f.room.hasUnresolvedMedia()).toBe(false);
+    expect(f.slots.slotState('ABCDEF', leaving.session.playerId)).toBeNull();
+    expect(released(f)).toEqual([
+      expect.objectContaining({
+        fields: expect.objectContaining({ reason: 'expired', count: 1, durationMs: 330_000 }),
+      }),
+    ]);
+  } finally {
+    f.close();
+  }
+});
+
+it('closes a disposed room that still held an uncertain preparation', async () => {
+  const { f } = await uncertainLeaver();
+  try {
+    for (const player of f.players.slice(0, 5)) f.room.onLeave(player.client);
+    f.room.onDispose();
+    expect(f.unregistered).toEqual(['ABCDEF']);
+    expect(f.slots.occupied('ABCDEF')).toBe(0);
+    expect(f.slots.reserve('FRESH1', 'newcomer', 0, { create: true })).toBe('reserved');
+    expect(released(f)).toEqual([
+      expect.objectContaining({ fields: expect.objectContaining({ reason: 'disposed' }) }),
+    ]);
+  } finally {
+    f.close();
+  }
+});
+
+it('does not hold a disposed room for a preparation that fails after disposal', async () => {
+  let reject!: (reason: Error) => void;
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const f = fixture(() => {
+    started();
+    return new Promise((_resolve, fail) => {
+      reject = fail;
+    });
+  });
+  try {
+    const preparation = f.room.requestMediaGrant(f.players[0]!.session.playerId, 'practice', null);
+    await began;
+    for (const player of f.players) f.room.onLeave(player.client);
+    f.room.onDispose();
+    // Still preparing: the room waits for the answer.
+    expect(f.unregistered).toEqual([]);
+    reject(new Error('unknown allocation'));
+    await preparation;
+    expect(f.room.uncertainPreparations.size).toBe(0);
+    expect(f.unregistered).toEqual(['ABCDEF']);
+    expect(f.slots.occupied('ABCDEF')).toBe(0);
   } finally {
     f.close();
   }
