@@ -2884,15 +2884,18 @@
   grid-template-columns: minmax(0, 1fr) min(360px, 30vw);
   gap: var(--space-2);
   align-items: start;
+  /* S15P21C204-342. 두 열의 위·아래를 맞춘다. 칸마다 margin 을 주면 서로 다른 규칙이 이겨 어긋난다. */
+  margin-top: var(--space-2);
 }
 .demo-layout > .game-stage {
   min-width: 0;
+  margin-top: 0;
 }
 .demo-layout > .demo-panel {
   height: calc(100dvh - 128px);
   min-height: 360px;
   overflow: auto;
-  margin: var(--space-2) 0 0;
+  margin: 0;
   padding: var(--space-3);
   background: var(--ink-panel);
   border: 1px solid var(--line);
@@ -2974,6 +2977,37 @@
   padding: 5px 8px;
   color: #ffd4cc;
   border-color: #bf695d;
+}
+/* S15P21C204-342. 결과가 새로 나면 짧게 밝아진다. 같은 문구가 다시 와도 눌린 것이 보인다. */
+.demo-panel-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+/* 지금 시작할 수 없는 대본은 잠긴 채 이유와 함께 남는다(S15P21C204-342). */
+.demo-scenario-item[data-blocked] > button {
+  opacity: 0.55;
+}
+.demo-blocked {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--bone-dim);
+}
+@keyframes demo-outcome-flash {
+  from {
+    background: #f4c96b22;
+  }
+  to {
+    background: transparent;
+  }
+}
+.demo-panel > p.demo-outcome {
+  animation: demo-outcome-flash 900ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-panel > p.demo-outcome {
+    animation: none;
+  }
 }
 .demo-panel > p[role='status'] {
   margin: var(--space-3) 0 0;

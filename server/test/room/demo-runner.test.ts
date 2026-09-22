@@ -10,6 +10,7 @@ import {
   SCENARIO_OPTIONS,
   STEP_TIMEOUT_TICKS,
   availableScenarios,
+  scenarioOffers,
   createDemoRunner,
   type DemoOperatorState,
   type DemoWorld,
@@ -125,7 +126,41 @@ it('re-arms after the grab window and follows a prey that stepped away', () => {
 
   operator = { ...operator, status: 'CAPTURED' };
   tickOnce(121);
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
+});
+
+// S15P21C204-342. 완료를 서버가 알려 준다. 웹이 "도는 중이던 것이 사라짐" 으로 추론하면 한 틱에
+// 끝나는 대본을 놓치고, 같은 이유로 또 거절돼도 화면이 바뀐 줄 모른다.
+it('reports the completed scenario and counts every outcome', () => {
+  const runner = createDemoRunner();
+  // 앞 칸이 통로인 가운데에 선다. 배치 대본이 그 칸을 쓴다.
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 3 }, dir: 0 });
+  let puppet = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  const build = (tick: number) => world([operator, puppet], { tick });
+  expect(runner.status).toMatchObject({ completed: null, outcomes: 0 });
+
+  // 한 틱에 끝나는 대본(배치)도 완료로 남는다. 방이 옮겨 준 자리를 세계가 다시 알려 준다.
+  expect(runner.start('place-puppet', build(0))).toBeNull();
+  for (let tick = 1; tick <= 6 && runner.status.scenario; tick++)
+    runner.advance(build(tick), {
+      send: () => true,
+      place: (actor, cell, dir) => {
+        if (actor === puppet.playerId) puppet = { ...puppet, cell, dir };
+        return true;
+      },
+    });
+  expect(runner.status).toMatchObject({ completed: 'place-puppet', outcomes: 1, failure: null });
+
+  // 실패는 완료를 지우고 결과 번호만 올린다.
+  expect(runner.start('capture', build(4))).toBeNull();
+  runner.advance(build(STEP_TIMEOUT_TICKS + 5), () => true);
+  expect(runner.status).toMatchObject({ completed: null, outcomes: 2 });
+  expect(runner.status.failure).toBe('chase-operator:TIMEOUT');
+
+  // 라운드가 끝나 대본만 내리는 것은 결과가 아니다.
+  expect(runner.start('capture', build(STEP_TIMEOUT_TICKS + 6))).toBeNull();
+  runner.stop();
+  expect(runner.status).toMatchObject({ scenario: null, outcomes: 2 });
 });
 
 it('refuses a scenario the world cannot support and reports why', () => {
@@ -193,6 +228,21 @@ function simulate(
   }
   return { sent, dropped };
 }
+
+// S15P21C204-342. 목록에서 빼면 버튼이 조용히 사라진다. 전부 보내되 못 쓰는 이유를 붙인다.
+it('offers every scenario and says why the ones it cannot start are blocked', () => {
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  const offers = scenarioOffers(world([operator, tagger], { puppetIds: ['puppet-tagger'] }));
+  expect(offers).toHaveLength(DEMO_SCENARIOS.length);
+  const blocked = new Map(offers.map((offer) => [offer.id, offer.unavailable]));
+  expect(blocked.get('capture')).toBeUndefined();
+  // 도망자 인형이 없으니 그 대본들은 이유와 함께 잠긴다.
+  expect(blocked.get('exit')).toBe('NO_RUNNER_PUPPET');
+  expect(blocked.get('exchange-trace')).toBe('OPERATOR_MUST_BE_TAGGER');
+  // 목록에 남아 있는 것이 핵심이다.
+  expect(offers.map((offer) => offer.id)).toContain('exit');
+});
 
 it('lists only the scenarios the operator role and the puppets can carry out', () => {
   const asRunner = world([
@@ -262,7 +312,7 @@ it('makes two puppet runners exchange beside a tagger operator and accepts the o
   const operator = actors.get('operator')!;
   expect(sameCell(actors.get('puppet-runner')!, operator)).toBe(false);
   expect(sameCell(actors.get('puppet-runner-2')!, operator)).toBe(false);
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 });
 
 it('gives up an exchange the rules refused within the offer lifetime, not the step budget', () => {
@@ -296,7 +346,34 @@ it('withdraws its own offer after the operator has seen it', () => {
     actor: 'puppet-runner',
     command: { type: 'EXCHANGE_CANCEL', payload: { exchangeId: 'x-2' } },
   });
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
+});
+
+// S15P21C204-342. 앞 대본이 남긴 교환 요청은 2초 뒤 저절로 사라진다. 그 사이에 취소 대본을 누르면,
+// 새 요청을 기다리던 단계가 남은 요청을 보고 지나가 버려 취소할 때는 이미 사라진 뒤였다.
+it('waits for a leftover offer to clear before asking for its own', () => {
+  const runner = createDemoRunner();
+  const actors = new Map<string, GameSubject>([
+    ['operator', player({ playerId: 'operator', role: 'runner', cell: { x: 2, y: 2 } })],
+    ['puppet-runner', player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 1 } })],
+  ]);
+  expect(runner.start('exchange-cancel', world([...actors.values()]))).toBeNull();
+  const leftoverUntil = 60;
+  let requestedAt: number | null = null;
+  const { sent } = simulate(runner, actors, 400, {
+    patch: (tick, sentSoFar) => {
+      const requested = sentSoFar.some((entry) => entry.command.type === 'EXCHANGE_REQUEST');
+      if (requested && requestedAt === null) requestedAt = tick;
+      if (tick < leftoverUntil) return { exchanges: { 'puppet-runner': 'stale-1' } };
+      return { exchanges: requested ? { 'puppet-runner': 'x-3' } : {} };
+    },
+  });
+  // 남은 요청이 사라진 뒤에야 제 요청을 낸다. 취소는 제 요청을 향한다.
+  expect(requestedAt).toBeGreaterThanOrEqual(leftoverUntil);
+  expect(sent.at(-1)).toMatchObject({
+    command: { type: 'EXCHANGE_CANCEL', payload: { exchangeId: 'x-3' } },
+  });
+  expect(runner.status.failure).toBeNull();
 });
 
 it('drops one puppet connection and sends no command for the abort scenario', () => {
@@ -309,7 +386,7 @@ it('drops one puppet connection and sends no command for the abort scenario', ()
   const { sent, dropped } = simulate(runner, actors, 5);
   expect(sent).toEqual([]);
   expect(dropped).toEqual(['puppet-tagger']);
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 
   // A room that cannot drop puppets fails the step instead of leaving the scenario hanging.
   const without = createDemoRunner();
@@ -337,7 +414,7 @@ it('moves the installer off the device before a puppet runner walks into it', ()
   const firstRunnerMove = sent.findIndex((entry) => entry.actor === 'puppet-runner');
   const lastTaggerMove = sent.map((entry) => entry.actor).lastIndexOf('puppet-tagger');
   expect(firstRunnerMove).toBeGreaterThan(lastTaggerMove);
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 });
 
 it('never installs on a start cell or on a cell someone stands on', () => {
@@ -362,7 +439,7 @@ it('never installs on a start cell or on a cell someone stands on', () => {
   );
   expect(before.cell).toEqual({ x: 3, y: 2 });
   expect(actors.get('puppet-tagger')!.cell).not.toEqual({ x: 3, y: 2 });
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 
   // With every neighbour taken, the scenario is refused instead of walking into someone.
   const boxed = world(
@@ -402,7 +479,7 @@ it('captures one puppet runner with one puppet tagger for the tally scenario', (
   });
   expect(actors.get('puppet-runner')!.status).toBe('CAPTURED');
   expect(sameCell(actors.get('puppet-tagger')!, actors.get('operator')!)).toBe(false);
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 });
 
 function sameCell(a: GameSubject, b: GameSubject) {
@@ -483,6 +560,14 @@ it('releases every forward intent on the next tick so a puppet walks exactly one
 function operatorState(over: Partial<DemoOperatorState> = {}): DemoOperatorState {
   return { installations: [], challengeId: null, exchangeId: null, exit: null, ...over };
 }
+
+/** 인형 도망자의 출구. 관리자 출구와 달리 미로 반대편에 있을 수 있다. */
+const PUPPET_EXIT = {
+  exitId: 'exit-puppet',
+  ownerId: 'puppet-runner',
+  approach: { x: 3, y: 1 },
+  wall: { x: 3, y: 0 },
+};
 
 const OPERATOR_EXIT = {
   exitId: 'exit-operator',
@@ -675,7 +760,7 @@ it('다가오기는 역할과 거리를 고를 수 있다', () => {
 
 it('내가 장비를 무장할 때까지 기다렸다가 인형이 들어온다', () => {
   const runner = createDemoRunner();
-  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  let operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
   let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
   const armedAt = { x: 2, y: 2 };
   let armed = false;
@@ -686,21 +771,99 @@ it('내가 장비를 무장할 때까지 기다렸다가 인형이 들어온다'
         installations: armed ? [{ kind: 'trap', cell: armedAt, state: 'ARMED' }] : [],
       }),
     });
+  // 방이 옮겨 준 자리를 세계가 다시 알려 준다. 관리자 배치는 명령이 아니라 제어다.
+  const io = {
+    send: (_actor: string, command: PuppetCommand) => {
+      puppet = apply(puppet, command);
+      return true;
+    },
+    place: (actor: string, cell: { x: number; y: number }, dir: number) => {
+      if (actor === 'operator') operator = { ...operator, cell, dir: dir as GameSubject['dir'] };
+      return true;
+    },
+  };
   expect(runner.start('trap', build(0), { installer: 'me' })).toBeNull();
   // 무장 전에는 인형이 한 칸도 움직이지 않는다.
   for (let tick = 1; tick <= 10; tick++) {
-    runner.advance(build(tick), () => {
-      throw new Error('puppet moved before the operator armed anything');
+    runner.advance(build(tick), {
+      ...io,
+      send: () => {
+        throw new Error('puppet moved before the operator armed anything');
+      },
     });
   }
   armed = true;
-  for (let tick = 11; tick <= 80 && runner.status.scenario; tick++) {
-    runner.advance(build(tick), (_actor, command) => {
+  for (let tick = 11; tick <= 80 && runner.status.scenario; tick++) runner.advance(build(tick), io);
+  // S15P21C204-342. 장비 칸에 서 있으면 도망자가 들어올 수 없다. 관리자가 먼저 비킨다.
+  expect(operator.cell).not.toEqual(armedAt);
+  expect(puppet.cell).toEqual(armedAt);
+});
+
+// S15P21C204-342. 발동한 덫은 더 이상 무장 상태가 아니다. 자리를 매 Tick 다시 읽던 단계는 도망자가
+// 밟는 순간 목표를 잃고 실패로 끝났다. 대본이 보여 주려던 바로 그 순간이었다.
+it('덫이 발동해 무장이 풀려도 그 자리를 기억한다', () => {
+  const runner = createDemoRunner();
+  let operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  const armedAt = { x: 2, y: 2 };
+  // 도망자가 옆 칸에 닿는 순간 덫이 발동한 것으로 본다.
+  const fired = () =>
+    Math.abs(puppet.cell.x - armedAt.x) + Math.abs(puppet.cell.y - armedAt.y) <= 1;
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      operator: operatorState({
+        installations: [{ kind: 'trap', cell: armedAt, state: fired() ? 'TRIGGERED' : 'ARMED' }],
+      }),
+    });
+  const io = {
+    send: (_actor: string, command: PuppetCommand) => {
       puppet = apply(puppet, command);
       return true;
-    });
-  }
+    },
+    place: (actor: string, cell: { x: number; y: number }, dir: number) => {
+      if (actor === 'operator') operator = { ...operator, cell, dir: dir as GameSubject['dir'] };
+      return true;
+    },
+  };
+  expect(runner.start('trap', build(0), { installer: 'me' })).toBeNull();
+  for (let tick = 1; tick <= 80 && runner.status.scenario; tick++) runner.advance(build(tick), io);
+  expect(runner.status.failure).toBeNull();
   expect(puppet.cell).toEqual(armedAt);
+});
+
+// S15P21C204-342. 규칙은 시작 칸 설치를 막는다(EQ-01). 관리자는 자기 시작 칸에서 경기를 시작하므로
+// 이 대본은 관리자가 스스로 걸어 나오기 전에는 성립하지 않았고, 화면에는 그 이유가 없었다.
+it('설치자가 나면 장비를 놓을 수 있는 자리로 먼저 옮긴다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  const puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      operator: operatorState(),
+      // 관리자가 선 칸이 곧 시작 칸이다.
+      startCells: [operator.cell, puppet.cell],
+    });
+  expect(runner.start('trap', build(0), { installer: 'me' })).toBeNull();
+  const placed = runWithPlacement(runner, build, 2);
+  expect(placed[0]?.actor).toBe('operator');
+  expect(placed[0]?.cell).not.toEqual(operator.cell);
+  expect(runner.status.step).toBe('stand-where-i-can-install');
+});
+
+it('감지기를 내가 놓을 때는 벽을 보게 세운다', () => {
+  const runner = createDemoRunner();
+  // (1,1) 은 벽(0,1)·(1,0) 과 맞닿은 모서리 통로다.
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 }, dir: 1 });
+  const puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 3 } });
+  const build = (tick: number) =>
+    world([operator, puppet], { tick, operator: operatorState(), startCells: [] });
+  expect(runner.start('sensor', build(0), { installer: 'me' })).toBeNull();
+  const placed = runWithPlacement(runner, build, 2);
+  // 선 자리는 그대로 두고 벽 쪽으로 돌려세운다.
+  expect(placed[0]).toMatchObject({ actor: 'operator', cell: { x: 1, y: 1 } });
+  expect([0, 3]).toContain(placed[0]!.dir);
 });
 
 it('내가 끝내 설치하지 않으면 그 이유로 끝난다', () => {
@@ -725,6 +888,64 @@ it('설치자를 나로 두려면 술래여야 한다', () => {
   ).toBe('OPERATOR_MUST_BE_TAGGER');
 });
 
+// S15P21C204-342. 교환은 나눌 지식이 남아야 성립한다. 한 번 교환한 인형만 남으면 규칙이 다음
+// 요청을 거절하므로, 대본이 남은 상대를 고르고 없으면 시작 전에 그 이유로 끝난다.
+it('이미 지도를 나눈 인형은 건너뛰고 남은 인형을 고른다', () => {
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const shared = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 1 } });
+  const fresh = player({ playerId: 'puppet-runner-2', role: 'runner', cell: { x: 1, y: 3 } });
+  const build = (over: Partial<DemoWorld> = {}) =>
+    world([operator, shared, fresh], {
+      puppetIds: ['puppet-runner', 'puppet-runner-2'],
+      operator: operatorState(),
+      // 첫 인형과는 이미 나눴다.
+      exchangeGain: (_from, to) => to === 'puppet-runner-2',
+      ...over,
+    });
+  for (const scenario of ['exchange', 'exchange-cancel', 'accept-my-exchange'] as const) {
+    const runner = createDemoRunner();
+    expect(runner.start(scenario, build()), scenario).toBeNull();
+    const movers = new Set<string>();
+    // 첫 틱은 앞선 교환 요청이 비었는지 보는 단계가 쓴다. 움직이는 인형은 그다음 틱에 나온다.
+    for (let tick = 1; tick <= 2 && movers.size === 0; tick += 1)
+      runner.advance(build({ tick }), (actor) => {
+        movers.add(actor);
+        return true;
+      });
+    expect([...movers], scenario).toEqual(['puppet-runner-2']);
+
+    // 남은 상대가 없으면 시작하지 않는다.
+    const refused = createDemoRunner();
+    expect(refused.start(scenario, build({ exchangeGain: () => false })), scenario).toBe(
+      'NO_EXCHANGE_PARTNER',
+    );
+  }
+});
+
+it('흔적 대본은 서로 나눌 지식이 남은 인형 둘을 고른다', () => {
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  const first = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 1 } });
+  const second = player({ playerId: 'puppet-runner-2', role: 'runner', cell: { x: 1, y: 3 } });
+  const build = (gain: (from: string, to: string) => boolean) =>
+    world([operator, first, second], {
+      puppetIds: ['puppet-runner', 'puppet-runner-2'],
+      exchangeGain: gain,
+    });
+  const runner = createDemoRunner();
+  expect(
+    runner.start(
+      'exchange-trace',
+      build(() => true),
+    ),
+  ).toBeNull();
+  expect(
+    createDemoRunner().start(
+      'exchange-trace',
+      build(() => false),
+    ),
+  ).toBe('NO_EXCHANGE_PARTNER');
+});
+
 it('내가 요청하면 인형이 수락을 보낸다', () => {
   const runner = createDemoRunner();
   const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
@@ -747,7 +968,7 @@ it('내가 요청하면 인형이 수락을 보낸다', () => {
     if (tick === 10) requested = true;
   }
   expect(sent).toContainEqual({ type: 'EXCHANGE_ACCEPT', payload: { exchangeId: 'exchange-1' } });
-  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
+  expect(runner.status).toMatchObject({ scenario: null, step: null, failure: null });
 });
 
 it('내가 요청하지 않으면 교환 대본이 그 이유로 끝난다', () => {
@@ -764,6 +985,41 @@ it('내가 요청하지 않으면 교환 대본이 그 이유로 끝난다', () 
   }
   runner.advance(build(STEP_TIMEOUT_TICKS + 40), () => true);
   expect(runner.status.failure).toBe('operator-requests:NO_REQUEST_FROM_OPERATOR');
+});
+
+// S15P21C204-342. 인형의 출구는 미로 반대편일 수 있어 20초 안에 걸어갈 수 없었다. 대본이
+// 관리자를 그 옆에 세우고, 관리자는 잡기만 누르면 된다.
+it('도전 중 포획은 관리자를 도전 중인 인형 옆에 세운다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 1, y: 1 } });
+  let puppet = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 3, y: 1 } });
+  let challenging = false;
+  const build = (tick: number) =>
+    world([operator, puppet], {
+      tick,
+      exits: [PUPPET_EXIT],
+      challenges: challenging ? { 'puppet-runner': 'challenge-1' } : {},
+    });
+  expect(runner.start('capture-in-challenge', build(0))).toBeNull();
+  const placed: { actor: string; cell: { x: number; y: number } }[] = [];
+  for (let tick = 1; tick <= 300 && placed.length === 0; tick++) {
+    runner.advance(build(tick), {
+      send: (_actor, command) => {
+        if (command.type === 'EXIT_START') challenging = true;
+        puppet = apply(puppet, command);
+        return true;
+      },
+      place: (actor, cell) => {
+        placed.push({ actor, cell });
+        return true;
+      },
+    });
+  }
+  expect(runner.status.step).toBe('stand-beside-challenge');
+  expect(placed[0]?.actor).toBe('operator');
+  // 인형이 선 칸 바로 옆이다.
+  const spot = placed[0]!.cell;
+  expect(Math.abs(spot.x - puppet.cell.x) + Math.abs(spot.y - puppet.cell.y)).toBe(1);
 });
 
 it('내가 도전을 시작할 때까지 술래 인형이 옆에서 기다린다', () => {
@@ -798,17 +1054,21 @@ it('내가 도전을 시작할 때까지 술래 인형이 옆에서 기다린다
   expect(puppet.cell).toEqual(waitingAt);
 
   challenging = true;
+  let shownChallenge = false;
   const commands: PuppetCommand['type'][] = [];
-  for (let tick = 91; tick <= 160 && runner.status.scenario; tick++) {
+  for (let tick = 91; tick <= 200 && runner.status.scenario; tick++) {
     runner.advance(build(tick), (_actor, command) => {
       commands.push(command.type);
       puppet = apply(puppet, command);
       return true;
     });
+    if (runner.status.step === 'show-my-challenge') shownChallenge = true;
   }
   // It grabs from the cell beside me; stepping onto me is not a capture since 319.
   expect(inFront(puppet, operator)).toBe(true);
   expect(commands).toContain('GRAB_INTENT');
+  // S15P21C204-342. 도전이 열리자마자 잡으면 도전 화면을 한 번도 못 본다.
+  expect(shownChallenge).toBe(true);
 });
 
 it('덫 두 개를 먼 칸부터 놓아 설치자가 앞 칸을 밟지 않는다', () => {
@@ -873,6 +1133,37 @@ it('관전 대본은 내가 잡힌 뒤에야 두 번째 술래가 움직인다',
   expect(movers.has('puppet-tagger-2')).toBe(true);
 });
 
+// S15P21C204-342. 먼저 교환한 인형이 관리자 옆을 차지하면 다음 인형이 설 자리가 없다. 그대로
+// 두면 걷기가 조건을 못 채운 자리로만 옮겨 다니며 상한까지 맴돌았다.
+it('교환하러 오는 인형을 위해 옆자리를 비운다', () => {
+  // y=1 줄만 통로인 7x3 복도. 관리자 (3,1), 옆 칸 (2,1)·(4,1) 을 인형이 채우고 있다.
+  const corridor: Topology = {
+    topologyVersion: 'corridor-2',
+    width: 7,
+    height: 3,
+    walkable: Array.from(
+      { length: 21 },
+      (_, index) => Math.floor(index / 7) === 1 && index % 7 > 0 && index % 7 < 6,
+    ),
+  };
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 3, y: 1 } });
+  const seated = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 2, y: 1 } });
+  const partner = player({ playerId: 'puppet-runner-2', role: 'runner', cell: { x: 4, y: 1 } });
+  const build = (tick: number) =>
+    world([operator, seated, partner], {
+      tick,
+      topology: corridor,
+      puppetIds: ['puppet-runner', 'puppet-runner-2'],
+      operator: operatorState(),
+      exchangeGain: (_from, to) => to === 'puppet-runner-2',
+    });
+  const runner = createDemoRunner();
+  expect(runner.start('exchange', build(0))).toBeNull();
+  const placed = runWithPlacement(runner, build, 2);
+  expect(runner.status.step).toBe('make-room-beside-me');
+  expect(placed[0]?.actor).toBe('puppet-runner');
+});
+
 // S15P21C204-321. 통로 1칸 미로에서는 가만히 선 인형 몸이 길을 아예 막는다. 걷기가 길을 못 찾으면
 // 목적지로 옮겨 달라고 한다. 옮길 수 없는 방이면 전처럼 실패로 끝난다.
 it('길이 몸으로 막히면 걷는 대신 목적지로 옮긴다', () => {
@@ -930,7 +1221,7 @@ it('reports a refused start the same way as a stop, and keeps a running scenario
   const tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
   expect(runner.start('capture', world([operator, tagger]))).toBeNull();
   expect(runner.start('exit', world([operator, tagger]))).toBe('NO_RUNNER_PUPPET');
-  expect(runner.status).toEqual({
+  expect(runner.status).toMatchObject({
     scenario: 'capture',
     step: 'chase-operator',
     failure: 'exit:NO_RUNNER_PUPPET',

@@ -111,6 +111,7 @@ export const DEMO_REJECTIONS = [
   'NO_ROOM_FOR_TWO_TRAPS',
   'CELL_UNAVAILABLE',
   'NO_CROSSING_PATH',
+  'NO_EXCHANGE_PARTNER',
   'UNSUPPORTED_OPTION',
 ] as const;
 export type DemoRejection = (typeof DEMO_REJECTIONS)[number];
@@ -122,6 +123,7 @@ export type DemoRejection = (typeof DEMO_REJECTIONS)[number];
 export const DEMO_FAILURE_REASONS = [
   'TIMEOUT',
   'FAILED',
+  'CANCELED',
   'NO_INSTALL_FROM_OPERATOR',
   'NO_REQUEST_FROM_OPERATOR',
   'NO_CHALLENGE_FROM_OPERATOR',
@@ -164,6 +166,11 @@ export type DemoWorld = Readonly<{
   exchanges: Readonly<Record<string, string>>;
   operatorId: string;
   puppetIds: readonly string[];
+  /**
+   * 두 참가자에게 아직 나눌 지식이 남았는지(KN-06). 규칙은 나눌 것이 없는 짝의 교환 요청을
+   * 거절하므로, 교환 대본은 이것으로 상대를 고른다. 방이 채우지 않으면 아무나 고른다.
+   */
+  exchangeGain?: (from: string, to: string) => boolean;
   /** S15P21C204-317. 관리자 주도 대본이 읽는다. 방이 채우기 전에는 없다. */
   operator?: DemoOperatorState;
 }>;
@@ -186,6 +193,10 @@ export type DemoStatus = Readonly<{
   scenario: DemoScenario | null;
   step: string | null;
   failure: string | null;
+  /** S15P21C204-342. 마지막으로 끝까지 간 대본. 실패로 끝났으면 null 이다. */
+  completed: DemoScenario | null;
+  /** 대본이 끝날 때마다 오르는 번호. 화면이 같은 결과가 다시 났음을 알 수 있다. */
+  outcomes: number;
 }>;
 
 const DIRECTIONS: readonly { dx: number; dy: number }[] = [
@@ -212,8 +223,16 @@ const POSE_HOLD_TICKS = 50;
 const EXCHANGE_OFFER_TICKS = 40;
 /** A trace shows 1 second after the exchange and stays 2 seconds: the scenario waits it out. */
 const TRACE_SHOW_TICKS = 60;
-/** S15P21C204-317. 인형이 도전을 붙들고 있는 동안 관리자가 걸어와 밟을 시간. */
-const CHALLENGE_HOLD_TICKS = 400;
+/**
+ * S15P21C204-317. 인형이 도전을 붙들고 있는 시간.
+ *
+ * 332: 20초(400 Tick)는 인형이 미로 반대편 자기 출구에서 버티는 동안 관리자가 그 자리를 찾아
+ * 걸어갈 수 있는 시간이 아니었다. 이제 대본이 관리자를 그 옆에 세우므로 잡기를 누를 시간만
+ * 있으면 되지만, 화면을 둘러보고 누를 여유로 60초를 둔다.
+ */
+const CHALLENGE_HOLD_TICKS = 1200;
+/** S15P21C204-342. 내 도전 화면을 한 번 보고 나서 잡히도록, 술래 인형이 한 박자 쉰다. */
+const SHOW_CHALLENGE_TICKS = 40;
 /** Long enough for the operator to see an incoming offer before the puppet withdraws it. */
 const CANCEL_AFTER_TICKS = 20;
 /**
@@ -282,6 +301,8 @@ export type DemoIo = Readonly<{
 }>;
 
 export interface DemoRunner {
+  /** S15P21C204-342. 도는 대본을 관리자가 내린다. 라운드는 그대로 둔다. */
+  cancel(): void;
   /** Starts a scenario, replacing whatever was running. Returns the rejection reason, or null. */
   start(
     scenario: DemoScenario,
@@ -300,6 +321,19 @@ export interface DemoRunner {
  */
 export function availableScenarios(world: DemoWorld): DemoScenario[] {
   return DEMO_SCENARIOS.filter((scenario) => typeof build(scenario, world, {}) !== 'string');
+}
+
+/**
+ * S15P21C204-342. 모든 대본과, 지금 시작할 수 없다면 그 이유. 기본 선택지로 판단한다.
+ * 목록에서 빼 버리면 버튼이 조용히 사라져 관리자가 무엇이 없어졌는지 알 수 없다.
+ */
+export function scenarioOffers(
+  world: DemoWorld,
+): readonly { id: DemoScenario; unavailable?: DemoRejection }[] {
+  return DEMO_SCENARIOS.map((scenario) => {
+    const built = build(scenario, world, {});
+    return typeof built === 'string' ? { id: scenario, unavailable: built } : { id: scenario };
+  });
 }
 
 /** Why the options do not fit this scenario, or null. */
@@ -331,9 +365,21 @@ export function createDemoRunner(): DemoRunner {
   const releasing = new Set<string>();
   /** The tick each puppet tagger last armed its grab. */
   const grabbedAt = new Map<string, number>();
+  let completed: DemoScenario | null = null;
+  let outcomes = 0;
 
+  /** 대본이 끝났다. 성공이든 실패든 결과 번호를 올려 화면이 그 사실을 알 수 있게 한다. */
   const finish = (reason: string | null) => {
+    if (scenario) {
+      outcomes += 1;
+      completed = reason ? null : scenario;
+    }
     if (reason) failure = reason;
+    reset();
+  };
+
+  /** 대본만 내린다. 라운드가 끝나 더 볼 것이 없을 때 쓰며, 결과로 치지 않는다. */
+  const reset = () => {
     scenario = null;
     tracks = [];
     releasing.clear();
@@ -353,11 +399,13 @@ export function createDemoRunner(): DemoRunner {
       scenario = next;
       tracks = built.map((steps) => ({ steps, index: 0, enteredAt: world.tick }));
       failure = null;
+      completed = null;
       releasing.clear();
       grabbedAt.clear();
       return null;
     },
-    stop: () => finish(null),
+    stop: () => reset(),
+    cancel: () => finish(scenario ? `${scenario}:CANCELED` : null),
     advance(world, given) {
       if (!scenario) return;
       const io: DemoIo = typeof given === 'function' ? { send: given } : given;
@@ -385,7 +433,7 @@ export function createDemoRunner(): DemoRunner {
       const running = tracks
         .map((track) => track.steps[track.index]?.label)
         .filter((label): label is string => label !== undefined);
-      return { scenario, step: running[0] ?? null, failure };
+      return { scenario, step: running[0] ?? null, failure, completed, outcomes };
     },
   };
 }
@@ -499,9 +547,10 @@ function placeInstead(
   place: DemoIo['place'] | undefined,
 ): 'running' | 'failed' {
   if (!place) return 'failed';
-  const spot =
-    stopWithin === 0 || !occupied(world, target) ? target : nearestFreeCell(world, target);
-  if (!spot || (stopWithin === 0 && occupied(world, target))) return 'failed';
+  // S15P21C204-342. 목적지에서 stopWithin 칸 안의 빈 칸이어야 한다. 그냥 "가장 가까운 빈 칸"으로
+  // 옮기면 조건을 못 채운 자리에 내려놓고, 다음 Tick 에 또 같은 자리로 옮기며 상한까지 맴돈다.
+  const spot = freeSpotNear(world, target, stopWithin);
+  if (!spot) return 'failed';
   return place(actor.playerId, spot, actor.dir) ? 'running' : 'failed';
 }
 
@@ -815,23 +864,65 @@ function build(
         if (!world.operator) return 'NO_OPERATOR_STATE';
         const runner = runners[0];
         if (!runner) return 'NO_RUNNER_PUPPET';
-        const armed = (now: DemoWorld) =>
-          now.operator?.installations.find(
-            (device) => device.kind === kind && device.state === 'ARMED',
-          ) ?? null;
+        // S15P21C204-342. 무장된 장비의 자리를 한 번 보면 기억한다. 발동한 장비는 더 이상 무장
+        // 상태가 아니어서, 자리를 매 Tick 다시 읽던 단계는 도망자가 밟는 순간 목표를 잃고
+        // "규칙이 이 동작을 받아들이지 않았습니다" 로 멈췄다. 대본이 보여 주려던 바로 그 순간이다.
+        let installed: Cell | null = null;
+        const armed = (now: DemoWorld) => {
+          const device =
+            now.operator?.installations.find(
+              (candidate) => candidate.kind === kind && candidate.state === 'ARMED',
+            ) ?? null;
+          if (device) installed = device.cell;
+          return device;
+        };
+        const installedCell = (now: DemoWorld) => armed(now)?.cell ?? installed;
+        // S15P21C204-342. 규칙은 시작 칸에 장비를 놓지 못하게 한다(EQ-01). 관리자는 경기 시작 위치,
+        // 곧 자기 시작 칸에 서 있으므로 이 대본은 관리자가 스스로 한 칸 걸어 나오기 전에는 절대
+        // 성립하지 않았고, 화면에는 그 이유가 없었다. 설치할 수 있는 자리로 먼저 옮긴다.
+        const install = installableSpot(world, operator, kind);
+        const onInstallableCell = !world.startCells.some((cell) => sameCell(cell, operator.cell));
+        if (install === null && !onInstallableCell)
+          return kind === 'trap' ? 'NO_ROOM_TO_INSTALL' : 'NO_WALL_TO_MOUNT';
+        const settle: Step[] =
+          install === null
+            ? []
+            : [
+                {
+                  kind: 'place',
+                  actor: world.operatorId,
+                  target: install.cell,
+                  dir: () => install.dir,
+                  label: 'stand-where-i-can-install',
+                },
+              ];
         return [
           [
+            ...settle,
             {
               kind: 'until',
               done: (now) => armed(now) !== null,
               failure: 'NO_INSTALL_FROM_OPERATOR',
               label: 'operator-installs',
             },
+            // S15P21C204-342. 장비는 내가 선 칸에 놓인다. 그 위에 그대로 서 있으면 도망자가
+            // 들어올 수 없다(칸 위의 술래는 포획 판정이지 발동이 아니다). 인형 설치자가 물러나듯
+            // 관리자도 옆으로 비킨다.
+            {
+              kind: 'place',
+              actor: world.operatorId,
+              target: (now) => {
+                const device = installedCell(now);
+                return device ? besideCell(now, device, world.operatorId) : null;
+              },
+              dir: (now) => subject(now, world.operatorId)?.dir ?? null,
+              label: 'step-aside-for-runner',
+            },
             {
               kind: 'walk',
               actor: runner.playerId,
-              // 무장된 장비 칸으로 들어간다. 매 Tick 다시 읽어 소모된 뒤에도 자리를 잃지 않는다.
-              target: (now) => armed(now)?.cell ?? null,
+              // 장비가 놓인 칸으로 들어간다. 발동해 무장이 풀려도 기억한 자리를 그대로 쓴다.
+              target: (now) => installedCell(now),
               label: 'runner-enters',
             },
           ],
@@ -923,9 +1014,13 @@ function build(
     case 'exchange':
     case 'exchange-cancel': {
       if (operator.role !== 'runner') return 'OPERATOR_MUST_BE_RUNNER';
-      const runner = runners[0];
-      if (!runner) return 'NO_RUNNER_PUPPET';
+      if (!runners[0]) return 'NO_RUNNER_PUPPET';
+      // 한 번 교환한 짝은 나눌 지식이 없어 규칙이 다음 요청을 거절한다. 남은 상대를 고른다.
+      const runner = exchangePartner(world, runners, world.operatorId);
+      if (!runner) return 'NO_EXCHANGE_PARTNER';
       const steps: Step[] = [
+        ...clearSpaceBeside(world, runner.playerId),
+        ...awaitNoSession(runner.playerId),
         {
           kind: 'walk',
           actor: runner.playerId,
@@ -966,8 +1061,11 @@ function build(
       // The trace is a tagger's view: two puppet runners exchange beside the operator, and the
       // rules publish the midpoint a second later for two seconds.
       if (operator.role !== 'tagger') return 'OPERATOR_MUST_BE_TAGGER';
-      const [first, second] = runners;
-      if (!first || !second) return 'NEED_TWO_RUNNER_PUPPETS';
+      if (runners.length < 2) return 'NEED_TWO_RUNNER_PUPPETS';
+      // 흔적을 보려면 두 인형이 실제로 교환해야 한다. 나눌 지식이 남은 짝을 고른다.
+      const pair = exchangePair(world, runners);
+      if (!pair) return 'NO_EXCHANGE_PARTNER';
+      const [first, second] = pair;
       const firstCell = (now: DemoWorld) => subject(now, first.playerId)?.cell ?? null;
       return [
         [
@@ -985,6 +1083,8 @@ function build(
             stopWithin: 1,
             label: 'second-joins',
           },
+          ...awaitNoSession(first.playerId),
+          ...awaitNoSession(second.playerId),
           {
             kind: 'send',
             actor: first.playerId,
@@ -1108,7 +1208,23 @@ function build(
             command: () => ({ type: 'EXIT_START', payload: { exitId: exit.exitId } }),
             label: 'start-challenge',
           },
-          // 완료 보고를 보내지 않고 버틴다. 그동안 관리자가 걸어와 밟으면 규칙이 포획을 낸다.
+          // S15P21C204-342. 인형의 출구는 미로 반대편일 수 있다. 관리자가 찾아 걸어갈 방법이
+          // 없어 매번 시간 초과로 끝났으므로, 도전이 열린 뒤 관리자를 그 옆에 세워 마주 보게 한다.
+          {
+            kind: 'place',
+            actor: world.operatorId,
+            target: (now) =>
+              besideCell(now, subject(now, runner.playerId)?.cell ?? null, world.operatorId),
+            // 방향은 "옮겨 갈 칸에서" 인형을 보는 방향이다. 지금 선 자리 기준으로 세면 배치가
+            // 끝나도 방향이 맞지 않아 확정되지 않는다(S15P21C204-342).
+            dir: (now) => {
+              const prey = subject(now, runner.playerId);
+              const spot = prey ? besideCell(now, prey.cell, world.operatorId) : null;
+              return prey && spot ? facingDirection(spot, prey.cell) : null;
+            },
+            label: 'stand-beside-challenge',
+          },
+          // 완료 보고를 보내지 않고 버틴다. 그동안 관리자가 잡으면 규칙이 포획을 낸다.
           {
             kind: 'until',
             done: (now) => subject(now, runner.playerId)?.status !== 'ACTIVE',
@@ -1141,6 +1257,8 @@ function build(
             failure: 'NO_CHALLENGE_FROM_OPERATOR',
             label: 'operator-starts-challenge',
           },
+          // S15P21C204-342. 곧바로 잡으면 도전 화면을 한 번도 못 본다. 한 박자 보여 준 뒤 잡는다.
+          { kind: 'wait', ticks: SHOW_CHALLENGE_TICKS, label: 'show-my-challenge' },
           {
             kind: 'grab',
             actor: tagger.playerId,
@@ -1154,10 +1272,13 @@ function build(
       // 요청하는 쪽을 확인한다. 인형은 옆에 와 마주 보고 내 요청이 오면 수락한다.
       if (operator.role !== 'runner') return 'OPERATOR_MUST_BE_RUNNER';
       if (!world.operator) return 'NO_OPERATOR_STATE';
-      const runner = runners[0];
-      if (!runner) return 'NO_RUNNER_PUPPET';
+      if (!runners[0]) return 'NO_RUNNER_PUPPET';
+      const runner = exchangePartner(world, runners, world.operatorId);
+      if (!runner) return 'NO_EXCHANGE_PARTNER';
       return [
         [
+          ...clearSpaceBeside(world, runner.playerId),
+          ...awaitNoSession(runner.playerId),
           {
             kind: 'walk',
             actor: runner.playerId,
@@ -1258,6 +1379,169 @@ function captureTracks(
       label: `capture-${prey.playerId}`,
     },
   ]);
+}
+
+/**
+ * `target` 에서 걸어서 `stopWithin` 칸 안에 있는 빈 칸. 거리는 몸을 지나쳐 세고, 내려놓을 칸은
+ * 비어 있어야 한다. 조건을 채우는 칸이 없으면 null 이고, 그 단계는 곧바로 실패로 끝난다.
+ */
+function freeSpotNear(world: DemoWorld, target: Cell, stopWithin: number): Cell | null {
+  if (stopWithin === 0) return isFree(world, target) ? target : null;
+  const seen = new Set<string>([key(target)]);
+  let frontier: Cell[] = [target];
+  for (let step = 1; step <= stopWithin; step += 1) {
+    const next: Cell[] = [];
+    for (const cell of frontier)
+      for (const neighbour of neighbours(world.topology, cell)) {
+        if (seen.has(key(neighbour))) continue;
+        seen.add(key(neighbour));
+        if (isFree(world, neighbour)) return neighbour;
+        next.push(neighbour);
+      }
+    frontier = next;
+  }
+  return null;
+}
+
+/**
+ * 그 칸 옆의 빈 칸. 없으면 가장 가까운 빈 칸으로 물러난다.
+ *
+ * S15P21C204-342. `mover` 는 지금 그리로 옮겨 갈 참가자다. 옮기고 나면 그 칸은 "누가 서 있는
+ * 칸" 이 되므로, 자신을 빼고 보지 않으면 다음 Tick 에 다른 칸을 골라 배치가 끝나지 않는다.
+ */
+function besideCell(world: DemoWorld, cell: Cell | null, mover?: string): Cell | null {
+  if (!cell) return null;
+  const free = (next: Cell) =>
+    !world.startCells.some((start) => sameCell(start, next)) &&
+    !world.participants.some(
+      (player) =>
+        player.status === 'ACTIVE' && player.playerId !== mover && sameCell(player.cell, next),
+    );
+  return neighbours(world.topology, cell).find(free) ?? nearestFreeCell(world, cell);
+}
+
+/**
+ * S15P21C204-342. 관리자가 장비를 놓을 수 있는 자리. 시작 칸이 아니고 아무도 서 있지 않은
+ * 이웃 칸이며, 감지기는 벽을 마주 봐야 붙일 수 있으므로 벽 낀 칸을 고르고 그 벽을 보게 한다.
+ * 지금 선 자리가 이미 조건을 만족하면 null 을 돌려 옮기지 않는다.
+ */
+function installableSpot(
+  world: DemoWorld,
+  operator: GameSubject,
+  kind: 'sensor' | 'trap',
+): { cell: Cell; dir: Dir } | null {
+  // 내가 선 칸은 나 때문에 "누가 서 있는 칸" 이 된다. 나를 빼고 본다.
+  const free = (cell: Cell) =>
+    !world.startCells.some((startCell) => sameCell(startCell, cell)) &&
+    !world.participants.some(
+      (player) =>
+        player.status === 'ACTIVE' &&
+        player.playerId !== operator.playerId &&
+        sameCell(player.cell, cell),
+    );
+  const usable = (cell: Cell) =>
+    free(cell) && (kind === 'trap' || wallBeside(world, cell) !== null);
+  const facing = (cell: Cell): Dir | null => {
+    if (kind === 'trap') return operator.dir;
+    const wall = wallBeside(world, cell);
+    return wall ? facingDirection(cell, wall) : null;
+  };
+  if (usable(operator.cell)) {
+    // 덫은 선 자리에 그대로 놓는다. 감지기는 벽을 봐야 붙으므로 방향만 맞춘다.
+    const dir = facing(operator.cell);
+    if (kind === 'trap' || dir === operator.dir || dir === null) return null;
+    return { cell: operator.cell, dir };
+  }
+  for (const cell of neighbours(world.topology, operator.cell)) {
+    if (!usable(cell)) continue;
+    const dir = facing(cell);
+    if (dir !== null) return { cell, dir };
+  }
+  return null;
+}
+
+/**
+ * S15P21C204-342. 관리자 옆에 빈 칸이 없으면 교환하러 오는 인형이 설 자리가 없다. 먼저 교환한
+ * 인형이 그 자리를 차지한 채로 다음 대본을 누르면 이 일이 생긴다. 서 있는 인형 하나를 비킨다.
+ */
+function clearSpaceBeside(world: DemoWorld, keep: string): Step[] {
+  if (
+    neighbours(world.topology, subject(world, world.operatorId)?.cell ?? { x: -1, y: -1 }).some(
+      (cell) => isFree(world, cell),
+    )
+  )
+    return [];
+  const operator = subject(world, world.operatorId);
+  if (!operator) return [];
+  const blocker = neighbours(world.topology, operator.cell)
+    .map((cell) =>
+      world.participants.find(
+        (player) =>
+          player.status === 'ACTIVE' &&
+          player.playerId !== keep &&
+          world.puppetIds.includes(player.playerId) &&
+          sameCell(player.cell, cell),
+      ),
+    )
+    .find((player) => player !== undefined);
+  if (!blocker) return [];
+  const spot = nearestFreeCell(world, blocker.cell);
+  if (!spot) return [];
+  return [
+    {
+      kind: 'place',
+      actor: blocker.playerId,
+      target: spot,
+      dir: () => blocker.dir,
+      label: 'make-room-beside-me',
+    },
+  ];
+}
+
+/**
+ * 아직 나눌 지식이 남은 상대. 방이 규칙을 알려 주지 않으면(합성 세계 시험) 첫 인형을 쓴다.
+ * 판정은 규칙이 하고, 대본은 규칙이 받아 줄 상대를 고르기만 한다(S15P21C204-342).
+ */
+function exchangePartner(
+  world: DemoWorld,
+  pool: readonly GameSubject[],
+  other: string,
+): GameSubject | null {
+  const gain = world.exchangeGain;
+  if (!gain) return pool[0] ?? null;
+  return pool.find((puppet) => gain(other, puppet.playerId)) ?? null;
+}
+
+/** 서로 나눌 지식이 남은 인형 둘. 흔적 대본은 인형끼리 교환시킨다. */
+function exchangePair(
+  world: DemoWorld,
+  pool: readonly GameSubject[],
+): readonly [GameSubject, GameSubject] | null {
+  const gain = world.exchangeGain;
+  if (!gain) return pool[0] && pool[1] ? [pool[0], pool[1]] : null;
+  for (const first of pool)
+    for (const second of pool)
+      if (first.playerId !== second.playerId && gain(first.playerId, second.playerId))
+        return [first, second];
+  return null;
+}
+
+/**
+ * S15P21C204-342. 앞 대본이 남긴 교환 요청이 사라질 때까지 기다린다.
+ *
+ * 교환 요청은 2초를 살고 저절로 사라진다. 그 사이에 다음 교환 대본을 누르면, 새 요청을 기다리던
+ * 단계가 **남아 있던 요청**을 보고 지나가 버린다. 그 뒤 취소할 때는 이미 사라져 "규칙이 이 동작을
+ * 받아들이지 않았습니다" 로 끝났다. 규칙도 세션이 열려 있는 동안에는 새 요청을 받지 않는다.
+ */
+function awaitNoSession(playerId: string): Step[] {
+  return [
+    {
+      kind: 'until',
+      done: (now) => now.exchanges[playerId] === undefined,
+      timeout: EXCHANGE_OFFER_TICKS + POSE_HOLD_TICKS,
+      label: 'wait-offer-clear',
+    },
+  ];
 }
 
 /**

@@ -183,21 +183,21 @@ async function playing(
 it('offers the scenario list to the operator and refuses an unknown request', async () => {
   const demo = await playing('runner');
   try {
-    // Before the match the whole list is offered and only a PLAYING tick narrows it to the
-    // operator's role, so waiting for "some state arrived" can still read the opening list.
-    // The list follows the operator's role: a runner cannot be shown a tagger's trace view.
+    // S15P21C204-342. 모든 대본이 목록에 남고, 지금 시작할 수 없는 것은 이유를 달고 온다.
+    // 목록에서 빼 버리면 버튼이 조용히 사라져 관리자가 무엇이 없어졌는지 알 수 없다.
     await vi.waitFor(
       () =>
-        expect(demo.states.at(-1)?.available.map((item) => item.id)).not.toContain(
-          'exchange-trace',
-        ),
-      {
-        timeout: 5000,
-      },
+        expect(
+          demo.states.at(-1)?.available.find((item) => item.id === 'exchange-trace')?.unavailable,
+        ).toBe('OPERATOR_MUST_BE_TAGGER'),
+      { timeout: 5000 },
     );
-    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('trap');
-    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('capture');
-    expect(demo.states.at(-1)?.available.map((item) => item.id)).toContain('exchange');
+    const offers = new Map(
+      (demo.states.at(-1)?.available ?? []).map((item) => [item.id, item.unavailable]),
+    );
+    expect(offers.get('trap')).toBeUndefined();
+    expect(offers.get('capture')).toBeUndefined();
+    expect(offers.get('exchange')).toBeUndefined();
     expect(demo.states.at(-1)?.running).toBeNull();
     // A malformed request changes nothing: the room keeps waiting for a real scenario id.
     demo.room.send(PRODUCT_CLIENT_MESSAGES.demoScenario, { matchId: demo.room.state.matchId });
@@ -257,19 +257,62 @@ it('swaps the operator to the other role when the rematch asks to swap', async (
   }
 }, 60_000);
 
+// S15P21C204-342. 관리자를 기다리는 대본은 2분 동안 다른 버튼을 잠갔고, 푸는 길은 라운드 종료뿐이었다.
+it('cancels the running scenario without ending the round', async () => {
+  const demo = await playing('tagger');
+  try {
+    // 관리자가 장비를 놓기를 기다리는 대본을 띄운다.
+    demo.room.send(PRODUCT_CLIENT_MESSAGES.demoScenario, {
+      matchId: demo.room.state.matchId,
+      scenario: 'trap',
+      options: { installer: 'me' },
+    });
+    await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBe('trap'), { timeout: 10_000 });
+
+    demo.room.send(PRODUCT_CLIENT_MESSAGES.demoControl, {
+      matchId: demo.room.state.matchId,
+      action: 'cancel-scenario',
+    });
+    await vi.waitFor(() => expect(demo.states.at(-1)?.running).toBeNull(), { timeout: 5000 });
+    expect(demo.states.at(-1)?.failureCode).toBe('trap:CANCELED');
+    // 라운드는 그대로다. 곧바로 다른 대본을 돌릴 수 있다.
+    expect(demo.room.state.phase).toBe('PLAYING');
+    demo.scenario('approach');
+    // 인형이 이미 관리자 옆에 서 있으면 대본은 한두 Tick 만에 끝난다. 돌았다는 사실만 본다.
+    await vi.waitFor(
+      () =>
+        expect(
+          demo.states.some(
+            (state) => state.running === 'approach' || state.completed === 'approach',
+          ),
+        ).toBe(true),
+      { timeout: 10_000 },
+    );
+  } finally {
+    await demo.close();
+  }
+}, 90_000);
+
 it('lets the operator abort a demo round through the control channel', async () => {
   const demo = await playing('runner');
   try {
+    // S15P21C204-342. 먼저 한 건을 기록해 둔다. 무효 처리가 누계를 지우지 않아야 한다.
+    demo.scenario('capture-one');
+    await vi.waitFor(() => expect(demo.room.state.counts.captured).toBe(1), { timeout: 80_000 });
+
     demo.room.send(PRODUCT_CLIENT_MESSAGES.demoControl, {
       matchId: demo.room.state.matchId,
       action: 'abort-round',
     });
     await vi.waitFor(() => expect(demo.room.state.phase).toBe('ABORTED'), { timeout: 5000 });
-    expect(demo.room.state.abortReason ?? null).toBeNull();
+    // 사람이 끝낸 것이지 장애가 아니다. 결과 화면이 그렇게 말할 수 있어야 한다.
+    expect(demo.room.state.abortReason).toBe('DEMO_OPERATOR_ABORT');
+    // 경기 인스턴스를 내려도 그때까지의 누계는 남는다.
+    expect(demo.room.state.counts.captured).toBe(1);
   } finally {
     await demo.close();
   }
-}, 60_000);
+}, 130_000);
 
 // S15P21C204-321. 조립(bootstrap)이 크기별 맵을 방에 넘기지 않아 어떤 방이든 고른 크기와 상관없이
 // 기본 31칸 맵으로 경기했다. 일반 방과 같은 조립을 쓰므로 여기서 함께 고정한다. 데모 방은 로비를

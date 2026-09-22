@@ -5,6 +5,7 @@ import {
   activeExits,
   createLayoutSelector,
   createTemplateVariants,
+  hasNewInformation,
   matchCore,
   preparePracticeLayout,
   validateTemplate,
@@ -175,6 +176,14 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
       })),
     // Start cells refuse devices (EQ-01); the scenario reads them so it never asks for one there.
     demoStartCells: (state) => state.layout.players.map((placed) => placed.cell),
+    // 교환은 나눌 지식이 남아야 성립한다(KN-06). 한 번 교환한 짝은 규칙이 다음 요청을 거절하므로,
+    // 대본이 상대를 고를 때 규칙에 그대로 물어본다. 판정은 여기서 하지 않는다.
+    demoExchangeGain: (state, from, to) => {
+      const knowledgeFrom = state.knowledge.get(from);
+      const knowledgeTo = state.knowledge.get(to);
+      if (!knowledgeFrom || !knowledgeTo) return false;
+      return hasNewInformation(knowledgeFrom, knowledgeTo, state.exits);
+    },
     layouts: {
       maps: { validateTemplate, createTemplateVariants },
       selection: createLayoutSelector({
