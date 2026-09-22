@@ -201,10 +201,29 @@ describe('PLACE_PLAYER 가 거절하는 것', () => {
     expectRefused(state, 'r-a', { x: -1, y: -1 });
   });
 
-  it('시작 칸으로는 옮기지 않는다', () => {
+  it('주인이 서 있는 시작 칸으로는 옮기지 않는다', () => {
     const state = demoMatch(100);
     const someoneElsesStart = state.layout.players.find((p) => p.playerId !== 'r-a')!.cell;
     expectRefused(state, 'r-a', someoneElsesStart);
+  });
+
+  // S15P21C204-321. 시작 칸은 장비만 막는다. 경기 중에는 보통 바닥이고, 작은 미로에서는 도망자의
+  // 출구 앞 칸이 누군가의 시작 칸인 배치가 13% 나온다.
+  it('주인이 떠난 시작 칸으로는 옮긴다', () => {
+    const state = demoMatch(100);
+    const owner = state.layout.players.find((p) => p.playerId !== 'r-a')!;
+    // 주인을 먼저 비키게 한다.
+    const vacated = stepMatch(state, {
+      tick: 101,
+      commands: [],
+      controls: [place(owner.playerId, freePassage(state, owner.cell), 0)],
+    }).state;
+    const after = stepMatch(vacated, {
+      tick: 102,
+      commands: [],
+      controls: [place('r-a', owner.cell, 1)],
+    }).state;
+    expect(player(after, 'r-a').cell).toEqual(owner.cell);
   });
 
   it('다른 참가자가 서 있는 칸으로는 옮기지 않는다', () => {

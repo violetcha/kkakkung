@@ -72,7 +72,9 @@ function apply(actor: GameSubject, command: PuppetCommand): GameSubject {
   return actor;
 }
 
-it('walks a puppet to the operator with turns and forward intents only', () => {
+// S15P21C204-317. Since 319 a capture needs an armed grab with the runner one cell in front.
+// Walking onto the operator, as this scenario used to, never captured and ran out the budget.
+it('brings a puppet tagger beside the operator, faces it and arms its grab', () => {
   const runner = createDemoRunner();
   let tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 }, dir: 0 });
   const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
@@ -80,7 +82,7 @@ it('walks a puppet to the operator with turns and forward intents only', () => {
   const start = runner.start('capture', world([operator, tagger]));
   expect(start).toBeNull();
 
-  for (let tick = 1; tick <= 60 && !sameCell(tagger, operator); tick++) {
+  for (let tick = 1; tick <= 60 && !sent.some((c) => c.type === 'GRAB_INTENT'); tick++) {
     runner.advance(world([operator, tagger], { tick }), (actor, command) => {
       expect(actor).toBe('puppet-tagger');
       sent.push(command);
@@ -88,9 +90,42 @@ it('walks a puppet to the operator with turns and forward intents only', () => {
       return true;
     });
   }
-  expect(sameCell(tagger, operator)).toBe(true);
-  // Only the two commands a player could send themselves.
-  expect(new Set(sent.map((command) => command.type))).toEqual(new Set(['TURN', 'MOVE_INTENT']));
+  expect(inFront(tagger, operator)).toBe(true);
+  expect(sameCell(tagger, operator)).toBe(false);
+  // Only the commands a player could send themselves.
+  expect(new Set(sent.map((command) => command.type))).toEqual(
+    new Set(['TURN', 'MOVE_INTENT', 'GRAB_INTENT']),
+  );
+});
+
+it('re-arms after the grab window and follows a prey that stepped away', () => {
+  const runner = createDemoRunner();
+  let tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 1, y: 2 }, dir: 0 });
+  let operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const grabs: number[] = [];
+  expect(runner.start('capture', world([operator, tagger]))).toBeNull();
+  const tickOnce = (tick: number) =>
+    runner.advance(world([operator, tagger], { tick }), (_actor, command) => {
+      if (command.type === 'GRAB_INTENT') grabs.push(tick);
+      tagger = apply(tagger, command);
+      return true;
+    });
+  for (let tick = 1; tick <= 20; tick++) tickOnce(tick);
+  // Already in front: it arms at once and again each time the window has closed, not every tick.
+  expect(grabs[0]).toBe(1);
+  expect(grabs.length).toBeGreaterThan(1);
+  expect(grabs.every((tick, index) => index === 0 || tick - grabs[index - 1]! >= 8)).toBe(true);
+
+  // The operator walks off to the far corner: the tagger follows and arms there again.
+  operator = { ...operator, cell: { x: 3, y: 3 } };
+  const before = grabs.length;
+  for (let tick = 21; tick <= 120; tick++) tickOnce(tick);
+  expect(inFront(tagger, operator)).toBe(true);
+  expect(grabs.length).toBeGreaterThan(before);
+
+  operator = { ...operator, status: 'CAPTURED' };
+  tickOnce(121);
+  expect(runner.status).toEqual({ scenario: null, step: null, failure: null });
 });
 
 it('refuses a scenario the world cannot support and reports why', () => {
@@ -355,11 +390,13 @@ it('captures one puppet runner with one puppet tagger for the tally scenario', (
   ]);
   expect(runner.start('capture-one', world([...actors.values()]))).toBeNull();
   simulate(runner, actors, 60, {
-    patch: () => {
-      // Standing on the prey is the rules' capture; the world then reports the prey as ended.
+    patch: (_tick, sent) => {
+      // The rules' capture: an armed grab with the prey one cell in front of the tagger.
       const tagger = actors.get('puppet-tagger')!;
       const prey = actors.get('puppet-runner')!;
-      if (sameCell(tagger, prey)) actors.set('puppet-runner', { ...prey, status: 'CAPTURED' });
+      const armed = sent.at(-1)?.command.type === 'GRAB_INTENT';
+      if (armed && inFront(tagger, prey))
+        actors.set('puppet-runner', { ...prey, status: 'CAPTURED' });
       return undefined;
     },
   });
@@ -372,6 +409,17 @@ function sameCell(a: GameSubject, b: GameSubject) {
   return a.cell.x === b.cell.x && a.cell.y === b.cell.y;
 }
 
+/** The runner is the cell right in front of the tagger: what an armed grab reaches. */
+function inFront(tagger: GameSubject, prey: GameSubject) {
+  const vector = [
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 },
+  ][tagger.dir]!;
+  return tagger.cell.x + vector.dx === prey.cell.x && tagger.cell.y + vector.dy === prey.cell.y;
+}
+
 // S15P21C204-267. On the real server a forward intent stays held until released or expired, and
 // the held move resumes in the tick the first cell completes: an unreleased intent is two cells.
 it('releases every forward intent on the next tick so a puppet walks exactly one cell', () => {
@@ -380,7 +428,7 @@ it('releases every forward intent on the next tick so a puppet walks exactly one
   const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
   expect(runner.start('capture', world([operator, tagger]))).toBeNull();
   const sent: PuppetCommand[] = [];
-  for (let tick = 1; tick <= 40 && !sameCell(tagger, operator); tick++) {
+  for (let tick = 1; tick <= 40 && !inFront(tagger, operator); tick++) {
     // The world shows the move in progress on the tick after the intent, then it lands.
     const last = sent.at(-1);
     const busy = last?.type === 'MOVE_INTENT' && last.payload.direction === 'forward';
@@ -407,7 +455,7 @@ it('releases every forward intent on the next tick so a puppet walks exactly one
       return true;
     });
   }
-  expect(sameCell(tagger, operator)).toBe(true);
+  expect(inFront(tagger, operator)).toBe(true);
   const forwards = sent.filter(
     (command) => command.type === 'MOVE_INTENT' && command.payload.direction === 'forward',
   );
@@ -503,6 +551,24 @@ it('내 출구 앞으로 관리자를 세우고 출구 벽을 보게 한다', ()
   });
 });
 
+// S15P21C204-321. 작은 미로에서는 출구 앞 칸에 인형이 서 있는 배치가 자주 나온다.
+it('내 출구 앞에 인형이 서 있으면 먼저 비키게 한 뒤 나를 세운다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const blocker = player({
+    playerId: 'puppet-runner',
+    role: 'runner',
+    cell: OPERATOR_EXIT.approach,
+  });
+  const build = (tick: number) =>
+    world([operator, blocker], { tick, operator: operatorState({ exit: OPERATOR_EXIT }) });
+  expect(runner.start('place-me-at-exit', build(0))).toBeNull();
+  const placed = runWithPlacement(runner, build, 3);
+  expect(placed[0]?.actor).toBe('puppet-runner');
+  expect(placed[0]?.cell).not.toEqual(OPERATOR_EXIT.approach);
+  expect(runner.status.step).toBe('clear-exit');
+});
+
 it('출구가 없거나 술래면 배치 대본을 거절한다', () => {
   const runner = createDemoRunner();
   const operator = player({ playerId: 'operator', role: 'runner' });
@@ -562,6 +628,27 @@ it('배치를 할 수 없는 방에서는 그 단계가 실패한다', () => {
   expect(runner.start('place-me-at-exit', build(0))).toBeNull();
   runner.advance(build(1), { send: () => true });
   expect(runner.status.failure).toBe('place-at-exit:FAILED');
+});
+
+// S15P21C204-316. 코어는 배치를 조용히 거절한다. 전에는 2분 상한까지 매 틱 다시 요청했다.
+it('코어가 받아들이지 않은 배치는 곧바로 실패로 끝난다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner', cell: { x: 1, y: 1 } });
+  const build = (tick: number) =>
+    world([operator], { tick, operator: operatorState({ exit: OPERATOR_EXIT }) });
+  expect(runner.start('place-me-at-exit', build(0))).toBeNull();
+  let requests = 0;
+  // 방은 요청을 받지만 관리자는 한 칸도 옮겨지지 않는다.
+  for (let tick = 1; tick <= 30 && runner.status.scenario; tick++)
+    runner.advance(build(tick), {
+      send: () => true,
+      place: () => {
+        requests += 1;
+        return true;
+      },
+    });
+  expect(runner.status.failure).toBe('place-at-exit:FAILED');
+  expect(requests).toBeLessThanOrEqual(11);
 });
 
 it('다가오기는 역할과 거리를 고를 수 있다', () => {
@@ -711,13 +798,17 @@ it('내가 도전을 시작할 때까지 술래 인형이 옆에서 기다린다
   expect(puppet.cell).toEqual(waitingAt);
 
   challenging = true;
+  const commands: PuppetCommand['type'][] = [];
   for (let tick = 91; tick <= 160 && runner.status.scenario; tick++) {
     runner.advance(build(tick), (_actor, command) => {
+      commands.push(command.type);
       puppet = apply(puppet, command);
       return true;
     });
   }
-  expect(puppet.cell).toEqual(operator.cell);
+  // It grabs from the cell beside me; stepping onto me is not a capture since 319.
+  expect(inFront(puppet, operator)).toBe(true);
+  expect(commands).toContain('GRAB_INTENT');
 });
 
 it('덫 두 개를 먼 칸부터 놓아 설치자가 앞 칸을 밟지 않는다', () => {
@@ -782,8 +873,70 @@ it('관전 대본은 내가 잡힌 뒤에야 두 번째 술래가 움직인다',
   expect(movers.has('puppet-tagger-2')).toBe(true);
 });
 
+// S15P21C204-321. 통로 1칸 미로에서는 가만히 선 인형 몸이 길을 아예 막는다. 걷기가 길을 못 찾으면
+// 목적지로 옮겨 달라고 한다. 옮길 수 없는 방이면 전처럼 실패로 끝난다.
+it('길이 몸으로 막히면 걷는 대신 목적지로 옮긴다', () => {
+  // y=1 줄만 통로인 7x3 복도. 걷는 인형 (1,1), 가로막는 인형 (2,1), 출구 앞 (4,1), 나는 (5,1).
+  const corridor: Topology = {
+    topologyVersion: 'corridor-1',
+    width: 7,
+    height: 3,
+    walkable: Array.from(
+      { length: 21 },
+      (_, index) => Math.floor(index / 7) === 1 && index % 7 > 0 && index % 7 < 6,
+    ),
+  };
+  const operator = player({ playerId: 'operator', role: 'tagger', cell: { x: 5, y: 1 } });
+  const blocker = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 2, y: 1 } });
+  const walker = player({ playerId: 'puppet-runner', role: 'runner', cell: { x: 1, y: 1 } });
+  const build = (tick: number) =>
+    world([operator, blocker, walker], {
+      tick,
+      topology: corridor,
+      exits: [
+        { exitId: 'e', ownerId: 'puppet-runner', approach: { x: 4, y: 1 }, wall: { x: 4, y: 0 } },
+      ],
+    });
+  const runner = createDemoRunner();
+  expect(runner.start('exit', build(0))).toBeNull();
+  const placed: { actor: string; cell: { x: number; y: number } }[] = [];
+  runner.advance(build(1), {
+    send: () => true,
+    place: (actor, cell) => {
+      placed.push({ actor, cell });
+      return true;
+    },
+  });
+  expect(runner.status.failure).toBeNull();
+  expect(placed).toEqual([{ actor: 'puppet-runner', cell: { x: 4, y: 1 } }]);
+
+  // 옮길 수 없는 방이면 길이 없다고 끝낸다.
+  const plain = createDemoRunner();
+  expect(plain.start('exit', build(0))).toBeNull();
+  plain.advance(build(1), { send: () => true });
+  expect(plain.status.failure).toMatch(/:FAILED$/);
+});
+
 it('모든 시나리오가 선택지 목록을 갖는다', () => {
   // 웹이 버튼마다 어떤 설정을 보여 줄지 이 표에서 읽는다. 빠지면 그 버튼만 설정이 사라진다.
   for (const scenario of DEMO_SCENARIOS) expect(SCENARIO_OPTIONS[scenario]).toBeDefined();
   expect(Object.keys(SCENARIO_OPTIONS)).toHaveLength(DEMO_SCENARIOS.length);
+});
+
+// S15P21C204-313. 선택지 때문에 시작하지 못한 버튼이 아무 반응 없이 끝나지 않게 한다.
+it('reports a refused start the same way as a stop, and keeps a running scenario', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  expect(runner.start('capture', world([operator, tagger]))).toBeNull();
+  expect(runner.start('exit', world([operator, tagger]))).toBe('NO_RUNNER_PUPPET');
+  expect(runner.status).toEqual({
+    scenario: 'capture',
+    step: 'chase-operator',
+    failure: 'exit:NO_RUNNER_PUPPET',
+  });
+  expect(runner.start('trap', world([operator, tagger]), { distance: 2 })).toBe(
+    'UNSUPPORTED_OPTION',
+  );
+  expect(runner.status.failure).toBe('trap:UNSUPPORTED_OPTION');
 });

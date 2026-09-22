@@ -2,11 +2,12 @@
  * S15P21C204-260. The operator panel shows only what the server offered and never invents a
  * scenario. A player room receives no demo state at all, so the panel is simply not rendered.
  */
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { demoStateSchema, type DemoStateMessage } from '@kkakkung/protocol/game-messages';
-import { DemoPanel } from './DemoPanel';
+import { DemoPanel, completedScenario } from './DemoPanel';
 import { DEMO_SCENARIO_GUIDE, demoFailureCodes } from './demo-scenario-guide';
 
 const state = (over: Partial<DemoStateMessage> = {}): DemoStateMessage =>
@@ -88,4 +89,45 @@ it('disables controls before the round starts and explains why', () => {
   );
   expect(html).toContain('경기가 시작되면 시나리오를 실행할 수 있습니다.');
   expect(html.match(/disabled=""/g)).toHaveLength(3);
+});
+
+// S15P21C204-313. 패널은 라운드 종료와 선택지 전송을 지원했지만 앱이 그 콜백을 넘기지 않아, 단추는
+// 보이지 않고 고른 선택지는 기본값으로 바뀌어 나갔다. 패널 시험은 콜백을 직접 넘기므로 이걸 못 봤다.
+it('lets the operator end the round even while a scenario is stuck', () => {
+  const render = (over: Partial<DemoStateMessage>, phase: string) =>
+    renderToStaticMarkup(
+      createElement(DemoPanel, { demo: state(over), phase, onRun: () => {}, onAbort: () => {} }),
+    );
+  const abort = (html: string) => /<button[^>]*class="demo-abort"[^>]*>/.exec(html)?.[0] ?? '';
+  expect(abort(render({ running: 'capture', step: 'chase-operator' }, 'PLAYING'))).not.toContain(
+    'disabled',
+  );
+  expect(abort(render({}, 'DEVICE_CHECK'))).toContain('disabled');
+  expect(abort(render({}, 'RESULT'))).toContain('disabled');
+});
+
+it('is mounted with the options and round-end callbacks the panel offers', () => {
+  const app = readFileSync(new URL('../../../app/ProductApp.tsx', import.meta.url), 'utf8');
+  const mounts = [...app.matchAll(/<DemoPanel[\s\S]*?\/>/g)].map((match) => match[0]);
+  // 준비 단계에는 목록을 두지 않는다. 경기에 들어가서 본다. 패널은 무대 옆 열 하나뿐이다.
+  expect(mounts).toHaveLength(1);
+  expect(mounts[0]).toContain('onRunWithOptions=');
+  expect(mounts[0]).toContain('onAbort=');
+  const stage = app.slice(app.indexOf('<section className="game-stage"'));
+  expect(stage.indexOf('<DemoPanel')).toBeGreaterThan(stage.indexOf('</section>'));
+  // S15P21C204-314. 서버가 보내고 미니맵이 그릴 줄 아는 관리자 출구를 앱이 넘기지 않았다.
+  const minimap = /<MiniMap[\s\S]*?\/>/.exec(app)?.[0] ?? '';
+  expect(minimap).toContain('operatorExit={snapshot.demo?.operatorExit');
+});
+
+// S15P21C204-313. 성공한 시나리오가 아무 표시 없이 목록으로 돌아가 됐는지 알 수 없었다.
+it('remembers a scenario that ended without a failure as completed', () => {
+  const idle = { running: null, failureCode: null };
+  expect(completedScenario('capture', idle, null)).toBe('capture');
+  // 다음 갱신에서도 남아 있다가, 새 실행이나 실패가 오면 지운다.
+  expect(completedScenario(null, idle, 'capture')).toBe('capture');
+  expect(completedScenario(null, { running: 'trap', failureCode: null }, 'capture')).toBeNull();
+  expect(
+    completedScenario('capture', { running: null, failureCode: 'chase-operator:TIMEOUT' }, null),
+  ).toBeNull();
 });

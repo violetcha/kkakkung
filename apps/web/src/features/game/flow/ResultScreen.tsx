@@ -1,4 +1,4 @@
-import type { PrivateView, PublicRoundState } from '@kkakkung/protocol/game-schema';
+import type { PrivateView, PublicRoundState, Role } from '@kkakkung/protocol/game-schema';
 import { resultPresenter } from './result-presenter';
 import type { RequestDisplay } from '../../room/command-lifecycle';
 import { commandFeedback } from './command-feedback';
@@ -8,6 +8,7 @@ export function ResultScreen({
   host,
   request,
   connectedCount,
+  demo = false,
   onRematch,
 }: {
   round: PublicRoundState;
@@ -15,7 +16,12 @@ export function ResultScreen({
   host: boolean;
   request?: RequestDisplay;
   connectedCount: number;
-  onRematch(mode: 'same' | 'swap' | 'lobby'): void;
+  /**
+   * S15P21C204-318. 데모 방은 관리자 한 명과 인형 다섯이라 팀·인원 안내가 맞지 않는다. 대신 다음
+   * 경기에서 관리자가 맡을 역할을 고른다. 술래 쪽 대본을 보려고 링크를 새로 만들 필요가 없다.
+   */
+  demo?: boolean;
+  onRematch(mode: 'same' | 'swap' | 'lobby', role?: Role): void;
 }) {
   const result = resultPresenter(round, self);
   const pending =
@@ -39,16 +45,32 @@ export function ResultScreen({
             ? '다음 경기를 준비하고 있습니다. 잠시 기다려 주세요.'
             : round.rematchState === 'settling'
               ? '다음 경기를 위해 연결을 정리하고 있습니다. 재경기를 선택하면 준비되는 대로 이동합니다.'
-              : host
-                ? '재경기 방식을 선택해 주세요. 모두 다시 준비한 뒤 시작합니다.'
-                : '방장이 다음 경기를 선택하기를 기다리고 있습니다.'}
+              : demo
+                ? '다음 경기에서 맡을 역할을 고르세요. 인형이 준비를 대신합니다.'
+                : host
+                  ? '재경기 방식을 선택해 주세요. 모두 다시 준비한 뒤 시작합니다.'
+                  : '방장이 다음 경기를 선택하기를 기다리고 있습니다.'}
         </p>
       )}
-      {ended && connectedCount < 6 && (
+      {ended && !demo && connectedCount < 6 && (
         <p>현재 {connectedCount}/6명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수 있습니다.</p>
       )}
       {commandFeedback(request) && <p role="status">{commandFeedback(request)}</p>}
-      {host && ended && (
+      {host && ended && demo && (
+        <div className="actions">
+          {(['runner', 'tagger'] as const).map((role) => (
+            <button
+              key={role}
+              disabled={pending}
+              aria-pressed={self?.role === role}
+              onClick={() => onRematch('same', role)}
+            >
+              {role === 'runner' ? '도망자로 재경기' : '술래로 재경기'}
+            </button>
+          ))}
+        </div>
+      )}
+      {host && ended && !demo && (
         <div className="actions">
           <button disabled={pending} onClick={() => onRematch('same')}>
             같은 팀으로 재경기
