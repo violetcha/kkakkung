@@ -89,6 +89,12 @@ import { preparationIssue } from './preparation-issue.js';
 import type { StructuredEvent } from '../observability/StructuredEvents.js';
 
 const MAP_FINALIZING_TIMEOUT_MS = 30_000;
+/**
+ * S15P21C204-328. Well past the 3s countdown, because nothing here is meant to be slow: the
+ * control the countdown hands over is applied on the very next tick. It is a way out of a phase
+ * that would otherwise have none, not a deadline anybody should ever meet.
+ */
+const COUNTDOWN_TIMEOUT_MS = 15_000;
 /** S15P21C204-258. Puppets filling the other five seats of a demo room. */
 const DEMO_PUPPET_COUNT = 5;
 /** 시연 방(showcase)의 고정 맵: 소형 미로, 고정 시드. 발표마다 같은 구조·같은 출구가 나온다. */
@@ -1131,6 +1137,17 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         case 'COUNTDOWN': {
           const game = this.gameInstance();
           if (!game) return;
+          // S15P21C204-328. Nothing else gets this room out of COUNTDOWN. `countdown.due` is
+          // true exactly once, `applyStartPlaying` refuses silently (a control carries no
+          // requestId, so there is nothing to answer with), and RoomExpiry keeps the room. Miss
+          // the one control and six people watch a countdown that never ends. Ordinary starts
+          // never come near this: the control below is applied on the very next tick, because
+          // `driver.tick()` runs ahead of this switch and `startRequestedTick` is serverTick + 1.
+          const startedAt = deps.slots.phaseStartedAt(this.roomCode);
+          if (startedAt !== null && now - startedAt >= COUNTDOWN_TIMEOUT_MS) {
+            this.returnToDeviceCheck('COUNTDOWN_TIMEOUT');
+            return;
+          }
           if (this.countdown.due(now)) {
             this.startRequestedTick = this.context.serverTick + 1;
             this.driver.enqueueControl(game.gameInstanceId, {
