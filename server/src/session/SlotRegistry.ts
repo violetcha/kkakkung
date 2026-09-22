@@ -2,7 +2,8 @@
  * Logical seat accounting across rooms: RESERVED (session issued), JOINED (connected) and
  * RETIRING (left but remote media not yet confirmed released). A match room holds 6 seats and a
  * demo room holds 1; service capacity is 60 seats and the number of rooms is the F-verified
- * limit. A RETIRING seat still counts; only `releaseConfirmed` (after E confirms retirement)
+ * limit. Both limits count the rooms players join (match and showcase): demo rooms have their own
+ * small room budget (S15P21C204-312), so a demonstration never takes a room or a seat away. A RETIRING seat still counts; only `releaseConfirmed` (after E confirms retirement)
  * frees it.
  */
 import type { Phase, Role } from '@kkakkung/protocol/game-schema';
@@ -30,6 +31,7 @@ export type ReserveResult =
   | 'ROLE_FULL'
   | 'SERVICE_FULL'
   | 'ROOM_LIMIT'
+  | 'DEMO_LIMIT'
   | 'OWNER_LIMIT'
   | 'ROOM_CLOSED';
 
@@ -64,17 +66,23 @@ export class SlotRegistry {
   readonly maxRooms: number;
   /** 한 주체가 동시에 열어 둘 수 있는 방 수(S15P21C204-293). */
   readonly maxRoomsPerOwner: number;
+  /** 동시에 열 수 있는 데모 방 수. maxRooms 와 따로 센다(S15P21C204-312). */
+  readonly maxDemoRooms: number;
 
   constructor(options: {
     roomCapacity?: number;
     serviceCapacity?: number;
     maxRooms: number;
     maxRoomsPerOwner?: number;
+    maxDemoRooms?: number;
   }) {
     this.roomCapacity = options.roomCapacity ?? 6;
     this.serviceCapacity = options.serviceCapacity ?? 60;
     this.maxRooms = options.maxRooms;
     this.maxRoomsPerOwner = options.maxRoomsPerOwner ?? 2;
+    this.maxDemoRooms = options.maxDemoRooms ?? 1;
+    if (!Number.isSafeInteger(this.maxDemoRooms) || this.maxDemoRooms < 1)
+      throw new Error('INVALID_MAX_DEMO_ROOMS');
     if (!Number.isSafeInteger(this.maxRooms) || this.maxRooms < 1)
       throw new Error('INVALID_MAX_ROOMS');
     if (!Number.isSafeInteger(this.maxRoomsPerOwner) || this.maxRoomsPerOwner < 1)
@@ -151,6 +159,23 @@ export class SlotRegistry {
     return total;
   }
 
+  /**
+   * Seats that count toward the service capacity: every room players join, match or showcase. A
+   * demo operator's seat is not one of them; demo rooms have their own budget (S15P21C204-312).
+   */
+  playerOccupied(): number {
+    let total = 0;
+    for (const room of this.rooms.values()) if (room.kind !== 'demo') total += room.slots.size;
+    return total;
+  }
+
+  /** Demo rooms, or every other room when `demo` is false. */
+  private roomsCounted(demo: boolean): number {
+    let count = 0;
+    for (const room of this.rooms.values()) if ((room.kind === 'demo') === demo) count += 1;
+    return count;
+  }
+
   occupied(roomCode: string): number {
     return this.rooms.get(roomCode)?.slots.size ?? 0;
   }
@@ -183,7 +208,9 @@ export class SlotRegistry {
     let room = this.rooms.get(roomCode);
     if (!room) {
       if (!options.create) return 'ROOM_CLOSED';
-      if (this.rooms.size >= this.maxRooms) return 'ROOM_LIMIT';
+      if (options.demo) {
+        if (this.roomsCounted(true) >= this.maxDemoRooms) return 'DEMO_LIMIT';
+      } else if (this.roomsCounted(false) >= this.maxRooms) return 'ROOM_LIMIT';
       // 전역 예산을 한 주체가 다 가져가지 못하게 한다. 방이 닫히면 항목이 사라지므로 따로
       // 정리할 계수기를 두지 않고 매번 센다(방은 최대 열 개다).
       if (options.openedBy && this.roomsOpenedBy(options.openedBy) >= this.maxRoomsPerOwner)
@@ -211,7 +238,8 @@ export class SlotRegistry {
     if (room.slots.has(playerId)) return 'reserved';
     if (!JOINABLE_PHASES.includes(room.phase)) return 'ROOM_CLOSED';
     if (room.slots.size >= room.capacity) return 'ROOM_FULL';
-    if (this.totalOccupied() >= this.serviceCapacity) return 'SERVICE_FULL';
+    if (room.kind !== 'demo' && this.playerOccupied() >= this.serviceCapacity)
+      return 'SERVICE_FULL';
     if (room.kind === 'showcase') {
       // 시연 방은 역할을 고르고 들어온다. 고른 역할이 이미 절반을 채웠으면 다른 역할을 고르게 한다.
       const role = options.showcase?.role;

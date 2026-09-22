@@ -109,7 +109,18 @@ export async function requestDemoRoom(
   } catch {
     throw new Error('CONNECTION_FAILED');
   }
-  if (!response.ok) throw new Error(`DEMO_REQUEST_FAILED:${response.status}`);
+  if (!response.ok) {
+    // S15P21C204-312. 503 은 "다른 데모 방이 열려 있음"과 "서비스가 참" 을 함께 뜻한다. 서버가
+    // 준 코드를 붙여 화면이 운영자에게 할 일을 나눠 알릴 수 있게 한다.
+    const body: unknown = await response.json().catch(() => null);
+    const code =
+      typeof body === 'object' &&
+      body !== null &&
+      typeof (body as { error?: unknown }).error === 'string'
+        ? (body as { error: string }).error
+        : null;
+    throw new Error(`DEMO_REQUEST_FAILED:${response.status}${code ? ':' + code : ''}`);
+  }
   const result = demoRoomResponseSchema.safeParse(await response.json().catch(() => null));
   if (!result.success) throw new Error('INVALID_RESPONSE');
   return result.data;
