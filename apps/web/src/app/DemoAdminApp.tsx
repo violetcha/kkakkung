@@ -4,14 +4,14 @@ import { BrandLogo } from './BrandLogo';
 
 const messageFor = (error: unknown) => {
   if (!(error instanceof Error)) return '데모 방을 열지 못했습니다. 잠시 후 다시 시도해 주세요.';
-  switch (error.message) {
-    case 'DEMO_REQUEST_FAILED:401':
-      return '관리자 권한을 확인하지 못했습니다. 다시 로그인해 주세요.';
-    case 'DEMO_REQUEST_FAILED:503':
-      return '데모 방을 지금 열 수 없습니다. 진행 중인 데모를 종료하거나 운영 설정을 확인해 주세요.';
-    default:
-      return '데모 방을 열지 못했습니다. 네트워크와 운영 상태를 확인한 뒤 다시 시도해 주세요.';
-  }
+  // 서버가 준 코드가 뒤에 붙을 수 있다(예: DEMO_REQUEST_FAILED:503:DEMO_ROOM_LIMIT).
+  const [, status, code] = /^DEMO_REQUEST_FAILED:(\d+)(?::(\w+))?$/.exec(error.message) ?? [];
+  if (status === '401') return '관리자 권한을 확인하지 못했습니다. 다시 로그인해 주세요.';
+  if (code === 'DEMO_ROOM_LIMIT')
+    return '다른 데모 방이 아직 열려 있습니다. 그 방에서 라운드를 끝내고 나가거나, 나간 지 2분이 지나면 다시 열 수 있습니다.';
+  if (status === '503')
+    return '데모 방을 지금 열 수 없습니다. 운영 설정(DEMO_ROOMS)이나 서비스 상태를 확인해 주세요.';
+  return '데모 방을 열지 못했습니다. 네트워크와 운영 상태를 확인한 뒤 다시 시도해 주세요.';
 };
 
 /** GitLab SSO로 보호된 `/demo` 전용 관리자 화면. 일반 게임 입장·운영 토큰과 분리한다. */

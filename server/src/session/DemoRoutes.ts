@@ -68,7 +68,11 @@ function createDemoRoute(
     });
     if (outcome !== 'reserved') {
       deps.sessions.invalidate(issued.sessionId);
-      return void res.status(503).json({ error: 'CAPACITY' });
+      // S15P21C204-312. 데모 방은 자기 예산이 따로 있다. 다른 데모 방이 열려 있어서 못 여는 것과
+      // 서비스 전체가 찬 것은 운영자가 할 일이 다르므로 나눠 답한다.
+      return void res
+        .status(503)
+        .json({ error: outcome === 'DEMO_LIMIT' ? 'DEMO_ROOM_LIMIT' : 'CAPACITY' });
     }
     const response: DemoRoomResponse = {
       sessionToken: issued.sessionToken,

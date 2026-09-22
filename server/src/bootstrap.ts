@@ -83,6 +83,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   maxRooms: number;
   /** 한 출처가 동시에 열어 둘 수 있는 방 수(S15P21C204-300). 생략하면 레지스트리 기본값. */
   maxRoomsPerOrigin?: number;
+  /** S15P21C204-312. Demo rooms counted apart from maxRooms. */
+  demoMaxRooms?: number;
   inviteMaxTtlMs: number | null;
   publicWindow:
     | Readonly<{ opensAtEpochMs: number; closesAtEpochMs: number }>
@@ -189,6 +191,7 @@ export function createApplication<State = unknown>(
         ...(product.maxRoomsPerOrigin === undefined
           ? {}
           : { maxRoomsPerOwner: product.maxRoomsPerOrigin }),
+        ...(product.demoMaxRooms === undefined ? {} : { maxDemoRooms: product.demoMaxRooms }),
       })
     : null;
   const directory = new RoomDirectory();

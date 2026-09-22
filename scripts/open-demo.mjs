@@ -71,11 +71,13 @@ try {
           ? 'the --output file already exists; name a new one so an earlier address is not lost'
           : reason.includes('DEMO_UNAVAILABLE')
             ? 'the deployment runs with DEMO_ROOMS=0'
-            : reason.includes('CAPACITY')
-              ? 'the room budget is full; close the open demo room or raise MAX_ROOMS'
-              : reason.startsWith('DEMO_ROOM_REJECTED:401')
-                ? 'OPS_TOKEN is missing or wrong'
-                : 'check OPS_TOKEN, the target URLs and the role (runner or tagger)';
+            : reason.includes('DEMO_ROOM_LIMIT')
+              ? 'another demo room is still open; close it (round end, then leave) or wait until it expires'
+              : reason.includes('CAPACITY')
+                ? 'the room budget is full; close the open demo room or raise MAX_ROOMS'
+                : reason.startsWith('DEMO_ROOM_REJECTED:401')
+                  ? 'OPS_TOKEN is missing or wrong'
+                  : 'check OPS_TOKEN, the target URLs and the role (runner or tagger)';
   console.error(`DEMO_ROOM_FAILED (${reason}): ${hint}.`);
   process.exitCode = 1;
 }

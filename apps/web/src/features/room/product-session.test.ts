@@ -139,3 +139,17 @@ describe('demo link across a refresh', () => {
     expect(storage.getItem('kkakkung.demo-session')).toBeNull();
   });
 });
+
+// S15P21C204-312. 503 은 "다른 데모 방이 열려 있음"과 "서비스가 참"을 함께 뜻한다. 코드를 붙여 넘긴다.
+it('keeps the server reason when the demo room cannot be opened', async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ error: 'DEMO_ROOM_LIMIT' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      }),
+  );
+  await expect(
+    requestDemoRoom({ role: 'runner' }, fetcher as unknown as typeof fetch),
+  ).rejects.toThrow('DEMO_REQUEST_FAILED:503:DEMO_ROOM_LIMIT');
+});
