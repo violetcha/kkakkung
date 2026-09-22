@@ -66,6 +66,7 @@ import {
   SCENE_ASSET_VERSION,
 } from '../features/game/flow/loading-controller';
 import {
+  carryRole,
   cueState,
   CUE_FLASH_MS,
   captureProgressFlash,
@@ -389,13 +390,17 @@ export function bindProductRoom(
   const emitCues = () => {
     if (!active || snapshot.lost) return;
     const round = snapshot.round;
-    const next = cueState({
-      round,
-      self: snapshot.view?.self ?? null,
-      endedSelf: snapshot.endedSelf,
-      tick: clock.renderTick() ?? round?.serverTick ?? 0,
-      countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
-    });
+    // 334. 종료 전이로 self 가 비워진 생존자도 같은 경기의 역할을 이어 받아 승패를 듣는다.
+    const next = carryRole(
+      lastCueState,
+      cueState({
+        round,
+        self: snapshot.view?.self ?? null,
+        endedSelf: snapshot.endedSelf,
+        tick: clock.renderTick() ?? round?.serverTick ?? 0,
+        countdown: round ? loadingDisplay(round, clock.serverNow()).countdown : null,
+      }),
+    );
     const cues = detectCues(lastCueState, next);
     const progressFlash = captureProgressFlash(lastCueState, next);
     lastCueState = next;
