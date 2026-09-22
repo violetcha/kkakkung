@@ -13,8 +13,10 @@ import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
 import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { useMediaConsent } from '../features/room/use-media-consent';
+import { ConsentGate } from '../features/room/ConsentGate';
+import { deviceReady } from '../features/game/flow/device-readiness';
+import { ReadyCheck } from '../features/room/ReadyCheck';
 import { DemoPanel } from '../features/game/flow/DemoPanel';
-import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { FaceGuidanceNotice } from '../features/game/flow/FaceGuidanceNotice';
 import { LocalControls } from '../features/game/flow/LocalControls';
 import { AudioControls } from '../features/game/flow/AudioControls';
@@ -39,9 +41,12 @@ import { MiniMap } from '../features/game/map/MiniMap';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
 import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { PracticeScreen } from '../features/game/flow/PracticeScreen';
+import { PracticeQuests } from '../features/game/flow/PracticeQuests';
+import { EMPTY_LESSONS, observeLessons } from '../features/game/flow/practice-lessons';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { createDemoFaceTexture } from '../features/game/scene/demo-face';
+import { CanvasTexture, SRGBColorSpace } from 'three';
 import { restraintPresenter } from '../features/game/equipment/restraint-presenter';
 import { CueFlash } from '../features/game/flow/CueFlash';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
@@ -111,6 +116,28 @@ export function ProductApp({
     if (invitation || initialRoom) setHomePanel('admission');
   }, [invitation, initialRoom]);
   const finishSolo = useCallback(() => setSolo(false), []);
+  // S15P21C204-295. 대기실의 준비는 "카메라를 켜고 준비됐다고 알린다" 하나다. 동의를 아직 받지
+  // 않았으면 먼저 받고, 켜는 데 실패하면 준비를 보고하지 않는다(빈 카메라로 시작하지 않는다).
+  const [readying, setReadying] = useState(false);
+  /** 동의를 받은 뒤 이어서 준비를 보고할 때 쓴다. 동의 창은 준비를 누를 때만 뜬다. */
+  const [consentAsk, setConsentAsk] = useState(false);
+  /** 방 안 설정 창. Esc 와 머리말의 설정 단추가 같은 창을 연다. */
+  const [roomMenu, setRoomMenu] = useState(false);
+  /** 장치 점검 창. 준비를 누르면 열리고 준비가 보고되면 닫힌다. */
+  const [deviceCheck, setDeviceCheck] = useState(false);
+  // 준비를 누르면 카메라를 켜고 점검 창을 연다. 준비 보고는 점검을 통과한 뒤 그 창에서 한다.
+  const startAndReady = useCallback(async () => {
+    setDeviceCheck(true);
+    setReadying(true);
+    setError('');
+    try {
+      await runtime.current?.startDevices(false);
+    } catch {
+      setError('카메라를 켜지 못했습니다. 권한을 확인하고 다시 눌러 주세요.');
+    } finally {
+      setReadying(false);
+    }
+  }, []);
   const [error, setError] = useState('');
   const [access, setAccess] = useState<'checking' | SessionAccessResponse['method'] | 'failed'>(
     'checking',
@@ -118,6 +145,34 @@ export function ProductApp({
   const [accessAttempt, setAccessAttempt] = useState(0);
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);
   const [selfId, setSelfId] = useState('');
+  // 대기실 타일이 쓰는 얼굴. 내 것은 가공 얼굴을 그리는 면 그대로, 남의 것은 받은 얼굴이다.
+  const selfFace = useRef<{ surface: HTMLCanvasElement | null; texture: CanvasTexture | null }>({
+    surface: null,
+    texture: null,
+  });
+  useEffect(
+    () => () => {
+      selfFace.current.texture?.dispose();
+      selfFace.current = { surface: null, texture: null };
+    },
+    [],
+  );
+  const lobbyFace = useCallback(
+    (playerId: string) => {
+      if (playerId !== selfId) return runtime.current?.faces.get(playerId) ?? null;
+      const surface = runtime.current?.processedFaceSurface() ?? null;
+      if (surface !== selfFace.current.surface) {
+        selfFace.current.texture?.dispose();
+        if (surface) {
+          const texture = new CanvasTexture(surface);
+          texture.colorSpace = SRGBColorSpace;
+          selfFace.current = { surface, texture };
+        } else selfFace.current = { surface: null, texture: null };
+      }
+      return selfFace.current.texture;
+    },
+    [selfId],
+  );
   const [code, setCode] = useState('');
   const [sessionCredential, setSessionCredential] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<number | null>(null);
@@ -176,6 +231,19 @@ export function ProductApp({
     (element: HTMLDivElement | null) => runtime.current?.setPreviewHost(element),
     [],
   );
+  /**
+   * S15P21C204-295. 미리보기 video 가 화면에서 떨어지면 브라우저가 프레임 콜백을 멈춘다.
+   * 그러면 얼굴 표본이 끊겨 타일 얼굴이 기본 얼굴로 내려간다. 점검 창을 닫은 뒤에는 보이지
+   * 않는 이 자리에 붙여 두어 카메라가 계속 흐르게 한다.
+   */
+  const facePump = useRef<HTMLDivElement | null>(null);
+  const checkHost = useRef<HTMLDivElement | null>(null);
+  const holdPreview = useCallback((element: HTMLDivElement | null) => {
+    facePump.current = element;
+  }, []);
+  const checkPreview = useCallback((element: HTMLDivElement | null) => {
+    checkHost.current = element;
+  }, []);
   const leave = useCallback(async () => {
     generation.current++;
     cancelPendingAdmission();
@@ -372,6 +440,115 @@ export function ProductApp({
     renderTick(),
   );
   // S15P21C204-295. 지금 앞에 있는 것에 쓰는 키. 아이템 칸(핫바)과는 다른 줄로 나뉘어 있다.
+  const selfSeat = snapshot?.roster?.players.find((player) => player.playerId === selfId) ?? null;
+  // 대기실(사람 모으기·장치 점검)은 스크롤 없는 한 화면이다.
+  const inLobby = Boolean(
+    snapshot?.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase),
+  );
+  const DEVICE_STATE_LABELS: Record<string, string> = {
+    idle: '꺼짐',
+    off: '사용 안 함',
+    ready: '준비됨',
+    locked: '권한 필요',
+    denied: '허용 안 됨',
+    failed: '다시 점검',
+    requesting: '권한 확인 중',
+    loading: '불러오는 중',
+    running: '보정 중',
+  };
+  const lobbyDevices = snapshot
+    ? (
+        [
+          ['웹캠', snapshot.devices.camera],
+          ['얼굴 추적', snapshot.devices.vision],
+          ['중립 자세 보정', snapshot.devices.calibration],
+          ['마이크', snapshot.devices.microphone],
+        ] as const
+      ).map(([label, state]) => ({
+        label,
+        state: DEVICE_STATE_LABELS[state] ?? state,
+      }))
+    : [];
+  // S15P21C204-295. 대기실의 준비는 "카메라를 켜고 자세를 점검한 뒤 준비됐다고 알린다"다.
+  // 동의를 아직 받지 않았으면 먼저 받고, 점검 창에서 통과해야 준비가 보고된다.
+  const demoRoom = Boolean(snapshot?.demo);
+  const devices = snapshot?.devices;
+  const motion = snapshot?.motionCheck;
+  const reportReady = useCallback(
+    async (next: boolean) => {
+      if (!next) {
+        runtime.current?.ready(false);
+        return;
+      }
+      if (!consent.consented) {
+        setConsentAsk(true);
+        return;
+      }
+      // 이미 점검을 통과한 사람이 준비를 취소했다가 다시 누른 것이면 창을 또 열지 않는다.
+      // 그대로 다시 보고한다. 장치가 하나라도 빠졌으면 아래로 내려가 창을 연다.
+      if (
+        devices &&
+        deviceReady(devices) &&
+        motion?.lean &&
+        motion.turn &&
+        runtime.current?.ready(true)
+      )
+        return;
+      await startAndReady();
+    },
+    [consent.consented, startAndReady, devices, motion],
+  );
+  // 점검 창은 준비를 누를 때만 열리고, 준비가 보고되면 스스로 닫힌다.
+  const selfReady = snapshot?.roster?.players.find((p) => p.playerId === selfId)?.ready ?? false;
+  useEffect(() => {
+    if (selfReady) setDeviceCheck(false);
+  }, [selfReady]);
+  // 카메라와 얼굴 추적이 서면 중립 자세를 한 번 맞춘다. 누를 단추 없이 진행한다.
+  const calibrating = useRef(false);
+  useEffect(() => {
+    if (!deviceCheck || !devices) return;
+    if (devices.camera !== 'ready' || devices.vision !== 'ready') return;
+    if (devices.calibration !== 'idle' || calibrating.current) return;
+    calibrating.current = true;
+    void runtime.current?.calibrateMotion().finally(() => {
+      calibrating.current = false;
+    });
+  }, [deviceCheck, devices]);
+  // 두 확인이 끝나면 준비를 보고한다. 소리 장치가 아직 잠겨 있어 거절되면 확인음으로 한 번
+  // 풀고 다시 보고한다. 두 확인을 마친 사람이 단추를 더 누를 일은 없어야 한다.
+  useEffect(() => {
+    if (!deviceCheck || selfReady || !motion?.lean || !motion.turn) return;
+    if (runtime.current?.ready(true)) return;
+    void playTestTone().then(() => runtime.current?.ready(true));
+  }, [deviceCheck, selfReady, motion, playTestTone]);
+  // S15P21C204-295. 방 안에서도 Esc 는 같은 설정 창을 연다. 창은 홈과 하나다.
+  const inRoom = Boolean(snapshot);
+  // 창이 열리고 닫힐 때마다 미리보기가 붙을 자리를 옮긴다. 둘 다 화면 안에 있어야 한다.
+  useEffect(() => {
+    if (!inRoom) return;
+    runtime.current?.setPreviewHost(deviceCheck ? checkHost.current : facePump.current);
+  }, [inRoom, deviceCheck]);
+  useEffect(() => {
+    if (!inRoom) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.repeat) setRoomMenu((open) => !open);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [inRoom]);
+  useEffect(() => {
+    if (!inRoom) setRoomMenu(false);
+  }, [inRoom]);
+  // S15P21C204-295. 팀 연습의 할 일 목록. 내 시야가 바뀔 때마다 무엇을 해 봤는지 센다.
+  const practicePhase = round?.phase === 'TEAM_PRACTICE';
+  const [lessons, setLessons] = useState(EMPTY_LESSONS);
+  useEffect(() => {
+    if (!practicePhase) setLessons(EMPTY_LESSONS);
+  }, [practicePhase]);
+  useEffect(() => {
+    if (!practicePhase) return;
+    setLessons((current) => observeLessons(current, view));
+  }, [practicePhase, view]);
   const interact = interactPrompt({
     view: view ?? null,
     tick: renderTick(),
@@ -431,19 +608,30 @@ export function ProductApp({
             ? `product-shell home-shell home-${homePanel}`
             : !snapshot && solo
               ? 'product-shell solo-shell'
-              : 'product-shell'
+              : inLobby
+                ? 'product-shell room-shell'
+                : 'product-shell'
       }
     >
       <RoughDefs />
-      {!snapshot && !solo && <LobbyBackdrop paused={backgroundPaused} />}
-      <header>
-        <BrandLogo />
-        {snapshot && (
-          <button className="quiet" onClick={leaveByChoice}>
-            나가기
-          </button>
-        )}
-      </header>
+      {((!snapshot && !solo) || inLobby) && (
+        <LobbyBackdrop paused={backgroundPaused} door={inLobby} />
+      )}
+      {!worldVisible && (
+        <header>
+          <BrandLogo />
+          {/* 대기실에서는 왼쪽 줄에 설정·나가기가 있다. 머리말에 같은 단추를 또 두지 않는다. */}
+          {snapshot && !inLobby && (
+            <span className="room-head-actions">
+              {/* 설정은 방 안에서도 한 창이다. Esc 로도 같은 창이 열린다. */}
+              <button onClick={() => setRoomMenu(true)}>설정</button>
+              <button className="quiet" onClick={leaveByChoice}>
+                나가기
+              </button>
+            </span>
+          )}
+        </header>
+      )}
       {solo && !snapshot ? (
         <SoloPracticeScreen onExit={finishSolo} />
       ) : !snapshot && (homePanel === 'title' || homePanel === 'options') ? (
@@ -698,11 +886,7 @@ export function ProductApp({
               주세요.
             </p>
           )}
-          <QualityControl
-            value={snapshot.quality}
-            onChange={(value) => runtime.current?.quality(value)}
-          />
-          {!worldVisible && localControls}
+          {/* 화면 품질은 설정 창(화면)에 있다. 방 안 어디서도 화면 위에 따로 띄우지 않는다. */}
           {snapshot.roster && round && ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
             <LobbyScreen
               roster={snapshot.roster}
@@ -737,41 +921,38 @@ export function ProductApp({
               onSelectMapSize={(size) =>
                 runtime.current?.send({ type: 'ROOM_MAP_SIZE', payload: { size } })
               }
-            />
-          )}
-          {sessionCredential &&
-            !snapshot.demo &&
-            snapshot.roster?.hostId === selfId &&
-            snapshot.roster?.kind !== 'showcase' &&
-            round &&
-            ['LOBBY', 'DEVICE_CHECK'].includes(round.phase) && (
-              <RoomInvitationControls
-                key={`${code}:${selfId}`}
-                sessionToken={sessionCredential}
-                roomCode={code}
-                teamOnly={access === 'gitlab-sso'}
-              />
-            )}
-          {round?.phase === 'DEVICE_CHECK' && (
-            <DeviceCheckScreen
-              status={snapshot.devices}
-              ready={snapshot.roster?.players.find((p) => p.playerId === selfId)?.ready ?? false}
-              onStart={async (microphone) => {
-                await runtime.current?.startDevices(microphone);
-              }}
-              onReady={(value) => runtime.current?.ready(value)}
-              faceGuidance={snapshot.faceGuidance ?? null}
-              motion={snapshot.motionCheck}
-              onCalibrate={async () => {
-                await runtime.current?.calibrateMotion();
-              }}
-              onMicrophone={async (enabled) => {
-                await runtime.current?.setMicrophone(enabled);
-              }}
-              onTestTone={playTestTone}
-              consented={consent.consented}
-              onConsent={consent.accept}
-              demo={Boolean(snapshot.demo)}
+              onKick={(targetPlayerId) =>
+                runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } })
+              }
+              ready={selfSeat?.ready ?? false}
+              canReady={round.phase === 'DEVICE_CHECK' && !joining && !readying}
+              readyHint={
+                round.phase === 'LOBBY'
+                  ? '자리가 다 차면 준비를 누를 수 있어요. 그때 카메라가 켜집니다.'
+                  : undefined
+              }
+              onReady={(next) => void reportReady(next)}
+              onStart={() => runtime.current?.send({ type: 'ROOM_START', payload: {} })}
+              startRequest={snapshot.requests.ROOM_START}
+              devices={lobbyDevices}
+              faceOf={lobbyFace}
+              pumpHost={holdPreview}
+              onSettings={() => setRoomMenu(true)}
+              onLeave={leaveByChoice}
+              invite={
+                // 시연 방은 /showcase 로 들어오고, 데모 방은 인형이 자리를 채운다. 초대가 없다.
+                sessionCredential &&
+                !snapshot.demo &&
+                snapshot.roster?.hostId === selfId &&
+                snapshot.roster?.kind !== 'showcase' ? (
+                  <RoomInvitationControls
+                    key={`${code}:${selfId}`}
+                    sessionToken={sessionCredential}
+                    roomCode={code}
+                    teamOnly={access === 'gitlab-sso'}
+                  />
+                ) : undefined
+              }
             />
           )}
           {round && inResult && (
@@ -838,6 +1019,19 @@ export function ProductApp({
                     ) : null
                   }
                 />
+                {/* S15P21C204-295. 팀 연습의 할 일 목록. 혼자 연습과 같은 목록을 무대 왼쪽에 둔다. */}
+                {practicePhase && activeSelf && (
+                  <PracticeQuests
+                    role={activeSelf.role}
+                    completed={lessons.completed}
+                    canReady={deviceReady(snapshot.devices)}
+                    request={snapshot.requests.PRACTICE_READY}
+                    readyReported={snapshot.practiceReady}
+                    onReady={() =>
+                      runtime.current?.send({ type: 'PRACTICE_READY', payload: { ready: true } })
+                    }
+                  />
+                )}
                 {interactiveWorld && <FaceGuidanceNotice notice={snapshot.faceGuidance} />}
                 {/* 2 중앙 십자선. 설치·교환이 가능한 칸이면 색이 바뀐다(W4는 별도 스토리). */}
                 {interactiveWorld && (
@@ -980,6 +1174,127 @@ export function ProductApp({
             {snapshot.request?.type !== 'REMATCH' ? commandFeedback(snapshot.request) : null}
           </p>
           {snapshot.error && <p role="alert">{snapshot.error}</p>}
+          {roomMenu && (
+            <aside className="settings-overlay" aria-label="설정">
+              <SettingsWindow
+                variant="overlay"
+                eyebrow="설정"
+                title="설정"
+                initialTab="device"
+                lead={{ label: '방 나가기', danger: true, run: () => void leave() }}
+                tail={{ label: '닫기', run: () => setRoomMenu(false) }}
+                tabs={[
+                  {
+                    id: 'device',
+                    label: '조작 · 장치',
+                    content: (
+                      <LocalControls
+                        status={snapshot.devices}
+                        mode={snapshot.interaction.mode}
+                        previewHost={preview}
+                        onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+                        onMotion={async () => {
+                          await runtime.current?.calibrateMotion();
+                        }}
+                        onRecover={async () => {
+                          await runtime.current?.recoverDevices();
+                        }}
+                        onMicrophone={async (enabled) => {
+                          await runtime.current?.setMicrophone(enabled);
+                        }}
+                        consented={consent.consented}
+                        canRecover={
+                          !!round &&
+                          ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)
+                        }
+                        variant="full"
+                        bare
+                      />
+                    ),
+                  },
+                  {
+                    id: 'sound',
+                    label: '소리',
+                    content: (
+                      <AudioControls
+                        readStatus={readAudio}
+                        onPreferences={changeAudio}
+                        onTestTone={playTestTone}
+                        participants={snapshot.roster?.players.filter(
+                          (player) => player.playerId !== selfId,
+                        )}
+                        canTestTone={
+                          !!round && ['DEVICE_CHECK', 'TEAM_PRACTICE'].includes(round.phase)
+                        }
+                        bare
+                      />
+                    ),
+                  },
+                  {
+                    id: 'display',
+                    label: '화면',
+                    content: (
+                      <QualityControl
+                        value={snapshot.quality}
+                        onChange={(value) => runtime.current?.quality(value)}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </aside>
+          )}
+          {deviceCheck && round?.phase === 'DEVICE_CHECK' && (
+            <div
+              className="consent-ask device-check-ask"
+              role="dialog"
+              aria-modal="true"
+              aria-label="장치 점검"
+            >
+              <div className="consent-ask-box device-check-ask-box">
+                <ReadyCheck
+                  status={snapshot.devices}
+                  motion={snapshot.motionCheck}
+                  previewHost={checkPreview}
+                  onCancel={() => setDeviceCheck(false)}
+                  onRetry={() => void startAndReady()}
+                  extra={
+                    /* 운영자 시연 방에만 있는 빠져나가는 길. 그 방은 장치 없이도 돌려 봐야 한다. */
+                    demoRoom && !selfReady ? (
+                      <button
+                        type="button"
+                        className="quiet"
+                        onClick={() => runtime.current?.ready(true)}
+                      >
+                        점검 없이 준비 (데모)
+                      </button>
+                    ) : null
+                  }
+                />
+              </div>
+            </div>
+          )}
+          {consentAsk && (
+            <div
+              className="consent-ask"
+              role="dialog"
+              aria-modal="true"
+              aria-label="카메라 사용 동의"
+            >
+              <div className="consent-ask-box">
+                <ConsentGate
+                  onAccept={() => {
+                    consent.accept();
+                    setConsentAsk(false);
+                    void startAndReady();
+                  }}
+                />
+                <button type="button" className="quiet" onClick={() => setConsentAsk(false)}>
+                  동의하지 않기
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
       {error && <p role="alert">{error}</p>}

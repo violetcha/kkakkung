@@ -11,6 +11,19 @@ for (let y = -80; y <= 3; y++) {
   if (y % 9 === -5 || y % 9 === -6) for (const x of [-4, -3, -2, 2, 3, 4]) cells.push({ x, y });
 }
 const occupied = new Set(cells.map(({ x, y }) => `${x}:${y}`));
+const waitingCells = cells.filter(({ y }) => y >= -2);
+const waitingWalls: WallFace[] = [
+  ...waitingCells.flatMap(({ y }) => [
+    { x: -2, y, side: 1 as const },
+    { x: 2, y, side: 3 as const },
+  ]),
+  ...[-1, 0, 1].map((x) => ({ x, y: -3, side: 2 as const })),
+].filter(
+  (wall, index, all) =>
+    all.findIndex(
+      (other) => other.x === wall.x && other.y === wall.y && other.side === wall.side,
+    ) === index,
+);
 const walls: WallFace[] = [];
 for (const cell of cells) {
   for (const [dx, dy, side] of [
@@ -60,9 +73,39 @@ function CorridorLight({ z, phase, still }: { z: number; phase: number; still: b
   );
 }
 
-function Corridor({ still }: { still: boolean }) {
+/**
+ * S15P21C204-295. 복도 끝의 문. 경기에서 도망자가 찾아야 하는 그 출구를 대기실 배경에 세워 둔다.
+ * 장식이라 아무것도 열리지 않는다. 조명은 복도 등이 준다.
+ */
+function ExitDoor() {
+  return (
+    <group position={[0, 0, -2.42]} scale={0.85}>
+      <mesh position={[0, 1.12, 0]}>
+        <boxGeometry args={[1.24, 2.24, 0.12]} />
+        <meshStandardMaterial color="#39423c" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 1.06, 0.08]}>
+        <boxGeometry args={[1, 2.04, 0.06]} />
+        <meshStandardMaterial color="#0a0b09" roughness={0.95} />
+      </mesh>
+      {/* 손잡이 자리의 가느다란 빛 한 줄 */}
+      <mesh position={[0.37, 1, 0.12]}>
+        <boxGeometry args={[0.05, 0.34, 0.02]} />
+        <meshBasicMaterial color="#8c836b" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function Corridor({ still, door }: { still: boolean; door: boolean }) {
   useFrame(({ camera, clock }) => {
     const t = still ? 0 : clock.elapsedTime;
+    if (door) {
+      camera.position.set(0, 1.05, 1.7);
+      camera.lookAt(0, 0.38, -2.4);
+      camera.rotation.z = 0;
+      return;
+    }
     camera.position.set(-1.28 + Math.sin(t * 0.13) * 0.025, 0.88, 2.3);
     camera.lookAt(0.7 + Math.sin(t * 0.09) * 0.1, 0.94, -8);
     camera.rotation.z = -0.025;
@@ -70,18 +113,23 @@ function Corridor({ still }: { still: boolean }) {
   return (
     <>
       <color attach="background" args={['#090a07']} />
-      <ambientLight intensity={0.12} color="#adac88" />
-      <ScenePrimitives
-        cells={cells}
-        walls={walls}
-        players={[]}
-        theme="facility"
-        quality="medium"
-        fixtures={false}
-      />
-      {Array.from({ length: 19 }, (_, index) => -index * 4).map((z, index) => (
-        <CorridorLight key={z} z={z} phase={index * 2.7} still={still} />
-      ))}
+      <ambientLight intensity={door ? 0.42 : 0.12} color="#adac88" />
+      <group scale={[1, door ? 1.45 : 1, 1]}>
+        <ScenePrimitives
+          cells={door ? waitingCells : cells}
+          walls={door ? waitingWalls : walls}
+          players={[]}
+          theme="facility"
+          quality="medium"
+          fixtures={false}
+        />
+      </group>
+      <group position={[0, door ? 0.8 : 0, 0]}>
+        {(door ? [-1] : Array.from({ length: 19 }, (_, index) => -index * 4)).map((z, index) => (
+          <CorridorLight key={z} z={z} phase={index * 2.7} still={still} />
+        ))}
+      </group>
+      {door && <ExitDoor />}
     </>
   );
 }
@@ -96,7 +144,7 @@ class BackdropBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
-export function LobbyBackdrop({ paused }: { paused: boolean }) {
+export function LobbyBackdrop({ paused, door = false }: { paused: boolean; door?: boolean }) {
   const [reduced, setReduced] = useState(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
@@ -122,7 +170,7 @@ export function LobbyBackdrop({ paused }: { paused: boolean }) {
           frameloop={hidden || still ? 'demand' : 'always'}
           camera={{ position: [-0.45, 0.9, 2.3], fov: 58, near: 0.05, far: 100 }}
         >
-          <Corridor still={still} />
+          <Corridor still={still} door={door} />
         </Canvas>
       </BackdropBoundary>
     </div>

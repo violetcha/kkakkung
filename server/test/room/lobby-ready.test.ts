@@ -45,6 +45,20 @@ describe('LobbyCoordinator', () => {
     expect(six.evaluate('DEVICE_CHECK')).toBe('stay');
   });
 
+  // S15P21C204-295. 잠깐 끊겼다 돌아온 사람이 준비를 다시 누르지 않아도 된다.
+  it('keeps a ready mark across a disconnect and still refuses to start without that seat', () => {
+    const six = lobby(6);
+    for (let i = 0; i < 6; i++) six.applyReady(`p${i}`, true, 'DEVICE_CHECK');
+    expect(six.evaluate('DEVICE_CHECK')).toBe('all-ready');
+
+    six.setConnected('p3', false);
+    expect(six.list().find((p) => p.playerId === 'p3')?.ready).toBe(true);
+    expect(six.evaluate('DEVICE_CHECK')).toBe('to-lobby');
+
+    six.setConnected('p3', true);
+    expect(six.evaluate('DEVICE_CHECK')).toBe('all-ready');
+  });
+
   it('assigns exactly three runners and three taggers, honouring a rematch plan for remaining players', () => {
     const six = lobby(6);
     const roles = six.assignRoles(null);

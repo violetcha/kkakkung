@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DeviceStatus, InteractionState } from '../../input/InteractionRuntime';
 import { deviceFeedback } from './device-feedback';
 import { deviceLost } from './device-readiness';
+import { PanelSection } from './SettingsPanes';
 
 export function LocalControls({
   status,
@@ -15,6 +16,7 @@ export function LocalControls({
   canRecover = true,
   compact = false,
   variant = 'full',
+  bare = false,
 }: {
   status: DeviceStatus;
   mode: InteractionState['mode'];
@@ -36,6 +38,8 @@ export function LocalControls({
    * 장치 단추를 다시 보여 주지 않고, 미리보기와 끊겼을 때의 복구 배너만 남긴다.
    */
   variant?: 'full' | 'quiet';
+  /** 설정 창 안에서는 접는 상자 없이 내용만 둔다. 갈래 이름이 이미 제목이다. */
+  bare?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const calibrating = busy || status.calibration === 'running';
@@ -70,8 +74,7 @@ export function LocalControls({
       {previewHost && (
         <div className="preview-host" ref={previewHost} aria-label="내 웹캠 미리보기" />
       )}
-      <details open={!compact}>
-        <summary>조작 안내 · 장치 설정</summary>
+      <PanelSection bare={bare} open={!compact} title="조작 안내 · 장치 설정">
         <p>
           <strong>{mode === 'motion' ? '얼굴·상체 조작' : '키보드 조작'}</strong>
         </p>
@@ -129,7 +132,7 @@ export function LocalControls({
         {status.camera === 'ready' && status.calibration !== 'ready' && (
           <p role="status">정면을 보고 얼굴과 양쪽 어깨가 보이도록 자세를 맞춘 뒤 보정해 주세요.</p>
         )}
-      </details>
+      </PanelSection>
       {status.errorCode && <p role="status">{deviceFeedback(status.errorCode)}</p>}
     </aside>
   );

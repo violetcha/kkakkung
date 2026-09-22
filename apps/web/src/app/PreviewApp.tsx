@@ -3,6 +3,8 @@ import { WorkflowPreview } from './WorkflowPreview';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { LobbyScreen } from '../features/room/LobbyScreen';
+import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
+import { BrandLogo } from './BrandLogo';
 import { viewFixture, roundFixture } from '../features/room/product-fixture';
 import { DeviceCheckScreen } from '../features/game/flow/DeviceCheckScreen';
 import { useMediaConsent } from '../features/room/use-media-consent';
@@ -106,18 +108,45 @@ export default function PreviewApp() {
       {['장비', '교환', '포즈', '키 도전', '연습'].includes(screen) && (
         <WorkflowPreview key={screen} screen={screen} />
       )}
+      {/* S15P21C204-295. 대기실은 한 화면이라 검수에서도 같은 껍데기로 본다. */}
       {screen === '로비' && (
-        <LobbyScreen
-          roster={{
-            matchId: 'm',
-            stateVersion: 1,
-            phase: 'LOBBY',
-            hostId: 'self',
-            players: [{ playerId: 'self', nickname: '시험 참가자', connected: true, ready: false }],
-          }}
-          selfId="self"
-          roomCode="ABCDEF"
-        />
+        <div className="product-shell room-shell preview-room">
+          <LobbyBackdrop paused door />
+          <header>
+            <BrandLogo />
+          </header>
+          <LobbyScreen
+            roster={{
+              matchId: 'm',
+              stateVersion: 1,
+              phase: 'LOBBY',
+              hostId: 'self',
+              // S15P21C204-295. 검수에서는 여섯 자리가 어떻게 보이는지 한 번에 본다.
+              players: [
+                { playerId: 'self', nickname: '시험 참가자', connected: true, ready: true },
+                { playerId: 'p2', nickname: '친구1', connected: true, ready: true },
+                { playerId: 'p3', nickname: '친구2', connected: true, ready: false },
+                { playerId: 'p4', nickname: '친구3', connected: false, ready: true },
+                { playerId: 'p5', nickname: '친구4', connected: true, ready: true },
+                { playerId: 'p6', nickname: '친구5', connected: true, ready: false },
+              ],
+            }}
+            selfId="self"
+            roomCode="ABCDEF"
+            ready
+            canReady
+            onReady={() => {}}
+            onSettings={() => {}}
+            onLeave={() => {}}
+            invite={<p>초대 링크가 표시되는 자리입니다.</p>}
+            devices={[
+              { label: '웹캠', state: '준비됨' },
+              { label: '얼굴 추적', state: '준비됨' },
+              { label: '중립 자세 보정', state: '꺼짐' },
+              { label: '마이크', state: '사용 안 함' },
+            ]}
+          />
+        </div>
       )}
       {screen === '장치 점검' && (
         <>

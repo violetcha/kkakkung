@@ -56,11 +56,15 @@ export class LobbyCoordinator {
     return participant;
   }
 
+  /**
+   * S15P21C204-295. 끊겨도 준비 표시는 남긴다. 잠깐 끊겼다 돌아온 사람이 처음부터 다시 누르는
+   * 일을 없앤다. 시작 판정은 evaluate 가 "연결된 사람이 정원만큼 있고 모두 준비" 를 보므로,
+   * 끊긴 사람의 준비가 남아 있어도 그 사람 없이 시작되지 않는다.
+   */
   setConnected(playerId: string, connected: boolean) {
     const participant = this.participants.get(playerId);
     if (!participant) return;
     participant.connected = connected;
-    if (!connected) participant.ready = false;
     this.refreshHost();
   }
 

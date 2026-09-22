@@ -123,6 +123,8 @@ function fixture(dropStart: boolean) {
 async function toCountdown(dropStart: boolean) {
   const f = fixture(dropStart);
   for (const player of f.players) f.send(player, 'READY', { ready: true });
+  // S15P21C204-295. 전원이 준비해도 저절로 시작하지 않는다. 방장이 시작한다.
+  f.send(f.players[0]!, 'ROOM_START', {});
   f.advance(50);
   expect(f.room.phase).toBe('TEAM_PRACTICE');
   for (const player of f.players) f.send(player, 'PRACTICE_READY', { ready: true });

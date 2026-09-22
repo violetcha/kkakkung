@@ -5,6 +5,30 @@ import type { Role } from '@kkakkung/protocol/game-schema';
 import type { HomeSettings } from '../../room/home-settings';
 import type { QualityPreset } from '../scene/quality-presets';
 
+/**
+ * 접히는 상자로 쓰이던 화면이 설정 창 안으로 들어올 때 쓴다. 창은 갈래 이름이 이미 제목이라
+ * 같은 제목을 한 번 더 두지 않는다(`bare`).
+ */
+export function PanelSection({
+  bare,
+  open,
+  title,
+  children,
+}: {
+  bare: boolean;
+  open: boolean;
+  title: string;
+  children: ReactNode;
+}) {
+  if (bare) return <div className="panel-section">{children}</div>;
+  return (
+    <details open={open}>
+      <summary>{title}</summary>
+      {children}
+    </details>
+  );
+}
+
 /** 몸 동작은 역할과 상관없다. 마지막 한 줄만 역할에 따라 바뀐다. */
 const MOTION_GUIDE = [
   ['몸을 앞으로', '한 칸 전진'],

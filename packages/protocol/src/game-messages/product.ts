@@ -79,6 +79,8 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
   envelope('ROOM_KICK', { targetPlayerId: playerIdSchema }),
   /** S15P21C204-311. 방장이 로비에서 맵 크기를 고른다. */
   envelope('ROOM_MAP_SIZE', { size: z.enum(MAP_SIZES) }),
+  /** S15P21C204-295. 여섯 명이 모두 준비한 뒤, 방장이 직접 시작한다. */
+  envelope('ROOM_START', {}),
   envelope('PRACTICE_READY', { ready: z.boolean() }),
   envelope('LOAD_READY', {
     loadId: opaqueIdSchema,
@@ -120,6 +122,7 @@ export const PHASE_COMMAND_TYPES = [
   'ROOM_LOCK',
   'ROOM_KICK',
   'ROOM_MAP_SIZE',
+  'ROOM_START',
   'PRACTICE_READY',
   'LOAD_READY',
   'REMATCH',
