@@ -48,7 +48,14 @@ import {
 } from './exits/challenge.js';
 import { verifyProgress } from './exits/complete.js';
 import { createExitRegistry } from './exits/registry.js';
-import { clearNextAction, expireMove, holdMove, queueTurn, releaseMove } from './input-buffer.js';
+import {
+  clearIntents,
+  clearNextAction,
+  expireMove,
+  holdMove,
+  queueTurn,
+  releaseMove,
+} from './input-buffer.js';
 import { discoverExits, knownActiveExits } from './knowledge/exits.js';
 import { initialTerrain, knownTerrainOf, observeTerrain } from './knowledge/terrain.js';
 import { completeActions, reserveMove, type CompletedMove } from './movement.js';
@@ -558,7 +565,13 @@ function handleInstall(ctx: StepContext, command: CoreCommand<'INSTALL'>): void 
   const plan = planInstall(ctx.state, actor, command.payload.kind);
   if (plan.status === 'rejected') return outcome(ctx, command, 'rejected', plan.code);
   // Reserving spends no charge: only a finished placement does.
-  ctx.state = reserveInstall(ctx.state, actor, plan.target, ctx.tick).state;
+  //
+  // S15P21C204-339. A move still held (or a turn still queued) from before the pose would be
+  // resumed by this very tick's queued-action stage, and the next tick's upkeep would then drop
+  // the reservation with no outcome to show for it: the installer was told `applied` and saw
+  // nothing happen. Taking the pose supersedes the older intent. A MOVE_INTENT sent after this
+  // still leaves the pose explicitly, as before.
+  ctx.state = reserveInstall(ctx.state, clearIntents(actor), plan.target, ctx.tick).state;
   return outcome(ctx, command, 'applied', null);
 }
 
@@ -812,6 +825,8 @@ function startQueuedActions(ctx: StepContext): void {
     const player = ctx.state.players.get(id)!;
     if (player.status !== 'ACTIVE' || player.action !== null) continue;
     if (isChallenging(player)) continue;
+    // 339. A pending placement keeps the pose: only an explicit command may leave it.
+    if (player.installation !== null) continue;
     const restrained = isRestrained(player, ctx.tick);
     if (player.nextAction) {
       // The single-shot turn is consumed before any held move resumes.
