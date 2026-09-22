@@ -32,6 +32,8 @@ export type AttachedInstance<State> = {
   mediaInstanceId: string | null;
   frameRevision: number;
   aborted: boolean;
+  /** The round is decided: the last state stays for the result screen but never steps again. */
+  settled: boolean;
 };
 
 export type PhaseCommandHandler = (entry: LedgerEntry, tick: number) => OutcomeResult;
@@ -98,6 +100,7 @@ export class MatchDriver<State> {
       mediaInstanceId: input.mediaInstanceId ?? null,
       frameRevision: 0,
       aborted: false,
+      settled: false,
     });
   }
 
@@ -130,6 +133,18 @@ export class MatchDriver<State> {
     );
     for (const { actorId, outcome } of canceled) this.deps.onOutcome(actorId, outcome);
     return canceled;
+  }
+
+  /**
+   * S15P21C204-335. Stops a decided instance where it is. It stays attached, so its last frame and
+   * personal views still serve the result screen, but it is not stepped and emits no further media
+   * frame: the one that carried RESULT was the last, and E retires the round's media once for it.
+   */
+  settle(gameInstanceId: string) {
+    const instance = this.instances.get(gameInstanceId);
+    if (!instance) return;
+    instance.settled = true;
+    this.controls.delete(gameInstanceId);
   }
 
   /** Controls are applied on the next tick only, never inside the enqueueing callback. */
@@ -210,10 +225,10 @@ export class MatchDriver<State> {
         entry.gameInstanceId && current && current.gameInstanceId === entry.gameInstanceId
           ? this.instances.get(entry.gameInstanceId)
           : undefined;
-      if (!target || target.aborted) {
+      if (!target || target.aborted || target.settled) {
         const done = queue.complete(
           command.requestId,
-          { result: 'canceled', code: 'CANCELED', tick },
+          { result: 'canceled', code: target?.settled ? 'ROUND_ENDED' : 'CANCELED', tick },
           this.deps.stateVersionFor(entry.actorId),
           now,
         );
@@ -232,6 +247,10 @@ export class MatchDriver<State> {
     // 3. Step every attached instance exactly once with its frozen commands and controls.
     for (const instance of this.instances.values()) {
       if (instance.aborted) continue;
+      if (instance.settled) {
+        this.controls.delete(instance.gameInstanceId);
+        continue;
+      }
       const group = perInstance.get(instance.gameInstanceId) ?? { entries: [], commands: [] };
       const controls = this.controls.get(instance.gameInstanceId) ?? [];
       this.controls.delete(instance.gameInstanceId);

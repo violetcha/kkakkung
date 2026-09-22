@@ -388,6 +388,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     mediaScopeFor(playerId: string, purpose: 'practice' | 'game') {
+      // A decided or aborted round issues no media. A grant or MEDIA_PREPARED arriving now finds no
+      // scope and is retired as an orphan instead of becoming a new generation (335).
+      if (this.phase === 'RESULT' || this.phase === 'ABORTED') return null;
       if (!this.clientsByPlayer.has(playerId)) return null;
       const instance = this.context.instanceOf(playerId);
       if (!instance || instance.kind !== purpose) return null;
@@ -1787,6 +1790,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
 
     private finishMatch() {
       this.driver.cancelAllPending('ROUND_ENDED');
+      // Without this the decided instance stepped for the whole result screen (up to 5 minutes)
+      // and every frame asked E to retire the round's media again, 20 times a second (335).
+      for (const instance of this.driver.attached()) this.driver.settle(instance.gameInstanceId);
       this.setPhase('RESULT');
     }
 
@@ -1827,6 +1833,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     }
 
     private abortMatch(reason: PublicMatchState['abortReason'] | null, diagnostic: string) {
+      // A decided round stays decided: a late failure must not turn its winner into ABORTED (335).
+      if (this.phase === 'RESULT') return;
       this.reportPreparationFailure('ABORTED', diagnostic, reason);
       this.invalidateLayout();
       this.blockedReason = diagnostic;
