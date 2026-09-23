@@ -117,6 +117,37 @@ it('registers callbacks once, keeps sensor updates out of UI and ignores late di
   expect(runtime.dispose).toHaveBeenCalledOnce();
   expect(changed).toHaveBeenCalledTimes(2);
 });
+it('allows only demo readiness to bypass the physical device gate', () => {
+  const runtime = {
+    setContext: vi.fn(),
+    dispose: vi.fn(async () => {}),
+  } as unknown as InteractionRuntime;
+  const sendCommand = vi.fn(() => 'id');
+  const bridge = createInteractionBridge(
+    {
+      sendCommand,
+      requestMediaGrant: vi.fn(),
+      reportMediaStatus: vi.fn(),
+      requestBindingsRefresh: vi.fn(),
+      onDeviceStatus: vi.fn(),
+      onFaceTrack: vi.fn(),
+      onMediaStatus: vi.fn(),
+      onSensors: vi.fn(),
+      onInteractionState: vi.fn(),
+      onLocalPreview: vi.fn(),
+    },
+    () => runtime,
+    undefined,
+    () => true,
+  );
+  bridge.setContext(context);
+
+  expect(bridge.ready(true)).toBe(true);
+  expect(sendCommand).toHaveBeenCalledExactlyOnceWith({
+    type: 'READY',
+    payload: { ready: true },
+  });
+});
 it('keeps the preview attached across practice, loading and play without remounting on state updates', async () => {
   let callbacks!: InteractionDeps;
   const runtime = {

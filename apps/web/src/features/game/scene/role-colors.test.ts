@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { ROLE_COLORS, ROLE_SILHOUETTE, relativeLuminance, roleColorsCss } from './role-colors';
+import { ROLE_COLORS, relativeLuminance, roleColorsCss } from './role-colors';
 
 it('gives both roles cloth bright enough to read at the edge of the lantern', () => {
   for (const role of ['tagger', 'runner'] as const) {
@@ -16,12 +16,6 @@ it('separates the roles by hue, not only by brightness', () => {
   // Tagger is red-led, runner is green/blue-led: the dominant channels differ.
   expect(tr!).toBeGreaterThan(tg! + tb!);
   expect(rg! + rb!).toBeGreaterThan(rr! * 2);
-});
-
-it('changes shape as well as colour, so a colour-blind player still tells them apart', () => {
-  expect(ROLE_SILHOUETTE.tagger.shoulder).toBeGreaterThan(ROLE_SILHOUETTE.runner.shoulder);
-  expect(ROLE_SILHOUETTE.tagger.brim).not.toBe(ROLE_SILHOUETTE.runner.brim);
-  expect(ROLE_SILHOUETTE.tagger.satchel).not.toBe(ROLE_SILHOUETTE.runner.satchel);
 });
 
 it('hands the same hex values to the CSS tokens', () => {

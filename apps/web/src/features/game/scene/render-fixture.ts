@@ -7,16 +7,26 @@ import type {
 } from '@kkakkung/protocol/game-schema';
 import { viewFixture } from '../../room/product-fixture';
 
-export const RENDER_SCENES = ['복도', '코너', '출구·장비', '상대 5명'] as const;
+export const RENDER_SCENES = [
+  '복도',
+  '코너',
+  '출구·장비',
+  '상대 5명',
+  '도망자 단독',
+  '술래 단독',
+] as const;
 export type RenderScene = (typeof RENDER_SCENES)[number];
 /** 자기 동작. 회전 중 벽 관통·잘림과 전진 중 셀 등장을 이동 시점 0–20으로 검수한다. */
 export const SELF_MOTIONS = ['still', 'turn', 'move'] as const;
 export type SelfMotion = (typeof SELF_MOTIONS)[number];
+export const TARGET_FACINGS = ['front', 'side'] as const;
+export type TargetFacing = (typeof TARGET_FACINGS)[number];
 /** Development-only invented recipient views. No master map or production layout is imported. */
 export function renderFixture(
   scene: RenderScene,
   facing: Dir = 0,
   selfMotion: SelfMotion = 'still',
+  targetFacing: TargetFacing = 'front',
 ): PrivateView {
   const cells: Cell[] = [
     { x: 0, y: 0 },
@@ -30,7 +40,8 @@ export function renderFixture(
     ]),
     { x: 0, y: -3, side: 2 },
   ];
-  const players: VisibleEntity[] =
+  const targetDir = targetFacing === 'front' ? 2 : 1;
+  const players: Extract<VisibleEntity, { kind: 'player' }>[] =
     scene === '출구·장비'
       ? []
       : [
@@ -38,12 +49,12 @@ export function renderFixture(
             id: 'other',
             kind: 'player',
             cell: { x: 0, y: -2 },
-            dir: 2,
+            dir: targetDir,
             role: 'runner',
             action: {
               kind: 'move',
-              from: { x: 0, y: -2, dir: 2 },
-              to: { x: 0, y: -1, dir: 2 },
+              from: { x: 0, y: -2, dir: targetDir },
+              to: { x: 0, y: -1, dir: targetDir },
               startTick: 0,
               endTick: 20,
             },
@@ -55,6 +66,7 @@ export function renderFixture(
     walls.push({ x: 1, y: -3, side: 2 }, { x: 2, y: -2, side: 3 });
   }
   if (scene === '상대 5명') {
+    players[0] = { ...players[0]!, role: 'tagger' };
     cells.push(...[-1, 1].flatMap((x) => [0, -1, -2].map((y) => ({ x, y }))));
     walls = [
       ...[0, -1, -2].flatMap((y) => [
@@ -73,11 +85,18 @@ export function renderFixture(
         id: `other-${index}`,
         kind: 'player' as const,
         cell: { x: x!, y: y! },
-        dir: 2 as const,
+        dir: targetDir as Dir,
+        role: index % 2 === 0 ? ('tagger' as const) : ('runner' as const),
         action: null,
       })),
     );
   }
+  if (scene === '도망자 단독' || scene === '술래 단독')
+    players[0] = {
+      ...players[0]!,
+      role: scene === '술래 단독' ? 'tagger' : 'runner',
+      action: null,
+    };
   const exitWall = walls.at(-1)!;
   const base = viewFixture();
   if (base.self?.status !== 'ACTIVE') throw Error('active fixture required');

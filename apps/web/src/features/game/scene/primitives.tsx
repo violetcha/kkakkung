@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { BoxGeometry, MeshStandardMaterial, TextureLoader, type Texture } from 'three';
 import type { Cell, Dir, WallFace } from '@kkakkung/protocol/game-schema';
 import { CHARACTER, cellPosition, directionYaw, wallKey, wallModel } from './scene-model';
-import { createFacilityResources, FACILITY, type BackroomsTextureSet } from './facility-theme';
+import {
+  createFacilityResources,
+  createFacilitySurfaceTextures,
+  FACILITY,
+  type BackroomsTextureSet,
+} from './facility-theme';
 import { BLOCK, createBlockResources, isMossyFace } from './block-theme';
 import { DEFAULT_SCENE_THEME, type SceneThemeId } from './scene-theme';
 import type { QualityPreset } from './quality-presets';
@@ -98,11 +103,14 @@ function BlockTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonl
 
 function useBackroomsTextures(quality: QualityPreset): BackroomsTextureSet | undefined {
   const [textures, setTextures] = useState<BackroomsTextureSet>();
+  const paths = backroomsTexturePaths(quality);
+  const colorPath = paths.color;
+  const roughnessPath = paths.roughness;
+  const normalPath = paths.normal;
   useEffect(() => {
     let active = true;
     const owned = new Set<Texture>();
     const loader = new TextureLoader();
-    const paths = backroomsTexturePaths(quality);
     setTextures(undefined);
     const load = (path: string | null, kind: 'color' | 'data') =>
       path === null
@@ -128,9 +136,9 @@ function useBackroomsTextures(quality: QualityPreset): BackroomsTextureSet | und
             }
           });
     void Promise.all([
-      load(paths.color, 'color'),
-      load(paths.roughness, 'data'),
-      load(paths.normal, 'data'),
+      load(colorPath, 'color'),
+      load(roughnessPath, 'data'),
+      load(normalPath, 'data'),
     ]).then(([color, roughness, normal]) => {
       if (!active || !color) return;
       setTextures({
@@ -143,7 +151,7 @@ function useBackroomsTextures(quality: QualityPreset): BackroomsTextureSet | und
       active = false;
       owned.forEach((texture) => texture.dispose());
     };
-  }, [quality]);
+  }, [colorPath, normalPath, roughnessPath]);
   return textures;
 }
 
@@ -159,7 +167,12 @@ function FacilityTerrain({
   fixtures: boolean;
 }) {
   const textures = useBackroomsTextures(quality);
-  const facility = useMemo(() => createFacilityResources(textures, quality), [quality, textures]);
+  const surfaces = useMemo(createFacilitySurfaceTextures, []);
+  useEffect(() => () => surfaces.dispose(), [surfaces]);
+  const facility = useMemo(
+    () => createFacilityResources(textures, quality, surfaces),
+    [quality, surfaces, textures],
+  );
   useEffect(() => () => facility.dispose(), [facility]);
   return (
     <>

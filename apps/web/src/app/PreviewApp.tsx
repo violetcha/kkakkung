@@ -17,6 +17,7 @@ import { QualityControl } from '../features/game/flow/QualityControl';
 import type { QualityPreset } from '../features/game/scene/quality-presets';
 import { RenderPreview } from './RenderPreview';
 import { HudPreview } from './HudPreview';
+import { MeshyAvatarPreview } from './MeshyAvatarPreview';
 // S15P21C204-273. 장치 점검 캐러셀 검수용 합성 상태. 실제 장치를 켜지 않는다.
 const DEVICE_STAGES = {
   '점검 전': INITIAL_DEVICES,
@@ -57,6 +58,7 @@ const views = [
   '결과',
   '연결 상실',
   '렌더 검수',
+  'Meshy 캐릭터',
 ] as const;
 /** 미니맵 검수용 통로. 가로 한 줄과 세로 한 줄이 꺾여 만난다. */
 const CORRIDOR = [
@@ -105,6 +107,7 @@ export default function PreviewApp() {
       </nav>
       <QualityControl value={quality} onChange={setQuality} />
       {screen === '렌더 검수' && <RenderPreview quality={quality} />}
+      {screen === 'Meshy 캐릭터' && <MeshyAvatarPreview />}
       {['장비', '교환', '포즈', '키 도전', '연습'].includes(screen) && (
         <WorkflowPreview key={screen} screen={screen} />
       )}

@@ -1,5 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { createQualityControl, QUALITY_PRESETS } from './quality-presets';
+import { createQualityControl, QUALITY_PRESET_IDS, QUALITY_PRESETS } from './quality-presets';
+
+it('exposes only the product quality presets accepted by asset manifests', () => {
+  expect(QUALITY_PRESET_IDS).toEqual(['low', 'medium']);
+});
 it('forwards each actual quality transition once and lowers render resolution', () => {
   const apply = vi.fn();
   const control = createQualityControl(apply);
