@@ -148,6 +148,11 @@ export const SESSION_ERROR_CODES = [
    * 다른 사실이라 따로 답한다: 여기서는 자기 방을 닫으면 바로 다시 열 수 있다.
    */
   'TOO_MANY_ROOMS',
+  /**
+   * S15P21C204-366. 이 계정이 이미 다른 창·탭에서 방에 접속해 있다. 한 계정은 서비스 전체에서
+   * 자리 하나만 갖는다. 그 창을 닫으면 자리가 바로 풀린다.
+   */
+  'ALREADY_IN_ROOM',
 ] as const;
 export type SessionErrorCode = (typeof SESSION_ERROR_CODES)[number];
 

@@ -4,6 +4,11 @@ export type ProductSession = {
   playerId: string;
   tokenHash: Buffer;
   inviteId: string;
+  /**
+   * 팀 SSO 로 받은 세션의 계정 키(해시). 한 계정이 서비스 전체에서 자리 하나만 갖게 세는 데만
+   * 쓴다(S15P21C204-366). SSO 신원이 없으면 null 이다.
+   */
+  account: string | null;
   roomCode: string;
   nickname: string;
   /** Epoch ms. */

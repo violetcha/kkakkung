@@ -528,7 +528,7 @@ Node 24.19.0·pnpm 11.19.0·TypeScript 6.0.3·Colyseus 0.18. 웹은 game-core·�
 
 ### 13.2 입장과 접근 경계
 
-- 입장 방식은 `SERVICE_AUDIENCE=team`(gitlab-sso) 또는 `public`(guest)로 고르고 두 설정이 어긋나면 부팅을 거절한다. public+LiveKit은 `publisher-permissions`에서만 부팅한다. 운영은 team이다. 호스트 프록시가 인증해 덮어쓴 신원만 신뢰하고 클라이언트가 신원을 지정하지 않는다. 게스트 방 생성은 신원을 바꿔도 같은 IP 제한을 받는다. 제한과 방 상한은 주소 원본이 아니라 **접힌 출처 키**로 센다(300). IPv6는 /64로 접어 임시 주소 회전을 한 출처로 묶고, IPv4-mapped IPv6는 IPv4와 같은 출처로 본다. 한 출처가 동시에 열 수 있는 방은 `MAX_ROOMS_PER_ORIGIN`(기본 2)이며 공유 NAT 뒤 여러 사람은 한 출처로 묶인다. 팀 SSO 방 생성은 IP가 아니라 SSO 계정당 `MAX_ROOMS_PER_ACCOUNT`(기본 1)로 세고, 명시한 초대 링크로 만든 방은 세지 않는다(366). 내 상한 초과(`TOO_MANY_ROOMS`)와 서비스 포화(`CAPACITY`)는 다르게 답하고, 좌석 레지스트리 내부 코드는 밖으로 내보내지 않는다.
+- 입장 방식은 `SERVICE_AUDIENCE=team`(gitlab-sso) 또는 `public`(guest)로 고르고 두 설정이 어긋나면 부팅을 거절한다. public+LiveKit은 `publisher-permissions`에서만 부팅한다. 운영은 team이다. 호스트 프록시가 인증해 덮어쓴 신원만 신뢰하고 클라이언트가 신원을 지정하지 않는다. 게스트 방 생성은 신원을 바꿔도 같은 IP 제한을 받는다. 제한과 방 상한은 주소 원본이 아니라 **접힌 출처 키**로 센다(300). IPv6는 /64로 접어 임시 주소 회전을 한 출처로 묶고, IPv4-mapped IPv6는 IPv4와 같은 출처로 본다. 한 출처가 동시에 열 수 있는 방은 `MAX_ROOMS_PER_ORIGIN`(기본 2)이며 공유 NAT 뒤 여러 사람은 한 출처로 묶인다. 팀 SSO 방 생성은 IP가 아니라 SSO 계정당 `MAX_ROOMS_PER_ACCOUNT`(기본 1)로 세고, 명시한 초대 링크로 만든 방은 세지 않는다. 한 SSO 계정은 서비스 전체에서 자리도 하나이며, 다른 창에서 접속 중이면 `ALREADY_IN_ROOM`으로 거절하고 접속 전 예약은 새 요청으로 교체한다(366). 내 상한 초과(`TOO_MANY_ROOMS`)와 서비스 포화(`CAPACITY`)는 다르게 답하고, 좌석 레지스트리 내부 코드는 밖으로 내보내지 않는다.
 - 게임 서버 포트는 비공개, web-proxy는 loopback. 운영 API는 별도 OPS_TOKEN.
 - 방 수: 스키마 1–10방, 방당 6석(`MAX_SLOTS = MAX_ROOMS × 6`). 값의 원본은 제품 Compose overlay이며 배포 사전 검사가 실제 값으로 검증한다. 운영은 10방이며, 게임 단독 60클라이언트 30분(QA-10)까지 검증했고 실제 미디어 단계 부하(QA-11/12)는 미실행이다.
 - 요청 상한: 운영·미디어 HTTP는 파싱 전에 인증 종류별 초당·동시 상한, 본문 2,048B·5초. 운영 명령 대기 64, 감사 오류 표본 24시간·4,096개.

@@ -206,6 +206,22 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       deps.monotonicNow(),
     );
     if (verdict !== 'allowed') return fail(res, 429, 'RATE_LIMITED');
+    // S15P21C204-366. 한 계정은 서비스 전체에서 자리 하나만 갖는다. 접속 중인 자리가 있으면
+    // 거절하고, 아직 접속하지 않은 예약(창을 닫았거나 두 번 누른 경우)은 새 요청으로 바꾼다.
+    // 일반 세션은 연결이 끊기면 바로 무효가 되므로 창을 닫은 사람은 곧바로 다시 들어온다.
+    if (principal) {
+      const held = deps.sessions.sessionsOfAccount(principal);
+      const connected = held.some(
+        (session) =>
+          deps.sessions.activeConnection(session.sessionId) !== null ||
+          deps.slots.slotState(session.roomCode, session.playerId) !== 'RESERVED',
+      );
+      if (connected) return fail(res, 409, 'ALREADY_IN_ROOM');
+      for (const session of held) {
+        deps.sessions.invalidate(session.sessionId);
+        deps.slots.release(session.roomCode, session.playerId);
+      }
+    }
     deps.cleanupReservations?.();
     const nowMs = deps.monotonicNow();
     let roomCode: string;
@@ -217,6 +233,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
         issued = deps.sessions.issue({
           nickname: body.nickname,
           inviteId: verified.inviteId,
+          account: principal,
           roomCode,
           ...(verified.expiresAt === undefined
             ? {}
@@ -246,6 +263,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
         issued = deps.sessions.issue({
           nickname: body.nickname,
           inviteId: verified.inviteId,
+          account: principal,
           roomCode,
           ...(verified.expiresAt === undefined
             ? {}
