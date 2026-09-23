@@ -43,6 +43,23 @@ it('keeps participant materials isolated and reports overlay visibility', () => 
   expect(first.map).toBeNull();
 });
 
+it('uploads a live video face every frame even when the element never renders', () => {
+  const material = createRunnerFaceMaterial();
+  const video = new Texture() as Texture & { isVideoTexture: boolean };
+  video.isVideoTexture = true;
+  const still = new Texture();
+
+  syncRunnerFaceMaterial(material, video);
+  const first = video.version;
+  syncRunnerFaceMaterial(material, video);
+  expect(video.version).toBeGreaterThan(first);
+
+  syncRunnerFaceMaterial(material, still);
+  const settled = still.version;
+  syncRunnerFaceMaterial(material, still);
+  expect(still.version).toBe(settled);
+});
+
 it('disposes only the surface material when the live face leaves visibility', () => {
   const texture = { dispose: vi.fn() };
   const faces = createFaceTextures(() => texture);
