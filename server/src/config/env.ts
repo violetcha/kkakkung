@@ -74,6 +74,9 @@ const environment = z.object({
   // 정상 6인은 방 하나에 초대로 모이므로 영향이 없다. 올리면 전역 예산을 한 회선이 더 많이
   // 가져갈 수 있고, 내리면 같은 망에서 동시에 두 팀이 놀기 어려워진다.
   MAX_ROOMS_PER_ORIGIN: z.coerce.number().int().min(1).max(10).default(2),
+  // S15P21C204-366. 한 SSO 계정이 동시에 열어 둘 수 있는 방 수. 팀원은 IP 가 아니라 계정으로
+  // 식별되므로 NAT 걱정 없이 "한 사람 한 방"으로 둔다.
+  MAX_ROOMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(10).default(1),
   OPS_DATA_DIR: z.string().default('./.local/operations'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 
@@ -208,6 +211,8 @@ export function parseConfig(input: Record<string, string | undefined>) {
   // 않게 부팅에서 거절한다(S15P21C204-300).
   if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ORIGIN >= raw.MAX_ROOMS)
     throw new Error('MAX_ROOMS_PER_ORIGIN must be below MAX_ROOMS');
+  if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ACCOUNT >= raw.MAX_ROOMS)
+    throw new Error('MAX_ROOMS_PER_ACCOUNT must be below MAX_ROOMS');
   if (raw.ALERT_WEBHOOK_CHANNEL !== undefined && raw.ALERT_WEBHOOK_URL === undefined)
     throw new Error('ALERT_WEBHOOK_CHANNEL requires ALERT_WEBHOOK_URL');
   if (raw.ALERT_WEBHOOK_URL !== undefined) {
@@ -306,6 +311,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     maxRooms: raw.MAX_ROOMS,
     maxSlots: raw.MAX_SLOTS,
     maxRoomsPerOrigin: raw.MAX_ROOMS_PER_ORIGIN,
+    maxRoomsPerAccount: raw.MAX_ROOMS_PER_ACCOUNT,
     opsDataDir: raw.OPS_DATA_DIR,
     logLevel: raw.LOG_LEVEL,
     livekit: livekit

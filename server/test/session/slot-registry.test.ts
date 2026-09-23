@@ -161,3 +161,22 @@ describe('SlotRegistry', () => {
     expect(new SlotRegistry({ maxRooms: 10 }).maxRoomsPerOwner).toBe(2);
   });
 });
+
+// S15P21C204-366. 계정 주체는 출처와 다른 한도로 센다.
+describe('SlotRegistry account owner limit', () => {
+  it('applies maxRoomsPerAccount to account owners and maxRoomsPerOwner to origins', () => {
+    const slots = new SlotRegistry({ maxRooms: 6, maxRoomsPerOwner: 2, maxRoomsPerAccount: 1 });
+    const account = { create: true, openedBy: 'sso:a', ownerKind: 'account' } as const;
+    expect(slots.reserve('ROOM01', 'a1', 0, account)).toBe('reserved');
+    expect(slots.reserve('ROOM02', 'a2', 0, account)).toBe('OWNER_LIMIT');
+    expect(slots.reserve('ROOM02', 'g1', 0, { create: true, openedBy: 'guest:x' })).toBe(
+      'reserved',
+    );
+    expect(slots.reserve('ROOM03', 'g2', 0, { create: true, openedBy: 'guest:x' })).toBe(
+      'reserved',
+    );
+    expect(() => new SlotRegistry({ maxRooms: 2, maxRoomsPerAccount: 0 })).toThrow(
+      'INVALID_MAX_ROOMS_PER_ACCOUNT',
+    );
+  });
+});

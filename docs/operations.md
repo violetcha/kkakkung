@@ -25,19 +25,20 @@
 
 값은 비밀이 아닌 정책으로 [compose.continuous.yaml](../infra/compose.continuous.yaml)·[compose.product.yaml](../infra/compose.product.yaml)에 두고, 배포 러너가 overlay에서 읽어 사전 검사에 넘긴다. 비밀값은 Jenkins Secret file `kkakkung-production-env`에만 둔다.
 
-| 설정                                       | 현재 값                 | 비고                                                                                                                                                     |
-| ------------------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                     |
-| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                       |
-| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                     |
-| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                     |
-| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                               |
-| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
-| API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
-| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                              |
-| `DEMO_MAX_ROOMS`                           | `3`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                            |
-| `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                   |
-| `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
+| 설정                                       | 현재 값                 | 비고                                                                                                                                                                      |
+| ------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`   | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                                      |
+| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                                        |
+| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                                      |
+| `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                                      |
+| `MAX_ROOMS_PER_ACCOUNT`                    | `1`                     | 팀 SSO 계정 하나가 동시에 여는 방 수(366). IP가 아니라 계정으로 세므로 캠퍼스 NAT 뒤 팀원끼리 막지 않는다. 초대 링크로 만든 방은 세지 않는다. `MAX_ROOMS` 미만이어야 부팅 |
+| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                                                |
+| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                                           |
+| API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                                            |
+| `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                                               |
+| `DEMO_MAX_ROOMS`                           | `3`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                                             |
+| `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                                    |
+| `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝                  |
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
 

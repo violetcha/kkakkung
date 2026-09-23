@@ -16,6 +16,8 @@ services:
       # S15P21C204-300: one origin (an IPv4 address or an IPv6 /64) may hold at most this many
       # rooms at once, so a single visitor cannot take the whole budget above. Shared NAT folds a
       # school or office onto one origin; a normal team opens one room and joins by invitation.
+      # S15P21C204-366: team SSO creation is capped per SSO account instead
+      # (MAX_ROOMS_PER_ACCOUNT, default 1), so teammates behind one campus IP are not blocked.
       MAX_ROOMS_PER_ORIGIN: '2'
       # S15P21C204-258: the operator demo room stays available so a demonstration needs no redeploy.
       # It has no entry point on the home screen: operators open it from /demo behind GitLab SSO.

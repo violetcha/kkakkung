@@ -66,6 +66,8 @@ export class SlotRegistry {
   readonly maxRooms: number;
   /** 한 주체가 동시에 열어 둘 수 있는 방 수(S15P21C204-293). */
   readonly maxRoomsPerOwner: number;
+  /** 한 SSO 계정이 동시에 열어 둘 수 있는 방 수(S15P21C204-366). 출처와 따로 센다. */
+  readonly maxRoomsPerAccount: number;
   /** 동시에 열 수 있는 데모 방 수. maxRooms 와 따로 센다(S15P21C204-312). */
   readonly maxDemoRooms: number;
 
@@ -74,12 +76,14 @@ export class SlotRegistry {
     serviceCapacity?: number;
     maxRooms: number;
     maxRoomsPerOwner?: number;
+    maxRoomsPerAccount?: number;
     maxDemoRooms?: number;
   }) {
     this.roomCapacity = options.roomCapacity ?? 6;
     this.serviceCapacity = options.serviceCapacity ?? 60;
     this.maxRooms = options.maxRooms;
     this.maxRoomsPerOwner = options.maxRoomsPerOwner ?? 2;
+    this.maxRoomsPerAccount = options.maxRoomsPerAccount ?? 1;
     this.maxDemoRooms = options.maxDemoRooms ?? 1;
     if (!Number.isSafeInteger(this.maxDemoRooms) || this.maxDemoRooms < 1)
       throw new Error('INVALID_MAX_DEMO_ROOMS');
@@ -87,6 +91,8 @@ export class SlotRegistry {
       throw new Error('INVALID_MAX_ROOMS');
     if (!Number.isSafeInteger(this.maxRoomsPerOwner) || this.maxRoomsPerOwner < 1)
       throw new Error('INVALID_MAX_ROOMS_PER_OWNER');
+    if (!Number.isSafeInteger(this.maxRoomsPerAccount) || this.maxRoomsPerAccount < 1)
+      throw new Error('INVALID_MAX_ROOMS_PER_ACCOUNT');
   }
 
   roomCodes(): ReadonlySet<string> {
@@ -203,6 +209,8 @@ export class SlotRegistry {
       /** 시연 방 자리. 방을 새로 열 때는 종류를 정하고, 있는 방에서는 고른 역할의 빈자리를 찾는다. */
       showcase?: { role: Role };
       openedBy?: string | null;
+      /** 주체가 출처(게스트)인지 SSO 계정인지. 한도가 다르다. 생략하면 출처. */
+      ownerKind?: 'origin' | 'account';
     } = {},
   ): ReserveResult {
     let room = this.rooms.get(roomCode);
@@ -213,7 +221,9 @@ export class SlotRegistry {
       } else if (this.roomsCounted(false) >= this.maxRooms) return 'ROOM_LIMIT';
       // 전역 예산을 한 주체가 다 가져가지 못하게 한다. 방이 닫히면 항목이 사라지므로 따로
       // 정리할 계수기를 두지 않고 매번 센다(방은 최대 열 개다).
-      if (options.openedBy && this.roomsOpenedBy(options.openedBy) >= this.maxRoomsPerOwner)
+      const ownerLimit =
+        options.ownerKind === 'account' ? this.maxRoomsPerAccount : this.maxRoomsPerOwner;
+      if (options.openedBy && this.roomsOpenedBy(options.openedBy) >= ownerLimit)
         return 'OWNER_LIMIT';
       room = {
         roomCode,

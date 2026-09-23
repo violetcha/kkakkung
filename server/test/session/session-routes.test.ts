@@ -355,11 +355,51 @@ describe('GitLab team admission through the trusted ingress', () => {
     expect(await refused.json()).toEqual({ error: 'TOO_MANY_ROOMS' });
     expect(deps.slots.roomCodes().size).toBe(2);
 
-    // 팀(SSO) 생성은 이 상한의 대상이 아니다.
+    // 팀(SSO)은 IP 가 아니라 계정으로 센다. 같은 IP 의 게스트 방은 팀원의 몫을 줄이지 않는다.
     deps = { ...deps, admissionMode: 'gitlab-sso' };
     expect((await post({ nickname: 'team', createRoom: true }, identity('member'))).status).toBe(
       201,
     );
     expect(deps.slots.roomCodes().size).toBe(3);
+  });
+
+  // S15P21C204-366. 팀 모드에서 한 계정이 방 예산 전체를 가져가지 못하게 한다.
+  it('lets one SSO account hold one room without penalizing teammates behind one IP', async () => {
+    // 기본값이 운영 값이다. 게스트 출처 한도(2)와 따로 센다.
+    deps = { ...deps, slots: new SlotRegistry({ maxRooms: 6 }) };
+    expect((await post(create, identity('alice'))).status).toBe(201);
+    const refused = await post(create, identity('alice'));
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: 'TOO_MANY_ROOMS' });
+
+    // 모든 요청이 같은 루프백 IP 에서 온다. 캠퍼스 NAT 뒤 다른 팀원은 자기 몫을 그대로 쓴다.
+    expect((await post(create, identity('bob'))).status).toBe(201);
+    expect((await post(create, identity('carol'))).status).toBe(201);
+    expect(deps.slots.roomCodes().size).toBe(3);
+  });
+
+  it('frees an SSO account slot once its room closes', async () => {
+    deps = { ...deps, slots: new SlotRegistry({ maxRooms: 6 }) };
+    const first = sessionResponseSchema.parse(await (await post(create, identity('alice'))).json());
+    expect((await post(create, identity('alice'))).status).toBe(429);
+    for (const seat of deps.slots.members(first.roomCode))
+      deps.slots.release(first.roomCode, seat.playerId);
+    expect(deps.slots.closeRoom(first.roomCode)).toBe(true);
+    expect((await post(create, identity('alice'))).status).toBe(201);
+  });
+
+  it('does not count rooms an SSO member creates through an explicit creation link', async () => {
+    deps = { ...deps, slots: new SlotRegistry({ maxRooms: 6 }) };
+    expect((await post(create, identity('alice'))).status).toBe(201);
+    const link = deps.invites.issue({
+      scope: { allowCreate: true, roomCodes: [] },
+      expiresAt: 1_030_000,
+    });
+    if (link.status !== 'issued') throw new Error(link.code);
+    const viaLink = await post(
+      { ...create, inviteToken: link.invitation.inviteToken },
+      identity('alice'),
+    );
+    expect(viaLink.status).toBe(201);
   });
 });

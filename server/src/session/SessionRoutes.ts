@@ -223,11 +223,14 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
             : { admissionDeadlineEpochMs: verified.expiresAt }),
         });
         playerId = issued.playerId;
-        // S15P21C204-293: 게스트 생성만 주체를 남긴다. 팀 입장은 사람이 식별되고 한 IP 뒤에
-        // 여러 명이 있을 수 있어 대상이 아니다.
+        // 방을 연 주체를 남겨 동시에 열어 둔 방 수를 센다. 게스트는 출처(S15P21C204-293), 팀
+        // SSO 는 계정이다(S15P21C204-366). 캠퍼스처럼 한 IP 뒤에 여러 팀원이 있으므로 SSO 를
+        // IP 로 세면 안 된다. 초대 링크로 만든 방은 링크 자체가 범위를 정하므로 세지 않는다.
+        const account = principal && !body.inviteToken ? principal : null;
         const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs, {
           create: true,
-          openedBy: guestLimiter,
+          openedBy: guestLimiter ?? account,
+          ownerKind: guestLimiter ? 'origin' : 'account',
         });
         if (outcome !== 'reserved') {
           deps.sessions.invalidate(issued.sessionId);
