@@ -1036,6 +1036,17 @@ export function ProductApp({
                 </div>
                 <GameStatusChrome
                   role={activeSelf?.role ?? null}
+                  // S15P21C204-369. 시연 방 녹화용 시점 표시. 내가 뛰는 동안은 역할 · 내 이름,
+                  // 개인 종료 뒤 동료를 볼 때는 관전 · 대상 이름. 일반 방은 그리지 않는다.
+                  caption={
+                    snapshot.roster?.kind !== 'showcase'
+                      ? null
+                      : activeSelf
+                        ? { kind: 'role', role: activeSelf.role, name: playerNames[selfId] ?? '' }
+                        : spectating
+                          ? { kind: 'spectate', name: playerNames[spectating.targetId] ?? '' }
+                          : null
+                  }
                   // 제한시간이 없는 데모 라운드는 null 이다. 시계가 지난 시간을 흘린다(332).
                   remainingSeconds={
                     round && round.deadlineTick !== null

@@ -83,18 +83,50 @@ export function StageClock({
   );
 }
 
+/**
+ * S15P21C204-369. 시연 방 녹화 화면의 시점 표시. 시계 아래 가운데에 "도망자 · 이름" / "술래 · 이름",
+ * 개인 종료 뒤 동료 시점을 볼 때는 "관전 · 대상 이름". 시연 방만 넘기고 일반 방은 null 이다.
+ */
+export type StageCaption =
+  | Readonly<{ kind: 'role'; role: Role; name: string }>
+  | Readonly<{ kind: 'spectate'; name: string }>;
+
+export const ROLE_CAPTION: Readonly<Record<Role, string>> = Object.freeze({
+  runner: '도망자',
+  tagger: '술래',
+});
+
+export function stageCaptionText(caption: StageCaption): string {
+  return `${caption.kind === 'role' ? ROLE_CAPTION[caption.role] : '관전'} · ${caption.name}`;
+}
+
+export function StageCaptionLine({ caption }: { caption: StageCaption }) {
+  return (
+    <p
+      className="stage-caption"
+      data-role={caption.kind === 'role' ? caption.role : 'spectate'}
+      aria-label={stageCaptionText(caption)}
+    >
+      {stageCaptionText(caption)}
+    </p>
+  );
+}
+
 export function GameStatusChrome({
   status,
   role,
   remainingSeconds,
   startedAtMs,
   nowMs,
+  caption,
 }: {
   status: ReactNode;
   role?: Role | null;
   remainingSeconds?: number | null;
   startedAtMs?: number;
   nowMs?: number;
+  /** S15P21C204-369. 시연 방의 시점 표시. 없으면 그리지 않는다. */
+  caption?: StageCaption | null;
 }) {
   return (
     <>
@@ -104,6 +136,7 @@ export function GameStatusChrome({
           {...(nowMs === undefined ? {} : { nowMs })}
         />
       )}
+      {caption && <StageCaptionLine caption={caption} />}
       {role === 'tagger' ? (
         <TaggerVeins />
       ) : (
