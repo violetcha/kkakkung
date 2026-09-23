@@ -2935,6 +2935,14 @@
   color: var(--color-muted);
   font-size: var(--text-small);
 }
+/* 지금 무엇이 막고 있는지. 상시 안내(.pose-arms-notice)보다 눈에 들어와야 한다. */
+.pose-hint {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid #dfbb79;
+  color: #dfbb79;
+  font-size: var(--text-small);
+}
 .game-panel button {
   margin: 8px 8px 0 0;
 }
