@@ -126,6 +126,8 @@ export const SHOWCASE_ERROR_CODES = [
   'ROLE_FULL',
   'CAPACITY',
   'SHOWCASE_UNAVAILABLE',
+  // S15P21C204-362. 서버가 입장을 받지 않는 동안(readiness LOCKED, admission 닫힘). 일반 세션 발급과 같다.
+  'ADMISSION_CLOSED',
 ] as const;
 export type ShowcaseErrorCode = (typeof SHOWCASE_ERROR_CODES)[number];
 
@@ -136,12 +138,23 @@ export const SESSION_ERROR_CODES = [
   'ROOM_NOT_AVAILABLE',
   'RATE_LIMITED',
   'ADMISSION_CLOSED',
+  /** 서비스가 찼다: 열 수 있는 방 수(`MAX_ROOMS`)나 좌석 수(`MAX_SLOTS`)를 다 썼다. 잠시 뒤 다시. */
   'CAPACITY',
+  /**
+   * S15P21C204-365. 들어가려던 그 방의 자리가 찼다. 서비스는 여유가 있을 수 있어 `CAPACITY` 와
+   * 다르게 답한다: 여기서는 기다리는 것이 아니라 다른 방을 찾거나 새 방을 만든다.
+   */
+  'ROOM_FULL',
   /**
    * 이 호출자가 이미 상한만큼 방을 열어 두었다(S15P21C204-293). 서비스가 찬 `CAPACITY` 와는
    * 다른 사실이라 따로 답한다: 여기서는 자기 방을 닫으면 바로 다시 열 수 있다.
    */
   'TOO_MANY_ROOMS',
+  /**
+   * S15P21C204-366. 이 계정이 이미 다른 창·탭에서 방에 접속해 있다. 한 계정은 서비스 전체에서
+   * 자리 하나만 갖는다. 그 창을 닫으면 자리가 바로 풀린다.
+   */
+  'ALREADY_IN_ROOM',
 ] as const;
 export type SessionErrorCode = (typeof SESSION_ERROR_CODES)[number];
 

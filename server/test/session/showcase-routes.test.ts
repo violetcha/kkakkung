@@ -30,6 +30,8 @@ describe('showcase room admission', () => {
   const now = 1_000_000;
   const sessions = new ProductSessionStore({ now: () => now });
   const slots = new SlotRegistry({ maxRooms: 2 });
+  // S15P21C204-362. 이 묶음은 서버가 열린 상태만 본다. 닫힌 문은 아래 별도 묶음이 본다.
+  const ready = true;
 
   beforeAll(async () => {
     const app = express();
@@ -39,8 +41,10 @@ describe('showcase room admission', () => {
         sessions,
         slots,
         trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
       }),
     );
     ({ server, endpoint } = await listen(app));
@@ -111,8 +115,10 @@ describe('showcase room admission', () => {
         sessions: store,
         slots: own,
         trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
       }),
     );
     const local = await listen(app);
@@ -137,6 +143,13 @@ describe('showcase room admission', () => {
     }
   });
 
+  // S15P21C204-367. 로그인 게이트는 SSAFY 계정 전체를 통과시키므로 운영자 판정은 목록이 한다.
+  it('refuses a signed-in account that is not on the operator list', async () => {
+    const response = await post({ role: 'runner' }, { 'x-demo-admin': 'student@example.com' });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'UNAUTHORIZED' });
+  });
+
   it('rejects a request that names no role', async () => {
     expect((await post({})).status).toBe(400);
     expect((await post({ role: 'referee' })).status).toBe(400);
@@ -147,7 +160,7 @@ describe('showcase rooms disabled', () => {
   it('keeps the same identity check and never opens a room', async () => {
     const app = express();
     app.use(express.json({ limit: '2kb' }));
-    app.use(createShowcaseUnavailableRoutes(true));
+    app.use(createShowcaseUnavailableRoutes(true, (identity) => identity === 'member'));
     const { server, endpoint } = await listen(app);
     try {
       const anonymous = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
@@ -171,7 +184,7 @@ describe('showcase rooms disabled', () => {
   it('ignores the header when the server is not behind the trusted proxy', async () => {
     const app = express();
     app.use(express.json({ limit: '2kb' }));
-    app.use(createShowcaseUnavailableRoutes(false));
+    app.use(createShowcaseUnavailableRoutes(false, () => true));
     const { server, endpoint } = await listen(app);
     try {
       const response = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
@@ -182,6 +195,119 @@ describe('showcase rooms disabled', () => {
       expect(response.status).toBe(401);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
+describe('showcase admission gate (S15P21C204-362)', () => {
+  it('answers ADMISSION_CLOSED without issuing a session while the server is not ready, then admits again', async () => {
+    // 2026-09-23 배포 서버가 LOCKED 인 동안 시연 세션이 발급되어 게임 페이지에서 NOT_READY 로 튕겼다.
+    // 일반 세션 발급과 같은 문을 여기서 먼저 지나, 첫 화면이 이유를 보여 준다.
+    const own = new SlotRegistry({ maxRooms: 1 });
+    const store = new ProductSessionStore({ now: () => 1_000_000 });
+    let ready = false;
+    const app = express();
+    app.use(express.json({ limit: '2kb' }));
+    app.use(
+      createShowcaseRoutes({
+        sessions: store,
+        slots: own,
+        trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
+        monotonicNow: () => 1_000_000,
+        admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
+      }),
+    );
+    const local = await listen(app);
+    try {
+      const call = (headers: Record<string, string> = { 'x-demo-admin': 'member' }) =>
+        fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify({ role: 'runner' }),
+        });
+      // 인증이 문보다 먼저다. 신원 없는 호출은 서버 상태를 알 수 없다.
+      expect((await call({})).status).toBe(401);
+      const closed = await call();
+      expect(closed.status).toBe(503);
+      expect(await closed.json()).toEqual({ error: 'ADMISSION_CLOSED' });
+      expect(own.roomCodes().size).toBe(0);
+
+      ready = true;
+      const opened = await call();
+      expect(opened.status).toBe(201);
+      const seat = showcaseRoomResponseSchema.parse(await opened.json());
+      expect(own.occupied(seat.roomCode)).toBe(1);
+    } finally {
+      await new Promise<void>((resolve) => local.server.close(() => resolve()));
+    }
+  });
+});
+
+describe('three showcase rooms at once (S15P21C204-361)', () => {
+  it('fills the earliest open room first, opens up to three, and answers CAPACITY for a fourth', async () => {
+    const own = new SlotRegistry({ maxRooms: 10, maxShowcaseRooms: 3 });
+    const store = new ProductSessionStore({ now: () => 1_000_000 });
+    const app = express();
+    app.use(express.json({ limit: '2kb' }));
+    app.use(
+      createShowcaseRoutes({
+        sessions: store,
+        slots: own,
+        trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
+        monotonicNow: () => 1_000_000,
+        admissionTtlMs: 10 * 60_000,
+        ready: () => true,
+      }),
+    );
+    const local = await listen(app);
+    try {
+      const seat = async (role: 'runner' | 'tagger') => {
+        const response = await fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-demo-admin': 'member' },
+          body: JSON.stringify({ role }),
+        });
+        return response.status === 201
+          ? showcaseRoomResponseSchema.parse(await response.json()).roomCode
+          : `${response.status}:${((await response.json()) as { error: string }).error}`;
+      };
+      const fill = async () => {
+        const codes = await Promise.all([
+          seat('runner'),
+          seat('runner'),
+          seat('tagger'),
+          seat('tagger'),
+        ]);
+        expect(new Set(codes).size).toBe(1);
+        return codes[0]!;
+      };
+      // 첫 무리 넷은 한 방. 다섯째는 새 방을 연다(한도 3).
+      const first = await fill();
+      const second = await seat('runner');
+      expect(second).not.toBe(first);
+      expect(own.formingShowcaseRooms()).toBe(2);
+      // 둘째 방에 빈 자리가 있는 동안은 셋째 방을 열지 않고 거기에 앉힌다.
+      expect(await seat('tagger')).toBe(second);
+      expect(await seat('runner')).toBe(second);
+      expect(await seat('tagger')).toBe(second);
+      expect(own.occupied(second)).toBe(4);
+      const third = await fill();
+      expect(new Set([first, second, third]).size).toBe(3);
+      expect(own.formingShowcaseRooms()).toBe(3);
+      // 셋이 다 모이는 중이면 열셋째는 기다린다.
+      expect(await seat('runner')).toBe('503:CAPACITY');
+      // 시연 방 셋은 MAX_ROOMS 예산을 셋 쓴다.
+      expect(own.roomCodes().size).toBe(3);
+      // 한 방이 시작하면 모이는 중이 둘이 되어 새 방이 열린다.
+      own.setPhase(first, 'TEAM_PRACTICE', 1_000_000);
+      const fourth = await seat('runner');
+      expect(fourth).not.toBe('503:CAPACITY');
+      expect(own.roomCodes().size).toBe(4);
+    } finally {
+      await new Promise<void>((resolve) => local.server.close(() => resolve()));
     }
   });
 });

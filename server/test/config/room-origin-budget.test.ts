@@ -50,3 +50,22 @@ describe('출처별 방 예산 설정', () => {
     expect(() => parseConfig({ ...base, MAX_ROOMS_PER_ORIGIN: 'two' })).toThrow();
   });
 });
+
+// S15P21C204-366. 팀 SSO 는 IP 가 아니라 계정으로 센다.
+describe('계정별 방 예산 설정', () => {
+  it('기본값은 한 방이고 운영이 바꿀 수 있다', () => {
+    expect(parseConfig({ ...base }).maxRoomsPerAccount).toBe(1);
+    expect(
+      parseConfig({ ...base, MAX_ROOMS: '10', MAX_SLOTS: '60', MAX_ROOMS_PER_ACCOUNT: '2' })
+        .maxRoomsPerAccount,
+    ).toBe(2);
+  });
+
+  it('전역 방 수 이상이거나 범위를 벗어나면 부팅을 거절한다', () => {
+    expect(() =>
+      parseConfig({ ...base, MAX_ROOMS: '4', MAX_SLOTS: '24', MAX_ROOMS_PER_ACCOUNT: '4' }),
+    ).toThrow('MAX_ROOMS_PER_ACCOUNT must be below MAX_ROOMS');
+    expect(() => parseConfig({ ...base, MAX_ROOMS_PER_ACCOUNT: '0' })).toThrow();
+    expect(() => parseConfig({ ...base, MAX_ROOMS_PER_ACCOUNT: 'one' })).toThrow();
+  });
+});

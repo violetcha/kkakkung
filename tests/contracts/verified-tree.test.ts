@@ -18,6 +18,39 @@ const script = resolve(root, 'scripts/verified-tree.mjs');
 const tree = (n: number) => n.toString(16).padStart(40, '0');
 
 describe('verified tree markers', () => {
+  // S15P21C204-368. MR 과 배포는 검사 목록이 달라 한쪽 기록이 다른 쪽을 대신하지 않는다.
+  it('keeps MR and deploy markers apart so an MR-verified tree still gets the deploy checks', () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'kkakkung-verified-'));
+    recordVerifiedTree({
+      stateDir,
+      tree: tree(7),
+      commit: 'b'.repeat(40),
+      build: 'kkakkung-mr#330',
+    });
+    expect(findVerifiedTree(stateDir, tree(7))).not.toBeNull();
+    expect(findVerifiedTree(stateDir, tree(7), 'deploy')).toBeNull();
+    recordVerifiedTree({
+      stateDir,
+      tree: tree(7),
+      commit: 'b'.repeat(40),
+      build: 'kkakkung#240',
+      scope: 'deploy',
+    });
+    expect(findVerifiedTree(stateDir, tree(7), 'deploy')?.build).toBe('kkakkung#240');
+    const check = spawnSync(
+      process.execPath,
+      [script, 'check', '--state-dir', stateDir, '--tree', tree(7), '--scope', 'deploy'],
+      { encoding: 'utf8' },
+    );
+    expect(check.stdout).toContain('kkakkung#240');
+    const bad = spawnSync(
+      process.execPath,
+      [script, 'check', '--state-dir', stateDir, '--tree', tree(7), '--scope', 'nightly'],
+      { encoding: 'utf8' },
+    );
+    expect(bad.status).toBe(2);
+  });
+
   it('records a verified tree and finds it again; another tree or a bad hash finds nothing', () => {
     const stateDir = mkdtempSync(join(tmpdir(), 'kkakkung-verified-'));
     const path = recordVerifiedTree({

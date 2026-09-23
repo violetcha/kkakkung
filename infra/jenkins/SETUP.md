@@ -129,14 +129,15 @@ MR 빌드는 GitLab 이 보낸 커밋을 체크아웃 HEAD 와 대조하고, dev
 ## 알고 있어야 할 것
 
 - 빌드가 컨트롤러(built-in node)에서 돕니다. 서버 한 대라 에이전트 분리 실익이 적어 안 나눕니다. 서버가 늘면 노드 추가 + `agent { label }`.
-- 현재 Verify는 Chromium을 준비하고 `pnpm verify`의 Playwright E2E까지 실행한다. 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
+- 현재 Verify는 Chromium을 준비하고 `scripts/ci-plan.mjs`가 정한 검사만 돈다(S15P21C204-368, [테스트 안내](../../docs/testing.md#ci-검사-계획)). 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
 
 ## 8. GitLab SSO 게이트 (2026-09-09 적용)
 
-2026-09-22부터 저장소의 SSO 기준은 프로젝트 역할 대신 등록 이메일이다. 최초 설치 전에
-[SSO 절차](../SSO.md)에 따라 `/opt/kkakkung/sso-access/allowed-emails.txt`를 준비한다.
+367부터 로그인 게이트는 lab.ssafy.com 계정 전체를 통과시키고, `/demo`·`/showcase` 운영자는
+게임 서버가 `/opt/kkakkung/sso-access/allowed-emails.txt`로 판정한다. 최초 설치 전에
+[SSO 절차](../SSO.md)에 따라 이 파일을 준비한다.
 기존 운영 서버는 아래 최초 설치 명령으로 비밀 env를 덮어쓰지 말고, 같은 문서의 전환 절차를
-따른다. `/demo`와 `/showcase` 및 두 관리자 API 모두 이 기준을 사용한다.
+따른다. 게이트 교체는 앱 배포 뒤에 한다(순서는 SSO 절차).
 
 ```bash
 sudo install -d /opt/kkakkung/sso && sudo cp infra/compose.sso.yaml /opt/kkakkung/sso/

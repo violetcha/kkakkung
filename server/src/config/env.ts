@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MEDIA_API_CEILINGS } from '../operations/ApiBudget.js';
+import { validateMonthlyUsageConfig, type MonthlyUsageConfig } from '../media/MonthlyUsageMeter.js';
 
 // Owned by F (F-01/DP-01). B maps the parsed values into
 // MediaConfiguration / admission policy; E never reads process.env directly.
@@ -74,6 +75,9 @@ const environment = z.object({
   // 정상 6인은 방 하나에 초대로 모이므로 영향이 없다. 올리면 전역 예산을 한 회선이 더 많이
   // 가져갈 수 있고, 내리면 같은 망에서 동시에 두 팀이 놀기 어려워진다.
   MAX_ROOMS_PER_ORIGIN: z.coerce.number().int().min(1).max(10).default(2),
+  // S15P21C204-366. 한 SSO 계정이 동시에 열어 둘 수 있는 방 수. 팀원은 IP 가 아니라 계정으로
+  // 식별되므로 NAT 걱정 없이 "한 사람 한 방"으로 둔다.
+  MAX_ROOMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(10).default(1),
   OPS_DATA_DIR: z.string().default('./.local/operations'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 
@@ -108,8 +112,21 @@ const environment = z.object({
   // and taking a match room for a demonstration left players one room short while it was open.
   DEMO_MAX_ROOMS: z.coerce.number().int().min(1).max(3).default(1),
   // 발표 시연 방(showcase): 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. `/showcase` 는 GitLab SSO
-  // 뒤에 있고 운영 토큰은 필요 없다. 기본 켜짐이며 0 으로 내리면 발급 API 가 503 으로 답한다.
-  SHOWCASE_ROOMS: z.enum(['0', '1']).default('1'),
+  // 뒤에 있고 운영 토큰은 필요 없다. S15P21C204-361. 동시에 모이는 중일 수 있는 시연 방 수다. 기본 1,
+  // 발표 배포는 3. 0 으로 내리면 발급 API 가 503 으로 답한다. 시연 방은 MAX_ROOMS 안에서 함께 센다.
+  SHOWCASE_ROOMS: z.coerce.number().int().min(0).max(10).default(1),
+  // S15P21C204-367. `/demo`·`/showcase` 를 여는 운영자 등록 이메일 파일(한 줄에 하나). 로그인
+  // 게이트는 SSAFY GitLab 계정 전체를 통과시키므로 운영자 판정은 서버가 이 목록으로 한다.
+  // 없으면 두 관리 경로는 아무도 통과시키지 않는다.
+  DEMO_ADMIN_EMAILS_FILE: z.string().min(1).optional(),
+
+  // S15P21C204-364. LiveKit monthly participant-minute guard. The plan limit and the dashboard
+  // baseline ("<used minutes>@<ISO time read>") come together from the private env file; with
+  // neither the guard is off and the server says so at start. One without the other is refused.
+  LIVEKIT_MONTHLY_MINUTES: positiveSafeInt,
+  LIVEKIT_USAGE_BASELINE: z.string().trim().min(1).optional(),
+  LIVEKIT_MONTHLY_RESERVE_MINUTES: z.coerce.number().int().min(0).default(300),
+  LIVEKIT_BILLING_CYCLE_DAY: z.coerce.number().int().min(1).max(28).default(1),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -208,6 +225,26 @@ export function parseConfig(input: Record<string, string | undefined>) {
   // 않게 부팅에서 거절한다(S15P21C204-300).
   if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ORIGIN >= raw.MAX_ROOMS)
     throw new Error('MAX_ROOMS_PER_ORIGIN must be below MAX_ROOMS');
+  if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ACCOUNT >= raw.MAX_ROOMS)
+    throw new Error('MAX_ROOMS_PER_ACCOUNT must be below MAX_ROOMS');
+  // S15P21C204-364. The limit and the baseline mean nothing apart: a limit without a baseline
+  // would count from zero and let the month overrun, a baseline without a limit guards nothing.
+  if ((raw.LIVEKIT_MONTHLY_MINUTES === undefined) !== (raw.LIVEKIT_USAGE_BASELINE === undefined))
+    throw new Error('LIVEKIT_MONTHLY_MINUTES and LIVEKIT_USAGE_BASELINE must be set together');
+  let monthlyUsage: MonthlyUsageConfig | null = null;
+  if (raw.LIVEKIT_MONTHLY_MINUTES !== undefined && raw.LIVEKIT_USAGE_BASELINE !== undefined) {
+    const match = /^(\d+)@(.+)$/.exec(raw.LIVEKIT_USAGE_BASELINE);
+    const readAt = match ? Date.parse(match[2]!) : Number.NaN;
+    if (!match || !Number.isSafeInteger(readAt))
+      throw new Error('LIVEKIT_USAGE_BASELINE must look like "<minutes>@<ISO-8601 time>"');
+    monthlyUsage = validateMonthlyUsageConfig({
+      limitMinutes: raw.LIVEKIT_MONTHLY_MINUTES,
+      reserveMinutes: raw.LIVEKIT_MONTHLY_RESERVE_MINUTES,
+      baselineMinutes: Number(match[1]),
+      baselineAtEpochMs: readAt,
+      cycleDay: raw.LIVEKIT_BILLING_CYCLE_DAY,
+    });
+  }
   if (raw.ALERT_WEBHOOK_CHANNEL !== undefined && raw.ALERT_WEBHOOK_URL === undefined)
     throw new Error('ALERT_WEBHOOK_CHANNEL requires ALERT_WEBHOOK_URL');
   if (raw.ALERT_WEBHOOK_URL !== undefined) {
@@ -306,6 +343,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     maxRooms: raw.MAX_ROOMS,
     maxSlots: raw.MAX_SLOTS,
     maxRoomsPerOrigin: raw.MAX_ROOMS_PER_ORIGIN,
+    maxRoomsPerAccount: raw.MAX_ROOMS_PER_ACCOUNT,
     opsDataDir: raw.OPS_DATA_DIR,
     logLevel: raw.LOG_LEVEL,
     livekit: livekit
@@ -325,7 +363,9 @@ export function parseConfig(input: Record<string, string | undefined>) {
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     demoMaxRooms: raw.DEMO_MAX_ROOMS,
-    showcaseRooms: raw.SHOWCASE_ROOMS === '1',
+    livekitMonthlyUsage: monthlyUsage,
+    showcaseRooms: raw.SHOWCASE_ROOMS,
+    demoAdminEmailsFile: raw.DEMO_ADMIN_EMAILS_FILE ?? null,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

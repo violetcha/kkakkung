@@ -67,12 +67,12 @@ continuous 제품 배포는 `SESSION_ADMISSION_MODE=gitlab-sso`로 팀원 직접
 같은 overlay의 `SERVICE_AUDIENCE=team`과 일치해야 한다. 서버의 public/guest 준비 코드는
 [프로토콜](../docs/protocol.md)의 게스트 입장을 따르며 현재 운영 ingress와 릴리스는 팀 제한을
 유지한다. public+livekit은 `MEDIA_SUBSCRIPTION_MODE=publisher-permissions`일 때만 부팅한다(D-2026-09-15-01).
-사이트의 GitLab 로그인·등록 이메일 검사를 통과하면 별도 초대 없이 방 생성·방 코드 참가가 가능하다.
-SSAFY 전체 교육생에게 개방하는 설정은 아니다. 기본/attested 입장 방식은 invitation이다.
+사이트의 lab.ssafy.com GitLab 로그인을 통과하면 별도 초대 없이 방 생성·방 코드 참가가 가능하다.
+367부터 이 게이트가 SSAFY 공개 경로다(계정당 방 하나·자리 하나). 기본/attested 입장 방식은 invitation이다.
 호스트가 `X-SSO-User`를 인증 응답 값으로 덮어쓰고 내부 smoke 프록시는 제거해야 한다.
 게임 포트 비공개·web-proxy loopback 바인딩을 유지한 상태에서만 사용한다.
 
-team audience에서 서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인 + 운영자 등록 이메일** 게이트를 사용한다. public audience에서는 게임만 게스트로 연다. `/demo`, `/showcase`, `/api/demo-admin`, `/api/showcase`는 항상 같은 SSO 게이트를 거쳐 호스트가 `X-Demo-Admin`을 덮어쓴다. 이 헤더는 일반 공개 경로와 내부 smoke 경로에서 비우며, 운영 Bearer API(`/api/operations`)는 계속 외부 404다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 이메일 목록 준비·기존 서버 전환·실제 인수는 [SSO 절차](SSO.md)를 따른다. 이 설정 변경만으로 운영 반영이나 일반 공개가 완료되지 않는다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
+team audience에서 서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로그인** 게이트를 사용한다(367). public audience에서는 게임만 게스트로 연다. `/demo`, `/showcase`, `/api/demo-admin`, `/api/showcase`는 항상 같은 SSO 게이트를 거쳐 호스트가 `X-Demo-Admin`을 로그인 이메일로 덮어쓰고, 게임 서버가 등록 이메일 목록(`/opt/kkakkung/sso-access/allowed-emails.txt` 마운트)과 대조한다. 이 헤더는 일반 공개 경로와 내부 smoke 경로에서 비우며, 운영 Bearer API(`/api/operations`)는 계속 외부 404다. `/health/*`와 `/jenkins`는 SSO 밖이며 정확한 LiveKit webhook POST는 서버 서명을 검증한다. 이메일 목록 준비·기존 서버 전환·실제 인수는 [SSO 절차](SSO.md)를 따른다. 이 설정 변경만으로 운영 반영이나 일반 공개가 완료되지 않는다. 자동 DP-06 인증은 아래 loopback 전용 경로를 따른다.
 
 ## 파이프라인
 
