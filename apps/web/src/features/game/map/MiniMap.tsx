@@ -4,6 +4,7 @@ import { mapDrawModel } from './map-draw-model';
 import { pastEventMarkers, type HunterMarker } from './past-event-markers';
 import { exitOwnerLabel, type OwnerNames } from '../scene/ExitOwnerLabel';
 import { drawMinimap, minimapDrawKey } from './minimap-render';
+import { minimapZoomAt } from './minimap-zoom';
 
 export function MiniMap({
   view,
@@ -13,6 +14,7 @@ export function MiniMap({
   windowCells,
   renderTick,
   operatorExit = null,
+  zoomedOut = false,
 }: {
   view: PrivateView | null;
   ownerNames?: OwnerNames;
@@ -24,10 +26,24 @@ export function MiniMap({
   renderTick?: () => number | null;
   /** Only the operator demo supplies this; player rooms must leave it absent. */
   operatorExit?: Cell | null;
+  /** S15P21C204-352. 참이면 같은 위젯 안에서 전체 지도로 줌아웃한다(M 키). 창 모드에서만 쓴다. */
+  zoomedOut?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const latest = useRef({ view, markers, tick, renderTick, operatorExit });
   latest.current = { view, markers, tick, renderTick, operatorExit };
+  // S15P21C204-352. 축척은 효과를 다시 걸지 않고 프레임마다 읽는다. 전환 도중에 다시 누르면
+  // 지금 위치에서 반대로 돌아가도록, 바뀐 순간의 값과 시각을 함께 들고 있는다.
+  const target = zoomedOut ? 1 : 0;
+  const zoom = useRef({ from: 0, to: target, since: 0, value: 0 });
+  if (zoom.current.to !== target) {
+    zoom.current = {
+      from: zoom.current.value,
+      to: target,
+      since: typeof performance === 'undefined' ? 0 : performance.now(),
+      value: zoom.current.value,
+    };
+  }
   const continuous = windowCells !== undefined && renderTick !== undefined;
   useEffect(
     () => {
@@ -41,13 +57,19 @@ export function MiniMap({
         // S15P21C204-277. 칸이 정수 픽셀에 앉도록 배율도 정수로 고른다.
         const dpr = Math.max(1, Math.min(Math.floor(window.devicePixelRatio || 1), 2));
         const size = (canvas.clientWidth || 240) * dpr;
+        const now = typeof performance === 'undefined' ? 0 : performance.now();
+        zoom.current.value = minimapZoomAt(
+          zoom.current.from,
+          zoom.current.to,
+          now - zoom.current.since,
+        );
         const input = {
           view,
           size,
           tick: renderTick?.() ?? tick,
           markers,
           operatorExit,
-          ...(windowCells === undefined ? {} : { window: windowCells }),
+          ...(windowCells === undefined ? {} : { window: windowCells, zoom: zoom.current.value }),
         };
         const key = minimapDrawKey(input);
         // 크기가 달라졌으면 백버퍼를 다시 잡아야 하므로 열쇠와 무관하게 그린다.
@@ -87,19 +109,29 @@ export function MiniMap({
       : [view, markers, tick, windowCells, continuous, operatorExit],
   );
   return (
-    <figure className={windowCells === undefined ? 'mini-map' : 'mini-map mini-map-window'}>
+    <figure
+      className={
+        windowCells === undefined
+          ? 'mini-map'
+          : `mini-map mini-map-window${zoomedOut ? ' mini-map-zoomed-out' : ''}`
+      }
+    >
       <canvas
         ref={ref}
         aria-label={
           windowCells === undefined
             ? `내가 탐색한 지도. 위쪽은 북쪽입니다. 채운 칸은 가 본 바닥, 두꺼운 띠는 벽, 옅은 격자는 아직 안 가 본 곳입니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
-            : `내 주변 ${windowCells}칸 지도. 가운데 흰 점이 나, 점에서 퍼지는 부채꼴이 내가 보는 방향이고 위쪽이 북쪽입니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
+            : zoomedOut
+              ? `내가 탐색한 지도 전체. 흰 점이 나이고 위쪽이 북쪽입니다. M 키로 내 주변 ${windowCells}칸 지도로 돌아갑니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
+              : `내 주변 ${windowCells}칸 지도. 가운데 흰 점이 나, 점에서 퍼지는 부채꼴이 내가 보는 방향이고 위쪽이 북쪽입니다. M 키로 전체 지도를 봅니다.${operatorExit ? ' O 표시는 운영자 출구입니다.' : ''}`
         }
       />
       <figcaption>
         {windowCells === undefined
           ? '탐색 지도 · 북쪽 고정 · 옅은 격자는 안 가 본 곳'
-          : '내 주변 · 흰 점 = 나 · 부채꼴 = 시선 · N = 북쪽'}
+          : zoomedOut
+            ? '전체 지도 · 북쪽 고정 · M = 내 주변'
+            : '내 주변 · 흰 점 = 나 · 부채꼴 = 시선 · M = 전체 지도'}
         {operatorExit && <span className="mini-map-operator-exit"> · O 운영자 출구</span>}
       </figcaption>
       {pastEventMarkers(view, markers, tick).length > 0 && <p>빈 원은 과거 사건 위치입니다.</p>}

@@ -63,14 +63,27 @@ export type MinimapLayout = Readonly<{
   gridStep: number;
 }>;
 
-export function minimapLayout(size: number, cells = MINIMAP_CELLS): MinimapLayout {
-  const unit = Math.max(1, Math.floor(size / cells));
+/**
+ * S15P21C204-352. 축척이 흐르는 동안에는 칸을 정수 픽셀에 맞추지 않는다. 칸 수가 소수로
+ * 지나가는데 정수로 반올림하면 지도가 프레임마다 한 픽셀씩 튄다. 머무는 두 축척(창·전체)은
+ * 지금처럼 정수라 도트가 흐려지지 않는다.
+ */
+export function minimapLayout(
+  size: number,
+  cells = MINIMAP_CELLS,
+  options: Readonly<{ fractional?: boolean }> = {},
+): MinimapLayout {
+  const unit = options.fractional
+    ? Math.max(0.5, size / cells)
+    : Math.max(1, Math.floor(size / cells));
   const span = unit * cells;
   return {
     cells,
     unit,
     span,
-    offset: Math.max(0, Math.floor((size - span) / 2)),
+    offset: options.fractional
+      ? Math.max(0, (size - span) / 2)
+      : Math.max(0, Math.floor((size - span) / 2)),
     band: unit >= 4 ? Math.max(2, Math.round(unit / 4)) : 1,
     gridStep: unit >= 6 ? 1 : 4,
   };
@@ -146,8 +159,27 @@ export function wallBandRect(
  * 흐른다. 칸 단위로 반올림하면 한 칸 지날 때마다 지도가 턱턱 뛰어 보인다.
  */
 export function windowOrigin(self: Readonly<{ x: number; z: number }>, cells: number) {
-  const half = Math.floor(cells / 2);
+  // 홀수 칸의 한가운데. 정수 칸 수에서는 (cells - 1) / 2 가 Math.floor(cells / 2) 와 같고,
+  // 축척이 흐르는 동안에는 소수 칸 수에서도 내가 정확히 가운데에 남는다 (352).
+  const half = (cells - 1) / 2;
   return { x: self.x - half, y: self.z - half };
+}
+
+/**
+ * S15P21C204-352. 전환 도중의 창. `zoom` 0 은 내 주변 창, 1 은 전체 지도다. 칸 수는 둘 사이를
+ * 지나가고, 창의 기준점은 내 위치 중심에서 지도 원점으로 옮겨 간다. 그래서 줌아웃이 끝나면
+ * 전체 지도와 정확히 같은 자리에 선다.
+ */
+export function zoomedWindow(
+  self: Readonly<{ x: number; z: number }>,
+  windowCells: number,
+  zoom: number,
+  fullCells = MINIMAP_CELLS,
+): Readonly<{ cells: number; origin: Readonly<{ x: number; y: number }>; zoom: number }> {
+  const t = zoom < 0 ? 0 : zoom > 1 ? 1 : zoom;
+  const cells = windowCells + (fullCells - windowCells) * t;
+  const centered = windowOrigin(self, cells);
+  return { cells, origin: { x: centered.x * (1 - t) + 0, y: centered.y * (1 - t) + 0 }, zoom: t };
 }
 
 /** 창 모드 지형: 창 좌표로 옮기고 창 밖(한 칸 여유)은 버린다. 좌표는 소수일 수 있다. */
@@ -179,6 +211,8 @@ export type MinimapInput = {
   cells?: number;
   /** 홀수 칸 수를 주면 내 주변만 확대해 그린다(창 모드). 없으면 전체 지도. */
   window?: number;
+  /** S15P21C204-352. 창 모드에서 0 은 내 주변, 1 은 전체 지도. 그 사이는 전환 중이다. */
+  zoom?: number;
 };
 
 /**
@@ -200,6 +234,8 @@ export function minimapDrawKey(input: MinimapInput): string {
     input.size,
     input.cells ?? null,
     input.window ?? null,
+    // 축척이 흐르는 동안에는 프레임마다 다시 그린다. 머물러 있으면 값이 그대로라 그리지 않는다.
+    Math.round((input.zoom ?? 0) * 1000),
     Math.round(model.self.x * 256),
     Math.round(model.self.z * 256),
     Math.round(model.self.yaw * 256),
@@ -215,18 +251,23 @@ export function drawMinimap(ctx: MinimapContext, input: MinimapInput): MinimapLa
   const tick = input.tick ?? 0;
   const model = mapDrawModel(input.view, tick, input.operatorExit ?? null);
   const windowed = input.window !== undefined && model !== null;
+  const zoomed = windowed ? zoomedWindow(model!.self, input.window!, input.zoom ?? 0) : null;
   const layout = minimapLayout(
     input.size,
-    windowed ? input.window! : (input.cells ?? MINIMAP_CELLS),
+    zoomed ? zoomed.cells : (input.cells ?? MINIMAP_CELLS),
+    // 전환 도중에만 소수 칸을 허용한다. 창과 전체 지도에 머무는 동안은 정수 픽셀 그대로다.
+    { fractional: zoomed !== null && zoomed.zoom > 0 && zoomed.zoom < 1 },
   );
   const { unit, offset, span } = layout;
-  const origin = windowed ? windowOrigin(model!.self, layout.cells) : { x: 0, y: 0 };
+  const origin = zoomed ? zoomed.origin : { x: 0, y: 0 };
   ctx.fillStyle = windowed ? MINIMAP_COLORS.windowBackground : MINIMAP_COLORS.background;
   ctx.fillRect(0, 0, input.size, input.size);
 
   // 안 가 본 칸: 전체 지도에서는 옅은 격자만. 바닥을 칠하지 않아 "가 본 곳"과 한눈에 갈린다.
   // 창 모드는 격자 없이 어두운 바탕만 둬서 가 본 바닥의 사각형이 그대로 드러난다.
-  if (!windowed) {
+  // 전체 지도로 줌아웃하면 안 가 본 칸의 격자를 켠다. 창에서는 격자가 없어야 가 본 바닥이
+  // 드러나므로, 전환이 절반을 넘어선 뒤부터 그린다 (352).
+  if (!windowed || (zoomed !== null && zoomed.zoom > 0.5)) {
     ctx.strokeStyle = MINIMAP_COLORS.unknownGrid;
     ctx.lineWidth = 1;
     ctx.beginPath();

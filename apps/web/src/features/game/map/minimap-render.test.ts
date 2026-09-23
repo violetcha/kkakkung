@@ -12,6 +12,8 @@ import {
   windowOrigin,
   minimapDrawKey,
   MINIMAP_WINDOW_CELLS,
+  MINIMAP_CELLS,
+  zoomedWindow,
   type MinimapContext,
 } from './minimap-render';
 
@@ -393,5 +395,73 @@ describe('minimapDrawKey', () => {
     expect(at(99)).not.toBe(at(100));
     expect(at(100)).toBe(at(120));
     expect(at(120)).not.toBe(at(140));
+  });
+});
+
+// S15P21C204-352. M 키로 같은 위젯 안에서 전체 지도까지 줌아웃한다. 두 축척 사이는 이어진 값이다.
+describe('drawMinimap zoom', () => {
+  it('walks the window out to the whole map and keeps me centred on the way', () => {
+    const self = { x: 10, z: 20 };
+    expect(zoomedWindow(self, 11, 0)).toEqual({
+      cells: 11,
+      origin: { x: 5, y: 15 },
+      zoom: 0,
+    });
+    // 끝에서는 전체 지도와 같은 칸 수·기준점이다.
+    expect(zoomedWindow(self, 11, 1)).toEqual({
+      cells: MINIMAP_CELLS,
+      origin: { x: 0, y: 0 },
+      zoom: 1,
+    });
+    const middle = zoomedWindow(self, 11, 0.5);
+    expect(middle.cells).toBeGreaterThan(11);
+    expect(middle.cells).toBeLessThan(MINIMAP_CELLS);
+    // 기준점은 '나를 가운데 둔 창'과 '지도 원점' 사이를 섞은 값이다. 절반이면 절반씩이다.
+    const centred = windowOrigin(self, middle.cells);
+    expect(middle.origin.x).toBeCloseTo(centred.x * 0.5, 6);
+    expect(middle.origin.y).toBeCloseTo(centred.y * 0.5, 6);
+    // 지도 원점 쪽으로 다가간다: 남은 거리가 창 기준점보다 짧다.
+    expect(Math.abs(middle.origin.y)).toBeLessThan(Math.abs(centred.y));
+    // 범위를 벗어난 값은 양 끝으로 잘린다.
+    expect(zoomedWindow(self, 11, 2).cells).toBe(MINIMAP_CELLS);
+    expect(zoomedWindow(self, 11, -1).cells).toBe(11);
+  });
+
+  it('draws the whole map at full zoom and turns the unknown grid on past halfway', () => {
+    const view = viewFixture({
+      knownTerrain: [
+        { x: 1, y: 1, kind: 'floor' },
+        { x: 30, y: 30, kind: 'floor' },
+      ],
+    });
+    const out = recorder();
+    const layout = drawMinimap(out.ctx, { view, size: 165, window: 11, zoom: 1 });
+    // 창에서 버려지던 먼 칸이 전체 지도에서는 둘 다 보인다.
+    expect(layout.cells).toBe(MINIMAP_CELLS);
+    expect(fillsOf(out.calls, MINIMAP_COLORS.windowFloor)).toHaveLength(2);
+    const grid = (calls: readonly Call[]) =>
+      calls.some((call) => call.op === 'lineTo' && call.stroke === MINIMAP_COLORS.unknownGrid);
+    expect(grid(out.calls)).toBe(true);
+    const near = recorder();
+    drawMinimap(near.ctx, { view, size: 165, window: 11, zoom: 0.25 });
+    expect(grid(near.calls)).toBe(false);
+  });
+
+  it('keeps whole pixels at rest and lets them flow only mid transition', () => {
+    const view = viewFixture();
+    const rest = drawMinimap(recorder().ctx, { view, size: 165, window: 11, zoom: 0 });
+    const full = drawMinimap(recorder().ctx, { view, size: 165, window: 11, zoom: 1 });
+    expect(Number.isInteger(rest.unit)).toBe(true);
+    expect(Number.isInteger(full.unit)).toBe(true);
+    const moving = drawMinimap(recorder().ctx, { view, size: 165, window: 11, zoom: 0.4 });
+    expect(Number.isInteger(moving.unit)).toBe(false);
+  });
+
+  it('redraws while the zoom moves and stays quiet once it settles', () => {
+    const view = viewFixture();
+    const at = (zoom: number) => minimapDrawKey({ view, size: 165, window: 11, zoom });
+    expect(at(0)).not.toBe(at(0.4));
+    expect(at(0.4)).not.toBe(at(1));
+    expect(at(1)).toBe(at(1));
   });
 });
