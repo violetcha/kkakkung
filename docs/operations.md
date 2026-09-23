@@ -31,6 +31,7 @@
 | `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions` | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                                                                    |
 | `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`             | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                                                                  |
 | `MAX_ROOMS_PER_ORIGIN`                     | `2`                     | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                                                                  |
+| `MAX_ROOMS_PER_ACCOUNT`                    | `1`                     | 팀 SSO 계정 하나가 동시에 여는 방 수(366). IP가 아니라 계정으로 세므로 캠퍼스 NAT 뒤 팀원끼리 막지 않는다. 초대 링크로 만든 방은 세지 않는다. `MAX_ROOMS` 미만이어야 부팅                             |
 | `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)     | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                                                                            |
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                                                                       |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                                                                        |
@@ -176,7 +177,7 @@ pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
 
 본문 2,048바이트, 헤더 후 본문 완료 5초(`408/BODY_TIMEOUT`). 키 저장은 차원별 4,096개이며 토큰 원문은 보관하지 않는다. LiveKit webhook raw body는 사전 파싱에서 제외하고 서명을 검증한다.
 
-**게스트 방 점유**(S15P21C204-293). 게스트가 만든 방은 만든 출처(IP)를 기록하고, 같은 출처가 **동시에 2개**까지만 열어 둘 수 있다. 넘으면 `429 TOO_MANY_ROOMS`로 거절한다. 서비스가 찬 `503 CAPACITY`와 다른 사실이라 따로 답한다 — 자기 방을 닫으면 바로 다시 열 수 있다. 팀(SSO) 입장은 사람이 식별되고 한 IP 뒤에 여러 명이 있을 수 있어 이 상한의 대상이 아니다. 상한은 `SlotRegistry`의 `maxRoomsPerOwner`이며 기본 2다.
+**게스트 방 점유**(S15P21C204-293). 게스트가 만든 방은 만든 출처(IP)를 기록하고, 같은 출처가 **동시에 2개**까지만 열어 둘 수 있다. 넘으면 `429 TOO_MANY_ROOMS`로 거절한다. 서비스가 찬 `503 CAPACITY`와 다른 사실이라 따로 답한다 — 자기 방을 닫으면 바로 다시 열 수 있다. 상한은 `SlotRegistry`의 `maxRoomsPerOwner`이며 기본 2다. 팀(SSO)은 IP가 아니라 **계정**으로 센다(366): 한 계정이 연 방은 `MAX_ROOMS_PER_ACCOUNT`(기본 1)개까지이고, 서비스 전체에서 **자리도 하나**다. 다른 창에서 접속 중이면 `409 ALREADY_IN_ROOM`, 아직 접속하지 않은 예약은 새 요청으로 교체한다. 일반 세션은 연결이 끊기면 바로 무효가 되므로 창을 닫으면 곧바로 다시 들어올 수 있다.
 
 **방 수명은 사람이 들어올 때만 는다.** 초대 링크를 회전해도 로비 체류 기한이 갱신되지 않는다. 예전에는 갱신돼서, 아무도 없는 방을 10분마다 한 번 돌리는 것만으로 영원히 붙잡을 수 있었다.
 
