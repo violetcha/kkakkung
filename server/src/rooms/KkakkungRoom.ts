@@ -776,9 +776,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // Retiring seats keep a callback target until E confirms the remote boundary.
       if (!this.hasUnresolvedMedia()) deps.directory.unregister(this.roomCode, this);
       deps.sessions.invalidateRoom(this.roomCode);
+      // S15P21C204-360. 시연 방은 발표마다 연달아 여닫는다. 넷이 모두 나간 시연 방은 E의 해제
+      // 확인을 기다리지 않고 자리와 방 항목을 바로 비워 다음 시연이 같은 예산을 쓴다. 미디어 세대
+      // 회수 자체는 재시도 엔진이 이어가고, 늦은 확인은 위의 directory 등록이 남아 이 핸들이 받아
+      // 빈 방·빈 자리에 대한 no-op 으로 끝난다. 일반 방은 RETIRING 자리로 확인을 기다린다.
       for (const member of deps.slots.members(this.roomCode))
         deps.slots.release(this.roomCode, member.playerId, {
-          confirmedRetirement: !this.hasUnresolvedMedia(member.playerId),
+          confirmedRetirement: this.showcase || !this.hasUnresolvedMedia(member.playerId),
         });
       deps.slots.closeRoom(this.roomCode);
       deps.onInvalidateRoom?.(this.roomCode);
