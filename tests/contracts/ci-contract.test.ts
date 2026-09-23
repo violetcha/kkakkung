@@ -21,6 +21,7 @@ const imageScanJenkinsfile = readFileSync(
   resolve(root, 'infra/jenkins/image-scan.Jenkinsfile'),
   'utf8',
 );
+const deployStage = jenkinsfile.slice(jenkinsfile.indexOf("stage('Deploy')"));
 const dockerfileCi = readFileSync(resolve(root, 'infra/docker/Dockerfile.ci'), 'utf8');
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
   packageManager: string;
@@ -186,9 +187,29 @@ describe('Jenkinsfile uses the single entry point', () => {
   });
   it('deploys only on the develop branch and injects secrets from the Secret file credential', () => {
     expect(jenkinsfile).toContain("DEPLOY_BRANCH = 'develop'");
-    expect(jenkinsfile).toMatch(/when \{ environment name: 'IS_DEPLOY', value: 'true' \}/);
+    const deployWhen = deployStage.slice(0, deployStage.indexOf('steps'));
+    expect(deployWhen).toContain("environment name: 'IS_DEPLOY', value: 'true'");
     expect(jenkinsfile).toContain("file(credentialsId: 'kkakkung-production-env'");
     expect(jenkinsfile).not.toMatch(/LIVEKIT_API_SECRET\s*=/);
+  });
+  // S15P21C204-347. 345 이후 배포 빌드는 늘 develop 머리를 배포하므로, 웹훅과 폴링이 겹치면 같은 커밋이 두 번
+  // 배포된다. 되풀이되는 것은 CI 시간만이 아니라 실제 180초 라운드를 뛰는 DP-06 이다.
+  it('skips a deploy whose commit is already the last good one', () => {
+    const prepare = jenkinsfile.slice(
+      jenkinsfile.indexOf("stage('Prepare')"),
+      jenkinsfile.indexOf("stage('Secret scan')"),
+    );
+    expect(prepare).toContain('env.ALREADY_DEPLOYED');
+    expect(prepare).toContain('last-good-tag');
+    // 사람이 시작한 빌드는 건너뛰지 않는다: 환경 파일만 바꾸고 같은 커밋을 다시 배포하는 경로다.
+    expect(prepare).toContain('UserIdCause');
+    // 원인을 읽지 못하면 배포한다. 건너뛰는 쪽으로 기울면 배포가 조용히 사라진다.
+    expect(prepare).toMatch(/def byUser = true/);
+    // 건너뛴 빌드는 왜 배포하지 않았는지 목록에서 보인다. 성공 표시만으로 반영을 읽지 않는다.
+    expect(prepare).toContain('currentBuild.description');
+    expect(deployStage.slice(0, deployStage.indexOf('steps'))).toContain(
+      "environment name: 'ALREADY_DEPLOYED', value: 'false'",
+    );
   });
   // S15P21C204-343. Verify 는 같은 트리를 다른 잡이 검증했으면 건너뛰는데, 그 잡은 작업 공간이
   // 다르다. 배포 스모크는 이 작업 공간의 웹 클라이언트 소스를 돌리고 그 소스는 packages/*/dist 를
@@ -206,16 +227,44 @@ describe('Jenkinsfile uses the single entry point', () => {
     // 조건을 달면 이번 사고와 같은 종류의 암묵적 결합이 되돌아온다.
     expect(prepare).not.toMatch(/VERIFIED_BY/);
   });
+  // S15P21C204-347. 생략의 키는 트리 해시인데 소스 브랜치의 트리는 develop 이 움직이는 순간 머지
+  // 커밋의 트리와 달라진다. 그래서 배포 빌드 넷 중 둘이 같은 코드를 10분씩 다시 검증했다(kkakkung
+  // #210 17분, #213 15분). MR 은 develop 과 합친 결과를 검증하고 그 트리를 기록한다.
+  it('verifies the merge with develop on MR builds and records that tree', () => {
+    const verify = jenkinsfile.slice(
+      jenkinsfile.indexOf("stage('Verify')"),
+      jenkinsfile.indexOf("stage('Build images')"),
+    );
+    expect(verify).toContain('git merge --no-commit --no-ff origin/develop');
+    // 배포 빌드는 머지 커밋 자체가 검증 대상이므로 합치지 않는다.
+    expect(verify).toContain("env.IS_DEPLOY != 'true'");
+    // 합친 결과의 트리를 기록해야 배포가 그 트리를 알아본다.
+    expect(verify).toContain('git write-tree');
+    // 합치지 못하면 abort 하고 소스 브랜치를 그대로 검증한다.
+    expect(verify).toContain('git merge --abort');
+    // HEAD 는 움직이지 않는다. 커밋을 만들면 커밋 상태 게시와 345 의 SHA 대조가 같이 흔들린다.
+    expect(verify).not.toMatch(/git commit/);
+    // 머지 상태를 다음 빌드에 남기지 않는다.
+    const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
+    expect(post).toContain('git merge --abort');
+  });
   it('reports commit status to GitLab for running, success and failure', () => {
     expect(jenkinsfile).toContain("gitLabConnection('ssafy-gitlab')");
     for (const state of ['running', 'failed', 'success'])
       expect(jenkinsfile).toContain(`updateGitlabCommitStatus name: 'jenkins', state: '${state}'`);
   });
-  it('prunes release images only through the age-guarded script under the host lock', () => {
+  // 정리를 잠금 아래 두었더니 정리 한 줄이 다른 잡의 Verify 뒤에서 10분씩 기다렸다(kkakkung-mr #288
+  // 651초, kkakkung #213 606초). 사고(kkakkung #140 ↔ kkakkung-mr #167)를 막는 것은 나이 가드와
+  // 보호 목록이므로, 잠금은 빼고 그 둘은 고정한다.
+  // S15P21C204-347. 정리를 잠금 아래 두었더니 정리 한 줄이 다른 잡의 Verify 뒤에서 10분씩 기다렸다
+  // (kkakkung-mr #288 651초, kkakkung #213 606초). 사고(kkakkung #140 ↔ kkakkung-mr #167)를 막는
+  // 것은 나이 가드와 보호 목록이므로, 잠금은 빼고 그 둘은 고정한다.
+  it('prunes release images through the age-guarded script, outside the host lock', () => {
     const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
     expect(post).toMatch(
-      /flock \/var\/lib\/jenkins\/verify\.lock node scripts\/prune-release-images\.mjs[\s\S]*--min-age-minutes 60[\s\S]*--protect "\$TAG"[\s\S]*last-good-tag/,
+      /node scripts\/prune-release-images\.mjs[\s\S]*--min-age-minutes 60[\s\S]*--protect "\$TAG"[\s\S]*last-good-tag/,
     );
+    expect(post).not.toMatch(/flock/);
     expect(post).not.toMatch(/docker rmi/);
     expect(post).not.toMatch(/tail -n \+6/);
   });

@@ -91,6 +91,32 @@ pipeline {
           }
           echo "images=${env.NEEDS_IMAGES}  secret-scan=${env.SCAN_RANGE ?: '전체 히스토리'}"
         }
+        // 같은 머리를 두 번 배포하지 않습니다 (S15P21C204-347). 345 이후 배포 빌드는 GitLab 이 보낸 SHA 와 대조하지
+        // 않고 늘 develop 머리를 배포하므로, 웹훅 빌드가 큐에서 기다리는 동안 H/15 폴링이 넣은 빌드가
+        // 끝나고 나서 같은 머리를 다시 배포합니다. 되풀이되는 것은 CI 4분만이 아니라 실제 180초
+        // 라운드를 뛰는 DP-06 입니다 (kkakkung #211 실측 222초: LiveKit 참가자-분 약 22분, 실서버
+        // 방 하나 3.7분). 빌드는 직렬화되므로 여기서 읽는 last-good 은 앞 배포가 끝난 결과입니다.
+        //
+        // 사람이 시작한 빌드는 건너뛰지 않습니다. 환경 파일만 바꾸고 같은 커밋을 다시 배포하는 경로가
+        // 그것입니다 (5장). 시작 원인을 읽지 못하면 배포하는 쪽으로 기웁니다.
+        script {
+          def lastGood = sh(
+            script: 'cat "$STATE_DIR/last-good-tag" 2>/dev/null || true', returnStdout: true).trim()
+          def byUser = true
+          try {
+            byUser = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause').isEmpty()
+          } catch (ignored) {
+            echo '빌드 시작 원인을 읽지 못했습니다. 배포를 건너뛰지 않습니다.'
+          }
+          env.ALREADY_DEPLOYED =
+            (env.IS_DEPLOY == 'true' && !byUser && lastGood != '' && lastGood == env.TAG)
+              ? 'true'
+              : 'false'
+          if (env.ALREADY_DEPLOYED == 'true') {
+            currentBuild.description = "배포 생략: 이미 ${env.TAG}"
+            echo "배포 생략: ${env.TAG} 는 마지막 정상 배포와 같습니다"
+          }
+        }
         sh '''
           if ! docker image inspect "$CI_IMAGE:$CI_TAG" > /dev/null 2>&1; then
             echo "CI 이미지 빌드: $CI_IMAGE:$CI_TAG"
@@ -135,8 +161,39 @@ pipeline {
         // - Verify·이미지 빌드·배포는 같은 호스트 flock 을 잡아 한 번에 하나만 돕니다. 다른 빌드의
         //   vitest 와 CPU 를 나누면 tick 250ms 판정이 깨져 flake 가 났기 때문입니다(kkakkung-mr #70, #139).
         //   체크아웃·비밀 스캔 같은 가벼운 단계만 겹칩니다.
+        // S15P21C204-347. MR 빌드는 소스 브랜치가 아니라 **develop 과 합친 결과**를 검증합니다.
+        // 생략의 키가 트리 해시인데 소스 브랜치의 트리는 다른 MR 이 머지돼 develop 이 움직이는 순간
+        // 머지 커밋의 트리와 달라집니다. 그래서 배포 빌드가 같은 코드를 10분씩 다시 검증했습니다
+        // (kkakkung #210 17분·#213 15분 ↔ #211·#212 1초, 넷 중 둘). 합친 결과를 검증해 그 트리를
+        // 기록해 두면, 그 사이 develop 이 더 움직이지 않는 한 머지 커밋의 트리가 그것과 같아 배포가
+        // 생략합니다. 검증하는 것이 곧 머지될 코드라 게이트도 오히려 정확해집니다.
+        //
+        // 체크아웃은 그대로 두고 작업 공간에서만 합칩니다(--no-commit). HEAD 가 움직이지 않으므로
+        // 커밋 상태 게시도, 345 의 SHA 대조도, ci-verify 의 EXPECTED_SOURCE_SHA 도 손댈 필요가
+        // 없습니다. 합치지 못하면(충돌·develop 없음) abort 하고 소스 브랜치를 그대로 검증합니다 —
+        // 그 MR 은 어차피 머지되지 않습니다. 생략 판단은 여전히 트리 해시가 하므로, 기록된 것과
+        // 실제 배포할 트리가 같을 때만 건너뜁니다.
         script {
-          env.TREE_SHA = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
+          env.MERGED_TREE = 'false'
+          if (env.IS_DEPLOY != 'true') {
+            env.MERGED_TREE = sh(
+              script: '''
+                git merge --abort > /dev/null 2>&1 || true
+                if git merge --no-commit --no-ff origin/develop > /dev/null 2>&1; then
+                  echo true
+                else
+                  git merge --abort > /dev/null 2>&1 || true
+                  echo false
+                fi
+              ''',
+              returnStdout: true).trim()
+            echo env.MERGED_TREE == 'true'
+              ? 'develop 과 합친 결과를 검증합니다'
+              : 'develop 과 합치지 못해 소스 브랜치를 그대로 검증합니다'
+          }
+          env.TREE_SHA = sh(
+            script: env.MERGED_TREE == 'true' ? 'git write-tree' : 'git rev-parse HEAD^{tree}',
+            returnStdout: true).trim()
           env.VERIFIED_BY = sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA"', returnStdout: true).trim()
         }
         sh '''
@@ -174,7 +231,13 @@ pipeline {
     }
 
     stage('Deploy') {
-      when { environment name: 'IS_DEPLOY', value: 'true' }
+      when {
+        allOf {
+          environment name: 'IS_DEPLOY', value: 'true'
+          // Prepare 가 정합니다. 이미 배포된 머리면 건너뜁니다.
+          environment name: 'ALREADY_DEPLOYED', value: 'false'
+        }
+      }
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
 
@@ -261,15 +324,24 @@ pipeline {
       updateGitlabCommitStatus name: 'jenkins', state: 'success'
       // 최근 5개만 남기고 정리. 지금 태그·직전 정상 태그·실행 중 컨테이너의 태그, 그리고 마지막으로 태그가
       // 붙은 지 1시간이 안 된 태그는 지우지 않습니다. 다른 빌드가 막 만든 태그를 지우면 그 빌드의 Trivy 가
-      // 깨집니다 (kkakkung #140 ↔ kkakkung-mr #167). 정리도 같은 호스트 flock 아래에서 돕니다 (SETUP.md §6).
+      // 깨집니다 (kkakkung #140 ↔ kkakkung-mr #167).
+      //
+      // 잠금 없이 돕니다. 그 사고를 막는 것은 나이 가드와 보호 목록이지 잠금이 아니었습니다. 잠금 아래
+      // 두었더니 정리 한 줄이 다른 잡의 Verify 뒤에서 10분씩 기다렸고(kkakkung-mr #288 651초,
+      // kkakkung #213 606초), disableConcurrentBuilds 때문에 다음 푸시가 큐에서 같이 기다렸습니다.
+      // 잠금이 실제로 막는 것은 동시 vitest 의 tick 과부하이고, 태그 몇 개 지우는 일은 그 층이 아닙니다.
+      // Verify·이미지 빌드·배포의 직렬화는 그대로입니다 (SETUP.md §6).
       sh '''
-        flock /var/lib/jenkins/verify.lock node scripts/prune-release-images.mjs \
+        node scripts/prune-release-images.mjs \
           --keep 5 --min-age-minutes 60 \
           --protect "$TAG" --protect "$(cat "$STATE_DIR/last-good-tag" 2>/dev/null || true)" \
           "$IMG_GAME" "$IMG_WEB" || true
       '''
     }
     always {
+      // Verify 가 작업 공간에서만 합쳐 둔 것을 되돌립니다. 남기면 다음 빌드의 머지가 "You have not
+      // concluded your merge" 로 막힙니다 (S15P21C204-347).
+      sh 'git merge --abort > /dev/null 2>&1 || true'
       sh 'docker image prune -f > /dev/null || true'
     }
   }
