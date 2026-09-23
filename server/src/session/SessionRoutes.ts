@@ -252,11 +252,9 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
         const outcome = deps.slots.reserve(roomCode, issued.playerId, nowMs);
         if (outcome !== 'reserved') {
           deps.sessions.invalidate(issued.sessionId);
-          return fail(
-            res,
-            outcome === 'ROOM_CLOSED' ? 404 : 503,
-            outcome === 'ROOM_CLOSED' ? 'ROOM_NOT_AVAILABLE' : 'CAPACITY',
-          );
+          // S15P21C204-365. "그 방이 찼다"와 "서비스가 찼다"는 할 일이 달라 다르게 답한다.
+          if (outcome === 'ROOM_CLOSED') return fail(res, 404, 'ROOM_NOT_AVAILABLE');
+          return fail(res, 503, outcome === 'ROOM_FULL' ? 'ROOM_FULL' : 'CAPACITY');
         }
       }
     } catch {
