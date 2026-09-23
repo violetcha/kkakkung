@@ -1,13 +1,46 @@
 import { useEffect, useMemo } from 'react';
-import type { PrivateView } from '@kkakkung/protocol/game-schema';
+import type { PrivateView, VisibleEntity } from '@kkakkung/protocol/game-schema';
 import type { Texture } from 'three';
 import type { FaceTextures } from './face-textures';
 import type { QualityPreset } from './quality-presets';
 import { prefetchAvatarAssets } from './avatar-loader';
 import { visibilityMask } from './visibility-mask';
-import { createNeutralAvatarResources } from './NeutralAvatar';
+import { createNeutralAvatarResources, type NeutralAvatarResources } from './NeutralAvatar';
 import { RoleAvatar, type AvatarStateReporter } from './RoleAvatar';
 import { prefetchMeshyAvatarAssets } from './meshy-avatar-instance';
+
+type Player = Extract<VisibleEntity, { kind: 'player' }>;
+
+export const createAvatarResources = createNeutralAvatarResources;
+
+export function Avatar({
+  player,
+  ally,
+  faces,
+  standIn,
+  resources,
+  renderTick,
+}: {
+  player: Player;
+  ally: boolean;
+  faces?: FaceTextures;
+  standIn?: Texture | null;
+  resources: NeutralAvatarResources;
+  renderTick(): number | null;
+}) {
+  return (
+    <RoleAvatar
+      player={player}
+      ally={ally}
+      observerRole={player.role ?? null}
+      quality="medium"
+      faces={faces}
+      standIn={standIn}
+      resources={resources}
+      renderTick={renderTick}
+    />
+  );
+}
 
 export function FaceAvatars({
   view,
