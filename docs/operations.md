@@ -19,26 +19,44 @@
 - 시계 역행은 마지막으로 수락한 최대 시각보다 5ms 이내만 허용하고 기준 시각은 낮추지 않는다. 20→18→16→15는 허용, 이어서 14(6ms)는 잠근다.
 - 운영 볼륨의 `usage-checkpoint`·journal·회수·감사 파일과 `runtime-first*-consumed.json` marker는 지우거나 초기화하지 않는다. marker가 있으면 설정 id를 바꿔도 최초 설치 권한을 다시 쓸 수 없다.
 
-현재 LiveKit Cloud 프로젝트 `kkakkung`는 Build 플랜이다(2026-09-15 대시보드: 동시 참가자 100, API 분당 10,000, 월 5,000 참가자-분·50GB 고정 한도, 초과 시 차단). 서버에는 월간 청구 잔량 자동 조회와 금액 상한이 없다. 월 사용량 경보는 후속 과제다.
+현재 LiveKit Cloud 프로젝트 `kkakkung`는 Build 플랜이다(2026-09-15 대시보드: 동시 참가자 100, API 분당 10,000, 월 5,000 참가자-분·50GB 고정 한도, 초과 시 차단). 서버는 청구 잔량을 LiveKit에서 읽지 못한다(Build 플랜에 Analytics API 없음). 대신 **월 사용량 가드**가 서버가 본 연결 시간을 직접 세어, 남은 분이 여유 아래로 내려가면 새 경기(연습 진입)를 멈춘다(364, 아래 "LiveKit 월 사용량 가드").
 
 ## 2. 제품 설정값
 
 값은 비밀이 아닌 정책으로 [compose.continuous.yaml](../infra/compose.continuous.yaml)·[compose.product.yaml](../infra/compose.product.yaml)에 두고, 배포 러너가 overlay에서 읽어 사전 검사에 넘긴다. 비밀값은 Jenkins Secret file `kkakkung-production-env`에만 둔다.
 
-| 설정                                       | 현재 값                                       | 비고                                                                                                                                                               |
-| ------------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`                         | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                               |
-| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions`                       | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                                 |
-| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`                                   | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                               |
-| `MAX_ROOMS_PER_ORIGIN`                     | `2`                                           | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                               |
-| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)                           | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                                         |
-| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180                                | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                                    |
-| API 경보                                   | total 설정의 90%                              | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                                     |
-| `DEMO_ROOMS`                               | `1`(켜짐)                                     | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                                        |
-| `DEMO_MAX_ROOMS`                           | `3`                                           | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                                      |
-| `SHOWCASE_ROOMS`                           | `1`(켜짐)                                     | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                             |
-| `DEMO_ADMIN_EMAILS_FILE`                   | `/etc/kkakkung/sso-access/allowed-emails.txt` | `/demo`·`/showcase` 운영자 등록 이메일 목록(367). 호스트 `/opt/kkakkung/sso-access`를 읽기 전용 마운트. 요청마다 다시 읽고, 없거나 못 읽으면 두 관리 경로만 닫힌다 |
-| `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`                                     | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝           |
+| 설정                                       | 현재 값                                       | 비고                                                                                                                                                                                                  |
+| ------------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVICE_AUDIENCE` / 입장 방식             | `team` / `gitlab-sso`                         | `public`은 guest 입장. public+livekit은 publisher-permissions만 허용                                                                                                                                  |
+| `MEDIA_SUBSCRIPTION_MODE`                  | `publisher-permissions`                       | D-2026-09-15-01. `server-forwarding`(split)은 보류                                                                                                                                                    |
+| `MAX_ROOMS` / `MAX_SLOTS`                  | `10` / `60`                                   | 스키마 상한과 같다(`MAX_SLOTS = MAX_ROOMS × 6`). 게임 단독 60클라이언트 30분은 통과(QA-10), 실제 미디어 단계 부하(QA-11/12)는 미실행                                                                  |
+| `MAX_ROOMS_PER_ORIGIN`                     | `2`                                           | 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 여는 방 수(300). 공유 NAT는 한 출처로 묶이므로 "한 회선" 기준. `MAX_ROOMS` 미만이어야 부팅                                                                  |
+| `MAX_ROOMS_PER_ACCOUNT`                    | `1`                                           | 팀 SSO 계정 하나가 동시에 여는 방 수(366). IP가 아니라 계정으로 세므로 캠퍼스 NAT 뒤 팀원끼리 막지 않는다. 초대 링크로 만든 방은 세지 않는다. `MAX_ROOMS` 미만이어야 부팅                             |
+| `ROOM_IDLE_TTL_MS`                         | `600000`(로비 10분)                           | 장치 준비·결과·중단 5분, 종료 60초 전 안내                                                                                                                                                            |
+| `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180                                | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                                                                       |
+| API 경보                                   | total 설정의 90%                              | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                                                                        |
+| `DEMO_ROOMS`                               | `1`(켜짐)                                     | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                                                                           |
+| `DEMO_MAX_ROOMS`                           | `3`                                           | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                                                                         |
+| `SHOWCASE_ROOMS`                           | `1`                                           | 발표 시연 방(`/showcase`)이 동시에 모일 수 있는 수(0~10, 발표 배포는 `3`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 시연 방마다 `MAX_ROOMS` 예산에서 한 방을 쓴다. `0`이면 끔 |
+| `DEMO_ADMIN_EMAILS_FILE`                   | `/etc/kkakkung/sso-access/allowed-emails.txt` | `/demo`·`/showcase` 운영자 등록 이메일 목록(367). 호스트 `/opt/kkakkung/sso-access`를 읽기 전용 마운트. 요청마다 다시 읽고, 없거나 못 읽으면 두 관리 경로만 닫힌다                                    |
+| `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`                                     | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝                                              |
+
+### LiveKit 월 사용량 가드
+
+비밀 env 파일(Jenkins `kkakkung-production-env`)에 둘 다 넣어야 켜진다. 하나만 있으면 기동을 거절하고, 둘 다 없으면 꺼진 채 돌며 기동 로그에 `LiveKit monthly usage guard is OFF` 경고를 남긴다.
+
+| 설정                              | 예                            | 뜻                                                                                        |
+| --------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `LIVEKIT_MONTHLY_MINUTES`         | `5000`                        | 플랜의 월 참가자-분 한도                                                                  |
+| `LIVEKIT_USAGE_BASELINE`          | `1307@2026-09-23T10:00+09:00` | 대시보드에서 읽은 사용량과 읽은 시각. 서버는 이 시각 이후만 더한다                        |
+| `LIVEKIT_MONTHLY_RESERVE_MINUTES` | 기본 `300`                    | 남은 분이 이 값 이하가 되면 새 연습 진입을 멈춘다. 이미 진행 중인 경기가 끝까지 쓸 여유다 |
+| `LIVEKIT_BILLING_CYCLE_DAY`       | 기본 `1`                      | 청구 주기가 바뀌는 날(UTC, 1~28). 이날 누적과 기준값을 버리고 0부터 센다                  |
+
+- 세는 것: 서버가 발급한 세대 중 LiveKit에 붙어 있는 참가자 수 × 시간(250ms 주기). 누적은 운영 볼륨 `livekit-monthly-usage.json`에 30초마다 남아 배포·재시작 뒤에도 이어진다.
+- 세지 못하는 것: 이 서버가 발급하지 않은 연결(대시보드 시험, 같은 키를 쓰는 로컬 개발 등). 그래서 **대시보드를 볼 때마다 기준값을 새로 넣는다.** 기준값이 바뀌면 이전 누적은 버리고 새 값부터 센다.
+- 막히면 장치 점검 화면에 "이번 달 영상·음성 사용량이 한도에 가까워…"가 뜨고, 운영 상태(`/api/operations/status`)의 `monthlyUsage`에 사용·잔여·여유·`blocked`가 보인다. 열림·닫힘이 바뀔 때만 `media.budget.near_limit` 이벤트를 남긴다. 방장이 다시 시작을 누르면 열린 뒤 바로 들어간다.
+- **배포 스모크(DP-06)도 새 경기라 같이 막힌다.** 가드가 닫힌 동안 배포하면 스모크가 실패해 롤백된다. 기준값을 새로 넣거나 다음 주기를 기다린 뒤 배포한다.
+- 기존 `remainingMinutes`는 continuous 배포 게이트가 `null`을 요구하므로 이 값과 섞지 않는다.
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
 
@@ -66,9 +84,12 @@ sudo nginx -t && sudo systemctl reload nginx
 포획 수로 일찍 끝나지 않고 3분을 다 뛴 뒤 탈출이 포획보다 많으면 도망자, 아니면 술래가 이긴다.
 재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
 
-인증은 `/demo`와 같다(로그인 뒤 서버가 등록 이메일 목록과 대조) 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
-는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
-예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
+인증은 `/demo`와 같이 로그인 뒤 서버가 등록 이메일 목록과 대조한다. 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
+는 동시에 모이는 중일 수 있는 시연 방 수로 기본 `1`, 발표 배포는 `3`이다. `0`이면 발급 API가 503
+`SHOWCASE_UNAVAILABLE`로 답한다. `/showcase`를 연 사람은 빈 자리가 있는 시연 방 중 가장 먼저 열린 방에
+앉고, 그런 방이 없으면 모이는 중인 시연 방이 한도 미만일 때 새 방이 열리며, 한도에 닿았으면 503
+`CAPACITY`로 기다린다. 시연 방도 데모 방과 달리 `MAX_ROOMS`·좌석 예산에서 방마다 한 방을 쓴다(시연
+3개면 일반 방은 `MAX_ROOMS - 3`개). 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
 배포할 때 `host.conf`를 다시 설치한다.
 
 CLI는 장애 대응·자동화처럼 호스트에서만 쓰는 보조 경로다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이
@@ -157,7 +178,7 @@ pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
 
 본문 2,048바이트, 헤더 후 본문 완료 5초(`408/BODY_TIMEOUT`). 키 저장은 차원별 4,096개이며 토큰 원문은 보관하지 않는다. LiveKit webhook raw body는 사전 파싱에서 제외하고 서명을 검증한다.
 
-**게스트 방 점유**(S15P21C204-293). 게스트가 만든 방은 만든 출처(IP)를 기록하고, 같은 출처가 **동시에 2개**까지만 열어 둘 수 있다. 넘으면 `429 TOO_MANY_ROOMS`로 거절한다. 서비스가 찬 `503 CAPACITY`와 다른 사실이라 따로 답한다 — 자기 방을 닫으면 바로 다시 열 수 있다. 팀(SSO) 입장은 사람이 식별되고 한 IP 뒤에 여러 명이 있을 수 있어 이 상한의 대상이 아니다. 상한은 `SlotRegistry`의 `maxRoomsPerOwner`이며 기본 2다.
+**게스트 방 점유**(S15P21C204-293). 게스트가 만든 방은 만든 출처(IP)를 기록하고, 같은 출처가 **동시에 2개**까지만 열어 둘 수 있다. 넘으면 `429 TOO_MANY_ROOMS`로 거절한다. 서비스가 찬 `503 CAPACITY`와 다른 사실이라 따로 답한다 — 자기 방을 닫으면 바로 다시 열 수 있다. 상한은 `SlotRegistry`의 `maxRoomsPerOwner`이며 기본 2다. 팀(SSO)은 IP가 아니라 **계정**으로 센다(366): 한 계정이 연 방은 `MAX_ROOMS_PER_ACCOUNT`(기본 1)개까지이고, 서비스 전체에서 **자리도 하나**다. 다른 창에서 접속 중이면 `409 ALREADY_IN_ROOM`, 아직 접속하지 않은 예약은 새 요청으로 교체한다. 일반 세션은 연결이 끊기면 바로 무효가 되므로 창을 닫으면 곧바로 다시 들어올 수 있다.
 
 **방 수명은 사람이 들어올 때만 는다.** 초대 링크를 회전해도 로비 체류 기한이 갱신되지 않는다. 예전에는 갱신돼서, 아무도 없는 방을 10분마다 한 번 돌리는 것만으로 영원히 붙잡을 수 있었다.
 

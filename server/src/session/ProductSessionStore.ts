@@ -50,6 +50,8 @@ export class ProductSessionStore {
   issue(input: {
     nickname: string;
     inviteId: string;
+    /** SSO account key, when the request carried a trusted SSO identity (S15P21C204-366). */
+    account?: string | null;
     roomCode: string;
     /** An invitation may expire before the normal first-connection deadline. */
     admissionDeadlineEpochMs?: number;
@@ -78,6 +80,7 @@ export class ProductSessionStore {
       playerId: randomUUID(),
       tokenHash: hash(sessionToken),
       inviteId: input.inviteId,
+      account: input.account ?? null,
       roomCode: input.roomCode,
       nickname: input.nickname,
       issuedAt: now,
@@ -120,6 +123,14 @@ export class ProductSessionStore {
   getByPlayer(playerId: string): SessionAuth | null {
     const id = this.byPlayer.get(playerId);
     return id ? this.get(id) : null;
+  }
+
+  /** 이 계정으로 발급돼 아직 살아 있는 세션들(S15P21C204-366). */
+  sessionsOfAccount(account: string): SessionAuth[] {
+    const out: SessionAuth[] = [];
+    for (const session of this.sessions.values())
+      if (session.account === account && this.isLive(session)) out.push(toAuth(session));
+    return out;
   }
 
   activeConnection(sessionId: string): string | null {

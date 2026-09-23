@@ -15,6 +15,7 @@ import {
   MEDIA_ROUTES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  SHOWCASE_CLOSED_CLOSE_CODE,
   type SessionResponse,
   type DemoScenarioId,
   type DemoScenarioOptions,
@@ -141,6 +142,8 @@ export type ProductSnapshot = {
   lost: boolean;
   roomExpired?: boolean;
   removedByHost?: boolean;
+  /** S15P21C204-363. 시연 방의 방장이 나가 방이 닫혔다. 페이지는 `/showcase` 첫 화면으로 돌아간다. */
+  showcaseClosed?: boolean;
   error: string | null;
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
@@ -436,6 +439,7 @@ export function bindProductRoom(
       lost: true,
       roomExpired: code === ROOM_EXPIRED_CLOSE_CODE,
       removedByHost: code === ROOM_REMOVED_CLOSE_CODE,
+      showcaseClosed: code === SHOWCASE_CLOSED_CLOSE_CODE,
     });
     clock.clear();
     heartbeat.dispose();

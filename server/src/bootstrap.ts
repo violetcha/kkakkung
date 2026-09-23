@@ -84,6 +84,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   maxRooms: number;
   /** 한 출처가 동시에 열어 둘 수 있는 방 수(S15P21C204-300). 생략하면 레지스트리 기본값. */
   maxRoomsPerOrigin?: number;
+  /** 한 SSO 계정이 동시에 열어 둘 수 있는 방 수(S15P21C204-366). 생략하면 레지스트리 기본값. */
+  maxRoomsPerAccount?: number;
   /** S15P21C204-312. Demo rooms counted apart from maxRooms. */
   demoMaxRooms?: number;
   inviteMaxTtlMs: number | null;
@@ -194,7 +196,12 @@ export function createApplication<State = unknown>(
         ...(product.maxRoomsPerOrigin === undefined
           ? {}
           : { maxRoomsPerOwner: product.maxRoomsPerOrigin }),
+        ...(product.maxRoomsPerAccount === undefined
+          ? {}
+          : { maxRoomsPerAccount: product.maxRoomsPerAccount }),
         ...(product.demoMaxRooms === undefined ? {} : { maxDemoRooms: product.demoMaxRooms }),
+        // S15P21C204-361. 0 은 라우트가 아예 열리지 않으니 등록부 한도로는 1 을 둔다.
+        ...(config.showcaseRooms > 0 ? { maxShowcaseRooms: config.showcaseRooms } : {}),
       })
     : null;
   const directory = new RoomDirectory();
@@ -418,7 +425,7 @@ export function createApplication<State = unknown>(
           logger.warn('DEMO_ADMIN_EMAILS_FILE is not set: /demo and /showcase admit no operator');
         // 발표 시연 방. `/demo` 와 같은 SSO 경계 뒤의 브라우저 진입이며 운영 토큰과 무관하다.
         app.use(
-          config.showcaseRooms
+          config.showcaseRooms > 0
             ? createShowcaseRoutes({
                 sessions: productSessions,
                 slots,
@@ -426,6 +433,7 @@ export function createApplication<State = unknown>(
                 operatorAllowed,
                 monotonicNow,
                 admissionTtlMs: config.demoAdmissionTtlMs,
+                ready: operationsReady,
                 cleanupReservations,
               })
             : createShowcaseUnavailableRoutes(product.trustProxy, operatorAllowed),
@@ -570,6 +578,8 @@ export function createApplication<State = unknown>(
       emitEvent: eventLogger.emit,
       canStart: operationsReady,
       canStartDemo: demoOperationsReady,
+      // S15P21C204-364. Near the LiveKit monthly allowance new matches wait in device check.
+      canStartMatch: () => media?.allowsNewMatch?.() ?? true,
       strictProduct: product.strictProduct,
       random: product.random,
       onInvalidateRoom: (roomCode) => {
@@ -638,6 +648,23 @@ export function createApplication<State = unknown>(
             { readiness: init.readiness.state, admission: init.admission },
             'Media coordinator initialized',
           );
+          // S15P21C204-364. The monthly guard is off unless the operator configured it. Say so
+          // at every start rather than run silently without it.
+          const monthly = media.monthlyUsage?.() ?? null;
+          if (monthly)
+            logger.info(
+              {
+                usedMinutes: monthly.usedMinutes,
+                remainingMinutes: monthly.remainingMinutes,
+                reserveMinutes: monthly.reserveMinutes,
+                blocked: monthly.blocked,
+              },
+              'LiveKit monthly usage guard active',
+            );
+          else
+            logger.warn(
+              'LiveKit monthly usage guard is OFF: set LIVEKIT_MONTHLY_MINUTES and LIVEKIT_USAGE_BASELINE',
+            );
         }
         await server.listen(config.port, config.host);
       } catch (error) {

@@ -210,7 +210,8 @@ describe('오류 계약', () => {
 
   it('내부 좌석 코드를 그대로 내보내지 않는다', async () => {
     // ROOM_LIMIT·OWNER_LIMIT·SERVICE_FULL 은 레지스트리 내부 어휘다. 밖으로 나가면 구현이
-    // 드러나고 클라이언트가 계약에 없는 값을 보게 된다.
+    // 드러나고 클라이언트가 계약에 없는 값을 보게 된다. ROOM_FULL 은 S15P21C204-365 부터 참가
+    // 경로의 공개 코드지만 방 만들기에서는 나올 일이 없어 여기서도 막는다.
     const internal = ['ROOM_LIMIT', 'OWNER_LIMIT', 'SERVICE_FULL', 'ROOM_FULL'];
     await withHarness({ maxRooms: 1, maxRoomsPerOwner: 1 }, async ({ create }) => {
       for (const origin of ['203.0.113.4', '203.0.113.4', '203.0.113.5']) {

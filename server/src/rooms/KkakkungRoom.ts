@@ -25,6 +25,7 @@ import {
   PRODUCT_SERVER_MESSAGES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  SHOWCASE_CLOSED_CLOSE_CODE,
   demoControlSchema,
   demoScenarioRequestSchema,
   productJoinOptionsSchema,
@@ -168,6 +169,12 @@ export type ProductRoomDeps<State> = Readonly<{
   /** 교환 대본이 아직 나눌 지식이 남은 상대를 고를 수 있게 한다. */
   demoExchangeGain?: (state: State, from: string, to: string) => boolean;
   canStart?: () => boolean;
+  /**
+   * S15P21C204-364. Whether a new media match may start on the LiveKit monthly guard. Checked only
+   * when practice (the first media) begins; a match already running is never stopped by it, and a
+   * demo room, which issues no media, never asks.
+   */
+  canStartMatch?: () => boolean;
   /**
    * Readiness gate for a demo room (S15P21C204-258). A demo room never issues, publishes or
    * receives media, so media readiness says nothing about whether it can run; gating it on that
@@ -737,6 +744,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const control = this.heartbeat.close(client.sessionId);
       if (!auth) return;
       deps.sessions.releaseConnection(auth.sessionId, client.sessionId);
+      // S15P21C204-363. 시연 방의 방장이 대기실에서 나가면 그 시연은 끝난 것이다. 접속 해제 표시만
+      // 해도 방장이 승계되므로 그 전에 누가 방장이었는지 본다. 이미 닫히는 중인 방(만료·해체)의
+      // 이탈은 다시 닫지 않는다.
+      const hostLeftShowcaseLobby =
+        this.showcase &&
+        !this.closing &&
+        this.lobby.host === auth.playerId &&
+        (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK');
       this.clientsByPlayer.delete(auth.playerId);
       this.lobby.setConnected(auth.playerId, false);
       this.spectateChoices.delete(auth.playerId);
@@ -753,6 +768,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.queue.forgetActor(auth.playerId);
       this.dispatcher.forget(auth.playerId);
       if (!preserveDemoSession) deps.sessions.invalidate(auth.sessionId);
+      if (hostLeftShowcaseLobby) {
+        // 남은 셋은 방장 승계 대신 시연 종료 코드로 끊겨 /showcase 첫 화면으로 돌아간다. 자리·방
+        // 항목은 소멸(onDispose)이 즉시 비운다(360). 일반 방과 데모 방은 아래 기존 경로를 그대로 탄다.
+        this.closing = true;
+        deps.slots.beginClose(this.roomCode);
+        deps.sessions.invalidateRoom(this.roomCode);
+        void this.disconnect(SHOWCASE_CLOSED_CLOSE_CODE);
+        return;
+      }
       if (!preserveDemoSession && (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK')) {
         this.releaseSeat(auth.playerId, 'connection-lost');
         this.evaluateWaiting();
@@ -776,9 +800,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // Retiring seats keep a callback target until E confirms the remote boundary.
       if (!this.hasUnresolvedMedia()) deps.directory.unregister(this.roomCode, this);
       deps.sessions.invalidateRoom(this.roomCode);
+      // S15P21C204-360. 시연 방은 발표마다 연달아 여닫는다. 넷이 모두 나간 시연 방은 E의 해제
+      // 확인을 기다리지 않고 자리와 방 항목을 바로 비워 다음 시연이 같은 예산을 쓴다. 미디어 세대
+      // 회수 자체는 재시도 엔진이 이어가고, 늦은 확인은 위의 directory 등록이 남아 이 핸들이 받아
+      // 빈 방·빈 자리에 대한 no-op 으로 끝난다. 일반 방은 RETIRING 자리로 확인을 기다린다.
       for (const member of deps.slots.members(this.roomCode))
         deps.slots.release(this.roomCode, member.playerId, {
-          confirmedRetirement: !this.hasUnresolvedMedia(member.playerId),
+          confirmedRetirement: this.showcase || !this.hasUnresolvedMedia(member.playerId),
         });
       deps.slots.closeRoom(this.roomCode);
       deps.onInvalidateRoom?.(this.roomCode);
@@ -1572,6 +1600,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // device check until the old resource is confirmed released.
       if (this.hasUnresolvedMedia()) {
         this.blockedReason = 'PRACTICE_MEDIA_NOT_READY';
+        return;
+      }
+      // S15P21C204-364. Practice is where LiveKit starts to bill. Near the monthly allowance, stop
+      // here — in device check, with the reason shown — rather than let a match start that the
+      // provider would cut off halfway through.
+      if (!this.demo && deps.canStartMatch && !deps.canStartMatch()) {
+        this.blockedReason = 'MEDIA_MONTHLY_LIMIT';
         return;
       }
       const now = deps.monotonicNow();

@@ -38,6 +38,7 @@ import { crosshairState, installHint } from '../features/game/flow/install-hint'
 import { interactPrompt } from '../features/game/flow/interact-prompt';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { sessionErrorLabel } from '../features/room/session-error-labels';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
 import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { PracticeScreen } from '../features/game/flow/PracticeScreen';
@@ -272,8 +273,19 @@ export function ProductApp({
   // 나가는 것이 아니므로 그대로 두어 같은 경기로 돌아오게 한다.
   const leaveByChoice = useCallback(() => {
     if (demoSession) forgetDemoSession();
-    void leave();
-  }, [demoSession, leave]);
+    // S15P21C204-363. 시연 참가자는 /showcase 에서만 들어오므로 이 페이지의 입장 폼으로 떨어질 일이
+    // 없다. 방을 정리한 뒤 시연 첫 화면으로 돌려보낸다.
+    void leave().finally(() => {
+      if (showcaseSession) window.location.assign('/showcase');
+    });
+  }, [demoSession, showcaseSession, leave]);
+  // S15P21C204-363. 방장이 시연 방을 닫아 끊긴 사람은 안내를 잠깐 보고 /showcase 로 돌아간다.
+  const showcaseClosed = !!showcaseSession && !!snapshot?.lost && !!snapshot.showcaseClosed;
+  useEffect(() => {
+    if (!showcaseClosed) return;
+    const timer = window.setTimeout(leaveByChoice, 2500);
+    return () => window.clearTimeout(timer);
+  }, [showcaseClosed, leaveByChoice]);
   useEffect(() => {
     const previous = appliedInvitation.current;
     // Keep a new invitation for the next admission; never evict an active participant.
@@ -395,6 +407,11 @@ export function ProductApp({
     } catch (cause) {
       // 끝났거나 닫힌 데모 방이다. 새로고침이 거기로 다시 가지 않게 한다.
       if (!owned) forgetDemoSession();
+      // S15P21C204-363. 시연 세션의 입장 거절은 이 페이지의 입장 폼이 아니라 /showcase 가 다시 받는다.
+      if (!owned && showcaseSession && run === generation.current) {
+        window.location.assign('/showcase');
+        return;
+      }
       if (joined)
         await productRoomPort(joined)
           .leave()
@@ -404,23 +421,10 @@ export function ProductApp({
         runtime.current = null;
         setSnapshot(null);
         setSessionCredential(null);
-        const labels: Record<string, string> = {
-          INVALID_REQUEST: '닉네임·초대 링크·방 코드를 확인해 주세요.',
-          INVALID_INVITATION:
-            access === 'gitlab-sso' && !invitation
-              ? '로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'
-              : '유효한 초대 링크가 필요합니다.',
-          CAPACITY: '방이 가득 찼습니다.',
-          TOO_MANY_ROOMS:
-            '이미 열어 둔 방이 있습니다. 쓰지 않는 방을 닫거나 잠시 뒤 다시 시도해 주세요.',
-          ROOM_NOT_AVAILABLE: '입장할 수 없는 방입니다.',
-          RATE_LIMITED: '잠시 기다린 뒤 다시 시도해 주세요.',
-          ADMISSION_CLOSED: '지금은 입장을 받고 있지 않습니다.',
-          INVALID_SESSION: '입장 시간이 만료됐습니다. 다시 입장해 주세요.',
-        };
         setError(
-          labels[cause instanceof Error ? cause.message : ''] ??
-            '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.',
+          sessionErrorLabel(cause instanceof Error ? cause.message : '', {
+            ssoWithoutInvitation: access === 'gitlab-sso' && !invitation,
+          }) ?? '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.',
         );
       }
     } finally {
@@ -906,6 +910,8 @@ export function ProductApp({
           onLeave={leaveByChoice}
           expired={snapshot.roomExpired}
           removed={snapshot.removedByHost}
+          showcaseClosed={snapshot.showcaseClosed}
+          showcase={!!showcaseSession}
         />
       ) : (
         <>

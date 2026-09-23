@@ -76,6 +76,11 @@ export const PREPARATION_ISSUES = [
   'DEVICE_LOADING_TIMEOUT',
   'MEDIA_NOT_READY',
   'PREPARATION_UNAVAILABLE',
+  /**
+   * S15P21C204-364. 이번 달 영상·음성 사용량이 한도 가까이 차서 새 경기를 시작하지 않는다.
+   * 읽는 쪽은 모르는 값을 버리므로(아래 reader) 옛 클라이언트는 안내 없이 대기만 한다.
+   */
+  'MEDIA_BUDGET_EXHAUSTED',
 ] as const;
 export type PreparationIssue = (typeof PREPARATION_ISSUES)[number];
 export const REMATCH_STATES = ['available', 'settling', 'requested'] as const;

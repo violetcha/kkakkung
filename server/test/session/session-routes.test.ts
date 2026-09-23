@@ -11,6 +11,7 @@ import {
   type AdmissionState,
   type SessionRouteDeps,
 } from '../../src/session/SessionRoutes.js';
+import { createReservationCleanup } from '../../src/session/ReservationCleanup.js';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
 
 describe('POST /api/sessions', () => {
@@ -266,7 +267,9 @@ describe('GitLab team admission through the trusted ingress', () => {
       { nickname: 'seventh', createRoom: false, roomCode: host.roomCode },
       identity('member-6'),
     );
-    expect(await seventh.json()).toEqual({ error: 'CAPACITY' });
+    // S15P21C204-365. 그 방이 찬 것과 서비스가 찬 것은 다른 답이다.
+    expect(seventh.status).toBe(503);
+    expect(await seventh.json()).toEqual({ error: 'ROOM_FULL' });
     expect(await (await post(create, identity('another-host'))).json()).toEqual({
       error: 'CAPACITY',
     });
@@ -355,11 +358,109 @@ describe('GitLab team admission through the trusted ingress', () => {
     expect(await refused.json()).toEqual({ error: 'TOO_MANY_ROOMS' });
     expect(deps.slots.roomCodes().size).toBe(2);
 
-    // 팀(SSO) 생성은 이 상한의 대상이 아니다.
+    // 팀(SSO)은 IP 가 아니라 계정으로 센다. 같은 IP 의 게스트 방은 팀원의 몫을 줄이지 않는다.
     deps = { ...deps, admissionMode: 'gitlab-sso' };
     expect((await post({ nickname: 'team', createRoom: true }, identity('member'))).status).toBe(
       201,
     );
     expect(deps.slots.roomCodes().size).toBe(3);
+  });
+
+  // S15P21C204-366. 팀 모드에서 한 계정은 방 하나를 열고 자리 하나를 갖는다.
+  describe('one SSO account, one room and one seat', () => {
+    beforeEach(() => {
+      const slots = new SlotRegistry({ maxRooms: 6 });
+      deps = {
+        ...deps,
+        slots,
+        cleanupReservations: createReservationCleanup({
+          sessions: deps.sessions,
+          slots,
+          hasLiveRoom: () => false,
+          onRoomClosed: () => undefined,
+        }),
+      };
+    });
+    // 시도 속도 제한은 따로 시험한다. 여기서는 요청마다 창을 넘겨 한도 규칙만 본다.
+    const send = (body: unknown, user: string) => {
+      monotonic += 60_000;
+      return post(body, identity(user));
+    };
+    const admitted = async (response: Response) => {
+      expect(response.status).toBe(201);
+      return sessionResponseSchema.parse(await response.json());
+    };
+    /** 방이 하는 일을 흉내 낸다: 접속하면 자리를 JOINED 로, 끊기면 세션을 무효로 하고 자리를 푼다. */
+    const connect = (seat: { roomCode: string; playerId: string }) => {
+      const session = deps.sessions.getByPlayer(seat.playerId);
+      if (!session) throw new Error('missing session');
+      expect(deps.sessions.claimConnection(session.sessionId, 'conn-' + seat.playerId)).toBe(
+        'claimed',
+      );
+      expect(deps.slots.markJoined(seat.roomCode, seat.playerId, monotonic)).toBe(true);
+      return () => {
+        deps.sessions.invalidate(session.sessionId);
+        deps.slots.release(seat.roomCode, seat.playerId);
+      };
+    };
+    const joinByCode = (roomCode: string) => ({ nickname: 'team', createRoom: false, roomCode });
+
+    it('refuses a second seat while the account is connected, without blocking teammates', async () => {
+      connect(await admitted(await send(create, 'alice')));
+      const again = await send(create, 'alice');
+      expect(again.status).toBe(409);
+      expect(await again.json()).toEqual({ error: 'ALREADY_IN_ROOM' });
+
+      // 모든 요청이 같은 루프백 IP 에서 온다. 캠퍼스 NAT 뒤 다른 팀원은 자기 몫을 그대로 쓴다.
+      const bob = await admitted(await send(create, 'bob'));
+      await admitted(await send(create, 'carol'));
+      const other = await send(joinByCode(bob.roomCode), 'alice');
+      expect(other.status).toBe(409);
+      expect(await other.json()).toEqual({ error: 'ALREADY_IN_ROOM' });
+      expect(deps.slots.occupied(bob.roomCode)).toBe(1);
+    });
+
+    it('refuses a second window in the same room too', async () => {
+      const bob = await admitted(await send(create, 'bob'));
+      connect(await admitted(await send(joinByCode(bob.roomCode), 'alice')));
+      const second = await send(joinByCode(bob.roomCode), 'alice');
+      expect(second.status).toBe(409);
+      expect(deps.slots.occupied(bob.roomCode)).toBe(2);
+    });
+
+    it('replaces a reservation that never connected and closes the room it left empty', async () => {
+      // 창을 닫았거나 버튼을 두 번 누른 경우다. 붙잡힌 예약 때문에 본인이 막히면 안 된다.
+      const first = await admitted(await send(create, 'alice'));
+      const second = await admitted(await send(create, 'alice'));
+      expect(second.roomCode).not.toBe(first.roomCode);
+      expect(deps.slots.hasRoom(first.roomCode)).toBe(false);
+      expect(deps.sessions.getByPlayer(first.playerId)).toBeNull();
+    });
+
+    it('lets the account in again as soon as its window closes', async () => {
+      const bob = await admitted(await send(create, 'bob'));
+      const leave = connect(await admitted(await send(create, 'alice')));
+      leave();
+      await admitted(await send(joinByCode(bob.roomCode), 'alice'));
+    });
+
+    it('still caps rooms the account opened and left to others', async () => {
+      // 방을 연 사람이 나가도 남은 사람이 있으면 방은 그 계정의 몫으로 남는다.
+      const alice = await admitted(await send(create, 'alice'));
+      const leave = connect(alice);
+      connect(await admitted(await send(joinByCode(alice.roomCode), 'bob')));
+      leave();
+      const refused = await send(create, 'alice');
+      expect(refused.status).toBe(429);
+      expect(await refused.json()).toEqual({ error: 'TOO_MANY_ROOMS' });
+
+      // 명시한 생성 링크로 만든 방은 링크가 범위를 정하므로 이 몫과 무관하다.
+      const link = deps.invites.issue({
+        scope: { allowCreate: true, roomCodes: [] },
+        expiresAt: 1_030_000,
+      });
+      if (link.status !== 'issued') throw new Error(link.code);
+      await admitted(await send({ ...create, inviteToken: link.invitation.inviteToken }, 'alice'));
+    });
   });
 });

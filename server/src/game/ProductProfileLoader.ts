@@ -92,6 +92,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
     strictProduct: true,
     maxRooms: config.maxRooms,
     maxRoomsPerOrigin: config.maxRoomsPerOrigin,
+    maxRoomsPerAccount: config.maxRoomsPerAccount,
     demoMaxRooms: config.demoMaxRooms,
     inviteMaxTtlMs: admission?.inviteMaxTtlMs ?? null,
     publicWindow: config.publicWindow,
@@ -157,6 +158,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
             initialBudget: null,
             maxConcurrentParticipants: config.maxSlots,
             ...config.mediaApiLimits!,
+            monthlyUsage: config.livekitMonthlyUsage,
           }
         : null,
     core: matchCore,

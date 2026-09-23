@@ -32,6 +32,11 @@ export type ShowcaseRouteDependencies = Readonly<{
   monotonicNow: () => number;
   /** 세션을 받고 접속하기까지 기다려 주는 시간. 데모 방과 같은 값을 쓴다. */
   admissionTtlMs: number;
+  /**
+   * S15P21C204-362. 일반 세션 발급과 방 접속(onAuth 의 NOT_READY)이 함께 쓰는 문. 서버가 READY·OPEN
+   * 이 아니면 세션을 만들지 않고 ADMISSION_CLOSED 로 답해, 게임 페이지까지 가서 튕기는 경로를 없앤다.
+   */
+  ready: () => boolean;
   cleanupReservations?: () => void;
 }>;
 
@@ -44,12 +49,14 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
     res.setHeader('Cache-Control', 'no-store');
     if (!isOperatorRequest(req, deps.trustedProxy, deps.operatorAllowed))
       return fail(res, 401, 'UNAUTHORIZED');
+    if (!deps.ready()) return fail(res, 503, 'ADMISSION_CLOSED');
     const parsed = showcaseRoomRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {}));
     if (!parsed.success) return fail(res, 400, 'INVALID_REQUEST');
     deps.cleanupReservations?.();
     const existing = deps.slots.joinableShowcaseRoom();
-    // 넷이 찬 방이 아직 시작 전이면 다섯째는 기다린다. 무리를 둘로 나누는 새 방은 열지 않는다.
-    if (existing === null && deps.slots.formingShowcaseRoom()) return fail(res, 503, 'CAPACITY');
+    // S15P21C204-361. 빈 자리가 있는 시연 방이 있으면 거기에 앉힌다. 없으면 모이는 중인 시연 방이
+    // 한도(SHOWCASE_ROOMS) 미만일 때만 새 방을 열고, 한도에 닿았으면 기다리게 한다.
+    if (existing === null && !deps.slots.canOpenShowcaseRoom()) return fail(res, 503, 'CAPACITY');
     let roomCode: string;
     let issued: ReturnType<ProductSessionStore['issue']>;
     try {

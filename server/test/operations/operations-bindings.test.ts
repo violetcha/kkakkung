@@ -31,6 +31,7 @@ const releases: (() => void)[] = [];
 async function setup(
   overrides: Partial<MediaConfiguration> = {},
   monotonicNow: () => number = () => performance.now(),
+  extra: Partial<ConstructorParameters<typeof OperationsBindings>[0]> = {},
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kkakkung-e14-bindings-'));
   const clock = { now: EPOCH };
@@ -79,6 +80,7 @@ async function setup(
     retries: [],
     nowEpochMs: () => clock.now,
     getOfficialRevision: () => state.revision,
+    ...extra,
   });
   const audit = new OperationsAudit({
     opsDataDir: dir,
@@ -187,6 +189,34 @@ afterEach(async () => {
 });
 
 describe('E-14 real local operations bindings (no Cloud calls)', () => {
+  // S15P21C204-364. 월 사용량 가드는 운영 상태에 따로 보인다. 공식 잔량 필드는 건드리지 않는다
+  // (continuous 배포 게이트는 그 필드가 null 이기를 요구한다).
+  it('reports the monthly usage guard beside, never inside, the official balance', async () => {
+    const monthly = {
+      limitMinutes: 5000,
+      reserveMinutes: 300,
+      usedMinutes: 4750,
+      remainingMinutes: 250,
+      cycleStartEpochMs: EPOCH,
+      baselineAtEpochMs: EPOCH,
+      blocked: true,
+    };
+    const f = await setup({}, undefined, { monthlyUsage: () => monthly });
+    const status = f.operations.getStatus();
+    expect(status.monthlyUsage).toEqual(monthly);
+    expect(status.remainingMinutes).not.toBe(250);
+    // 가드가 꺼져 있거나 답하지 못하면 필드 자체가 없다. 운영 상태 전체를 망가뜨리지 않는다.
+    const off = await setup({}, undefined, { monthlyUsage: () => null });
+    expect('monthlyUsage' in off.operations.getStatus()).toBe(false);
+    const broken = await setup({}, undefined, {
+      monthlyUsage: () => {
+        throw new Error('meter');
+      },
+    });
+    expect(broken.operations.getStatus().admission).not.toBe(undefined);
+    expect('monthlyUsage' in broken.operations.getStatus()).toBe(false);
+  });
+
   it('completes a clean locked drain but never permits resume or issuance', async () => {
     const f = await setup();
     f.bindings.setAdmission('LOCKED');
