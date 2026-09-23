@@ -25,6 +25,7 @@ import {
   PRODUCT_SERVER_MESSAGES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  SHOWCASE_CLOSED_CLOSE_CODE,
   demoControlSchema,
   demoScenarioRequestSchema,
   productJoinOptionsSchema,
@@ -737,6 +738,14 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const control = this.heartbeat.close(client.sessionId);
       if (!auth) return;
       deps.sessions.releaseConnection(auth.sessionId, client.sessionId);
+      // S15P21C204-363. 시연 방의 방장이 대기실에서 나가면 그 시연은 끝난 것이다. 접속 해제 표시만
+      // 해도 방장이 승계되므로 그 전에 누가 방장이었는지 본다. 이미 닫히는 중인 방(만료·해체)의
+      // 이탈은 다시 닫지 않는다.
+      const hostLeftShowcaseLobby =
+        this.showcase &&
+        !this.closing &&
+        this.lobby.host === auth.playerId &&
+        (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK');
       this.clientsByPlayer.delete(auth.playerId);
       this.lobby.setConnected(auth.playerId, false);
       this.spectateChoices.delete(auth.playerId);
@@ -753,6 +762,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.queue.forgetActor(auth.playerId);
       this.dispatcher.forget(auth.playerId);
       if (!preserveDemoSession) deps.sessions.invalidate(auth.sessionId);
+      if (hostLeftShowcaseLobby) {
+        // 남은 셋은 방장 승계 대신 시연 종료 코드로 끊겨 /showcase 첫 화면으로 돌아간다. 자리·방
+        // 항목은 소멸(onDispose)이 즉시 비운다(360). 일반 방과 데모 방은 아래 기존 경로를 그대로 탄다.
+        this.closing = true;
+        deps.slots.beginClose(this.roomCode);
+        deps.sessions.invalidateRoom(this.roomCode);
+        void this.disconnect(SHOWCASE_CLOSED_CLOSE_CODE);
+        return;
+      }
       if (!preserveDemoSession && (phaseAtLeave === 'LOBBY' || phaseAtLeave === 'DEVICE_CHECK')) {
         this.releaseSeat(auth.playerId, 'connection-lost');
         this.evaluateWaiting();

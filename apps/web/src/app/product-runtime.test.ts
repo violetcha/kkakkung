@@ -1736,3 +1736,15 @@ it('flashes server-approved sensor and trap effects once without touching footst
   expect(flash()!.id).toBeGreaterThan(restrainedFlashId);
   await f.runtime.leave();
 });
+
+it('S15P21C204-363: reports a showcase room closed by its host apart from expiry and removal', async () => {
+  const f = fixture();
+  f.close(4003);
+  expect(f.runtime.getSnapshot()).toMatchObject({
+    lost: true,
+    showcaseClosed: true,
+    removedByHost: false,
+    roomExpired: false,
+  });
+  await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
+});
