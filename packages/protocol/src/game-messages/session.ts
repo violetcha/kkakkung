@@ -136,7 +136,13 @@ export const SESSION_ERROR_CODES = [
   'ROOM_NOT_AVAILABLE',
   'RATE_LIMITED',
   'ADMISSION_CLOSED',
+  /** 서비스가 찼다: 열 수 있는 방 수(`MAX_ROOMS`)나 좌석 수(`MAX_SLOTS`)를 다 썼다. 잠시 뒤 다시. */
   'CAPACITY',
+  /**
+   * S15P21C204-365. 들어가려던 그 방의 자리가 찼다. 서비스는 여유가 있을 수 있어 `CAPACITY` 와
+   * 다르게 답한다: 여기서는 기다리는 것이 아니라 다른 방을 찾거나 새 방을 만든다.
+   */
+  'ROOM_FULL',
   /**
    * 이 호출자가 이미 상한만큼 방을 열어 두었다(S15P21C204-293). 서비스가 찬 `CAPACITY` 와는
    * 다른 사실이라 따로 답한다: 여기서는 자기 방을 닫으면 바로 다시 열 수 있다.

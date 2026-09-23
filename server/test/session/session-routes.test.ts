@@ -266,7 +266,9 @@ describe('GitLab team admission through the trusted ingress', () => {
       { nickname: 'seventh', createRoom: false, roomCode: host.roomCode },
       identity('member-6'),
     );
-    expect(await seventh.json()).toEqual({ error: 'CAPACITY' });
+    // S15P21C204-365. 그 방이 찬 것과 서비스가 찬 것은 다른 답이다.
+    expect(seventh.status).toBe(503);
+    expect(await seventh.json()).toEqual({ error: 'ROOM_FULL' });
     expect(await (await post(create, identity('another-host'))).json()).toEqual({
       error: 'CAPACITY',
     });
