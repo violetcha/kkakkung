@@ -41,6 +41,8 @@ function fixture(
   options: {
     core?: CorePort<any>;
     layout?: (players: readonly RosterEntry[]) => MatchLayout;
+    /** 미디어 포트. 기본은 없음. S15P21C204-360 은 해제 확인이 오지 않는 미디어를 꽂는다. */
+    media?: unknown;
   } = {},
 ) {
   let now = 0;
@@ -85,7 +87,7 @@ function fixture(
         },
       },
     },
-    media: null,
+    media: (options.media ?? null) as any,
     assetVersion: 'fixture',
     random: () => 0.5,
   });
@@ -312,6 +314,69 @@ it('S15P21C204-363: closes the showcase room when the host leaves the waiting ro
     // 소멸이 자리와 방 항목을 비우면 다음 /showcase 요청은 새 방을 연다.
     f.room.onDispose();
     expect(f.slots.hasRoom(f.room.roomCode)).toBe(false);
+  } finally {
+    f.close();
+  }
+});
+
+it('S15P21C204-360: frees the seats and the room entry on dispose without waiting for media confirmation', async () => {
+  // 배포는 LiveKit 을 쓴다. E 가 해제를 확인하지 않는 미디어로, 넷이 모두 나간 뒤 방이 소멸하면
+  // 시연 방은 RETIRING 자리를 남기지 않고 즉시 등록부에서 사라져 다음 시연이 새 방을 연다.
+  const retirements: any[] = [];
+  const media = {
+    observeFrame() {},
+    releaseMatch() {},
+    lifecycle: { setGameConnection() {} },
+    prepareGeneration: async (request: any) => ({
+      ...request,
+      status: 'ready',
+      receiverGeneration: 1,
+      grant: {},
+      code: null,
+    }),
+    retireGeneration: async (request: any) => {
+      retirements.push(request);
+      return { ...request, status: 'unknown', code: 'TIMEOUT' };
+    },
+  };
+  const f = fixture({ media });
+  try {
+    f.join();
+    for (const [index, player] of f.players.entries())
+      f.command(player, 'READY', { ready: true }, index + 1);
+    f.tick();
+    f.command(f.players[0]!, 'ROOM_START', {}, 6);
+    f.tick();
+    expect(f.room.phase).toBe('TEAM_PRACTICE');
+    // 연습 미디어 세대를 받은 넷이 모두 창을 닫는다. 해제 확인은 오지 않는다.
+    for (const player of f.players) {
+      await f.room.requestMediaGrant(player.session.playerId, 'practice', null);
+      await f.flush();
+    }
+    for (const player of f.players) f.room.onLeave(player.client);
+    expect(f.room.pendingRetirements.size).toBe(4);
+    for (const player of f.players)
+      expect(f.slots.slotState(f.room.roomCode, player.session.playerId)).toBe('RETIRING');
+
+    f.room.onDispose();
+    expect(f.slots.hasRoom(f.room.roomCode)).toBe(false);
+    expect(f.slots.occupied(f.room.roomCode)).toBe(0);
+    expect(f.slots.joinableShowcaseRoom()).toBeNull();
+    expect(f.slots.formingShowcaseRoom()).toBe(false);
+    // 방 한도가 1 인 이 픽스처에서도 다음 시연 방이 바로 열린다.
+    expect(
+      f.slots.reserve('SHOWC2', 'next-host', 1_000, { create: true, showcase: { role: 'runner' } }),
+    ).toBe('reserved');
+
+    // 늦게 온 해제 확인은 소멸한 핸들이 받아 아무것도 건드리지 않는다.
+    for (const scope of retirements)
+      f.room.enqueueMediaControl({
+        type: 'MEDIA_RETIRED',
+        result: { ...scope, status: 'confirmed', code: null },
+      });
+    expect(f.room.pendingRetirements.size).toBe(0);
+    expect(f.slots.hasRoom(f.room.roomCode)).toBe(false);
+    expect(f.slots.occupied('SHOWC2')).toBe(1);
   } finally {
     f.close();
   }
