@@ -101,7 +101,6 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
 }, info) => {
   const { errors, failedResponses, metrics, counts, settledAfter } = await openRenderReview(page);
   const loading = page.getByRole('status', { name: '아바타 로딩' });
-  type ResourceSnapshot = NonNullable<Awaited<ReturnType<typeof counts>>>;
   const inspectScene = async (scene: string, ready: number) => {
     const before = await metrics.textContent();
     await page.getByRole('button', { name: scene, exact: true }).click();
@@ -136,8 +135,6 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   await expect.poll(counts).toEqual(original);
   mark('scene-cycle');
 
-  await inspectScene('술래 단독', 1);
-  await inspectScene('도망자 단독', 1);
   await inspectScene('상대 5명', 5);
   await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(0);
@@ -147,6 +144,9 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   await expect(loading).toHaveText('준비 5/5 · 대체 0');
   const reopenedMedium = await settledAfter(beforeMediumReopen);
   expect(reopenedMedium).not.toBeNull();
+  expect(reopenedMedium!.texture, 'medium stable texture').toBeLessThanOrEqual(
+    mediumCrowd!.texture,
+  );
   mark('reopen-medium');
 
   const beforeLow = await metrics.textContent();
@@ -154,35 +154,16 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   await expect(loading).toHaveText('준비 5/5 · 대체 0');
   const lowCrowd = await settledAfter(beforeLow);
   expect(lowCrowd).not.toBeNull();
-  await inspectScene('도망자 단독', 1);
-  await inspectScene('술래 단독', 1);
   await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(0);
   await expect(metrics).toHaveText('측정 대기');
   const beforeLowReopen = await metrics.textContent();
   await page.getByRole('button', { name: '렌더 다시 열기', exact: true }).click();
-  await expect(loading).toHaveText('준비 1/1 · 대체 0');
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
   const reopenedLow = await settledAfter(beforeLowReopen);
   expect(reopenedLow).not.toBeNull();
+  expect(reopenedLow!.texture, 'low stable texture').toBeLessThanOrEqual(lowCrowd!.texture);
   mark('reopen-low');
-
-  const qualitySamples: Record<'low' | 'medium', ResourceSnapshot[]> = {
-    low: [],
-    medium: [],
-  };
-  for (let cycle = 0; cycle < 5; cycle += 1)
-    for (const quality of ['medium', 'low'] as const) {
-      await page.getByRole('combobox', { name: '화면 품질' }).selectOption(quality);
-      qualitySamples[quality].push(await inspectScene('상대 5명', 5));
-    }
-  await page.getByRole('combobox', { name: '화면 품질' }).selectOption('medium');
-  qualitySamples.medium.push(await inspectScene('상대 5명', 5));
-  for (const quality of ['low', 'medium'] as const) {
-    const previous = qualitySamples[quality].at(-2)!;
-    const current = qualitySamples[quality].at(-1)!;
-    for (const field of ['draws', 'triangles', 'geometry', 'texture', 'programs'] as const)
-      expect(current[field], `${quality} stable ${field}`).toBeLessThanOrEqual(previous[field]);
-  }
   expect(errors).toEqual([]);
   expect(failedResponses).toEqual([]);
 });

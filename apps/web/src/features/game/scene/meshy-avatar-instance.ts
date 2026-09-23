@@ -6,6 +6,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  SkinnedMesh,
   SRGBColorSpace,
   TextureLoader,
   type AnimationAction,
@@ -40,6 +41,21 @@ export type MeshyAvatarInstance = Readonly<{
 }>;
 
 const templateCache = new Map<Role, Promise<MeshyAvatarTemplate>>();
+const activeTemplateInstances = new WeakMap<MeshyAvatarTemplate, number>();
+
+function retainTemplate(template: MeshyAvatarTemplate) {
+  activeTemplateInstances.set(template, (activeTemplateInstances.get(template) ?? 0) + 1);
+}
+
+function releaseTemplate(template: MeshyAvatarTemplate) {
+  const remaining = (activeTemplateInstances.get(template) ?? 1) - 1;
+  if (remaining > 0) {
+    activeTemplateInstances.set(template, remaining);
+    return;
+  }
+  activeTemplateInstances.delete(template);
+  Object.values(template.textures).forEach((texture) => texture.dispose());
+}
 
 export function loadMeshyAvatarTemplate(role: Role): Promise<MeshyAvatarTemplate> {
   const existing = templateCache.get(role);
@@ -100,8 +116,10 @@ export function createMeshyAvatarInstance(template: MeshyAvatarTemplate): MeshyA
     metalness: 0,
     side: DoubleSide,
   });
+  const skeletons = new Set<SkinnedMesh['skeleton']>();
   object.traverse((child) => {
     if (!(child instanceof Mesh)) return;
+    if (child instanceof SkinnedMesh) skeletons.add(child.skeleton);
     child.material = material;
     child.castShadow = true;
     child.receiveShadow = true;
@@ -127,6 +145,7 @@ export function createMeshyAvatarInstance(template: MeshyAvatarTemplate): MeshyA
   action.reset().play();
   action.paused = true;
   mixer.update(0);
+  retainTemplate(template);
   let disposed = false;
   return {
     scene: root,
@@ -138,7 +157,9 @@ export function createMeshyAvatarInstance(template: MeshyAvatarTemplate): MeshyA
       disposed = true;
       mixer.stopAllAction();
       mixer.uncacheRoot(object);
+      skeletons.forEach((skeleton) => skeleton.dispose());
       material.dispose();
+      releaseTemplate(template);
     },
   };
 }

@@ -1,11 +1,16 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import {
   AnimationClip,
+  Bone,
   Box3,
   BoxGeometry,
   Group,
+  Float32BufferAttribute,
   Mesh,
   MeshStandardMaterial,
+  Skeleton,
+  SkinnedMesh,
+  Uint16BufferAttribute,
   Texture,
   VectorKeyframeTrack,
 } from 'three';
@@ -87,4 +92,48 @@ it('removes Mixamo horizontal root motion while preserving vertical bounce', () 
 
   expect(values).toEqual([1, 2, 3, 1, 5, 3, 1, 4, 3]);
   expect(Array.from(source.tracks[0]?.values ?? [])).toEqual([1, 2, 3, 4, 5, 9, -2, 4, 12]);
+});
+
+it('releases shared template textures after the final avatar instance is disposed', () => {
+  const shared = template();
+  const releases = Object.values(shared.textures).map((texture) => vi.spyOn(texture, 'dispose'));
+  const first = createMeshyAvatarInstance(shared);
+  const second = createMeshyAvatarInstance(shared);
+
+  first.dispose();
+  expect(releases.map((release) => release.mock.calls.length)).toEqual([0, 0, 0, 0]);
+
+  second.dispose();
+  expect(releases.map((release) => release.mock.calls.length)).toEqual([1, 1, 1, 1]);
+
+  const remounted = createMeshyAvatarInstance(shared);
+  remounted.dispose();
+  expect(releases.map((release) => release.mock.calls.length)).toEqual([2, 2, 2, 2]);
+});
+
+it('releases the cloned Mixamo skeleton GPU resources', () => {
+  const shared = template();
+  const bone = new Bone();
+  const geometry = new BoxGeometry(1, 2, 1);
+  const vertices = geometry.getAttribute('position').count;
+  const weights = new Float32Array(vertices * 4);
+  for (let index = 0; index < vertices; index += 1) weights[index * 4] = 1;
+  geometry.setAttribute('skinIndex', new Uint16BufferAttribute(new Uint16Array(vertices * 4), 4));
+  geometry.setAttribute('skinWeight', new Float32BufferAttribute(weights, 4));
+  const skinned = new SkinnedMesh(geometry, new MeshStandardMaterial());
+  skinned.add(bone);
+  skinned.bind(new Skeleton([bone]));
+  shared.scene.clear();
+  shared.scene.add(skinned);
+  const avatar = createMeshyAvatarInstance(shared);
+  let cloned: SkinnedMesh | null = null;
+  avatar.scene.traverse((object) => {
+    if (object instanceof SkinnedMesh) cloned = object;
+  });
+  expect(cloned).not.toBeNull();
+  const release = vi.spyOn(cloned!.skeleton, 'dispose');
+
+  avatar.dispose();
+
+  expect(release).toHaveBeenCalledOnce();
 });
