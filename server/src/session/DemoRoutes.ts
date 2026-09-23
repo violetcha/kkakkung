@@ -15,6 +15,7 @@ import {
 } from '@kkakkung/protocol/game-messages';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
 import type { OperatorAuthorize } from './InvitationRoutes.js';
+import { isOperatorRequest, type OperatorAllowlist } from './operator-allowlist.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import { generateRoomCode } from './SessionRoutes.js';
 import type { SlotRegistry } from './SlotRegistry.js';
@@ -109,25 +110,19 @@ export function createDemoRoutes(
 }
 
 /**
- * Public-browser administrator entry. `X-Demo-Admin` is an assertion made by the host nginx only
- * after its GitLab project-member check. Requiring `trustedProxy` keeps an accidentally exposed
- * server port from treating a caller-supplied HTTP header as an administrator credential.
+ * Public-browser administrator entry. `X-Demo-Admin` is the login email the host nginx writes
+ * after GitLab SSO; the server admits it only when it is on the operator list (S15P21C204-367).
+ * Requiring `trustedProxy` keeps an accidentally exposed server port from treating a
+ * caller-supplied HTTP header as an administrator credential.
  */
 export function createDemoAdminRoutes(
-  deps: DemoRouteDependencies & Readonly<{ trustedProxy: boolean }>,
+  deps: DemoRouteDependencies &
+    Readonly<{ trustedProxy: boolean; operatorAllowed: OperatorAllowlist }>,
 ): Router {
   return createDemoRoute({
     ...deps,
     route: DEMO_ADMIN_ROOM_ROUTE,
-    authorize: (request) => {
-      const identity = request.headers['x-demo-admin'];
-      return (
-        deps.trustedProxy &&
-        typeof identity === 'string' &&
-        identity.trim().length > 0 &&
-        identity.length <= 256
-      );
-    },
+    authorize: (request) => isOperatorRequest(request, deps.trustedProxy, deps.operatorAllowed),
   });
 }
 
@@ -146,14 +141,14 @@ export function createDemoUnavailableRoutes(authorize: OperatorAuthorize): Route
 }
 
 /** Same unavailable response for an SSO-authorized browser administrator. */
-export function createDemoAdminUnavailableRoutes(trustedProxy: boolean): Router {
+export function createDemoAdminUnavailableRoutes(
+  trustedProxy: boolean,
+  operatorAllowed: OperatorAllowlist,
+): Router {
   const router = Router();
   router.use(
     DEMO_ADMIN_ROOM_ROUTE,
-    requireDemoAccess((request) => {
-      const identity = request.headers['x-demo-admin'];
-      return trustedProxy && typeof identity === 'string' && identity.trim().length > 0;
-    }),
+    requireDemoAccess((request) => isOperatorRequest(request, trustedProxy, operatorAllowed)),
     (_req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.status(503).json({ error: 'DEMO_UNAVAILABLE' });

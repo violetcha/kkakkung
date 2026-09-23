@@ -39,6 +39,7 @@ describe('showcase room admission', () => {
         sessions,
         slots,
         trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
       }),
@@ -111,6 +112,7 @@ describe('showcase room admission', () => {
         sessions: store,
         slots: own,
         trustedProxy: true,
+        operatorAllowed: (identity) => identity === 'member',
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
       }),
@@ -137,6 +139,13 @@ describe('showcase room admission', () => {
     }
   });
 
+  // S15P21C204-367. 로그인 게이트는 SSAFY 계정 전체를 통과시키므로 운영자 판정은 목록이 한다.
+  it('refuses a signed-in account that is not on the operator list', async () => {
+    const response = await post({ role: 'runner' }, { 'x-demo-admin': 'student@example.com' });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'UNAUTHORIZED' });
+  });
+
   it('rejects a request that names no role', async () => {
     expect((await post({})).status).toBe(400);
     expect((await post({ role: 'referee' })).status).toBe(400);
@@ -147,7 +156,7 @@ describe('showcase rooms disabled', () => {
   it('keeps the same identity check and never opens a room', async () => {
     const app = express();
     app.use(express.json({ limit: '2kb' }));
-    app.use(createShowcaseUnavailableRoutes(true));
+    app.use(createShowcaseUnavailableRoutes(true, (identity) => identity === 'member'));
     const { server, endpoint } = await listen(app);
     try {
       const anonymous = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
@@ -171,7 +180,7 @@ describe('showcase rooms disabled', () => {
   it('ignores the header when the server is not behind the trusted proxy', async () => {
     const app = express();
     app.use(express.json({ limit: '2kb' }));
-    app.use(createShowcaseUnavailableRoutes(false));
+    app.use(createShowcaseUnavailableRoutes(false, () => true));
     const { server, endpoint } = await listen(app);
     try {
       const response = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {

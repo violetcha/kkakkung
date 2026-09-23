@@ -36,6 +36,8 @@ describe('operator demo session admission', () => {
         sessions,
         slots,
         trustedProxy: true,
+        // S15P21C204-367. 로그인 게이트를 지난 이메일 중 운영자 목록에 있는 것만 받는다.
+        operatorAllowed: (identity) => identity === 'gitlab-member',
         monotonicNow: () => now,
         demoAdmissionTtlMs: 10 * 60_000,
       }),
@@ -93,6 +95,14 @@ describe('operator demo session admission', () => {
     });
     expect(response.status).toBe(201);
     expect(demoRoomResponseSchema.parse(await response.json()).role).toBe('tagger');
+
+    // S15P21C204-367. 게이트는 SSAFY 계정 전체를 통과시킨다. 목록 밖 계정은 데모를 열지 못한다.
+    const outsider = await fetch(endpoint + DEMO_ADMIN_ROOM_ROUTE, {
+      method: 'POST',
+      headers: { 'x-demo-admin': 'student@example.com', 'content-type': 'application/json' },
+      body: JSON.stringify({ role: 'tagger' }),
+    });
+    expect(outsider.status).toBe(401);
   });
 });
 

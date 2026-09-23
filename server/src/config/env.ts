@@ -110,6 +110,10 @@ const environment = z.object({
   // 발표 시연 방(showcase): 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. `/showcase` 는 GitLab SSO
   // 뒤에 있고 운영 토큰은 필요 없다. 기본 켜짐이며 0 으로 내리면 발급 API 가 503 으로 답한다.
   SHOWCASE_ROOMS: z.enum(['0', '1']).default('1'),
+  // S15P21C204-367. `/demo`·`/showcase` 를 여는 운영자 등록 이메일 파일(한 줄에 하나). 로그인
+  // 게이트는 SSAFY GitLab 계정 전체를 통과시키므로 운영자 판정은 서버가 이 목록으로 한다.
+  // 없으면 두 관리 경로는 아무도 통과시키지 않는다.
+  DEMO_ADMIN_EMAILS_FILE: z.string().min(1).optional(),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -326,6 +330,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     demoMaxRooms: raw.DEMO_MAX_ROOMS,
     showcaseRooms: raw.SHOWCASE_ROOMS === '1',
+    demoAdminEmailsFile: raw.DEMO_ADMIN_EMAILS_FILE ?? null,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

@@ -51,6 +51,7 @@ import {
   createDemoUnavailableRoutes,
 } from './session/DemoRoutes.js';
 import { createShowcaseRoutes, createShowcaseUnavailableRoutes } from './session/ShowcaseRoutes.js';
+import { fileOperatorAllowlist } from './session/operator-allowlist.js';
 import { createInvitationRoutes } from './session/InvitationRoutes.js';
 import { createOperationsRoutes } from './session/OperationsRoutes.js';
 import { OPERATIONS_ROUTES } from './session/OperationsRoutes.js';
@@ -410,6 +411,11 @@ export function createApplication<State = unknown>(
               directory.get(session.roomCode)?.canManageInvitations(session.playerId) === true,
           }),
         );
+        // S15P21C204-367. 로그인 게이트는 SSAFY 계정 전체를 통과시키므로 `/demo`·`/showcase` 의
+        // 운영자 판정은 등록 이메일 파일로 한다. 없으면 두 경로는 닫힌다.
+        const operatorAllowed = fileOperatorAllowlist(config.demoAdminEmailsFile);
+        if (config.demoAdminEmailsFile === null && (config.demoRooms || config.showcaseRooms))
+          logger.warn('DEMO_ADMIN_EMAILS_FILE is not set: /demo and /showcase admit no operator');
         // 발표 시연 방. `/demo` 와 같은 SSO 경계 뒤의 브라우저 진입이며 운영 토큰과 무관하다.
         app.use(
           config.showcaseRooms
@@ -417,11 +423,12 @@ export function createApplication<State = unknown>(
                 sessions: productSessions,
                 slots,
                 trustedProxy: product.trustProxy,
+                operatorAllowed,
                 monotonicNow,
                 admissionTtlMs: config.demoAdmissionTtlMs,
                 cleanupReservations,
               })
-            : createShowcaseUnavailableRoutes(product.trustProxy),
+            : createShowcaseUnavailableRoutes(product.trustProxy, operatorAllowed),
         );
         if (authorize) {
           app.use(createInvitationRoutes({ invites, authorize }));
@@ -447,11 +454,12 @@ export function createApplication<State = unknown>(
                   sessions: productSessions,
                   slots,
                   trustedProxy: product.trustProxy,
+                  operatorAllowed,
                   monotonicNow,
                   demoAdmissionTtlMs: config.demoAdmissionTtlMs,
                   cleanupReservations,
                 })
-              : createDemoAdminUnavailableRoutes(product.trustProxy),
+              : createDemoAdminUnavailableRoutes(product.trustProxy, operatorAllowed),
           );
           if (media?.createOperationsHandlers) {
             const handlers = media.createOperationsHandlers(authorize);

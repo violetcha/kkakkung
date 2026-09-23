@@ -133,10 +133,11 @@ MR 빌드는 GitLab 이 보낸 커밋을 체크아웃 HEAD 와 대조하고, dev
 
 ## 8. GitLab SSO 게이트 (2026-09-09 적용)
 
-2026-09-22부터 저장소의 SSO 기준은 프로젝트 역할 대신 등록 이메일이다. 최초 설치 전에
-[SSO 절차](../SSO.md)에 따라 `/opt/kkakkung/sso-access/allowed-emails.txt`를 준비한다.
+367부터 로그인 게이트는 lab.ssafy.com 계정 전체를 통과시키고, `/demo`·`/showcase` 운영자는
+게임 서버가 `/opt/kkakkung/sso-access/allowed-emails.txt`로 판정한다. 최초 설치 전에
+[SSO 절차](../SSO.md)에 따라 이 파일을 준비한다.
 기존 운영 서버는 아래 최초 설치 명령으로 비밀 env를 덮어쓰지 말고, 같은 문서의 전환 절차를
-따른다. `/demo`와 `/showcase` 및 두 관리자 API 모두 이 기준을 사용한다.
+따른다. 게이트 교체는 앱 배포 뒤에 한다(순서는 SSO 절차).
 
 ```bash
 sudo install -d /opt/kkakkung/sso && sudo cp infra/compose.sso.yaml /opt/kkakkung/sso/
