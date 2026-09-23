@@ -60,3 +60,44 @@ it('still counts down when the round has a deadline', () => {
   expect(html).toContain('01:35');
   expect(html).toContain('남은 시간');
 });
+
+// S15P21C204-369. 시연 방 녹화 화면의 시점 표시. 시계 아래에 역할 · 이름, 관전 중에는 관전 · 대상.
+it('captions a showcase viewpoint with the role and name in the role colour, and nothing without a caption', () => {
+  const runner = renderToStaticMarkup(
+    createElement(GameStatusChrome, {
+      remainingSeconds: 95,
+      status: null,
+      caption: { kind: 'role', role: 'runner', name: '주여니' },
+    }),
+  );
+  expect(runner).toContain('class="stage-caption"');
+  expect(runner).toContain('data-role="runner"');
+  expect(runner).toContain('도망자 · 주여니');
+
+  const tagger = renderToStaticMarkup(
+    createElement(GameStatusChrome, {
+      remainingSeconds: 95,
+      role: 'tagger',
+      status: null,
+      caption: { kind: 'role', role: 'tagger', name: '산이' },
+    }),
+  );
+  expect(tagger).toContain('data-role="tagger"');
+  expect(tagger).toContain('술래 · 산이');
+
+  const spectate = renderToStaticMarkup(
+    createElement(GameStatusChrome, {
+      remainingSeconds: 40,
+      status: null,
+      caption: { kind: 'spectate', name: '유림' },
+    }),
+  );
+  expect(spectate).toContain('data-role="spectate"');
+  expect(spectate).toContain('관전 · 유림');
+
+  // 일반 방은 caption 을 넘기지 않으므로 아무것도 그리지 않는다.
+  const plain = renderToStaticMarkup(
+    createElement(GameStatusChrome, { remainingSeconds: 95, status: null, caption: null }),
+  );
+  expect(plain).not.toContain('stage-caption');
+});

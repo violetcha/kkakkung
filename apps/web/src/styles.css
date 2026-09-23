@@ -3416,6 +3416,29 @@
   color: var(--rec);
   text-shadow: 0 0 12px #ff353573;
 }
+/* S15P21C204-369. 시연 방 녹화용 시점 표시. 시계 바로 아래, 글자만. 색은 미니맵·옷과 같은 역할 토큰. */
+.game-stage > .stage-caption,
+.solo-stage > .stage-caption {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 0 14px;
+  transform: translateX(-50%);
+  font: 25px/1.2 var(--font-display);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--bone);
+  text-shadow: 0 1px 6px #000;
+  pointer-events: none;
+}
+.stage-caption[data-role='tagger'] {
+  color: var(--role-tagger, #b8402f);
+}
+.stage-caption[data-role='runner'] {
+  color: var(--role-runner, #2f9f96);
+}
 /* 술래의 화면 테두리. 캠코더 대신 가장자리에 핏줄이 번진다(S15P21C204-295). */
 .game-stage > .vein-frame,
 .solo-stage > .vein-frame {
