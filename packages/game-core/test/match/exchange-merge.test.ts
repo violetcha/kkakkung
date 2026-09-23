@@ -152,7 +152,7 @@ describe('map knowledge merge and closed exit filter', () => {
     const exit = exitOfOwner(base.exits, 'r-b')!;
     // r-a knows r-b's exit; r-b's personal end closes it before the exchange.
     const known = setKnowledge(base, 'r-a', { discoveredExits: new Set([exit.exitId]) });
-    const ended = terminateRunner(known, 'r-b', 'ESCAPED', 100, () => 'e-1').state;
+    const ended = terminateRunner(known, 'r-b', 'ESCAPED', 100).state;
     expect(exitOfOwner(ended.exits, 'r-b')?.active).toBe(false);
     expect(getPlayerKnowledge(ended, 'r-a').knownActiveExits).toEqual([]);
 
