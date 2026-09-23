@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { StructuredEvent } from '../observability/StructuredEvents.js';
 import { createReadinessRuntime, type ReadinessRuntime } from '../health/ReadinessRuntime.js';
 import { ApiBudget } from '../operations/ApiBudget.js';
@@ -30,6 +31,11 @@ import {
   sameMediaOwnership,
 } from '../operations/SplitMediaOwnership.js';
 import { RequestHistory } from './RequestHistory.js';
+import {
+  MonthlyUsageMeter,
+  fileMonthlyUsageStore,
+  type MonthlyUsageSnapshot,
+} from './MonthlyUsageMeter.js';
 import type { GrantIssuerDeps } from './GrantIssuer.js';
 import type {
   MediaCoordinator,
@@ -71,6 +77,13 @@ export interface MediaCoordinatorRuntime extends MediaCoordinator {
   releaseMatch(matchId: string): void;
   /** Aggregate local diagnostics only; no identifiers, grants or private game information. */
   inspectRetention(): Readonly<Record<string, number>>;
+  /**
+   * S15P21C204-364. Whether a new match may start on the monthly participant-minute guard. True
+   * when the guard is not configured; running matches are never stopped by it.
+   */
+  allowsNewMatch(): boolean;
+  /** The guard's current count, or null when it is not configured. */
+  monthlyUsage(): MonthlyUsageSnapshot | null;
 }
 
 /** The public EXEC-CONTRACT-3 factory remains structurally compatible. No routes or env IO. */
@@ -81,9 +94,15 @@ export function createMediaCoordinator(
   return new Coordinator(deps, services);
 }
 
+/** 364. Beside the other operations state on the durable volume, so a deploy keeps the count. */
+const MONTHLY_USAGE_FILE = 'livekit-monthly-usage.json';
+
 class Coordinator implements MediaCoordinatorRuntime {
   readonly lifecycle: MediaLifecycle;
   private readonly registry: MediaGenerationRegistry;
+  /** S15P21C204-364. The monthly participant-minute guard; null when not configured. */
+  private readonly monthly: MonthlyUsageMeter | null;
+  private monthlyBlocked = false;
   private readonly apiBudget: ApiBudget;
   private readonly gateway: LiveKitGateway;
   private readonly journal: OperationJournal;
@@ -132,6 +151,13 @@ class Coordinator implements MediaCoordinatorRuntime {
     )
       throw new Error('INVALID_MEDIA_CAPACITY');
     const nowEpochMs = () => Math.floor(deps.epochNowSeconds() * 1000);
+    this.monthly = config.monthlyUsage
+      ? new MonthlyUsageMeter(
+          config.monthlyUsage,
+          fileMonthlyUsageStore(join(config.opsDataDir, MONTHLY_USAGE_FILE)),
+          nowEpochMs,
+        )
+      : null;
     this.registry = new MediaGenerationRegistry(
       config.namespace,
       true,
@@ -315,6 +341,7 @@ class Coordinator implements MediaCoordinatorRuntime {
       monotonicNow: deps.monotonicNow,
       getGameActivity: deps.getGameActivity,
       getOfficialRevision: services.getOfficialRevision ?? (() => null),
+      monthlyUsage: () => this.monthly?.snapshot() ?? null,
       mediaMode: services.mediaMode ?? (() => null),
       productSecurityReady: services.productSecurityReady ?? (() => false),
       namespaceOwnershipConfirmed: services.namespaceOwnershipConfirmed ?? (() => false),
@@ -710,6 +737,7 @@ class Coordinator implements MediaCoordinatorRuntime {
       await this.policy.reconcile();
       if (this.closed) return;
       this.lifecycle.reconcile();
+      let connected = 0;
       for (const g of this.registry.all()) {
         if (!this.registry.isCurrent(g)) continue;
         // JWT expiry limits initial admission and cached responses (GrantIssuer), not an
@@ -717,6 +745,8 @@ class Coordinator implements MediaCoordinatorRuntime {
         // Unjoined/absent expired generations still retire; connected media requires the
         // existing game/phase/policy checks and a durable, renewable usage lease below.
         const publication = this.policy.inspect(g);
+        // 364. What LiveKit bills: a participant it has seen connect and that has not ended.
+        if (publication?.participantSid && !publication.terminal) connected += 1;
         if (
           g.expiresAtEpochMs <= this.deps.epochNowSeconds() * 1000 &&
           (!publication?.participantSid ||
@@ -737,6 +767,7 @@ class Coordinator implements MediaCoordinatorRuntime {
           }
         }
       }
+      this.observeMonthlyUsage(connected);
       // Polling health cannot automatically restore OPEN after an actual lost prerequisite.
       this.getReadiness();
       // Do not hold media policy renewal behind disk compaction. close() drains this writer first.
@@ -751,9 +782,38 @@ class Coordinator implements MediaCoordinatorRuntime {
     return this.maintenance;
   }
 
+  allowsNewMatch(): boolean {
+    try {
+      return this.monthly?.allowsNewMatch() ?? true;
+    } catch {
+      // A meter that cannot answer must not open the gate it exists to close.
+      return false;
+    }
+  }
+
+  monthlyUsage(): MonthlyUsageSnapshot | null {
+    return this.monthly?.snapshot() ?? null;
+  }
+
+  /** Counts this pass and reports only when the gate opens or closes, not on every pass. */
+  private observeMonthlyUsage(connected: number): void {
+    if (!this.monthly) return;
+    this.monthly.observe(connected);
+    const snapshot = this.monthly.snapshot();
+    if (snapshot.blocked === this.monthlyBlocked) return;
+    this.monthlyBlocked = snapshot.blocked;
+    this.event('media.budget.near_limit', snapshot.blocked ? 'warn' : 'info', {
+      state: snapshot.blocked ? 'new-matches-stopped' : 'new-matches-open',
+      value: snapshot.remainingMinutes,
+      limit: snapshot.reserveMinutes,
+      unit: 'participant-minutes',
+    });
+  }
+
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
+    this.monthly?.flush();
     if (this.timer) clearTimeout(this.timer);
     this.transition.close();
     this.lifecycle.close();

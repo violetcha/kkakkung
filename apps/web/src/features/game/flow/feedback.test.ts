@@ -7,6 +7,13 @@ it('gives a recovery action for preparation failures without showing unknown dia
   expect(preparationFeedback('DEVICE_LOADING_TIMEOUT')).toContain('장치');
   expect(preparationFeedback(undefined)).toBeNull();
 });
+// S15P21C204-364. 월 사용량 한도는 다시 준비해도 풀리지 않는다. 재시도를 권하지 말고 이유를 말한다.
+it('explains the monthly media limit without telling players to retry', () => {
+  const text = preparationFeedback('MEDIA_BUDGET_EXHAUSTED');
+  expect(text).toContain('사용량');
+  expect(text).toContain('진행 중인 경기는 영향이 없습니다');
+  expect(text).not.toContain('다시 준비');
+});
 it('distinguishes pending, denied, and uncertain commands without disclosing raw errors', () => {
   const request = {
     requestId: 'x',

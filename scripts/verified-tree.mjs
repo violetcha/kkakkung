@@ -9,6 +9,11 @@
 //   node scripts/verified-tree.mjs check  --state-dir /opt/kkakkung --tree <tree>   # prints the recorder or nothing
 //
 // Markers live in <state-dir>/verified-trees/<tree>.json; the newest 200 are kept.
+//
+// S15P21C204-368. MR and deploy builds no longer run the same checks (scripts/ci-plan.mjs), so
+// a marker only vouches for its own scope: `--scope mr` (default, the directory above) or
+// `--scope deploy` (<state-dir>/verified-trees-deploy). A tree an MR verified still gets the
+// deploy checks, which are the ones MR builds leave out.
 
 import {
   existsSync,
@@ -24,16 +29,19 @@ import { fileURLToPath } from 'node:url';
 
 export const VERIFIED_TREES_DIR = 'verified-trees';
 export const MAX_MARKERS = 200;
+export const SCOPES = Object.freeze({ mr: VERIFIED_TREES_DIR, deploy: 'verified-trees-deploy' });
 const TREE = /^[0-9a-f]{40}$/;
 
-function markerDir(stateDir) {
-  return resolve(stateDir, VERIFIED_TREES_DIR);
+function markerDir(stateDir, scope = 'mr') {
+  const dir = SCOPES[scope];
+  if (!dir) throw new Error(`unknown scope: ${scope}`);
+  return resolve(stateDir, dir);
 }
 
 /** Writes the marker for a verified tree and prunes old ones. Returns the marker path. */
 export function recordVerifiedTree(input) {
   if (!TREE.test(input.tree)) throw new Error('tree must be a 40-hex git tree hash');
-  const dir = markerDir(input.stateDir);
+  const dir = markerDir(input.stateDir, input.scope);
   mkdirSync(dir, { recursive: true });
   const path = resolve(dir, `${input.tree}.json`);
   writeFileSync(
@@ -58,9 +66,9 @@ export function recordVerifiedTree(input) {
 }
 
 /** Returns the recorded marker for a tree, or null. Malformed markers count as absent. */
-export function findVerifiedTree(stateDir, tree) {
+export function findVerifiedTree(stateDir, tree, scope = 'mr') {
   if (!TREE.test(tree)) return null;
-  const path = resolve(markerDir(stateDir), `${tree}.json`);
+  const path = resolve(markerDir(stateDir, scope), `${tree}.json`);
   if (!existsSync(path)) return null;
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
@@ -88,9 +96,15 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args['state-dir'] || !args.tree || !['record', 'check'].includes(args.command)) {
+  const scope = args.scope ?? 'mr';
+  if (
+    !args['state-dir'] ||
+    !args.tree ||
+    !['record', 'check'].includes(args.command) ||
+    !(scope in SCOPES)
+  ) {
     console.error(
-      'usage: verified-tree.mjs record|check --state-dir <dir> --tree <tree> [--commit <sha> --build <label>]',
+      'usage: verified-tree.mjs record|check --state-dir <dir> --tree <tree> [--scope mr|deploy] [--commit <sha> --build <label>]',
     );
     process.exitCode = 2;
     return;
@@ -106,11 +120,12 @@ function main() {
       tree: args.tree,
       commit: args.commit,
       build: args.build,
+      scope,
     });
     console.error(`verified-tree: recorded ${args.tree.slice(0, 12)} → ${path}`);
     return;
   }
-  const found = findVerifiedTree(args['state-dir'], args.tree);
+  const found = findVerifiedTree(args['state-dir'], args.tree, scope);
   // stdout carries only the recorder label so the Jenkinsfile can capture it into a variable.
   if (found)
     console.log(`${found.build} (${String(found.commit).slice(0, 8)}, ${found.verifiedAt})`);

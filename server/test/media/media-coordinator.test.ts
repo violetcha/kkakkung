@@ -1222,3 +1222,50 @@ describe('spectating ended runners keep receiving', () => {
     );
   });
 });
+
+// S15P21C204-364. 계량기가 세는 것은 LiveKit 이 과금하는 것, 즉 실제로 붙어 있는 참가자다.
+it('counts connected participants toward the monthly guard and closes new matches at the reserve', async () => {
+  const f = await fixture(
+    {},
+    {
+      operatingMode: 'continuous',
+      publicWindow: { mode: 'continuous' },
+      monthlyUsage: {
+        limitMinutes: 5000,
+        reserveMinutes: 300,
+        baselineMinutes: 4600,
+        baselineAtEpochMs: EPOCH,
+        cycleDay: 1,
+      },
+    },
+  );
+  await open(f);
+  alive(f, game(2));
+  const first = await prepare(f, request('p1', { requestId: 'monthly-p1' }));
+  const second = await prepare(f, request('p2', { requestId: 'monthly-p2' }));
+  // 발급만 받고 붙지 않은 동안은 세지 않는다.
+  await f.coordinator.reconcile();
+  f.clock.offset += 60_000;
+  await f.coordinator.reconcile();
+  expect(f.coordinator.monthlyUsage()).toMatchObject({ usedMinutes: 4600, blocked: false });
+  f.publish(first.grant, 'p1');
+  f.publish(second.grant, 'p2');
+  await f.coordinator.reconcile();
+  expect(f.coordinator.allowsNewMatch()).toBe(true);
+  // 두 명이 50분: 100 참가자-분. 남은 분이 여유(300)까지 내려오면 새 경기를 멈춘다.
+  for (let minute = 0; minute < 50; minute++) {
+    f.clock.offset += 60_000;
+    await f.coordinator.reconcile();
+  }
+  expect(f.coordinator.monthlyUsage()).toMatchObject({
+    remainingMinutes: 300,
+    blocked: true,
+  });
+  expect(f.coordinator.allowsNewMatch()).toBe(false);
+  // 셈은 운영 볼륨에 남아 재시작 뒤에도 이어진다.
+  await f.coordinator.close();
+  const saved = JSON.parse(
+    await fs.readFile(path.join(f.dir, 'livekit-monthly-usage.json'), 'utf8'),
+  );
+  expect(saved.countedMs).toBeGreaterThanOrEqual(100 * 60_000);
+});

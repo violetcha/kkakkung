@@ -1,3 +1,4 @@
+import type { MonthlyUsageSnapshot } from '../media/MonthlyUsageMeter.js';
 import type {
   MediaConfiguration,
   MediaCoordinatorDeps,
@@ -40,6 +41,8 @@ export type OperationsBindingsOptions = Readonly<{
   refreshBudget?: () => void;
   /** E-16's exact bounded first-attempt retirement; never exempts UNRESOLVED. */
   isRetirementInFlight?: (record: JournalRecord) => boolean;
+  /** S15P21C204-364. The monthly guard's count for the operator status; null when off. */
+  monthlyUsage?: () => MonthlyUsageSnapshot | null;
 }>;
 
 /** E-14 action wiring. B owns HTTP/Room assembly; E-15 supplies the complete readiness gate. */
@@ -404,7 +407,17 @@ export class OperationsBindings {
       remainingMinutes: official ? budget.availableMinutes : null,
       remainingBytes: official ? budget.availableBytes : null,
       checkedAtEpochMs: official?.checkedAtEpochMs ?? null,
+      ...this.monthlyUsage(),
     };
+  }
+
+  private monthlyUsage(): { monthlyUsage?: MonthlyUsageSnapshot } {
+    try {
+      const snapshot = this.options.monthlyUsage?.() ?? null;
+      return snapshot ? { monthlyUsage: snapshot } : {};
+    } catch {
+      return {};
+    }
   }
 
   private safeReadiness(): Readiness {

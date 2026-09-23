@@ -234,6 +234,8 @@ export type MediaConfiguration = Readonly<{
   maxConcurrentParticipants: number;
   maxNormalApiCallsPer60s: number;
   maxTotalApiCallsPer60s: number;
+  /** S15P21C204-364. Monthly participant-minute guard; absent or null leaves it off. */
+  monthlyUsage?: import('./MonthlyUsageMeter.js').MonthlyUsageConfig | null;
 }>;
 export type CreateMediaCoordinator = (deps: MediaCoordinatorDeps) => MediaCoordinator;
 export type MetricSample = Readonly<{
@@ -266,6 +268,11 @@ export type OperationsStatus = Readonly<{
   remainingMinutes: number | null;
   remainingBytes: number | null;
   checkedAtEpochMs: number | null;
+  /**
+   * S15P21C204-364. The LiveKit monthly guard, when configured. Separate from `remainingMinutes`,
+   * which the continuous release gate requires to stay null (no official balance is claimed).
+   */
+  monthlyUsage?: import('./MonthlyUsageMeter.js').MonthlyUsageSnapshot;
 }>;
 export type OperationSubmission =
   | Readonly<{ status: 'accepted'; snapshot: OperationSnapshot }>

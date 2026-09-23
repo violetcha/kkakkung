@@ -1,6 +1,7 @@
 // F-04 / DP-04 CI contract: the Jenkinsfile runs the single entry point, the entry point runs
-// `pnpm verify` exactly once, the expected commit is checked before install, and the toolchain
-// is pinned. Nothing here starts Docker, Jenkins, a browser or the network.
+// `pnpm verify` exactly once without a CI mode (the plan rules for a mode are in ci-plan.test.ts),
+// the expected commit is checked before install, and the toolchain is pinned. Nothing here
+// starts Docker, Jenkins, a browser or the network.
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -33,7 +34,8 @@ const runCiVerify = (env: Record<string, string>) =>
     cwd: root,
     encoding: 'utf8',
     timeout: 60_000,
-    env: { ...process.env, CI_VERIFY_DRY_RUN: '1', ...env },
+    // Jenkins 가 컨테이너에 CI_VERIFY_MODE 를 넘기므로 기본은 비워 두고 시험마다 정한다.
+    env: { ...process.env, CI_VERIFY_DRY_RUN: '1', CI_VERIFY_MODE: '', ...env },
   });
 
 describe('ci-verify plan', () => {
@@ -90,6 +92,16 @@ describe('ci-verify process (dry run, nothing executed)', () => {
     expect(r.status).toBe(0);
     expect(r.stdout.match(/pnpm(?:\.cmd)? verify/g)).toHaveLength(1);
     expect(r.stdout).toContain('DRY_RUN');
+  });
+  // S15P21C204-368. Jenkins 는 모드를 넘기고, 그때는 pnpm verify 대신 계획을 돈다.
+  it('prints the scoped plan instead of pnpm verify when a CI mode is given', () => {
+    const deploy = runCiVerify({ EXPECTED_SOURCE_SHA: '', CI_VERIFY_MODE: 'deploy' });
+    if (deploy.status === 2) return;
+    expect(deploy.status).toBe(0);
+    expect(deploy.stdout).not.toMatch(/pnpm(?:\.cmd)? verify/);
+    expect(deploy.stdout).toContain('heavy-integration');
+    const unknown = runCiVerify({ EXPECTED_SOURCE_SHA: '', CI_VERIFY_MODE: 'nightly' });
+    expect(unknown.status).toBe(2);
   });
   it('fails before install when the expected commit does not match the checkout', () => {
     const r = runCiVerify({ EXPECTED_SOURCE_SHA: '0000000000000000000000000000000000000000' });
@@ -247,6 +259,25 @@ describe('Jenkinsfile uses the single entry point', () => {
     // 머지 상태를 다음 빌드에 남기지 않는다.
     const post = jenkinsfile.slice(jenkinsfile.indexOf('  post {'));
     expect(post).toContain('git merge --abort');
+  });
+  // S15P21C204-368. MR 과 배포가 서로 다른 검사 계획을 돌고, 생략 기록도 그 범위로만 통한다.
+  it('passes the verify scope to the plan and to the skip markers', () => {
+    const verify = jenkinsfile.slice(
+      jenkinsfile.indexOf("stage('Verify')"),
+      jenkinsfile.indexOf("stage('Build images')"),
+    );
+    expect(verify).toContain("env.VERIFY_SCOPE = env.IS_DEPLOY == 'true' ? 'deploy' : 'mr'");
+    expect(verify).toContain('-e CI_VERIFY_MODE="$VERIFY_SCOPE"');
+    for (const command of ['check', 'record'])
+      expect(
+        verify
+          .split('\n')
+          .some(
+            (line) =>
+              line.includes(`verified-tree.mjs ${command} `) &&
+              line.includes('--scope "$VERIFY_SCOPE"'),
+          ),
+      ).toBe(true);
   });
   it('reports commit status to GitLab for running, success and failure', () => {
     expect(jenkinsfile).toContain("gitLabConnection('ssafy-gitlab')");

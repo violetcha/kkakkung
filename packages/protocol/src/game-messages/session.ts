@@ -126,6 +126,8 @@ export const SHOWCASE_ERROR_CODES = [
   'ROLE_FULL',
   'CAPACITY',
   'SHOWCASE_UNAVAILABLE',
+  // S15P21C204-362. 서버가 입장을 받지 않는 동안(readiness LOCKED, admission 닫힘). 일반 세션 발급과 같다.
+  'ADMISSION_CLOSED',
 ] as const;
 export type ShowcaseErrorCode = (typeof SHOWCASE_ERROR_CODES)[number];
 

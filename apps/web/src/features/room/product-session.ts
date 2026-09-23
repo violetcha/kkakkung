@@ -203,7 +203,13 @@ export async function requestShowcaseRoom(
   } catch {
     throw new Error('CONNECTION_FAILED');
   }
-  if (!response.ok) throw new Error(`SHOWCASE_REQUEST_FAILED:${response.status}`);
+  if (!response.ok) {
+    // S15P21C204-362. 같은 503 이라도 서버가 닫힌 것(ADMISSION_CLOSED)과 방이 찬 것(CAPACITY)은
+    // 안내가 다르다. 몸체의 오류 코드를 상태 뒤에 붙여 화면이 가른다. 코드가 없으면 상태만 남긴다.
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    const code = typeof body?.error === 'string' ? `:${body.error}` : '';
+    throw new Error(`SHOWCASE_REQUEST_FAILED:${response.status}${code}`);
+  }
   const result = showcaseRoomResponseSchema.safeParse(await response.json().catch(() => null));
   if (!result.success) throw new Error('INVALID_RESPONSE');
   return result.data;

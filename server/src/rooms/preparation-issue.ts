@@ -7,6 +7,7 @@ export function preparationIssue(diagnostic: string | null): PreparationIssue | 
   if (diagnostic === 'LOADING_TIMEOUT' || diagnostic === 'DEVICE_CHECK_TIMEOUT')
     return 'DEVICE_LOADING_TIMEOUT';
   if (diagnostic === 'PRACTICE_MEDIA_NOT_READY') return 'MEDIA_NOT_READY';
+  if (diagnostic === 'MEDIA_MONTHLY_LIMIT') return 'MEDIA_BUDGET_EXHAUSTED';
   if (diagnostic.startsWith('LAYOUT:') || diagnostic.startsWith('PRACTICE_LAYOUT:'))
     return 'LAYOUT_UNAVAILABLE';
   return 'PREPARATION_UNAVAILABLE';
