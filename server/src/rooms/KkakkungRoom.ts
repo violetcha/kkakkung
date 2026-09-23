@@ -1295,8 +1295,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      * (313), 시연 방은 소형 고정이라 어디서도 바꾸지 않는다.
      */
     private mapSizePhases(): readonly Phase[] {
-      if (this.showcase) return [];
-      return this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'];
+      // S15P21C204-295. 시작은 방장이 누른다. 그 전까지는 대기실 어느 단계에서든 맵을 고른다.
+      // 시연 방만 예외다: 발표마다 같은 미로를 써야 해서 맵이 고정이다.
+      return this.showcase ? [] : ['LOBBY', 'DEVICE_CHECK'];
     }
 
     /** 시연 방은 매번 같은 미로·같은 출구를 쓰도록 시드를 고정한다. 다른 방은 무작위다. */

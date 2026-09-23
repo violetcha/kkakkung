@@ -55,6 +55,12 @@ export type DeploymentSmokeReport = {
     gameVideo: boolean;
     gameAudio: boolean;
   };
+  /**
+   * S15P21C204-295. 받은 영상이 실제로 얼굴 텍스처로 묶인 수(한 클라이언트가 들고 있는 최대치).
+   * 트랙은 오는데 화면에 얼굴이 안 붙는 경우를 배포 기록만으로 가릴 수 있게 남긴다. 합성
+   * 클라이언트는 장면을 그리지 않으므로 여기까지가 화면 직전이다.
+   */
+  facesBound: { practice: number; game: number };
   cleanup: {
     clientsClosed: number;
     drainConfirmed: boolean;
@@ -114,6 +120,7 @@ export async function runDeploymentSmoke(
     gameInputsApplied: 0,
     mediaRooms: { practice: 0, game: 0 },
     received: { practiceVideo: false, practiceAudio: false, gameVideo: false, gameAudio: false },
+    facesBound: { practice: 0, game: 0 },
     cleanup: { clientsClosed: 0, drainConfirmed: false, resumed: false, retirementUnconfirmed: 0 },
     durationMs: 0,
   };
@@ -324,12 +331,16 @@ export async function runDeploymentSmoke(
     }
     const video = samples.some((sample) => sample.allowedReceived.video > 0);
     const audio = samples.some((sample) => sample.allowedReceived.audio > 0);
+    // 받은 트랙이 얼굴 텍스처까지 묶였는지. 화면 바로 앞 단계다.
+    const bound = Math.max(...players.map((player) => player.runtime.faces.count), 0);
     if (purpose === 'practice') {
       report.received.practiceVideo ||= video;
       report.received.practiceAudio ||= audio;
+      report.facesBound.practice = Math.max(report.facesBound.practice, bound);
     } else {
       report.received.gameVideo ||= video;
       report.received.gameAudio ||= audio;
+      report.facesBound.game = Math.max(report.facesBound.game, bound);
     }
     return samples.every(
       (sample) =>

@@ -42,6 +42,7 @@ import { PoseChallenge } from '../features/game/pose/PoseChallenge';
 import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { PracticeScreen } from '../features/game/flow/PracticeScreen';
 import { PracticeQuests } from '../features/game/flow/PracticeQuests';
+import { SelfCorner } from '../features/game/flow/SelfCorner';
 import { EMPTY_LESSONS, observeLessons } from '../features/game/flow/practice-lessons';
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
@@ -590,9 +591,8 @@ export function ProductApp({
   });
   // S15P21C204-276. 접히는 오버레이는 손이 필요한 일이 있을 때만 펼쳐진 채로 시작한다.
   const drawerUrgent =
-    round?.phase === 'TEAM_PRACTICE' ||
-    (view?.self?.status === 'ACTIVE' &&
-      (view.self.challenge !== null || view.self.exchange?.direction === 'incoming'));
+    view?.self?.status === 'ACTIVE' &&
+    (view.self.challenge !== null || view.self.exchange?.direction === 'incoming');
   // S15P21C204-275. 시작 전 대기는 한 화면이 덮는다. 준비 실패 안내도 그 화면 안에서 보여 준다.
   const loadingCovered =
     !!round && !inResult && ['MAP_FINALIZING', 'GAME_LOADING', 'COUNTDOWN'].includes(round.phase);
@@ -940,11 +940,8 @@ export function ProductApp({
                       runtime.current?.send({ type: 'ROOM_KICK', payload: { targetPlayerId } }),
                   })}
               mapSize={snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE}
-              // 데모 방은 로비를 곧바로 지나므로 준비 단계에서 맵 크기를 고른다(313).
-              canChooseMapSize={
-                round.phase === 'LOBBY' ||
-                (Boolean(snapshot.demo) && round.phase === 'DEVICE_CHECK')
-              }
+              // 시작을 누르기 전까지 고를 수 있다. 자리가 다 차 장치 점검으로 넘어가도 같다.
+              canChooseMapSize={['LOBBY', 'DEVICE_CHECK'].includes(round.phase)}
               mapSizeRequest={snapshot.requests.ROOM_MAP_SIZE}
               {...(snapshot.demo
                 ? {
@@ -1053,6 +1050,23 @@ export function ProductApp({
                     ) : null
                   }
                 />
+                {/* S15P21C204-295. 우상단 내 캐릭터 창. 상대가 보는 내 모습과 장치 단추 하나다.
+                    설정 창이 열려 있는 동안에는 내려 둔다: 보이지 않는데 WebGL 한 장을 더
+                    그리면 느린 기기에서 창 조작까지 밀린다. */}
+                {activeSelf && !roomMenu && (
+                  <SelfCorner
+                    self={activeSelf}
+                    devices={snapshot.devices}
+                    busy={readying}
+                    renderTick={renderTick}
+                    faceStream={() => runtime.current?.processedFace() ?? null}
+                    onCamera={() => {
+                      if (consent.consented) void runtime.current?.startDevices(false);
+                      else setConsentAsk(true);
+                    }}
+                    onCalibrate={() => void runtime.current?.calibrateMotion()}
+                  />
+                )}
                 {/* S15P21C204-295. 팀 연습의 할 일 목록. 혼자 연습과 같은 목록을 무대 왼쪽에 둔다. */}
                 {practicePhase && activeSelf && (
                   <PracticeQuests
@@ -1234,28 +1248,42 @@ export function ProductApp({
                     id: 'device',
                     label: '조작 · 장치',
                     content: (
-                      <LocalControls
-                        status={snapshot.devices}
-                        mode={snapshot.interaction.mode}
-                        previewHost={preview}
-                        onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
-                        onMotion={async () => {
-                          await runtime.current?.calibrateMotion();
-                        }}
-                        onRecover={async () => {
-                          await runtime.current?.recoverDevices();
-                        }}
-                        onMicrophone={async (enabled) => {
-                          await runtime.current?.setMicrophone(enabled);
-                        }}
-                        consented={consent.consented}
-                        canRecover={
-                          !!round &&
-                          ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)
-                        }
-                        variant="full"
-                        bare
-                      />
+                      <>
+                        {/* S15P21C204-295. 상대 얼굴이 몇 개나 붙어 있는지. 화면에서 얼굴이
+                            안 보일 때 "트랙이 안 온 것"과 "와도 안 붙은 것"을 여기서 가른다.
+                            faceRevision 이 바뀔 때마다 다시 센다. */}
+                        {!!round && ['TEAM_PRACTICE', 'PLAYING'].includes(round.phase) && (
+                          <p
+                            className="pause-note"
+                            role="status"
+                            data-faces={snapshot.faceRevision}
+                          >
+                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개
+                          </p>
+                        )}
+                        <LocalControls
+                          status={snapshot.devices}
+                          mode={snapshot.interaction.mode}
+                          previewHost={preview}
+                          onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+                          onMotion={async () => {
+                            await runtime.current?.calibrateMotion();
+                          }}
+                          onRecover={async () => {
+                            await runtime.current?.recoverDevices();
+                          }}
+                          onMicrophone={async (enabled) => {
+                            await runtime.current?.setMicrophone(enabled);
+                          }}
+                          consented={consent.consented}
+                          canRecover={
+                            !!round &&
+                            ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)
+                          }
+                          variant="full"
+                          bare
+                        />
+                      </>
                     ),
                   },
                   {
@@ -1332,7 +1360,9 @@ export function ProductApp({
                   onAccept={() => {
                     consent.accept();
                     setConsentAsk(false);
-                    void startAndReady();
+                    // 대기실에서는 준비로 이어지고, 경기 중에는 카메라만 다시 켠다.
+                    if (round?.phase === 'DEVICE_CHECK') void startAndReady();
+                    else void runtime.current?.startDevices(false);
                   }}
                 />
                 <button type="button" className="quiet" onClick={() => setConsentAsk(false)}>

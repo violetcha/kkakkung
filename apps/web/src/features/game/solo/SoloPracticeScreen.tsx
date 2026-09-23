@@ -16,6 +16,7 @@ import type { AudioPreferences } from '../../media/audio-preferences';
 import type { Role } from '@kkakkung/protocol/game-schema';
 import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
+import { cameraAction } from '../flow/camera-action';
 import { POSE_LABELS, PoseArmsNotice } from '../pose/PoseChallenge';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS, type Lesson } from './solo-world';
@@ -244,45 +245,12 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   // 중립 자세 보정으로 바뀌고, 보정까지 끝나면 다시 보정할 수 있다.
   const cameraState = snapshot?.devices.camera ?? 'idle';
   const calibration = snapshot?.devices.calibration ?? 'idle';
-  const camera: {
-    state: string;
-    label: string;
-    icon: typeof CameraIcon;
-    disabled: boolean;
-    run(): void;
-  } =
-    busy || cameraState === 'requesting'
-      ? {
-          state: 'busy',
-          label: '카메라 연결 중',
-          icon: CameraIcon,
-          disabled: true,
-          run: () => {},
-        }
-      : cameraState !== 'ready'
-        ? {
-            state: cameraState === 'failed' ? 'failed' : 'idle',
-            label: cameraState === 'failed' ? '카메라 다시 연결' : '카메라 연결',
-            icon: CameraIcon,
-            disabled: false,
-            run: requestCamera,
-          }
-        : calibration === 'running'
-          ? {
-              state: 'busy',
-              label: '중립 자세 보정 중',
-              icon: PostureIcon,
-              disabled: true,
-              run: () => {},
-            }
-          : {
-              state:
-                calibration === 'ready' ? 'ready' : calibration === 'failed' ? 'failed' : 'idle',
-              label: calibration === 'ready' ? '중립 자세 다시 보정' : '중립 자세 보정',
-              icon: PostureIcon,
-              disabled: false,
-              run: () => void session.current?.calibrateMotion(),
-            };
+  const action = cameraAction({ camera: cameraState, calibration }, busy);
+  const camera = {
+    ...action,
+    icon: action.kind === 'camera' ? CameraIcon : PostureIcon,
+    run: action.kind === 'camera' ? requestCamera : () => void session.current?.calibrateMotion(),
+  };
   const role: Role = snapshot?.self.role ?? 'runner';
   const quests: readonly Lesson[] = [...COMMON_QUESTS, ROLE_QUEST[role]];
   const questsDone = quests.filter((id) => snapshot?.completed.includes(id)).length;
