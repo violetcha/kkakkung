@@ -2,6 +2,9 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // S15P21C204-368. CI 가 렌더링과 무관한 MR 에서 SwiftShader 렌더링 spec(e2e 의 약 70%)을 뺀다.
+  // 판단은 scripts/ci-plan.mjs 가 한다. 로컬 `pnpm verify` 는 이 값을 두지 않아 전부 돈다.
+  testIgnore: process.env.E2E_SKIP_RENDER === '1' ? ['**/facility-rendering.spec.ts'] : [],
   fullyParallel: false,
   workers: 1,
   // CI 의 SwiftShader 소프트웨어 WebGL 은 60초 렌더 시험이 가끔 넘친다(kkakkung-mr #140, 17회 중 1회).
