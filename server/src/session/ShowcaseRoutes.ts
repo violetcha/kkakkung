@@ -29,6 +29,11 @@ export type ShowcaseRouteDependencies = Readonly<{
   monotonicNow: () => number;
   /** 세션을 받고 접속하기까지 기다려 주는 시간. 데모 방과 같은 값을 쓴다. */
   admissionTtlMs: number;
+  /**
+   * S15P21C204-362. 일반 세션 발급과 방 접속(onAuth 의 NOT_READY)이 함께 쓰는 문. 서버가 READY·OPEN
+   * 이 아니면 세션을 만들지 않고 ADMISSION_CLOSED 로 답해, 게임 페이지까지 가서 튕기는 경로를 없앤다.
+   */
+  ready: () => boolean;
   cleanupReservations?: () => void;
 }>;
 
@@ -50,6 +55,7 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
   router.post(SHOWCASE_ROOM_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     if (!authorized(req, deps.trustedProxy)) return fail(res, 401, 'UNAUTHORIZED');
+    if (!deps.ready()) return fail(res, 503, 'ADMISSION_CLOSED');
     const parsed = showcaseRoomRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {}));
     if (!parsed.success) return fail(res, 400, 'INVALID_REQUEST');
     deps.cleanupReservations?.();
