@@ -34,6 +34,7 @@ import {
 } from '../features/game/pose/challenge-controller';
 import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
 import { createPrivateEvents } from '../features/room/private-events';
+import { debugFeed } from '../features/debug/debug-feed';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
 import { equipmentPresenter } from '../features/game/equipment/equipment-presenter';
@@ -650,12 +651,16 @@ export function bindProductRoom(
         // S15P21C204-273. 장치 점검 화면의 동작 확인 표시. 임계값은 입력 층이 준 값을 그대로 쓴다.
         onMotionDebug: (state) => {
           if (!live()) return;
+          // S15P21C204-295. 경기 화면의 내 캐릭터 창 게이지도 이 피드를 읽는다. 혼자 연습에서만
+          // 채우고 있어 실제 경기에서는 게이지가 멈춘 채였다. 판정에는 쓰지 않는다.
+          debugFeed.publishMotion(state);
           const next = observeMotionCheck(snapshot.motionCheck, state);
           if (next !== snapshot.motionCheck) publish({ motionCheck: next });
         },
         onLocalPreview: () => {},
         onSensors: (value) => {
           if (live()) deps.metrics?.recordSensors(value);
+          debugFeed.publishSensors(value);
           if (!live() || !participating || value.runtimeGeneration < sensorGeneration) return;
           sensorGeneration = value.runtimeGeneration;
           updateChallenge();
