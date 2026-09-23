@@ -73,7 +73,14 @@ export function WorkflowPreview({ screen }: { screen: string }) {
           <ExchangePanel view={view} tick={100} selected={null} onSelect={() => {}} send={send} />
         )}
         {screen === '포즈' && (
-          <PoseChallenge view={view} tick={100} progress={0.5} starting={false} send={send} />
+          <PoseChallenge
+            view={view}
+            tick={100}
+            progress={0.5}
+            hint={null}
+            starting={false}
+            send={send}
+          />
         )}
         {screen === '키 도전' && (
           <KeyChallenge

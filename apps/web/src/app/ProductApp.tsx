@@ -1190,6 +1190,7 @@ export function ProductApp({
                             view={view}
                             tick={renderTick()}
                             progress={snapshot.poseProgress}
+                            hint={snapshot.poseHint}
                             starting={snapshot.exitStarting}
                             send={(command) => runtime.current?.send(command)}
                           />

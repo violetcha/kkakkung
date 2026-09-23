@@ -26,6 +26,7 @@ import {
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
+import type { PoseMissReason } from '../features/game/pose/pose-evaluator';
 import {
   createChallengeController,
   exitCandidate,
@@ -132,6 +133,8 @@ export type ProductSnapshot = {
   exchangeNotice: string | null;
   faceRevision: number;
   poseProgress: number;
+  /** 자세가 서지 않는 이유. 디바운스를 거친 값이라 매 프레임 바뀌지 않는다. */
+  poseHint: PoseMissReason | null;
   exitStarting: boolean;
   keyIndex: number;
   practiceReady: boolean;
@@ -186,6 +189,7 @@ export function bindProductRoom(
     exchangeNotice: null,
     faceRevision: 0,
     poseProgress: 0,
+    poseHint: null,
     exitStarting: false,
     keyIndex: 0,
     practiceReady: false,
@@ -707,7 +711,7 @@ export function bindProductRoom(
       clear: () => {
         challenge.clear();
         startPending = null;
-        publish({ poseProgress: 0, exitStarting: false, keyIndex: 0 });
+        publish({ poseProgress: 0, poseHint: null, exitStarting: false, keyIndex: 0 });
         faces.clear();
         events.clear();
         commands.clear();
@@ -813,8 +817,16 @@ export function bindProductRoom(
       participating && pageActive && snapshot.round?.phase === 'PLAYING',
       interaction.mode === 'keyboard' ? 'keys' : 'pose',
     );
-    if (progress !== snapshot.poseProgress || challenge.keyIndex !== snapshot.keyIndex)
-      publish({ poseProgress: progress, keyIndex: challenge.keyIndex });
+    if (
+      progress !== snapshot.poseProgress ||
+      challenge.keyIndex !== snapshot.keyIndex ||
+      challenge.hint !== snapshot.poseHint
+    )
+      publish({
+        poseProgress: progress,
+        poseHint: challenge.hint,
+        keyIndex: challenge.keyIndex,
+      });
   }
   function sendCommand(command: CommandInput) {
     if (!active || snapshot.lost || !snapshot.round) return '';
@@ -1151,7 +1163,7 @@ export function bindProductRoom(
       publish({ practiceReady: false, error: null });
       challenge.clear();
       startPending = null;
-      publish({ poseProgress: 0, exitStarting: false });
+      publish({ poseProgress: 0, poseHint: null, exitStarting: false });
       publish({ request: null, requests: {} });
       commands.clear();
     }
