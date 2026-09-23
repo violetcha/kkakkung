@@ -272,8 +272,19 @@ export function ProductApp({
   // 나가는 것이 아니므로 그대로 두어 같은 경기로 돌아오게 한다.
   const leaveByChoice = useCallback(() => {
     if (demoSession) forgetDemoSession();
-    void leave();
-  }, [demoSession, leave]);
+    // S15P21C204-363. 시연 참가자는 /showcase 에서만 들어오므로 이 페이지의 입장 폼으로 떨어질 일이
+    // 없다. 방을 정리한 뒤 시연 첫 화면으로 돌려보낸다.
+    void leave().finally(() => {
+      if (showcaseSession) window.location.assign('/showcase');
+    });
+  }, [demoSession, showcaseSession, leave]);
+  // S15P21C204-363. 방장이 시연 방을 닫아 끊긴 사람은 안내를 잠깐 보고 /showcase 로 돌아간다.
+  const showcaseClosed = !!showcaseSession && !!snapshot?.lost && !!snapshot.showcaseClosed;
+  useEffect(() => {
+    if (!showcaseClosed) return;
+    const timer = window.setTimeout(leaveByChoice, 2500);
+    return () => window.clearTimeout(timer);
+  }, [showcaseClosed, leaveByChoice]);
   useEffect(() => {
     const previous = appliedInvitation.current;
     // Keep a new invitation for the next admission; never evict an active participant.
@@ -395,6 +406,11 @@ export function ProductApp({
     } catch (cause) {
       // 끝났거나 닫힌 데모 방이다. 새로고침이 거기로 다시 가지 않게 한다.
       if (!owned) forgetDemoSession();
+      // S15P21C204-363. 시연 세션의 입장 거절은 이 페이지의 입장 폼이 아니라 /showcase 가 다시 받는다.
+      if (!owned && showcaseSession && run === generation.current) {
+        window.location.assign('/showcase');
+        return;
+      }
       if (joined)
         await productRoomPort(joined)
           .leave()
@@ -906,6 +922,8 @@ export function ProductApp({
           onLeave={leaveByChoice}
           expired={snapshot.roomExpired}
           removed={snapshot.removedByHost}
+          showcaseClosed={snapshot.showcaseClosed}
+          showcase={!!showcaseSession}
         />
       ) : (
         <>
@@ -1172,6 +1190,7 @@ export function ProductApp({
                             view={view}
                             tick={renderTick()}
                             progress={snapshot.poseProgress}
+                            hint={snapshot.poseHint}
                             starting={snapshot.exitStarting}
                             send={(command) => runtime.current?.send(command)}
                           />
@@ -1258,7 +1277,13 @@ export function ProductApp({
                             role="status"
                             data-faces={snapshot.faceRevision}
                           >
-                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개
+                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개 · 지금 보이는 사람
+                            {}
+                            {
+                              (view?.visibleEntities ?? []).filter((e) => e.kind === 'player')
+                                .length
+                            }
+                            명
                           </p>
                         )}
                         <LocalControls

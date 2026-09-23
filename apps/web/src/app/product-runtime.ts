@@ -15,6 +15,7 @@ import {
   MEDIA_ROUTES,
   ROOM_EXPIRED_CLOSE_CODE,
   ROOM_REMOVED_CLOSE_CODE,
+  SHOWCASE_CLOSED_CLOSE_CODE,
   type SessionResponse,
   type DemoScenarioId,
   type DemoScenarioOptions,
@@ -25,6 +26,7 @@ import {
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
+import type { PoseMissReason } from '../features/game/pose/pose-evaluator';
 import {
   createChallengeController,
   exitCandidate,
@@ -32,6 +34,7 @@ import {
 } from '../features/game/pose/challenge-controller';
 import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
 import { createPrivateEvents } from '../features/room/private-events';
+import { debugFeed } from '../features/debug/debug-feed';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
 import { equipmentPresenter } from '../features/game/equipment/equipment-presenter';
@@ -131,12 +134,16 @@ export type ProductSnapshot = {
   exchangeNotice: string | null;
   faceRevision: number;
   poseProgress: number;
+  /** 자세가 서지 않는 이유. 디바운스를 거친 값이라 매 프레임 바뀌지 않는다. */
+  poseHint: PoseMissReason | null;
   exitStarting: boolean;
   keyIndex: number;
   practiceReady: boolean;
   lost: boolean;
   roomExpired?: boolean;
   removedByHost?: boolean;
+  /** S15P21C204-363. 시연 방의 방장이 나가 방이 닫혔다. 페이지는 `/showcase` 첫 화면으로 돌아간다. */
+  showcaseClosed?: boolean;
   error: string | null;
   quality: QualityPreset;
   endedSelf: PrivateView['self'];
@@ -183,6 +190,7 @@ export function bindProductRoom(
     exchangeNotice: null,
     faceRevision: 0,
     poseProgress: 0,
+    poseHint: null,
     exitStarting: false,
     keyIndex: 0,
     practiceReady: false,
@@ -431,6 +439,7 @@ export function bindProductRoom(
       lost: true,
       roomExpired: code === ROOM_EXPIRED_CLOSE_CODE,
       removedByHost: code === ROOM_REMOVED_CLOSE_CODE,
+      showcaseClosed: code === SHOWCASE_CLOSED_CLOSE_CODE,
     });
     clock.clear();
     heartbeat.dispose();
@@ -642,12 +651,16 @@ export function bindProductRoom(
         // S15P21C204-273. 장치 점검 화면의 동작 확인 표시. 임계값은 입력 층이 준 값을 그대로 쓴다.
         onMotionDebug: (state) => {
           if (!live()) return;
+          // S15P21C204-295. 경기 화면의 내 캐릭터 창 게이지도 이 피드를 읽는다. 혼자 연습에서만
+          // 채우고 있어 실제 경기에서는 게이지가 멈춘 채였다. 판정에는 쓰지 않는다.
+          debugFeed.publishMotion(state);
           const next = observeMotionCheck(snapshot.motionCheck, state);
           if (next !== snapshot.motionCheck) publish({ motionCheck: next });
         },
         onLocalPreview: () => {},
         onSensors: (value) => {
           if (live()) deps.metrics?.recordSensors(value);
+          debugFeed.publishSensors(value);
           if (!live() || !participating || value.runtimeGeneration < sensorGeneration) return;
           sensorGeneration = value.runtimeGeneration;
           updateChallenge();
@@ -703,7 +716,7 @@ export function bindProductRoom(
       clear: () => {
         challenge.clear();
         startPending = null;
-        publish({ poseProgress: 0, exitStarting: false, keyIndex: 0 });
+        publish({ poseProgress: 0, poseHint: null, exitStarting: false, keyIndex: 0 });
         faces.clear();
         events.clear();
         commands.clear();
@@ -809,8 +822,16 @@ export function bindProductRoom(
       participating && pageActive && snapshot.round?.phase === 'PLAYING',
       interaction.mode === 'keyboard' ? 'keys' : 'pose',
     );
-    if (progress !== snapshot.poseProgress || challenge.keyIndex !== snapshot.keyIndex)
-      publish({ poseProgress: progress, keyIndex: challenge.keyIndex });
+    if (
+      progress !== snapshot.poseProgress ||
+      challenge.keyIndex !== snapshot.keyIndex ||
+      challenge.hint !== snapshot.poseHint
+    )
+      publish({
+        poseProgress: progress,
+        poseHint: challenge.hint,
+        keyIndex: challenge.keyIndex,
+      });
   }
   function sendCommand(command: CommandInput) {
     if (!active || snapshot.lost || !snapshot.round) return '';
@@ -1147,7 +1168,7 @@ export function bindProductRoom(
       publish({ practiceReady: false, error: null });
       challenge.clear();
       startPending = null;
-      publish({ poseProgress: 0, exitStarting: false });
+      publish({ poseProgress: 0, poseHint: null, exitStarting: false });
       publish({ request: null, requests: {} });
       commands.clear();
     }

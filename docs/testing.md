@@ -4,7 +4,7 @@
 
 ## 1. 로컬 검사
 
-Node.js `24.19.0`, pnpm `11.19.0`, Cloud 비밀값 없이 실행한다. Jenkins Verify도 `scripts/ci-verify.mjs`를 거쳐 같은 `pnpm verify`를 한 번 실행한다.
+Node.js `24.19.0`, pnpm `11.19.0`, Cloud 비밀값 없이 실행한다. 로컬 `pnpm verify`는 전체 검사다. Jenkins Verify는 전체가 아니라 [CI 검사 계획](#ci-검사-계획)을 돈다.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -13,6 +13,21 @@ pnpm verify
 ```
 
 `pnpm verify` = `format:check` → `lint`(ESLint + 의존 경계) → `typecheck` → `test`(Vitest) → `build` → `check:product-assets` → `test:e2e`(Playwright).
+
+### CI 검사 계획
+
+S15P21C204-368(2026-09-23 결정)부터 Jenkins는 `scripts/ci-plan.mjs`의 계획만 돈다. 규칙을 벗어난 곳이 깨지면 배포 검증·실제 DP-06(자동 롤백)·다음 MR에서 잡히는 위험을 받아들였다.
+
+| 빌드                            | 검사                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| MR(코드)                        | format·lint·typecheck 동시 → Vitest(무거운 통합 3개 제외) → build                    |
+| MR, 웹·protocol·e2e·의존성 변경 | 위 + e2e. 3D 장면·아바타·렌더 미리보기가 바뀔 때만 `facility-rendering.spec.ts` 포함 |
+| MR, 자산 관련 변경              | 위 + `check:product-assets`                                                          |
+| MR, 배포 스모크 관련 변경       | Vitest에 `deployment-smoke-integration`(DP-06 로컬판) 포함                           |
+| MR, 문서만                      | format + `tests/contracts`                                                           |
+| 배포                            | typecheck + `product-integration`·`demo-scenarios`, 이후 기존 DP-06                  |
+
+바뀐 파일을 알 수 없으면 MR 검사를 전부 돈다. 같은 트리 생략 기록은 MR·배포 범위가 따로라 MR이 검증한 트리도 배포 검사는 돈다.
 
 | 명령                   | 확인 범위                                                                                                                |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
