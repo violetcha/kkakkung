@@ -1,10 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
-// CI renders with SwiftShader (software WebGL) on a 4 vCPU burstable host. Every wait below that
-// depends on 렌더 측정 needs ten rendered frames, so one slow host multiplies through the whole
-// spec: kkakkung-mr #171 spent the entire 60 s budget and never reached the crowd screenshot,
-// while the same steps take 12 s locally under forced SwiftShader. The budget is sized for that
-// host and the crowd screenshot has its own test so one slow lifecycle run cannot starve it.
+// CI renders with SwiftShader (software WebGL) on a 4 vCPU burstable host. Keep direction/scene
+// checks separate from the two quality-specific remount checks: at less than one frame per second,
+// combining them can exhaust one test's budget even though every individual transition succeeds.
 test.setTimeout(120_000);
 
 const stepTimings = new Map<string, number>();
@@ -96,31 +94,13 @@ async function fullPageShot(page: Page, info: TestInfo, name: string) {
   mark(`screenshot-${name}`);
 }
 
-test('product renderer survives direction, quality, visibility and scene lifecycle changes', async ({
-  page,
-}, info) => {
+test('product renderer survives direction and visibility changes', async ({ page }, info) => {
   const { errors, failedResponses, metrics, counts, settledAfter } = await openRenderReview(page);
-  const loading = page.getByRole('status', { name: '아바타 로딩' });
-  const inspectScene = async (scene: string, ready: number) => {
-    const before = await metrics.textContent();
-    await page.getByRole('button', { name: scene, exact: true }).click();
-    await expect(loading).toHaveText(`준비 ${ready}/${ready} · 대체 0`);
-    const current = await settledAfter(before);
-    expect(current).not.toBeNull();
-    return current!;
-  };
-
-  // Warm both roles before recording the stable medium-quality resource ceiling.
-  const beforeWarm = await metrics.textContent();
-  await page.getByRole('button', { name: '상대 5명', exact: true }).click();
-  await expect(loading).toHaveText('준비 5/5 · 대체 0');
-  const mediumCrowd = await settledAfter(beforeWarm);
-  expect(mediumCrowd).not.toBeNull();
-  mark('role-geometries-warmed');
   const beforeExit = await metrics.textContent();
   await page.getByRole('button', { name: '출구·장비', exact: true }).click();
   await expect.poll(async () => (await counts())?.texture ?? 0).toBeGreaterThanOrEqual(4);
-  const original = await settledAfter(beforeExit);
+  const exitCounts = await settledAfter(beforeExit);
+  expect(exitCounts).not.toBeNull();
   mark('exit-scene');
   for (const facing of ['0', '1', '2', '3']) {
     await page.getByRole('combobox', { name: '바라보는 방향' }).selectOption(facing);
@@ -128,14 +108,51 @@ test('product renderer survives direction, quality, visibility and scene lifecyc
   }
   mark('facings');
   await fullPageShot(page, info, 'facility-exit');
-  for (const scene of ['코너', '상대 5명', '복도', '상대 5명', '출구·장비']) {
-    await page.getByRole('button', { name: scene, exact: true }).click();
-    await expect(page.locator('canvas')).toHaveCount(1);
-  }
-  await expect.poll(counts).toEqual(original);
+
+  expect(errors).toEqual([]);
+  expect(failedResponses).toEqual([]);
+});
+
+test('product renderer keeps resource counts stable across scene cycles', async ({
+  page,
+}, testInfo) => {
+  testInfo.setTimeout(180_000);
+  const { errors, failedResponses, metrics, settledAfter } = await openRenderReview(page);
+  const cycleScenes = ['코너', '상대 5명', '복도', '출구·장비'] as const;
+  const cycleScenesOnce = async () => {
+    for (const scene of cycleScenes) {
+      await page.getByRole('button', { name: scene, exact: true }).click();
+      await expect(page.locator('canvas')).toHaveCount(1);
+    }
+  };
+  const beforeWarmCycle = await metrics.textContent();
+  await cycleScenesOnce();
+  const warmedExit = await settledAfter(beforeWarmCycle);
+  expect(warmedExit).not.toBeNull();
+  const beforeMeasuredCycle = await metrics.textContent();
+  await cycleScenesOnce();
+  const recycledExit = await settledAfter(beforeMeasuredCycle);
+  expect(recycledExit).toEqual(warmedExit);
   mark('scene-cycle');
 
-  await inspectScene('상대 5명', 5);
+  expect(errors).toEqual([]);
+  expect(failedResponses).toEqual([]);
+});
+
+test('product renderer releases textures across medium and low quality remounts', async ({
+  page,
+}, testInfo) => {
+  testInfo.setTimeout(180_000);
+  const { errors, failedResponses, metrics, settledAfter } = await openRenderReview(page);
+  const loading = page.getByRole('status', { name: '아바타 로딩' });
+
+  const beforeWarm = await metrics.textContent();
+  await page.getByRole('button', { name: '상대 5명', exact: true }).click();
+  await expect(loading).toHaveText('준비 5/5 · 대체 0');
+  const mediumCrowd = await settledAfter(beforeWarm);
+  expect(mediumCrowd).not.toBeNull();
+  mark('role-geometries-warmed');
+
   await page.getByRole('button', { name: '렌더 해제', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(0);
   await expect(metrics).toHaveText('측정 대기');
@@ -179,6 +196,10 @@ test('product renderer draws the five-opponent crowd scene', async ({ page }, in
   await expect.poll(async () => (await counts())?.geometry ?? 0).toBeGreaterThan(0);
   mark('crowd-frame');
   await fullPageShot(page, info, 'facility-crowd');
+  const beforeSide = await metrics.textContent();
+  await page.getByRole('combobox', { name: '상대 방향' }).selectOption('side');
+  await expect.poll(async () => (await metrics.textContent()) !== beforeSide).toBe(true);
+  await fullPageShot(page, info, 'facility-crowd-side');
   expect(errors).toEqual([]);
   expect(failedResponses).toEqual([]);
 });
@@ -205,12 +226,6 @@ test('product renderer loads and captures both role avatars', async ({ page }, i
   const tagger = await settledAfter(beforeTagger);
   expect(tagger!.triangles).toBeGreaterThanOrEqual(manifest.roles.tagger.metrics.triangles);
   await fullPageShot(page, info, 'avatar-tagger-front');
-
-  await page.getByRole('button', { name: '상대 5명', exact: true }).click();
-  await expect(loading).toHaveText('준비 5/5 · 대체 0');
-  await fullPageShot(page, info, 'avatar-crowd-front');
-  await page.getByRole('combobox', { name: '상대 방향' }).selectOption('side');
-  await fullPageShot(page, info, 'avatar-crowd-side');
 
   expect(errors).toEqual([]);
   expect(failedResponses).toEqual([]);

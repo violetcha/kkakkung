@@ -14,7 +14,6 @@ describe('rotating priority', () => {
     expect(createPriorityOrder(['B', 'C', 'A'], 11)).toEqual(base);
     expect(new Set(base).size).toBe(3);
     expect(() => createPriorityOrder(['A', 'A', 'B'], 1)).toThrow(RangeError);
-    expect(() => createPriorityOrder(['A', 'B'], 1)).toThrow(RangeError);
   });
 
   it('rotates left by one each tick after startTick', () => {
@@ -43,6 +42,27 @@ describe('rotating priority', () => {
     // (200-100) % 3 = 1 -> order [second, third, first]
     expect(selectPriorityCandidate(base, 200, 100, [first, second])).toBe(second);
     expect(selectPriorityCandidate(base, 201, 100, [first, second])).toBe(first);
+  });
+
+  it('keeps the three-runner order of a seed exactly as before the variable-length change', () => {
+    // S15P21C204-350. Pinned from the fixed-triple implementation: 3:3 replays must not move.
+    expect(base).toEqual(['A', 'C', 'B']);
+  });
+
+  it('serves a 2:2 match: both runner ids, rotation alternating every tick (S15P21C204-350)', () => {
+    const pair = createPriorityOrder(['B', 'A'], 11);
+    expect([...pair].sort()).toEqual(['A', 'B']);
+    expect(createPriorityOrder(['A', 'B'], 11)).toEqual(pair);
+    const [first, second] = pair as readonly [string, string];
+    expect(priorityForTick(pair, 100, 100)).toEqual([first, second]);
+    expect(priorityForTick(pair, 101, 100)).toEqual([second, first]);
+    expect(priorityForTick(pair, 102, 100)).toEqual([first, second]);
+    expect(selectPriorityCandidate(pair, 101, 100, [first, second])).toBe(second);
+    expect(selectPriorityCandidate(pair, 102, 100, [first, second])).toBe(first);
+    // One runner is a fixed order; none, or more than a team, is refused.
+    expect(createPriorityOrder(['A'], 3)).toEqual(['A']);
+    expect(() => createPriorityOrder([], 1)).toThrow(RangeError);
+    expect(() => createPriorityOrder(['A', 'B', 'C', 'D'], 1)).toThrow(RangeError);
   });
 
   it('is deterministic per seed and differs across seeds for at least one of several seeds', () => {

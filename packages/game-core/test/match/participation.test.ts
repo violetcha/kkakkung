@@ -6,23 +6,21 @@ import { terminateRunner } from '../../src/match/participation.js';
 import type { KnowledgeRecord } from '../../src/match/state.js';
 import { command, player, startedMatch, step } from './match-fixture.js';
 
-const ids = () => 'evt';
-
 describe('personal end and exit closure', () => {
   it('fixes the first result only: CAPTURED then ESCAPED keeps CAPTURED and counts once', () => {
     const start = startedMatch(100);
-    const first = terminateRunner(start, 'r-a', 'CAPTURED', 100, ids);
+    const first = terminateRunner(start, 'r-a', 'CAPTURED', 100);
     expect(first.changed).toBe(true);
     expect(player(first.state, 'r-a').status).toBe('CAPTURED');
     expect(first.state.counts).toEqual({ escaped: 0, captured: 1 });
-    const second = terminateRunner(first.state, 'r-a', 'ESCAPED', 101, ids);
+    const second = terminateRunner(first.state, 'r-a', 'ESCAPED', 101);
     expect(second.changed).toBe(false);
     expect(second.state).toBe(first.state);
     expect(second.mediaIntents).toEqual([]);
     expect(player(second.state, 'r-a').status).toBe('CAPTURED');
     expect(second.state.counts).toEqual({ escaped: 0, captured: 1 });
     // Taggers are never terminated through this path.
-    expect(terminateRunner(start, 't-a', 'CAPTURED', 100, ids).changed).toBe(false);
+    expect(terminateRunner(start, 't-a', 'CAPTURED', 100).changed).toBe(false);
   });
 
   it('closes the owner exit and bumps the map version of every runner who knew it', () => {
@@ -44,7 +42,7 @@ describe('personal end and exit closure', () => {
       mapVersion: 1,
     });
     const state: MatchState = { ...start, knowledge };
-    const ended = terminateRunner(state, 'r-a', 'CAPTURED', 100, ids).state;
+    const ended = terminateRunner(state, 'r-a', 'CAPTURED', 100).state;
     expect(ended.exits.get(exitId)?.active).toBe(false);
     expect(activeExits(ended.exits)).toHaveLength(2);
     for (const id of ['r-a', 'r-b', 'r-c']) {
@@ -54,14 +52,14 @@ describe('personal end and exit closure', () => {
     }
     expect(ended.knowledge.get('t-a')?.mapVersion).toBe(1);
     // No public event announces the closure to taggers.
-    expect(terminateRunner(state, 'r-a', 'CAPTURED', 100, ids).events).toEqual([]);
+    expect(terminateRunner(state, 'r-a', 'CAPTURED', 100).events).toEqual([]);
   });
 
   it('clears actions and intents, emits an idempotent RETIRE_PLAYER intent, and projects EndedSelf', () => {
     const start = startedMatch(100);
     const moving = step(start, 101, [command('r-a', 'MOVE_INTENT', { direction: 'back' })]).state;
     expect(player(moving, 'r-a').action).not.toBeNull();
-    const ended = terminateRunner(moving, 'r-a', 'ESCAPED', 101, ids);
+    const ended = terminateRunner(moving, 'r-a', 'ESCAPED', 101);
     expect(player(ended.state, 'r-a')).toMatchObject({
       action: null,
       heldMove: null,
@@ -80,6 +78,6 @@ describe('personal end and exit closure', () => {
     expect(ended.state.players.has('r-a')).toBe(true);
     expect(ended.state.order).toContain('r-a');
     // Repeating the same intent does not produce a second retirement.
-    expect(terminateRunner(ended.state, 'r-a', 'ESCAPED', 102, ids).mediaIntents).toEqual([]);
+    expect(terminateRunner(ended.state, 'r-a', 'ESCAPED', 102).mediaIntents).toEqual([]);
   });
 });

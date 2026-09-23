@@ -1295,8 +1295,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      * (313), 시연 방은 소형 고정이라 어디서도 바꾸지 않는다.
      */
     private mapSizePhases(): readonly Phase[] {
-      if (this.showcase) return [];
-      return this.demo ? ['LOBBY', 'DEVICE_CHECK'] : ['LOBBY'];
+      // S15P21C204-295. 시작은 방장이 누른다. 그 전까지는 대기실 어느 단계에서든 맵을 고른다.
+      // 시연 방만 예외다: 발표마다 같은 미로를 써야 해서 맵이 고정이다.
+      return this.showcase ? [] : ['LOBBY', 'DEVICE_CHECK'];
     }
 
     /** 시연 방은 매번 같은 미로·같은 출구를 쓰도록 시드를 고정한다. 다른 방은 무작위다. */
@@ -1760,16 +1761,26 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       const layout = this.showcase ? this.showcaseLayout(prepared) : prepared;
       const instance = this.context.createInstance('game');
-      const state = deps.core.createMatch({
-        matchId: this.context.matchId,
-        gameInstanceId: instance.gameInstanceId,
-        seed: this.context.seed ?? 0,
-        tuning: deps.tuning,
-        layout,
-        players,
-        deadline: this.demo ? 'none' : 'round',
-        ...(this.showcase ? { result: 'timeout-only' as const } : {}),
-      });
+      let state: State;
+      try {
+        state = deps.core.createMatch({
+          matchId: this.context.matchId,
+          gameInstanceId: instance.gameInstanceId,
+          seed: this.context.seed ?? 0,
+          tuning: deps.tuning,
+          layout,
+          players,
+          deadline: this.demo ? 'none' : 'round',
+          ...(this.showcase ? { result: 'timeout-only' as const } : {}),
+        });
+      } catch (error) {
+        // S15P21C204-350. A roster or layout the rules refuse is a preparation failure, not a
+        // tick fault: it used to escape the tick and be reported as SERVER_TICK_OVERLOAD. The
+        // instance never held a match, so nothing in the driver or media has to be retired.
+        this.context.retireInstance(instance.gameInstanceId);
+        const cause = error instanceof Error ? error.message : String(error);
+        return this.returnToDeviceCheck(`MATCH_CREATE:${cause}`);
+      }
       const mediaInstanceId = randomUUID();
       this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
       this.driver.attach({

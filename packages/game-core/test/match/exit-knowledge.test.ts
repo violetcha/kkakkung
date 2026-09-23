@@ -57,7 +57,7 @@ describe('exit discovery and disclosure', () => {
     const seen = step(placed(start, 'r-b', 11, 22, 1), 101).state;
     const beforeVersion = getPlayerKnowledge(seen, 'r-b').mapVersion;
     const beforeTerrain = getPlayerKnowledge(seen, 'r-b').knownTerrain.length;
-    const closed = terminateRunner(seen, 'r-a', 'CAPTURED', 101, () => 'e').state;
+    const closed = terminateRunner(seen, 'r-a', 'CAPTURED', 101).state;
     const after = getPlayerKnowledge(closed, 'r-b');
     expect(after.knownActiveExits).toEqual([]);
     expect(after.mapVersion).toBe(beforeVersion + 1);

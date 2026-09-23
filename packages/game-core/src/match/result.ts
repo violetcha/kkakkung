@@ -1,4 +1,5 @@
 import type { Counts, RoundResult } from './core-types.js';
+import { MAX_RUNNERS } from './priority.js';
 import type { MatchState } from './state.js';
 
 /** Counts derived from runner statuses; the stored counts must agree with it. */
@@ -14,10 +15,22 @@ export function countRunners(state: MatchState): Counts {
 }
 
 /**
- * Team result (RL-06). Two escaped runners win for runners, two captured for
- * taggers. `2 + 2` is impossible with three runners and is treated as an
- * invariant violation rather than normalized to a draw. Timeout applies only in
- * game mode when `tick` reaches deadlineTick and fewer than two runners escaped.
+ * Runners in the match, ended or not. The team thresholds scale from this, not from a constant.
+ */
+export function runnerCount(state: MatchState): number {
+  let count = 0;
+  for (const player of state.players.values()) if (player.role === 'runner') count += 1;
+  return count;
+}
+
+/**
+ * Team result (RL-06). A strict majority of the match's runners decides: with three runners that
+ * is two escaped for the runners or two captured for the taggers, exactly the written rule. With
+ * the showcase room's two runners (S15P21C204-350) it is both of them, so one escaped and one
+ * captured runs to the deadline; with one runner it is that runner. A runner count `createMatch`
+ * cannot produce, counts beyond the runner total, or a majority on both sides are an invariant
+ * violation rather than a draw. Timeout applies only in game mode when `tick` reaches
+ * deadlineTick and the runners have no majority.
  */
 export function evaluateResult(
   state: MatchState,
@@ -25,8 +38,17 @@ export function evaluateResult(
   options: Readonly<{ includeTimeout: boolean }>,
 ): RoundResult | null {
   const counts = countRunners(state);
-  if (counts.escaped + counts.captured > 3 || (counts.escaped >= 2 && counts.captured >= 2)) {
-    throw new Error(`impossible runner counts ${counts.escaped}/${counts.captured}`);
+  const runners = runnerCount(state);
+  const majority = Math.floor(runners / 2) + 1;
+  if (
+    runners === 0 ||
+    runners > MAX_RUNNERS ||
+    counts.escaped + counts.captured > runners ||
+    (counts.escaped >= majority && counts.captured >= majority)
+  ) {
+    throw new Error(
+      `impossible runner counts ${counts.escaped}/${counts.captured} of ${runners} runners`,
+    );
   }
   const timedOut =
     options.includeTimeout &&
@@ -41,8 +63,8 @@ export function evaluateResult(
       reason: 'timeout',
     };
   }
-  if (counts.escaped >= 2) return { winner: 'runners', reason: 'two-escaped' };
-  if (counts.captured >= 2) return { winner: 'taggers', reason: 'two-captured' };
+  if (counts.escaped >= majority) return { winner: 'runners', reason: 'two-escaped' };
+  if (counts.captured >= majority) return { winner: 'taggers', reason: 'two-captured' };
   if (timedOut) return { winner: 'taggers', reason: 'timeout' };
   return null;
 }

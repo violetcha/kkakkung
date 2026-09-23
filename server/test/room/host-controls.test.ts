@@ -276,10 +276,16 @@ it('lets only the host change the map size while the room is still gathering', a
     ).toBe('applied');
     await vi.waitFor(() => expect(seen.at(-1)?.size).toBe('small'));
     expect(seen.at(-1)!.revision).toBe(revision);
-    // 장치 점검이 시작되면 방장도 못 바꾼다.
+    // S15P21C204-295. 시작은 방장이 누른다. 그 전까지는 장치 점검에서도 맵을 바꿀 수 있다.
     f.serverRoom.setPhase('DEVICE_CHECK');
     expect(
-      (await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'large' } })).receipt.code,
+      (await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'large' } })).outcome?.result,
+    ).toBe('applied');
+    await vi.waitFor(() => expect(seen.at(-1)?.size).toBe('large'));
+    // 경기가 시작되면 더는 못 바꾼다.
+    f.serverRoom.setPhase('TEAM_PRACTICE');
+    expect(
+      (await f.send(f.host, { type: 'ROOM_MAP_SIZE', payload: { size: 'small' } })).receipt.code,
     ).toBe('INVALID_PHASE');
   } finally {
     await f.close();

@@ -143,8 +143,11 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
         let mediaControl!: SyntheticMediaControl;
         const phases = new Set<string>();
         const bindingStats: { generation: number; selfFace: boolean }[] = [];
+        // 얼굴 텍스처가 묶이는 id 그대로. 시야 엔티티의 id 와 같아야 얼굴이 붙는다(340).
+        let bindingIds: readonly string[] = [];
         room.onMessage('media-bindings', (value: unknown) => {
           const parsed = mediaBindingsSchema.parse(value);
+          bindingIds = parsed.participants.map((participant) => participant.playerId);
           bindingStats.push({
             generation: parsed.receiverGeneration,
             selfFace: parsed.participants.some(
@@ -190,7 +193,16 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
           }),
         });
         room.onMessage('*', () => {});
-        players.push({ session, room, runtime, grants, phases, bindingStats, mediaControl });
+        players.push({
+          session,
+          room,
+          runtime,
+          grants,
+          phases,
+          bindingStats,
+          bindings: () => bindingIds,
+          mediaControl,
+        });
         closers.push(() => runtime.leave());
       };
       for (let i = 0; i < 6; i++) await joinPlayer();
@@ -304,6 +316,22 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
         );
         for (const phase of ['TEAM_PRACTICE', 'GAME_LOADING', 'COUNTDOWN', 'PLAYING'])
           expect(player.phases.has(phase)).toBe(true);
+      }
+      // S15P21C204-340/295. 얼굴 텍스처는 바인딩의 playerId 로 묶이고, 화면은 시야 엔티티의
+      // id 로 찾는다. 둘이 어긋나면 상대 얼굴이 영영 붙지 않는다. 경기에서는 적이 별칭으로
+      // 나가므로 한 수신자의 바인딩은 실제 id 셋(나와 아군)과 별칭 셋이어야 한다.
+      const everyPlayerId = players.map((player) => player.session.playerId);
+      for (const player of players) {
+        const ids = player.bindings();
+        expect(ids).toHaveLength(6);
+        expect(ids.filter((id) => everyPlayerId.includes(id))).toHaveLength(3);
+        expect(ids.filter((id) => id.startsWith('anon-'))).toHaveLength(3);
+        const view = player.runtime.getSnapshot().view;
+        const visible = (view?.visibleEntities ?? [])
+          .filter((entity) => entity.kind === 'player')
+          .map((entity) => entity.id);
+        // 보이는 사람은 반드시 바인딩에도 같은 id 로 있어야 한다.
+        for (const id of visible) expect(ids).toContain(id);
       }
       expect(reports.filter((report) => report.status === 'closed').length).toBeGreaterThanOrEqual(
         6,

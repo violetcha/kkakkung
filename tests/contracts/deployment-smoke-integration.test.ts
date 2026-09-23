@@ -209,6 +209,9 @@ it('DP06 local harness follows real six-client grant/phase/input/retirement APIs
       evidenceScope: 'LOCAL_CONTRACT_ONLY',
       participants: 6,
       received: { practiceVideo: true, practiceAudio: true, gameVideo: true, gameAudio: true },
+      // S15P21C204-295. 얼굴이 몇 개나 묶였는지도 기록에 남는다. 합성 미디어는 실제 트랙을
+      // 만들지 않으므로 여기서는 자리만 확인하고, 숫자는 실제 Cloud 실행(DP-06)에서 본다.
+      facesBound: { practice: expect.any(Number), game: expect.any(Number) },
       mediaRooms: { practice: 2, game: 1 },
       // S15P21C204-324. The injected teardown stumble is recorded, and every client is still
       // confirmed closed: the round's verdict does not hang on that first attempt.
