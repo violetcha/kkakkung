@@ -170,6 +170,12 @@ export type ProductRoomDeps<State> = Readonly<{
   demoExchangeGain?: (state: State, from: string, to: string) => boolean;
   canStart?: () => boolean;
   /**
+   * S15P21C204-364. Whether a new media match may start on the LiveKit monthly guard. Checked only
+   * when practice (the first media) begins; a match already running is never stopped by it, and a
+   * demo room, which issues no media, never asks.
+   */
+  canStartMatch?: () => boolean;
+  /**
    * Readiness gate for a demo room (S15P21C204-258). A demo room never issues, publishes or
    * receives media, so media readiness says nothing about whether it can run; gating it on that
    * makes the room unopenable wherever media is disabled. Left unset the room falls back to
@@ -1594,6 +1600,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // device check until the old resource is confirmed released.
       if (this.hasUnresolvedMedia()) {
         this.blockedReason = 'PRACTICE_MEDIA_NOT_READY';
+        return;
+      }
+      // S15P21C204-364. Practice is where LiveKit starts to bill. Near the monthly allowance, stop
+      // here — in device check, with the reason shown — rather than let a match start that the
+      // provider would cut off halfway through.
+      if (!this.demo && deps.canStartMatch && !deps.canStartMatch()) {
+        this.blockedReason = 'MEDIA_MONTHLY_LIMIT';
         return;
       }
       const now = deps.monotonicNow();

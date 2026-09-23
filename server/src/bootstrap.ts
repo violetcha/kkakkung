@@ -565,6 +565,8 @@ export function createApplication<State = unknown>(
       emitEvent: eventLogger.emit,
       canStart: operationsReady,
       canStartDemo: demoOperationsReady,
+      // S15P21C204-364. Near the LiveKit monthly allowance new matches wait in device check.
+      canStartMatch: () => media?.allowsNewMatch?.() ?? true,
       strictProduct: product.strictProduct,
       random: product.random,
       onInvalidateRoom: (roomCode) => {
@@ -633,6 +635,23 @@ export function createApplication<State = unknown>(
             { readiness: init.readiness.state, admission: init.admission },
             'Media coordinator initialized',
           );
+          // S15P21C204-364. The monthly guard is off unless the operator configured it. Say so
+          // at every start rather than run silently without it.
+          const monthly = media.monthlyUsage?.() ?? null;
+          if (monthly)
+            logger.info(
+              {
+                usedMinutes: monthly.usedMinutes,
+                remainingMinutes: monthly.remainingMinutes,
+                reserveMinutes: monthly.reserveMinutes,
+                blocked: monthly.blocked,
+              },
+              'LiveKit monthly usage guard active',
+            );
+          else
+            logger.warn(
+              'LiveKit monthly usage guard is OFF: set LIVEKIT_MONTHLY_MINUTES and LIVEKIT_USAGE_BASELINE',
+            );
         }
         await server.listen(config.port, config.host);
       } catch (error) {

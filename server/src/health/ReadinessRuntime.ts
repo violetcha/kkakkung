@@ -20,7 +20,10 @@ export type ReadinessRuntimeOptions = Omit<
   ReadinessGateOptions,
   'isInitialized' | 'pendingPreparations'
 > &
-  Pick<OperationsBindingsOptions, 'getGameActivity' | 'getOfficialRevision' | 'recoveryCleanup'> &
+  Pick<
+    OperationsBindingsOptions,
+    'getGameActivity' | 'getOfficialRevision' | 'recoveryCleanup' | 'monthlyUsage'
+  > &
   Readonly<{ monotonicNow: () => number; emitMetric?: MediaCoordinatorDeps['emitMetric'] }>;
 
 /** E-owned readiness/operations/issuance assembly. B still owns HTTP and game bootstrap. */
@@ -63,6 +66,7 @@ export class ReadinessRuntime {
       nowEpochMs: options.nowEpochMs,
       getOfficialRevision: options.getOfficialRevision,
       refreshBudget: () => options.recovery.refreshBudget(),
+      monthlyUsage: options.monthlyUsage,
       isRetirementInFlight: (record) =>
         (options.pendingRetirements?.() ?? []).some(
           (g) =>

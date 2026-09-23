@@ -404,6 +404,8 @@ export type MediaConfiguration = Readonly<{
   maxConcurrentParticipants: number;
   maxNormalApiCallsPer60s: number;
   maxTotalApiCallsPer60s: number;
+  /** S15P21C204-364. Monthly participant-minute guard; absent or null leaves it off. */
+  monthlyUsage?: import('../media/MonthlyUsageMeter.js').MonthlyUsageConfig | null;
 }>;
 export type GameActivitySnapshot = Readonly<{
   activeMatches: number;
@@ -441,6 +443,11 @@ export type OperationsStatus = Readonly<{
   remainingMinutes: number | null;
   remainingBytes: number | null;
   checkedAtEpochMs: number | null;
+  /**
+   * S15P21C204-364. The LiveKit monthly guard, when configured. Separate from `remainingMinutes`,
+   * which the continuous release gate requires to stay null (no official balance is claimed).
+   */
+  monthlyUsage?: import('../media/MonthlyUsageMeter.js').MonthlyUsageSnapshot;
 }>;
 export type OperationSubmission =
   | Readonly<{ status: 'accepted'; snapshot: OperationSnapshot }>
@@ -472,6 +479,12 @@ export type ProductMediaRuntime = MediaCoordinator &
   Partial<
     Pick<
       import('../media/MediaCoordinator.js').MediaCoordinatorRuntime,
-      'lifecycle' | 'canIssue' | 'isInitialized' | 'createOperationsHandlers' | 'releaseMatch'
+      | 'lifecycle'
+      | 'canIssue'
+      | 'isInitialized'
+      | 'createOperationsHandlers'
+      | 'releaseMatch'
+      | 'allowsNewMatch'
+      | 'monthlyUsage'
     >
   >;

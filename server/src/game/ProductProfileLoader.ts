@@ -157,6 +157,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
             initialBudget: null,
             maxConcurrentParticipants: config.maxSlots,
             ...config.mediaApiLimits!,
+            monthlyUsage: config.livekitMonthlyUsage,
           }
         : null,
     core: matchCore,
