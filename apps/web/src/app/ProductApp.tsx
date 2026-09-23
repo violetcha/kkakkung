@@ -61,6 +61,7 @@ import {
 } from './runtime-metrics';
 import { BrandLogo } from './BrandLogo';
 import { MINIMAP_WINDOW_CELLS } from '../features/game/map/minimap-render';
+import { togglesMinimapZoom } from '../features/game/map/minimap-zoom';
 import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { debugFeed, useDebugOverlayEnabled } from '../features/debug/debug-feed';
 import {
@@ -145,6 +146,8 @@ export function ProductApp({
   );
   const [accessAttempt, setAccessAttempt] = useState(0);
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);
+  // S15P21C204-352. 미니맵 축척(M 키). 경기 화면에서만 의미가 있다.
+  const [mapZoomedOut, setMapZoomedOut] = useState(false);
   const [selfId, setSelfId] = useState('');
   // 대기실 타일이 쓰는 얼굴. 내 것은 가공 얼굴을 그리는 면 그대로, 남의 것은 받은 얼굴이다.
   const selfFace = useRef<{ surface: HTMLCanvasElement | null; texture: CanvasTexture | null }>({
@@ -438,6 +441,21 @@ export function ProductApp({
     ['PLAYING', 'TEAM_PRACTICE'].includes(round.phase) &&
     (activeSelf !== null || spectating !== null);
   const interactiveWorld = worldVisible && activeSelf !== null;
+  // S15P21C204-352. M 키로 우하단 미니맵을 전체 지도와 오간다. 위젯 안에서 축척만 바뀌고
+  // 오버레이를 띄우지 않으므로 이동·행동 입력은 그대로 흐른다. 경기 화면이 사라지면 창으로
+  // 되돌려, 다음 라운드가 전체 지도로 시작하지 않게 한다.
+  useEffect(() => {
+    if (!worldVisible) {
+      setMapZoomedOut(false);
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (!togglesMinimapZoom(event)) return;
+      setMapZoomedOut((zoomed) => !zoomed);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [worldVisible]);
   const playerNames = Object.fromEntries(
     snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
   );
@@ -1108,6 +1126,7 @@ export function ProductApp({
                   windowCells={MINIMAP_WINDOW_CELLS}
                   renderTick={renderTick}
                   operatorExit={snapshot.demo?.operatorExit ?? null}
+                  zoomedOut={mapZoomedOut}
                 />
                 {/* 6 접히는 오버레이. 급한 일이 있을 때만 펼쳐진 채로 시작한다. */}
                 {interactiveWorld && (

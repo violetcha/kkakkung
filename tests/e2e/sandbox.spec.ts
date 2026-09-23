@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const serverUrl = process.env.E2E_SERVER_URL ?? 'http://127.0.0.1:2567';
+
 test('two browsers join, receive authoritative movement, and leave independently', async ({
   page,
   browser,
@@ -8,7 +10,7 @@ test('two browsers join, receive authoritative movement, and leave independently
   await expect
     .poll(async () => {
       try {
-        return (await request.get('http://127.0.0.1:2567/health/ready')).status();
+        return (await request.get(`${serverUrl}/health/ready`)).status();
       } catch {
         return 0;
       }
@@ -27,7 +29,7 @@ test('two browsers join, receive authoritative movement, and leave independently
   const secondContext = await browser.newContext();
   const second = await secondContext.newPage();
   try {
-    await second.goto('http://127.0.0.1:5173/');
+    await second.goto(new URL(page.url()).origin);
     await second.getByTestId('room-mode').selectOption('sandbox');
     await second.getByLabel('닉네임').fill('둘');
     await second.getByRole('button', { name: '입장', exact: true }).click();

@@ -7,7 +7,7 @@ import { terminateRunner } from '../../src/match/participation.js';
 import { command, player, startedMatch, step } from './match-fixture.js';
 
 function ended(state: MatchState, id: string, outcome: 'ESCAPED' | 'CAPTURED'): MatchState {
-  return terminateRunner(state, id, outcome, state.tick ?? 0, () => 'evt').state;
+  return terminateRunner(state, id, outcome, state.tick ?? 0).state;
 }
 
 describe('team result and deadline', () => {

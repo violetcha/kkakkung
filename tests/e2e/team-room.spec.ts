@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const serverUrl = process.env.E2E_SERVER_URL ?? 'http://127.0.0.1:2567';
+
 test('preserved team room connects two browsers, starts on ready and moves by its cell contract', async ({
   page,
   browser,
@@ -8,7 +10,7 @@ test('preserved team room connects two browsers, starts on ready and moves by it
   await expect
     .poll(async () => {
       try {
-        return (await request.get('http://127.0.0.1:2567/health/ready')).status();
+        return (await request.get(`${serverUrl}/health/ready`)).status();
       } catch {
         return 0;
       }
@@ -24,7 +26,7 @@ test('preserved team room connects two browsers, starts on ready and moves by it
   const context = await browser.newContext();
   const second = await context.newPage();
   try {
-    await second.goto('http://127.0.0.1:5173/');
+    await second.goto(new URL(page.url()).origin);
     await second.getByLabel('닉네임').fill('팀원 둘');
     await second.getByRole('button', { name: '입장', exact: true }).click();
     await expect(second.getByTestId('ready-button')).toBeVisible();

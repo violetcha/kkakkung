@@ -206,6 +206,7 @@ export { detectCaptures } from './capture.js';
 export { countRunners, evaluateResult } from './result.js';
 export {
   terminateRunner,
+  type EventDraft,
   type TerminationOutcome,
   type TerminationResult,
 } from './participation.js';

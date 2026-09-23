@@ -1761,16 +1761,26 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       const layout = this.showcase ? this.showcaseLayout(prepared) : prepared;
       const instance = this.context.createInstance('game');
-      const state = deps.core.createMatch({
-        matchId: this.context.matchId,
-        gameInstanceId: instance.gameInstanceId,
-        seed: this.context.seed ?? 0,
-        tuning: deps.tuning,
-        layout,
-        players,
-        deadline: this.demo ? 'none' : 'round',
-        ...(this.showcase ? { result: 'timeout-only' as const } : {}),
-      });
+      let state: State;
+      try {
+        state = deps.core.createMatch({
+          matchId: this.context.matchId,
+          gameInstanceId: instance.gameInstanceId,
+          seed: this.context.seed ?? 0,
+          tuning: deps.tuning,
+          layout,
+          players,
+          deadline: this.demo ? 'none' : 'round',
+          ...(this.showcase ? { result: 'timeout-only' as const } : {}),
+        });
+      } catch (error) {
+        // S15P21C204-350. A roster or layout the rules refuse is a preparation failure, not a
+        // tick fault: it used to escape the tick and be reported as SERVER_TICK_OVERLOAD. The
+        // instance never held a match, so nothing in the driver or media has to be retired.
+        this.context.retireInstance(instance.gameInstanceId);
+        const cause = error instanceof Error ? error.message : String(error);
+        return this.returnToDeviceCheck(`MATCH_CREATE:${cause}`);
+      }
       const mediaInstanceId = randomUUID();
       this.mediaInstances.set(instance.gameInstanceId, mediaInstanceId);
       this.driver.attach({

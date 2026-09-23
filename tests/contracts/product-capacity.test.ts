@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,6 +17,19 @@ describe('deployed product room capacity', () => {
       expect(Number(capacity.MAX_ROOMS)).toBeLessThanOrEqual(10);
     },
   );
+
+  // S15P21C204-353. 데모 방은 경기 방 예산 밖에서 따로 센다(312). 운영 모드가 달라도 같은 값이고,
+  // 서버 스키마가 받는 범위(1~3) 안이어야 기동이 막히지 않는다.
+  it('gives both product overlays the same in-range demo room budget', () => {
+    const demoBudget = (mode: string) => {
+      const text = readFileSync(join(process.cwd(), productCapacityOverlay(mode)), 'utf8');
+      const values = [...text.matchAll(/^\s+DEMO_MAX_ROOMS: '(\d+)'$/gm)].map((m) => m[1]);
+      expect(values, mode).toHaveLength(1);
+      return Number(values[0]);
+    };
+    expect(demoBudget('continuous')).toBe(3);
+    expect(demoBudget('attested')).toBe(demoBudget('continuous'));
+  });
 
   it('keeps both product overlays at the same capacity', () => {
     expect(readProductCapacity(process.cwd(), 'continuous')).toEqual(

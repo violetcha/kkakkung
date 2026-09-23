@@ -50,7 +50,7 @@ export type DemoScenarioOptions = Readonly<{
   /** 어느 역할의 인형을 쓸지. 기본은 시나리오가 정한다. */
   role?: Role;
   /** 관리자에게서 몇 칸 떨어진 자리인지. */
-  distance?: 1 | 2 | 3;
+  distance?: 1 | 2 | 3 | 4 | 5;
   /** 관리자의 바라보는 방향 기준으로 어느 쪽인지. */
   side?: 'front' | 'left' | 'right' | 'back';
   /** 인형이 관리자를 보게 할지 등지게 할지. */
@@ -343,7 +343,7 @@ function checkOptions(scenario: DemoScenario, options: DemoScenarioOptions): Dem
     if (options[key] === undefined) continue;
     if (!allowed.includes(key)) return 'UNSUPPORTED_OPTION';
   }
-  if (options.distance !== undefined && ![1, 2, 3].includes(options.distance))
+  if (options.distance !== undefined && ![1, 2, 3, 4, 5].includes(options.distance))
     return 'UNSUPPORTED_OPTION';
   return null;
 }

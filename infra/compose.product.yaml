@@ -12,6 +12,8 @@ services:
       # so the two deployment modes never differ in how much they open.
       MAX_ROOMS: '10'
       MAX_SLOTS: '60'
+      # S15P21C204-353: same demo budget as the continuous overlay (separate from MAX_ROOMS).
+      DEMO_MAX_ROOMS: '3'
     volumes:
       - type: bind
         source: ${OPS_EVIDENCE_DIR:?Set the approved evidence directory}/runtime-evidence.json

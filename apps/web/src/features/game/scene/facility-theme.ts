@@ -85,12 +85,29 @@ export type BackroomsTextureSet = Readonly<{
   normal?: Texture;
 }>;
 
+export function createFacilitySurfaceTextures() {
+  const owned = [surfaceTexture('wall'), surfaceTexture('floor')] as const;
+  let disposed = false;
+  return {
+    owned,
+    wall: owned[0],
+    floor: owned[1],
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      owned.forEach((texture) => texture.dispose());
+    },
+  };
+}
+
+export type FacilitySurfaceTextures = ReturnType<typeof createFacilitySurfaceTextures>;
+
 export function createFacilityResources(
   textures?: BackroomsTextureSet,
   quality: QualityPreset = 'medium',
+  sharedSurfaces?: FacilitySurfaceTextures,
 ) {
-  const wallFallback = surfaceTexture('wall');
-  const floorTexture = surfaceTexture('floor');
+  const surfaces = sharedSurfaces ?? createFacilitySurfaceTextures();
   const detailed = quality === 'medium';
   const geometry = {
     floor: new PlaneGeometry(1, 1),
@@ -104,13 +121,13 @@ export function createFacilityResources(
   const material = {
     wall: new MeshStandardMaterial({
       color: textures ? '#ffffff' : '#b18b36',
-      map: textures?.color ?? wallFallback,
+      map: textures?.color ?? surfaces.wall,
       roughnessMap: detailed ? (textures?.roughness ?? null) : null,
       normalMap: detailed ? (textures?.normal ?? null) : null,
       roughness: 0.96,
       metalness: 0,
     }),
-    floor: new MeshStandardMaterial({ map: floorTexture, roughness: 1, metalness: 0 }),
+    floor: new MeshStandardMaterial({ map: surfaces.floor, roughness: 1, metalness: 0 }),
     panel: new MeshStandardMaterial({ color: '#6d5530', roughness: 0.9, metalness: 0.02 }),
     trim: new MeshStandardMaterial({ color: '#776342', roughness: 0.78, metalness: 0.08 }),
     ceiling: new MeshStandardMaterial({ color: '#8e825e', roughness: 1 }),
@@ -121,14 +138,13 @@ export function createFacilityResources(
   return {
     geometry,
     material,
-    textures: [wallFallback, floorTexture],
+    textures: [...surfaces.owned],
     dispose() {
       if (disposed) return;
       disposed = true;
       Object.values(geometry).forEach((resource) => resource?.dispose());
       Object.values(material).forEach((resource) => resource.dispose());
-      wallFallback.dispose();
-      floorTexture.dispose();
+      if (!sharedSurfaces) surfaces.dispose();
     },
   };
 }

@@ -2,22 +2,49 @@
 /**
  * 발표 시연 방(showcase)의 방 동작. 넷이 고른 역할 그대로 2:2 로 배정되고, 맵은 소형·고정 시드로
  * 준비되며(템플릿이 요구하는 여섯 자리는 빈 이름으로 채운다), 경기는 실제 넷만으로 제한시간
- * 판정 정책을 달고 만들어진다. 가짜 코어·가짜 로더라 규칙 판정이 아닌 방의 배선을 본다.
+ * 판정 정책을 달고 만들어진다. 앞의 두 케이스는 가짜 코어·가짜 로더로 방의 배선을 보고, 뒤의
+ * 두 케이스는 실제 `matchCore` 와 인증된 소형 미로로 경기가 실제로 만들어지는지, 코어가 거절하면
+ * 준비 실패로 끝나는지를 본다(S15P21C204-350).
  */
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
+import { bindFallbackPlayers, matchCore } from '@kkakkung/game-core/match';
 import type { RoomRosterMessage } from '@kkakkung/protocol/game-messages';
+import type { CorePort, MatchLayout } from '../../src/game/ports.js';
 import { createKkakkungRoom } from '../../src/rooms/KkakkungRoom.js';
 import { ProductSessionStore } from '../../src/session/ProductSessionStore.js';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
 import { RoomExpiry } from '../../src/session/RoomExpiry.js';
 import { FakeCore, fakePracticePort, layoutFor, testTuning } from './test-harness.js';
 
-function fixture() {
+type RosterEntry = { playerId: string; role: 'tagger' | 'runner' };
+
+/** The certified small maze's identity placement, bound to the six-slot roster the room asks for. */
+function smallMazeLayout(players: readonly RosterEntry[]): MatchLayout {
+  const file = JSON.parse(
+    readFileSync(
+      new URL('../../content/placements/maze-s-v1-fallback.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { fallbacks: { variantId: string; layout: MatchLayout }[] };
+  const identity = file.fallbacks.find((f) => f.variantId === 'r0')!;
+  const bound = bindFallbackPlayers(identity.layout, players);
+  if (!bound) throw new Error('small maze binding failed');
+  return bound;
+}
+
+function fixture(
+  options: {
+    core?: CorePort<any>;
+    layout?: (players: readonly RosterEntry[]) => MatchLayout;
+  } = {},
+) {
   let now = 0;
   const sessions = new ProductSessionStore({ now: () => now });
   const slots = new SlotRegistry({ maxRooms: 1 });
-  const core = new FakeCore();
+  const core = options.core ?? new FakeCore();
+  const layoutOf = options.layout ?? ((players: readonly RosterEntry[]) => layoutFor(players));
   const prepared: { players: { playerId: string; role: string }[]; seed: number }[] = [];
   const loader = {
     prepare: async (input: any) => {
@@ -25,7 +52,7 @@ function fixture() {
       return {
         status: 'selected',
         source: { templateId: 't', templateVersion: 'v1', templateHash: 'h', variantId: 'r0' },
-        layout: { status: 'selected', source: 'online', layout: layoutFor(input.players) },
+        layout: { status: 'selected', source: 'online', layout: layoutOf(input.players) },
       };
     },
   };
@@ -93,7 +120,7 @@ function fixture() {
     });
   return {
     room,
-    core,
+    core: core as FakeCore,
     slots,
     sessions,
     players,
@@ -188,6 +215,67 @@ it('prepares the small maze with a fixed seed and six template slots, then creat
     expect(created.layout.territories).toHaveLength(2);
     for (const placed of created.layout.players)
       expect(placed.playerId.startsWith('showcase-vacant-')).toBe(false);
+  } finally {
+    f.close();
+  }
+});
+
+/** Drives a joined room through READY, ROOM_START and PRACTICE_READY into MAP_FINALIZING. */
+async function reachMapFinalizing(f: ReturnType<typeof fixture>) {
+  f.join();
+  for (const [index, player] of f.players.entries())
+    f.command(player, 'READY', { ready: true }, index + 1);
+  f.tick();
+  f.command(f.players[0]!, 'ROOM_START', {}, 6);
+  f.tick();
+  expect(f.room.phase).toBe('TEAM_PRACTICE');
+  for (const [index, player] of f.players.entries())
+    f.command(player, 'PRACTICE_READY', { ready: true }, index + 10);
+  f.tick();
+  await f.flush();
+  expect(f.room.phase).toBe('MAP_FINALIZING');
+}
+
+it('S15P21C204-350: reaches GAME_LOADING with the real rules and the real small maze for four players', async () => {
+  // 가짜 코어는 인원 불변식이 없어 이 결함을 지나쳤다. 실제 `matchCore` 와 인증된 소형 미로 배치다.
+  const f = fixture({ core: matchCore, layout: smallMazeLayout });
+  try {
+    await reachMapFinalizing(f);
+    await f.flush();
+    await f.flush();
+    expect(f.room.phase).toBe('GAME_LOADING');
+    expect(f.room.blockedReason).toBeNull();
+    const attached = f.room.driver.attached();
+    expect(attached).toHaveLength(1);
+    const frame = matchCore.getFrame(attached[0]!.state);
+    expect(frame.phase).toBe('GAME_LOADING');
+    expect(frame.participants.map((p: { role: string }) => p.role).sort()).toEqual([
+      'runner',
+      'runner',
+      'tagger',
+      'tagger',
+    ]);
+  } finally {
+    f.close();
+  }
+});
+
+it('S15P21C204-350: a match the rules refuse ends preparation with its own reason, not a tick fault', async () => {
+  const core = new FakeCore();
+  core.createMatch = () => {
+    throw new RangeError('a match needs 3 taggers and 3 runners');
+  };
+  const f = fixture({ core });
+  try {
+    await reachMapFinalizing(f);
+    // The tick must return normally: a thrown createMatch used to escape here and be reported as
+    // SERVER_TICK_OVERLOAD by the coordinator.
+    await f.flush();
+    await f.flush();
+    expect(f.room.phase).toBe('DEVICE_CHECK');
+    expect(f.room.abortReason).toBeNull();
+    expect(f.room.blockedReason).toBe('MATCH_CREATE:a match needs 3 taggers and 3 runners');
+    expect(f.room.driver.attached()).toHaveLength(0);
   } finally {
     f.close();
   }

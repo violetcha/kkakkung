@@ -7,6 +7,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { verifyAvatarProductAssets } from './lib/avatar-product-assets.mjs';
 import { verifyVisionAssetNotices } from './lib/vision-asset-notices.mjs';
 
 const root = fileURLToPath(new URL('../apps/web/dist/', import.meta.url));
@@ -38,6 +39,7 @@ try {
   const notices = await verifyVisionAssetNotices(root, {
     requireReviewedRights: process.argv.includes('--require-reviewed-rights'),
   });
+  const avatars = await verifyAvatarProductAssets(root);
   const fontAssets = [
     ['Galmuri9.woff2', '275d995906625eaaa5d2d9baa0a80f90a5c033c381c0dc2108a8729d371041a6'],
     ['Galmuri11.woff2', 'f467d1b10e6b88dfa8399c9f93b38c7643e050abfe4fc15800ac0b000f5a57d6'],
@@ -169,6 +171,8 @@ try {
       cloudExecuted: false,
       fontAssetsVerified: fontAssets.length,
       fontFacesLoaded: Object.keys(fonts.loaded),
+      avatarManifest: avatars.manifest,
+      avatarAssetsVerified: avatars.assets,
       ...notices,
     }),
   );

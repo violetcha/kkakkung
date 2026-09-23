@@ -8,8 +8,14 @@ import {
   joinOptionsSchema,
   moveCommandSchema,
 } from '../src/messages/index.js';
+import { demoScenarioOptionsSchema } from '../src/game-messages/product.js';
 
 describe('protocol messages', () => {
+  it('accepts demo puppet distances through five cells', () => {
+    expect(demoScenarioOptionsSchema.parse({ distance: 5 })).toEqual({ distance: 5 });
+    expect(() => demoScenarioOptionsSchema.parse({ distance: 6 })).toThrow();
+  });
+
   it('accepts the documented join options and rejects unknown keys', () => {
     expect(joinOptionsSchema.parse({ token: 'one-use-token', protocolVersion: '0.1.0' })).toEqual({
       token: 'one-use-token',

@@ -35,6 +35,16 @@ it('offers a button per scenario the server listed', () => {
   expect(html).not.toContain('disabled');
 });
 
+it('offers a five-cell distance for long approach demonstrations', () => {
+  const html = renderToStaticMarkup(
+    createElement(DemoPanel, {
+      demo: state({ available: [{ id: 'place-puppet', options: ['distance'] }] }),
+      onRun: () => {},
+    }),
+  );
+  expect(html).toContain('5칸');
+});
+
 it('locks the buttons while one runs and reports a stopped scenario', () => {
   const running = renderToStaticMarkup(
     createElement(DemoPanel, {

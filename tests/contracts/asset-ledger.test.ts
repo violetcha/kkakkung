@@ -17,6 +17,24 @@ const ledgerPath = resolve(root, 'docs/third-party-assets.md');
 const ledger = readFileSync(ledgerPath, 'utf8');
 const publicRoot = resolve(root, 'apps/web/public');
 const noticePage = readFileSync(join(publicRoot, 'licenses/index.html'), 'utf8');
+const avatarManifest = JSON.parse(
+  readFileSync(join(publicRoot, 'models/avatars/v1/manifest.json'), 'utf8'),
+) as {
+  roles: Record<
+    string,
+    {
+      model: { url: string; sha256: string; bytes: number };
+      textures: Record<string, Record<string, { url: string; sha256: string; bytes: number }>>;
+    }
+  >;
+};
+
+function avatarAssets() {
+  return Object.values(avatarManifest.roles).flatMap((role) => [
+    role.model,
+    ...Object.values(role.textures).flatMap((textures) => Object.values(textures)),
+  ]);
+}
 
 function filesUnder(directory: string): string[] {
   const out: string[] = [];
@@ -80,6 +98,18 @@ describe('asset ledger covers what the build ships', () => {
       expect(statSync(resolve(root, path)).isFile(), path).toBe(true);
       expect(ledger, path).toContain(path.split('/').pop()!);
     }
+  });
+
+  it('records every generated avatar file with the manifest bytes and sha instead of a directory wildcard', () => {
+    expect(avatarAssets()).toHaveLength(8);
+    for (const asset of avatarAssets()) {
+      expect(ledger, asset.url).toContain(`\`${asset.url.slice(1)}\``);
+      expect(ledger, `${asset.url} bytes`).toContain(asset.bytes.toLocaleString('en-US'));
+      expect(ledger, `${asset.url} sha256`).toContain(asset.sha256);
+    }
+    expect(ledger).toContain('프로젝트 코드 생성 자산');
+    expect(ledger).toContain('외부 원본 없음');
+    expect(ledger).toContain('고지 의무 없음');
   });
 });
 

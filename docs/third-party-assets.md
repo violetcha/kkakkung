@@ -43,17 +43,18 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 
 ## 배포에 포함되는 자산 (S15P21C204-225)
 
-제품 빌드가 실제로 내보내는 파일은 `apps/web/public/` 아래가 전부다. 그 밖의 화면 요소(캐릭터·
-장비 형상, 효과음·안내음)는 파일이 아니라 저장소 TypeScript 코드가 실행 시점에 만들어 내므로
-제3자 권리가 붙지 않는다. 아래 두 표가 그 경계다.
+제품 빌드가 실제로 내보내는 정적 파일은 `apps/web/public/` 아래가 전부다. 캐릭터 GLB·아틀라스는
+외부 원본 없이 저장소의 Node 코드가 결정적으로 만드는 프로젝트 자산이고, 장비 형상과 효과음·
+안내음은 TypeScript 코드가 실행 시점에 만든다. 아래 표가 그 경계다.
 
-| 배포 경로                      | 자산                               | 출처·권리                                   | 고지 의무        |
-| ------------------------------ | ---------------------------------- | ------------------------------------------- | ---------------- |
-| `models/` (모델 3·WASM 6·문서) | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending)    | 있음 — 고지 화면 |
-| `fonts/` (WOFF2 6·OFL 원문)    | 갈무리 픽셀 글꼴 4종·나눔명조 2종  | Lee Minseo(quiple)·Google Inc., SIL OFL 1.1 | 있음 — 고지 화면 |
-| `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득         | 고지 대상 자체   |
-| `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산            | 없음             |
-| `textures/backrooms/` (PNG 4)  | 백룸 벽지 PBR 재질                 | 프로젝트 구성원 제공 렌더 자산              | 없음             |
+| 배포 경로                                   | 자산                               | 출처·권리                                   | 고지 의무        |
+| ------------------------------------------- | ---------------------------------- | ------------------------------------------- | ---------------- |
+| `models/` (모델 3·WASM 6·문서)              | MediaPipe 비전 자산                | Google, Apache-2.0(손동작 2모델 pending)    | 있음 — 고지 화면 |
+| `fonts/` (WOFF2 6·OFL 원문)                 | 갈무리 픽셀 글꼴 4종·나눔명조 2종  | Lee Minseo(quiple)·Google Inc., SIL OFL 1.1 | 있음 — 고지 화면 |
+| `licenses/` (고지 화면·원문)                | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득         | 고지 대상 자체   |
+| `brand/kkakkung-logo.png`                   | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산            | 없음             |
+| `textures/backrooms/` (PNG 4)               | 백룸 벽지 PBR 재질                 | 프로젝트 구성원 제공 렌더 자산              | 없음             |
+| `models/avatars/v1/` (GLB 2·PNG 6·manifest) | 역할별 호러 아바타                 | 프로젝트 코드 생성 자산·외부 원본 없음      | 고지 의무 없음   |
 
 나눔명조(S15P21C204-295)는 제목용 명조로 `@fontsource/nanum-myeongjo` 5.2.5(Google Fonts 배포본)의
 한글·라틴 400 서브셋 WOFF2 두 개를 그대로 담았다. 그 패키지의 LICENSE 는 저작권자를 Google Inc. 로
@@ -68,17 +69,37 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 
 파일이 아니라 코드다. 각 항목의 버전·무결성은 저장소 커밋으로 추적하고 별도 라이선스가 없다.
 
-| 만드는 것                                      | 원본                                                                                                                                                           |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 어두운 블록 테마 16×16 픽셀 타일 4종·재질(268) | [block-theme.ts](../apps/web/src/features/game/scene/block-theme.ts)                                                                                           |
-| 백룸 테마 바닥·천장 재질과 형상                | [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts)                                                                                     |
-| 캐릭터 형상·역할 색·실루엣                     | [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [role-colors.ts](../apps/web/src/features/game/scene/role-colors.ts)                     |
-| 감지기·덫 형상과 치수                          | [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx), [equipment-model.ts](../apps/web/src/features/game/scene/equipment-model.ts) |
-| 1인칭 손·랜턴·든 도구(268)                     | [HeldTool.tsx](../apps/web/src/features/game/scene/HeldTool.tsx)                                                                                               |
-| 출구 문틀·표시등                               | [VisibleExits.tsx](../apps/web/src/features/game/scene/VisibleExits.tsx)                                                                                       |
-| 데모 방 인형의 대역 얼굴                       | [demo-face.ts](../apps/web/src/features/game/scene/demo-face.ts)                                                                                               |
-| 발소리·감지기·덫 효과음 3종                    | [effect-buffer.ts](../apps/web/src/features/media/effect-buffer.ts)                                                                                            |
-| 상태 안내음 13종(261)                          | [cue-buffer.ts](../apps/web/src/features/media/cue-buffer.ts)                                                                                                  |
+| 만드는 것                                      | 원본                                                                                                                                                                                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 어두운 블록 테마 16×16 픽셀 타일 4종·재질(268) | [block-theme.ts](../apps/web/src/features/game/scene/block-theme.ts)                                                                                                                                                   |
+| 백룸 테마 바닥·천장 재질과 형상                | [facility-theme.ts](../apps/web/src/features/game/scene/facility-theme.ts)                                                                                                                                             |
+| 역할별 GLB·low/medium 아틀라스                 | [build-avatar-assets.mjs](../scripts/build-avatar-assets.mjs), [avatar-geometry.mjs](../scripts/lib/avatar-geometry.mjs), [avatar-png.mjs](../scripts/lib/avatar-png.mjs)                                              |
+| GLB 소비·실시간 얼굴·중립 실루엣               | [FaceAvatar.tsx](../apps/web/src/features/game/scene/FaceAvatar.tsx), [RoleAvatar.tsx](../apps/web/src/features/game/scene/RoleAvatar.tsx), [NeutralAvatar.tsx](../apps/web/src/features/game/scene/NeutralAvatar.tsx) |
+| 감지기·덫 형상과 치수                          | [EquipmentObjects.tsx](../apps/web/src/features/game/scene/EquipmentObjects.tsx), [equipment-model.ts](../apps/web/src/features/game/scene/equipment-model.ts)                                                         |
+| 1인칭 손·랜턴·든 도구(268)                     | [HeldTool.tsx](../apps/web/src/features/game/scene/HeldTool.tsx)                                                                                                                                                       |
+| 출구 문틀·표시등                               | [VisibleExits.tsx](../apps/web/src/features/game/scene/VisibleExits.tsx)                                                                                                                                               |
+| 데모 방 인형의 대역 얼굴                       | [demo-face.ts](../apps/web/src/features/game/scene/demo-face.ts)                                                                                                                                                       |
+| 발소리·감지기·덫 효과음 3종                    | [effect-buffer.ts](../apps/web/src/features/media/effect-buffer.ts)                                                                                                                                                    |
+| 상태 안내음 13종(261)                          | [cue-buffer.ts](../apps/web/src/features/media/cue-buffer.ts)                                                                                                                                                          |
+
+### 역할별 호러 아바타
+
+`apps/web/public/models/avatars/v1/manifest.json`이 런타임 선택과 배포 무결성의 기준이다.
+`node scripts/build-avatar-assets.mjs`가 GLB와 PNG를 결정적으로 다시 만들며, 제3자 모델·텍스처나
+사용자 제공 콘셉트 이미지를 배포 파일에 포함하지 않는다. 갱신 책임은 웹 3D 담당자에게 있고,
+`pnpm avatars:check`와 `pnpm check:product-assets`가 각각 저장소 원본과 빌드 산출물을 검사한다.
+
+| 파일                                                     |  bytes | SHA256                                                             |
+| -------------------------------------------------------- | -----: | ------------------------------------------------------------------ |
+| `models/avatars/v1/manifest.json`                        |  3,052 | `38074af8338bf4a5c8d03df749b1c3f312a7f7ead1ae401657b439d93cf84f98` |
+| `models/avatars/v1/runner.glb`                           | 26,844 | `0237927516d537cb5962fea11e79224b68718e6cfc8ea5eb692aa3ac4b67d442` |
+| `models/avatars/v1/tagger.glb`                           | 40,996 | `a6140de90196885d3e4079d4e23aba892c786446379beb54198ae7cb6183de40` |
+| `models/avatars/v1/textures/runner-low-color.png`        | 10,460 | `0e443dc7af9d434431a2d9059407af218e660b705f6aab7436262c294805d17b` |
+| `models/avatars/v1/textures/runner-medium-color.png`     | 30,434 | `9ad57f3b72cd210138a2a146f4a5c52ca379c44cb4bf834539a3ab3cd044fd19` |
+| `models/avatars/v1/textures/runner-medium-roughness.png` | 10,354 | `354cc62d1d1086359c8717120c103223cdfb6aaa2bbed6a2ac7214888a09787c` |
+| `models/avatars/v1/textures/tagger-low-color.png`        | 10,455 | `425338ac6dfe8a76cae8c309b408c1e06b965502fc3abb2ec496cf50235cda8a` |
+| `models/avatars/v1/textures/tagger-medium-color.png`     | 30,434 | `22bce6c444f6eaa0a51b59782f12c8f40ad69d3f78f43b1c4c875779b3756114` |
+| `models/avatars/v1/textures/tagger-medium-roughness.png` | 10,354 | `354cc62d1d1086359c8717120c103223cdfb6aaa2bbed6a2ac7214888a09787c` |
 
 ## 제품 고지 연결
 

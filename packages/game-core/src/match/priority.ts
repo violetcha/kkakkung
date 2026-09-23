@@ -1,22 +1,29 @@
 import { createRng, shuffle } from './random.js';
 
+/** A team holds at most three runners (RL-01); the showcase room fields two (S15P21C204-350). */
+export const MAX_RUNNERS = 3;
+
 /**
- * Seeded base order of exactly three runner IDs. Built once per match from the
- * sorted IDs so participant array order and transport order never matter.
+ * Seeded base order of the match's runner IDs, one to three of them. Built once per match from
+ * the sorted IDs so participant array order and transport order never matter. The length is the
+ * runner count; a three-runner order is byte for byte what the fixed triple used to produce.
  */
-export type PriorityOrder = readonly [string, string, string];
+export type PriorityOrder = readonly string[];
 
 export function createPriorityOrder(runnerIds: readonly string[], seed: number): PriorityOrder {
   const unique = new Set(runnerIds);
-  if (runnerIds.length !== 3 || unique.size !== 3) {
-    throw new RangeError('priority order needs exactly three distinct runner ids');
+  if (
+    runnerIds.length === 0 ||
+    runnerIds.length > MAX_RUNNERS ||
+    unique.size !== runnerIds.length
+  ) {
+    throw new RangeError('priority order needs one to three distinct runner ids');
   }
   const sorted = [...runnerIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const shuffled = shuffle(createRng(seed), sorted).items;
-  return Object.freeze([shuffled[0]!, shuffled[1]!, shuffled[2]!]);
+  return Object.freeze([...shuffle(createRng(seed), sorted).items]);
 }
 
-/** Order for a tick: base order rotated left by (tick - startTick) mod 3. */
+/** Order for a tick: base order rotated left by (tick - startTick) mod its length. */
 export function priorityForTick(
   baseOrder: PriorityOrder,
   tick: number,
@@ -25,12 +32,9 @@ export function priorityForTick(
   if (!Number.isInteger(tick) || !Number.isInteger(startTick) || tick < startTick) {
     throw new RangeError('tick must be an integer at or after startTick');
   }
-  const shift = (tick - startTick) % 3;
-  return Object.freeze([
-    baseOrder[shift]!,
-    baseOrder[(shift + 1) % 3]!,
-    baseOrder[(shift + 2) % 3]!,
-  ]) as PriorityOrder;
+  const length = baseOrder.length;
+  const shift = (tick - startTick) % length;
+  return Object.freeze(baseOrder.map((_, index) => baseOrder[(shift + index) % length]!));
 }
 
 /**
