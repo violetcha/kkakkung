@@ -1,62 +1,65 @@
-# GitLab 로그인과 이메일 허용 목록
+# GitLab 로그인과 운영자 이메일 목록
 
-2026-09-22 승인: GitLab 로그인 후 운영자가 등록한 이메일만 허용한다. 프로젝트 역할은
-조회하지 않는다. `/demo`, `/showcase`, `/api/demo-admin`, `/api/showcase`는 같은 SSO를
-유지한다. 일반 게임은 기존 team/public 선택을 따르며, 이 변경 자체는 공개 전환이 아니다.
-관련 Jira는 아직 지정되지 않았다. 설정 담당 F의 배포 검토 대상이다.
+2026-09-23 결정(S15P21C204-367): 로그인 게이트는 **lab.ssafy.com GitLab에 로그인한 계정 전체**를
+통과시킨다(SSAFY 공개). `/demo`, `/showcase`, `/api/demo-admin`, `/api/showcase`는 같은 게이트
+뒤에 두되, 운영자 판정은 **게임 서버가 등록 이메일 목록으로** 한다. 이전(2026-09-22)에는 게이트가
+이메일 목록을 직접 확인해 게임까지 목록 사용자만 들어올 수 있었다. 설정 담당 F의 배포 검토 대상이다.
 
 ## 판정과 신원
 
-`compose.sso.yaml`은 `GITLAB_PROJECTS`와 `EMAIL_DOMAINS`를 빈 값으로 지정해 기존 env 파일의
-설정을 덮어쓴다. 도메인 허용과 이메일 목록은 OR이므로 `EMAIL_DOMAINS=*`를 추가하면 안 된다.
-GitLab provider, 검증된 이메일 요구, PKCE, 콜백과 신원 헤더는 유지한다. 필요한 OAuth scope는
-`openid profile email`이다. GitLab 앱이 기존 `read_api` 권한도 가지고 있어도 변경된 요청은
-이를 사용하지 않는다. 별도 그룹/allowed-group 제한을 운영 env나 실행 인자로 추가하지 않는다.
+- `compose.sso.yaml`은 `EMAIL_DOMAINS='*'`로 로그인 계정 전체를 허용하고, `GITLAB_PROJECTS`를
+  빈 값으로 지정해 기존 env 파일의 프로젝트 제한을 덮어쓴다. GitLab provider, 검증된 이메일 요구,
+  PKCE, 콜백과 신원 헤더는 유지한다. OAuth scope는 `openid profile email`이다.
+- 일반 경로는 `X-SSO-User`(로그인 사용자)를 덮어써 넘기고, 서버는 그 해시로 계정당 방 하나·자리
+  하나를 센다(S15P21C204-366).
+- 관리 경로는 `X-Demo-Admin`을 **로그인 이메일**로 덮어쓴다. 서버는 `DEMO_ADMIN_EMAILS_FILE`
+  (`/etc/kkakkung/sso-access/allowed-emails.txt`, 호스트 `/opt/kkakkung/sso-access` 읽기 전용
+  마운트)에 그 이메일이 있을 때만 받는다. 요청마다 파일을 다시 읽으므로 목록 수정에 재시작이
+  필요 없다. 경로가 없거나 파일을 읽을 수 없으면 관리 경로는 아무도 통과시키지 않는다.
+- `/demo` 화면 자체는 로그인한 누구나 받을 수 있지만, 방을 여는 API가 목록 밖 계정을 401로
+  거절하므로 데모·쇼케이스를 열 수 없다.
 
-목록에는 GitLab OAuth가 반환하는 이메일을 한 줄에 하나씩 쓴다. 초대·커밋 이메일과 다를 수
-있다. 저장소 예시는 아무도 허용하지 않는다. 실제 목록은 서버에서만 관리하며 GitLab 권한
-회수와 별개로 이메일도 제거해야 한다. 파일이 없으면 프록시 기동이 실패한다.
+목록에는 GitLab OAuth가 반환하는 이메일을 한 줄에 하나씩 쓴다(대소문자 무시, 빈 줄·`#` 주석 무시).
+초대·커밋 이메일과 다를 수 있다. 저장소 예시는 아무도 허용하지 않는다. 실제 목록은 서버에서만
+관리한다.
 
-## 기존 운영 서버 적용
+## 운영 적용 순서
 
-먼저 `/opt/kkakkung/sso-access/allowed-emails.txt`를 준비한다. 실제 전체 허용 목록을
-확인하기 전에는 프록시를 교체하지 않는다. 기존 `sso.env`와 그 비밀값은 유지한다.
+순서를 지키지 않으면 관리 경로가 SSAFY 전체에 잠시 열린다.
 
-```bash
-sudo install -d -m 755 /opt/kkakkung/sso-access
-sudoedit /opt/kkakkung/sso-access/allowed-emails.txt
-sudo chmod 644 /opt/kkakkung/sso-access/allowed-emails.txt
-sudo test -s /opt/kkakkung/sso-access/allowed-emails.txt
-```
+1. 목록 파일을 확인한다. 게임 서버 컨테이너(비루트)가 읽을 수 있어야 한다.
 
-목록은 비밀 토큰이 아니며 비루트 컨테이너 사용자가 읽을 수 있어야 한다. 디렉터리 전체를
-읽기 전용으로 마운트하므로 편집기가 파일을 교체해도 컨테이너에서 새 파일을 읽을 수 있다.
-주석만 있는 파일도 크기는 있으므로 운영자는 실제 이메일이 들어 있는지 별도로 확인한다.
+   ```bash
+   sudo install -d -m 755 /opt/kkakkung/sso-access
+   sudoedit /opt/kkakkung/sso-access/allowed-emails.txt
+   sudo chmod 644 /opt/kkakkung/sso-access/allowed-emails.txt
+   ```
 
-기존 Compose 파일을 별도로 백업한 뒤, 검토된 저장소 루트에서 다음을 실행한다.
-앱 Jenkins 배포는 별개 프로젝트인 이 SSO 컨테이너를 갱신하지 않는다.
+2. 이 변경이 들어간 앱을 배포한다(Jenkins). 이 시점부터 서버가 관리 경로의 목록을 확인한다.
+   게이트가 아직 목록을 보고 있어 사용자 입장에서는 달라지는 것이 없다.
+3. 등록된 운영자로 `/demo`에서 방이 열리는지 확인한다. 실패하면 목록 경로·권한을 먼저 고친다.
+4. 게이트를 교체한다. 앱 Jenkins 배포는 별개 프로젝트인 이 SSO 컨테이너를 갱신하지 않는다.
 
-```bash
-sudo install -m 644 infra/compose.sso.yaml /opt/kkakkung/sso/compose.sso.yaml
-sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml config --quiet
-sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml up -d --force-recreate oauth2-proxy
-sudo docker logs --tail 20 kkakkung-sso
-```
+   ```bash
+   sudo install -m 644 infra/compose.sso.yaml /opt/kkakkung/sso/compose.sso.yaml
+   sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml config --quiet
+   sudo docker compose -f /opt/kkakkung/sso/compose.sso.yaml up -d --force-recreate oauth2-proxy
+   sudo docker logs --tail 20 kkakkung-sso
+   ```
 
-`restart`만으로 Compose 환경 변수와 마운트 변경은 적용되지 않는다. 최초 전환에는 컨테이너
-재생성이 필요하다. 이후 목록 수정 시에는 파일 내용 확인 후 같은 컨테이너를 재시작하고
-실제 허용·거절을 재검증한다. 비밀 env 전체나 콜백 URL 쿼리를 공유 로그에 출력하지 않는다.
+   `restart`만으로 Compose 환경 변수 변경은 적용되지 않는다. 비밀 env 전체나 콜백 URL 쿼리를
+   공유 로그에 출력하지 않는다.
 
 ## 실제 인수
 
-- 등록된 팀원과 상속 Maintainer가 각각 새 브라우저 세션으로 로그인해 `/demo`와 `/showcase`
-  모두 접근한다. 원래 요청한 화면으로 복귀하는지 확인한다.
-- 목록 밖의 GitLab 계정은 로그인 후 403이어야 한다. Guest/Reporter/Maintainer 역할과 무관하다.
-- 목록에서 제외한 계정은 기존 세션을 포함해 차단되는지 확인한다.
-- 익명 `/api/demo-admin`과 `/api/showcase`는 보호되고 위조 `X-Demo-Admin`으로 통과하지 못한다.
-- 일반 서비스는 기존 team/public 상태를 유지한다. 공개 전환 후에도 두 관리자 화면과 API는
-  계속 보호되어야 한다. `/api/operations`의 외부 404도 유지한다.
+- 목록 밖 lab.ssafy.com 계정이 새 브라우저 세션으로 로그인해 게임에 들어오고 방을 만들 수 있다.
+- 같은 계정이 `/api/demo-admin/rooms`, `/api/showcase/rooms`에서 401을 받는다.
+- 등록된 운영자는 `/demo`와 `/showcase`에서 방을 연다. 목록에서 지운 뒤 다시 시도하면 401이다.
+- 익명 요청과 위조 `X-Demo-Admin`은 통과하지 못한다. `/api/operations`의 외부 404는 유지한다.
 
-로컬 계약 시험은 설정과 라우팅만 검사한다. 실제 GitLab 로그인, 파일 가독성, 운영 반영과
-권한 회수 확인은 위 서버 인수로 별도 기록한다. 실패 시 백업 Compose로 재생성하면 이전
-프로젝트 권한 정책으로 복귀하며, 상속 권한 장애도 다시 발생할 수 있다.
+로컬 계약 시험은 설정과 라우팅, 서버 판정만 검사한다. 실제 GitLab 로그인, 파일 가독성, 운영 반영은
+위 서버 인수로 별도 기록한다. 되돌릴 때는 백업한 이전 `compose.sso.yaml`로 게이트를 재생성하면
+게이트가 다시 목록을 확인한다(앱의 목록 확인은 그대로 두어도 된다).
+
+**미확인**: lab.ssafy.com에 로그인할 수 있는 계정이 현재 SSAFY 교육생만인지(이전 기수·강사 계정
+포함 여부)는 확인하지 않았다.

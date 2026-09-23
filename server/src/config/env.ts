@@ -115,6 +115,10 @@ const environment = z.object({
   // 뒤에 있고 운영 토큰은 필요 없다. S15P21C204-361. 동시에 모이는 중일 수 있는 시연 방 수다. 기본 1,
   // 발표 배포는 3. 0 으로 내리면 발급 API 가 503 으로 답한다. 시연 방은 MAX_ROOMS 안에서 함께 센다.
   SHOWCASE_ROOMS: z.coerce.number().int().min(0).max(10).default(1),
+  // S15P21C204-367. `/demo`·`/showcase` 를 여는 운영자 등록 이메일 파일(한 줄에 하나). 로그인
+  // 게이트는 SSAFY GitLab 계정 전체를 통과시키므로 운영자 판정은 서버가 이 목록으로 한다.
+  // 없으면 두 관리 경로는 아무도 통과시키지 않는다.
+  DEMO_ADMIN_EMAILS_FILE: z.string().min(1).optional(),
 
   // S15P21C204-364. LiveKit monthly participant-minute guard. The plan limit and the dashboard
   // baseline ("<used minutes>@<ISO time read>") come together from the private env file; with
@@ -361,6 +365,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     demoMaxRooms: raw.DEMO_MAX_ROOMS,
     livekitMonthlyUsage: monthlyUsage,
     showcaseRooms: raw.SHOWCASE_ROOMS,
+    demoAdminEmailsFile: raw.DEMO_ADMIN_EMAILS_FILE ?? null,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

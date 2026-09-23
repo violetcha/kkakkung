@@ -5,9 +5,9 @@
  * 모두 지금 열려 있는 시연 방 하나에 모이고(없으면 새로 연다), 역할은 각자 고른다. 한 역할은
  * 둘까지라 셋째가 같은 역할을 고르면 `ROLE_FULL` 로 다른 역할을 고르게 한다.
  *
- * 인증은 `/demo` 와 같다. 호스트 nginx 가 GitLab 프로젝트 멤버 SSO 를 지난 뒤에만 `X-Demo-Admin`
- * 을 써 주므로, `trustedProxy` 없이는 호출자가 보낸 헤더를 신원으로 삼지 않는다. 운영 토큰은
- * 이 경로와 무관하고 브라우저에 전달되지 않는다.
+ * 인증은 `/demo` 와 같다. 호스트 nginx 가 GitLab SSO 를 지난 뒤 로그인 이메일로 `X-Demo-Admin`
+ * 을 써 주고, 서버는 그 이메일이 운영자 목록에 있을 때만 받는다(S15P21C204-367). `trustedProxy`
+ * 없이는 호출자가 보낸 헤더를 신원으로 삼지 않는다. 운영 토큰은 이 경로와 무관하다.
  */
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
@@ -18,6 +18,7 @@ import {
   type ShowcaseRoomResponse,
 } from '@kkakkung/protocol/game-messages';
 import { PRODUCT_PROTOCOL_VERSION } from '@kkakkung/protocol/version';
+import { isOperatorRequest, type OperatorAllowlist } from './operator-allowlist.js';
 import type { ProductSessionStore } from './ProductSessionStore.js';
 import { generateRoomCode } from './SessionRoutes.js';
 import type { SlotRegistry } from './SlotRegistry.js';
@@ -26,6 +27,8 @@ export type ShowcaseRouteDependencies = Readonly<{
   sessions: ProductSessionStore;
   slots: SlotRegistry;
   trustedProxy: boolean;
+  /** 운영자 등록 이메일 목록(S15P21C204-367). */
+  operatorAllowed: OperatorAllowlist;
   monotonicNow: () => number;
   /** 세션을 받고 접속하기까지 기다려 주는 시간. 데모 방과 같은 값을 쓴다. */
   admissionTtlMs: number;
@@ -40,21 +43,12 @@ export type ShowcaseRouteDependencies = Readonly<{
 const fail = (res: Response, status: number, code: ShowcaseErrorCode) =>
   void res.status(status).json({ error: code });
 
-function authorized(request: Request, trustedProxy: boolean): boolean {
-  const identity = request.headers['x-demo-admin'];
-  return (
-    trustedProxy &&
-    typeof identity === 'string' &&
-    identity.trim().length > 0 &&
-    identity.length <= 256
-  );
-}
-
 export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
   const router = Router();
   router.post(SHOWCASE_ROOM_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (!authorized(req, deps.trustedProxy)) return fail(res, 401, 'UNAUTHORIZED');
+    if (!isOperatorRequest(req, deps.trustedProxy, deps.operatorAllowed))
+      return fail(res, 401, 'UNAUTHORIZED');
     if (!deps.ready()) return fail(res, 503, 'ADMISSION_CLOSED');
     const parsed = showcaseRoomRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {}));
     if (!parsed.success) return fail(res, 400, 'INVALID_REQUEST');
@@ -105,11 +99,15 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
 }
 
 /** `SHOWCASE_ROOMS=0` 인 배포. 인증은 같게 보고 방은 절대 열지 않는다. */
-export function createShowcaseUnavailableRoutes(trustedProxy: boolean): Router {
+export function createShowcaseUnavailableRoutes(
+  trustedProxy: boolean,
+  operatorAllowed: OperatorAllowlist,
+): Router {
   const router = Router();
   router.post(SHOWCASE_ROOM_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (!authorized(req, trustedProxy)) return fail(res, 401, 'UNAUTHORIZED');
+    if (!isOperatorRequest(req, trustedProxy, operatorAllowed))
+      return fail(res, 401, 'UNAUTHORIZED');
     return fail(res, 503, 'SHOWCASE_UNAVAILABLE');
   });
   return router;

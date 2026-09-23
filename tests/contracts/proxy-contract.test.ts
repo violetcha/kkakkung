@@ -87,10 +87,20 @@ describe('host nginx (TLS edge)', () => {
     const admin = read('infra/nginx/demo-admin.conf');
     expect(admin).toContain('auth_request /oauth2/auth;');
     expect(admin).toContain('error_page 401 = @sso_signin;');
+    // S15P21C204-367. 게이트는 SSAFY 계정 전체를 통과시키므로 로그인 이메일을 넘겨 서버가
+    // 운영자 목록과 대조한다. 사용자 이름이 아니라 이메일이어야 목록과 맞는다.
     expect(admin).toContain(
-      'auth_request_set $demo_admin_user $upstream_http_x_auth_request_user;',
+      'auth_request_set $demo_admin_email $upstream_http_x_auth_request_email;',
     );
-    expect(admin).toContain('proxy_set_header X-Demo-Admin $demo_admin_user;');
+    expect(admin).toContain('proxy_set_header X-Demo-Admin $demo_admin_email;');
+    const production = read('infra/compose.production.yaml');
+    expect(production).toContain(
+      'DEMO_ADMIN_EMAILS_FILE: /etc/kkakkung/sso-access/allowed-emails.txt',
+    );
+    expect(production).toContain('source: /opt/kkakkung/sso-access');
+    expect(production).toContain('target: /etc/kkakkung/sso-access');
+    // 목록 디렉터리가 없어도 게임 서버는 떠야 한다(두 관리 경로만 닫힌다).
+    expect(production).toContain('create_host_path: true');
     expect(admin).toContain('proxy_set_header X-SSO-User "";');
     for (const location of [
       'location = /demo {',
@@ -135,20 +145,15 @@ describe('container nginx (web-proxy)', () => {
 });
 
 describe('SSO proxy compose', () => {
-  it('pins the image, binds to localhost, restricts to registered emails with PKCE', () => {
+  it('pins the image, binds to localhost, admits every lab.ssafy.com account with PKCE', () => {
     expect(sso).toMatch(/image: quay\.io\/oauth2-proxy\/oauth2-proxy:v7\.\d+\.\d+/);
     expect(sso).toContain("'127.0.0.1:4180:4180'");
     expect(sso).toContain("OAUTH2_PROXY_GITLAB_PROJECTS: ''");
-    expect(sso).toContain("OAUTH2_PROXY_EMAIL_DOMAINS: ''");
-    expect(sso).not.toContain("OAUTH2_PROXY_EMAIL_DOMAINS: '*'");
+    // S15P21C204-367. SSAFY 공개: 로그인 계정 전체. 운영자 목록은 게임 서버가 본다.
+    expect(sso).toContain("OAUTH2_PROXY_EMAIL_DOMAINS: '*'");
+    expect(sso).not.toContain('OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE');
+    expect(sso).toContain('OAUTH2_PROXY_OIDC_ISSUER_URL: https://lab.ssafy.com');
     expect(sso).toContain('OAUTH2_PROXY_SCOPE: openid profile email\n');
-    expect(sso).toContain(
-      'OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: /etc/oauth2-proxy/allowed-emails.txt',
-    );
-    expect(sso).toContain('source: /opt/kkakkung/sso-access');
-    expect(sso).toContain('target: /etc/oauth2-proxy');
-    expect(sso).toContain('read_only: true');
-    expect(sso).toContain('create_host_path: false');
     expect(sso).toContain('OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256');
     expect(sso).toContain('OAUTH2_PROXY_REDIRECT_URL: https://j15c204.p.ssafy.io/oauth2/callback');
     expect(sso).toMatch(/OAUTH2_PROXY_COOKIE_SECURE: 'true'/);
