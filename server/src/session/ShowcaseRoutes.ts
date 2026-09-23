@@ -54,8 +54,9 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
     if (!parsed.success) return fail(res, 400, 'INVALID_REQUEST');
     deps.cleanupReservations?.();
     const existing = deps.slots.joinableShowcaseRoom();
-    // 넷이 찬 방이 아직 시작 전이면 다섯째는 기다린다. 무리를 둘로 나누는 새 방은 열지 않는다.
-    if (existing === null && deps.slots.formingShowcaseRoom()) return fail(res, 503, 'CAPACITY');
+    // S15P21C204-361. 빈 자리가 있는 시연 방이 있으면 거기에 앉힌다. 없으면 모이는 중인 시연 방이
+    // 한도(SHOWCASE_ROOMS) 미만일 때만 새 방을 열고, 한도에 닿았으면 기다리게 한다.
+    if (existing === null && !deps.slots.canOpenShowcaseRoom()) return fail(res, 503, 'CAPACITY');
     let roomCode: string;
     let issued: ReturnType<ProductSessionStore['issue']>;
     try {

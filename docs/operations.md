@@ -36,7 +36,7 @@
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
 | `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                              |
 | `DEMO_MAX_ROOMS`                           | `3`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                            |
-| `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                   |
+| `SHOWCASE_ROOMS`                           | `1`                     | 발표 시연 방(`/showcase`)이 동시에 모일 수 있는 수(0~10, 발표 배포는 `3`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 시연 방마다 `MAX_ROOMS` 예산에서 한 방을 쓴다. `0`이면 끔 |
 | `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
 `NODE_ENV=production`은 거절하며 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`, `MEDIA_MODE=livekit`을 쓴다.
@@ -66,8 +66,11 @@ sudo nginx -t && sudo systemctl reload nginx
 재경기는 없고 결과 화면이 끝이다. 미디어(카메라·음성)는 일반 경기와 같이 발급된다.
 
 인증은 `/demo`와 같은 GitLab 로그인·등록 이메일 SSO 조각을 쓰고 운영 토큰은 필요 없다. `SHOWCASE_ROOMS`
-는 기본 `1`이며 `0`이면 발급 API가 503 `SHOWCASE_UNAVAILABLE`로 답한다. 시연 방도 `MAX_ROOMS`
-예산에서 한 방을 쓴다. 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
+는 동시에 모이는 중일 수 있는 시연 방 수로 기본 `1`, 발표 배포는 `3`이다. `0`이면 발급 API가 503
+`SHOWCASE_UNAVAILABLE`로 답한다. `/showcase`를 연 사람은 빈 자리가 있는 시연 방 중 가장 먼저 열린 방에
+앉고, 그런 방이 없으면 모이는 중인 시연 방이 한도 미만일 때 새 방이 열리며, 한도에 닿았으면 503
+`CAPACITY`로 기다린다. 시연 방도 데모 방과 달리 `MAX_ROOMS`·좌석 예산에서 방마다 한 방을 쓴다(시연
+3개면 일반 방은 `MAX_ROOMS - 3`개). 호스트 nginx에 `/showcase`·`/api/showcase` 위치가 있어야 하므로 처음
 배포할 때 `host.conf`를 다시 설치한다.
 
 CLI는 장애 대응·자동화처럼 호스트에서만 쓰는 보조 경로다. `DEMO_ROOMS=1`과 `OPS_TOKEN`이

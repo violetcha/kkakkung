@@ -185,3 +185,69 @@ describe('showcase rooms disabled', () => {
     }
   });
 });
+
+describe('three showcase rooms at once (S15P21C204-361)', () => {
+  it('fills the earliest open room first, opens up to three, and answers CAPACITY for a fourth', async () => {
+    const own = new SlotRegistry({ maxRooms: 10, maxShowcaseRooms: 3 });
+    const store = new ProductSessionStore({ now: () => 1_000_000 });
+    const app = express();
+    app.use(express.json({ limit: '2kb' }));
+    app.use(
+      createShowcaseRoutes({
+        sessions: store,
+        slots: own,
+        trustedProxy: true,
+        monotonicNow: () => 1_000_000,
+        admissionTtlMs: 10 * 60_000,
+        ready: () => true,
+      }),
+    );
+    const local = await listen(app);
+    try {
+      const seat = async (role: 'runner' | 'tagger') => {
+        const response = await fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-demo-admin': 'member' },
+          body: JSON.stringify({ role }),
+        });
+        return response.status === 201
+          ? showcaseRoomResponseSchema.parse(await response.json()).roomCode
+          : `${response.status}:${((await response.json()) as { error: string }).error}`;
+      };
+      const fill = async () => {
+        const codes = await Promise.all([
+          seat('runner'),
+          seat('runner'),
+          seat('tagger'),
+          seat('tagger'),
+        ]);
+        expect(new Set(codes).size).toBe(1);
+        return codes[0]!;
+      };
+      // 첫 무리 넷은 한 방. 다섯째는 새 방을 연다(한도 3).
+      const first = await fill();
+      const second = await seat('runner');
+      expect(second).not.toBe(first);
+      expect(own.formingShowcaseRooms()).toBe(2);
+      // 둘째 방에 빈 자리가 있는 동안은 셋째 방을 열지 않고 거기에 앉힌다.
+      expect(await seat('tagger')).toBe(second);
+      expect(await seat('runner')).toBe(second);
+      expect(await seat('tagger')).toBe(second);
+      expect(own.occupied(second)).toBe(4);
+      const third = await fill();
+      expect(new Set([first, second, third]).size).toBe(3);
+      expect(own.formingShowcaseRooms()).toBe(3);
+      // 셋이 다 모이는 중이면 열셋째는 기다린다.
+      expect(await seat('runner')).toBe('503:CAPACITY');
+      // 시연 방 셋은 MAX_ROOMS 예산을 셋 쓴다.
+      expect(own.roomCodes().size).toBe(3);
+      // 한 방이 시작하면 모이는 중이 둘이 되어 새 방이 열린다.
+      own.setPhase(first, 'TEAM_PRACTICE', 1_000_000);
+      const fourth = await seat('runner');
+      expect(fourth).not.toBe('503:CAPACITY');
+      expect(own.roomCodes().size).toBe(4);
+    } finally {
+      await new Promise<void>((resolve) => local.server.close(() => resolve()));
+    }
+  });
+});
