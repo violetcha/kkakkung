@@ -275,11 +275,11 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
       <div>
         <h4>{POSE_LABELS[snapshot.self.challenge.poseKind]}</h4>
         <p>
-          두 팔이 카메라에 들어오게 하고 자세를 1.2초 유지하세요. Esc로 취소하거나 키보드 조작으로
-          전환할 수 있습니다.
+          얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요. Esc로 취소하거나 키보드
+          조작으로 전환할 수 있습니다.
         </p>
         <progress aria-label="체험 자세 유지" max={1} value={snapshot.poseProgress} />
-        <PoseArmsNotice />
+        <PoseArmsNotice kind={snapshot.self.challenge.poseKind} />
         {/* 우상단 창은 상대가 보는 내 아바타라 프레이밍을 알 수 없다. 자세를 잡는 동안에만
             실제 카메라 화면을 옆에 둔다. 이 영상은 어디로도 전송되지 않는다. */}
         <div className="pose-preview" ref={posePreview} aria-label="내 웹캠 미리보기" />
