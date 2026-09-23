@@ -479,6 +479,8 @@ describe('local product integration with synthetic device/Cloud boundaries', () 
       await waitPhase('ABORTED');
       await expect(departedHost.runtime.leave()).resolves.toBeUndefined();
       expect(snapshots().every((s) => s.round?.abortReason === 'GAME_CONNECTION_LOST')).toBe(true);
+      // S15P21C204-370. 남은 사람에게 누가 끊겼는지 알린다. 끊긴 사람 한 명만 이름이 나온다.
+      expect(snapshots().every((s) => /^통합\d+$/.test(s.round?.abortedBy ?? ''))).toBe(true);
       await expect
         .poll(async () => (await server.inspect()).participantCount, { timeout: 8000 })
         .toBe(0);

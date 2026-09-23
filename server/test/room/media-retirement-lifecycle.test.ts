@@ -840,3 +840,50 @@ it('stops a decided round: no more frames, no late generation and no abort over 
     f.close();
   }
 });
+
+// S15P21C204-370. 무효가 얼마나 자주·누구 때문에 나는지 세야 재접속 유예가 필요한지 정할 수 있다.
+it('records who dropped when a lost connection voids the round, and clears it for the next', () => {
+  const f = fixture();
+  try {
+    const room = f.room as any;
+    room.setPhase('PLAYING');
+    room.connectionLosses = [
+      { nickname: 'test5', role: 'runner' },
+      { nickname: 'test4', role: 'tagger' },
+    ];
+    room.abortMatch('GAME_CONNECTION_LOST', 'CORE_ABORT');
+    expect(room.phase).toBe('ABORTED');
+    expect(room.state.abortedBy).toBe('test5, test4');
+    const aborted = f.events.filter((event) => event.event === 'room.match_aborted');
+    expect(aborted).toHaveLength(1);
+    expect(aborted[0].fields).toMatchObject({
+      phase: 'PLAYING',
+      code: 'GAME_CONNECTION_LOST',
+      lostRunners: 1,
+      lostTaggers: 1,
+      name: 'match',
+    });
+    // 닉네임은 이벤트에 남기지 않는다. 역할 수만 센다.
+    expect(JSON.stringify(aborted[0].fields)).not.toContain('test5');
+
+    room.setPhase('LOBBY');
+    expect(room.state.abortedBy).toBeUndefined();
+  } finally {
+    f.close();
+  }
+});
+
+it('names nobody when a round is voided for a reason other than a lost connection', () => {
+  const f = fixture();
+  try {
+    const room = f.room as any;
+    room.setPhase('PLAYING');
+    room.connectionLosses = [{ nickname: 'test5', role: 'runner' }];
+    room.abortMatch('SERVER_TICK_OVERLOAD', 'TICK_OVERLOAD');
+    expect(room.state.abortedBy).toBeUndefined();
+    const [aborted] = f.events.filter((event) => event.event === 'room.match_aborted');
+    expect(aborted.fields).toMatchObject({ lostRunners: 0, lostTaggers: 0 });
+  } finally {
+    f.close();
+  }
+});

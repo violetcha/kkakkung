@@ -304,6 +304,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private pendingLayout: PendingLayout | null = null;
     private startRequestedTick: number | null = null;
     private abortReason: PublicMatchState['abortReason'] | null = null;
+    /**
+     * S15P21C204-370. 이번 판에서 연결이 끊긴 참가자. 규칙 코어는 다음 tick 에 판을 무효로 하는데
+     * 그때는 로비 명단에서 이미 빠졌으므로 끊기는 순간 적어 둔다. 새 판을 시작하면 비운다.
+     */
+    private connectionLosses: { nickname: string; role: Role | null }[] = [];
+    private abortedBy: string | null = null;
     private readonly dispatcher: EventDispatcher;
     private readonly driver: MatchDriver<State>;
     /** S15P21C204-258. Set for a demo room: the operator's role, with five puppets filling 3:3. */
@@ -760,8 +766,15 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // includes the running match: reporting the loss would void it and free the seat, and the
       // operator would come back to a closed room (S15P21C204-312).
       const preserveDemoSession = this.demo;
-      if ((control || heartbeatLost) && !preserveDemoSession)
+      if ((control || heartbeatLost) && !preserveDemoSession) {
+        // 연습에서 끊긴 사람은 판을 무효로 만들지 않는다(RL-08). 경기에서 끊긴 사람만 적는다.
+        if (this.phase !== 'TEAM_PRACTICE' && this.context.instanceOf(auth.playerId))
+          this.connectionLosses.push({
+            nickname: auth.nickname,
+            role: this.roles.get(auth.playerId) ?? null,
+          });
         this.handleConnectionLost(auth.playerId);
+      }
       if (preserveDemoSession && this.clientsByPlayer.size === 0)
         this.demoVacantSince = deps.monotonicNow();
       if (!preserveDemoSession) this.lobby.remove(auth.playerId);
@@ -1895,6 +1908,19 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // A decided round stays decided: a late failure must not turn its winner into ABORTED (335).
       if (this.phase === 'RESULT') return;
       this.reportPreparationFailure('ABORTED', diagnostic, reason);
+      // S15P21C204-370. 무효가 얼마나 자주, 어느 단계에서, 누가 끊겨서 나는지 센다. 재접속 유예를
+      // 넣을지는 이 수치로 정한다. 닉네임은 남기지 않고 역할만 남긴다.
+      const lost = reason === 'GAME_CONNECTION_LOST' ? this.connectionLosses : [];
+      this.emitEvent('room.match_aborted', 'warn', {
+        phase: this.phase,
+        code: reason,
+        reason: diagnostic,
+        lostRunners: lost.filter((entry) => entry.role === 'runner').length,
+        lostTaggers: lost.filter((entry) => entry.role === 'tagger').length,
+        count: this.clientsByPlayer.size,
+        name: this.demo ? 'demo' : this.showcase ? 'showcase' : 'match',
+      });
+      this.abortedBy = lost.length > 0 ? lost.map((entry) => entry.nickname).join(', ') : null;
       this.invalidateLayout();
       this.blockedReason = diagnostic;
       this.abortReason = reason;
@@ -2121,6 +2147,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.practice.stop();
       this.startRequestedTick = null;
       this.abortReason = null;
+      this.abortedBy = null;
+      this.connectionLosses = [];
       this.blockedReason = null;
       this.seenMediaRequests.clear();
       this.seenMediaEvents.clear();
@@ -2163,7 +2191,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         count: this.clientsByPlayer.size,
       });
       this.phase = next;
-      if (next !== 'ABORTED') this.abortReason = null;
+      if (next !== 'ABORTED') {
+        this.abortReason = null;
+        this.abortedBy = null;
+      }
       this.context.bumpVersion();
       deps.slots.setPhase(this.roomCode, next, deps.monotonicNow());
       this.syncPublic();
@@ -2424,6 +2455,7 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       nullable.startAt = this.context.startAt ?? undefined;
       nullable.deadlineTick = this.context.deadlineTick ?? undefined;
       nullable.abortReason = this.abortReason ?? undefined;
+      nullable.abortedBy = this.phase === 'ABORTED' ? (this.abortedBy ?? undefined) : undefined;
       nullable.preparationIssue = ['LOBBY', 'DEVICE_CHECK'].includes(this.phase)
         ? preparationIssue(this.blockedReason)
         : undefined;

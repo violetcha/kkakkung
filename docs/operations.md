@@ -204,10 +204,11 @@ pnpm --filter @kkakkung/web build && node scripts/check-security-headers.mjs
 | Cloud 자격 오류·할당량 소진·기록 손상·SHA 불일치                      | 계속 차단한다. 숫자 변경, 성공 파일 생성, 빈 원장 재생성으로 풀지 않는다                                                                                                                                                                                                        |
 
 ```bash
-docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.command_rejected|room.load_ready|room.heartbeat_stall|room.media_uncertain_released|room.uncaught_exception|process.fault|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
+docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.preparation_failed|room.match_aborted|room.command_rejected|room.load_ready|room.heartbeat_stall|room.media_uncertain_released|room.uncaught_exception|process.fault|media.prepare_failed|media.api.failed|media.retirement.unresolved|media.webhook|media.policy.uncertain)"'
 ```
 
 - `room.preparation_failed`: `outcome`(ABORTED 또는 DEVICE_CHECK 복귀), `reason`(`LOADING_TIMEOUT`, `MAP_FINALIZING_TIMEOUT`, `LAYOUT:…`, `MEDIA_PREPARE:…`), 로딩 집계.
+- `room.match_aborted`(370): 경기 무효. `code`(`GAME_CONNECTION_LOST`·`SERVER_TICK_OVERLOAD`·`MEDIA_*`), `phase`(무효가 난 단계), `lostRunners`·`lostTaggers`(연결이 끊긴 도망자·술래 수, 닉네임은 남기지 않음), `count`(남은 연결), `name`(`match`·`showcase`·`demo`). 재접속 유예가 필요한지는 `GAME_CONNECTION_LOST`의 빈도로 판단한다. 로그는 컨테이너당 10MB×3까지만 남으므로 며칠 단위로 보려면 `scripts/collect-observability.mjs`로 모아 둔다.
 - `room.command_rejected`: READY·PRACTICE_READY·LOAD_READY·REMATCH 거절 코드와 지점(gate·queue·apply). 실패 시 `room.load_ready`가 0건이면 클라이언트가 보고하지 않은 것이다.
 - `room.heartbeat_stall`: 서버가 하트비트 간격(2초) 이상 멈췄다가 재개됨. `durationMs`는 멈춘 길이, `count`는 그 시간을 침묵으로 세지 않은 연결 수. 이때 연결을 끊지 않으므로 방이 해체되지 않는다.
 - `room.media_uncertain_released`: 결과를 모르는 미디어 준비(커서 없는 TIMEOUT 등)로 잡혀 있던 방을 놓아줌. `reason`은 `round-ended`(새 라운드가 이전 경기를 E에 넘김)·`disposed`(방 폐기)·`expired`(330초 경과, E의 세대 수명 300초 뒤). 자주 보이면 준비 실패 원인을 `media.prepare_failed`에서 찾는다.

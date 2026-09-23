@@ -342,6 +342,8 @@ describe('public state and versioning', () => {
               'roomExpiresInSeconds',
               'preparationIssue',
               'rematchState',
+              // S15P21C204-370. 연결이 끊겨 무효가 된 판(ABORTED)에만 있다.
+              'abortedBy',
             ].includes(f),
         )
         .sort(),

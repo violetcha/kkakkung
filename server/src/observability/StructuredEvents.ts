@@ -35,6 +35,7 @@ export const EVENT_NAMES = Object.freeze([
   'observability.dropped',
   'room.phase',
   'room.preparation_failed',
+  'room.match_aborted',
   'room.command_rejected',
   'room.load_ready',
   'room.heartbeat_stall',
@@ -81,6 +82,9 @@ export const EVENT_FIELD_KEYS = Object.freeze([
   'method',
   'status',
   'command',
+  /** S15P21C204-370. 연결이 끊겨 무효가 된 판에서 끊긴 도망자·술래 수. */
+  'lostRunners',
+  'lostTaggers',
 ] as const);
 
 export type StructuredEventFieldKey = (typeof EVENT_FIELD_KEYS)[number];

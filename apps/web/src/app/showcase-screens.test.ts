@@ -132,6 +132,19 @@ it('S15P21C204-363: tells a showcase member the host closed the room and points 
   expect(removed).toContain('>입장 화면으로<');
 });
 
+it('S15P21C204-370: tells a dropped player the room code to come back with', () => {
+  const lost = renderToStaticMarkup(
+    createElement(ConnectionLostScreen, { onLeave() {}, roomCode: 'ABCDEF' }),
+  );
+  expect(lost).toContain('방장이 로비로 돌아가면 방 코드 ABCDEF로 다시 참가할 수 있습니다.');
+  const unknown = renderToStaticMarkup(createElement(ConnectionLostScreen, { onLeave() {} }));
+  expect(unknown).toContain('입장 화면에서 다시 참가해 주세요.');
+  const showcase = renderToStaticMarkup(
+    createElement(ConnectionLostScreen, { onLeave() {}, showcase: true, roomCode: 'ABCDEF' }),
+  );
+  expect(showcase).not.toContain('ABCDEF');
+});
+
 it('S15P21C204-362: tells a member the server is not admitting instead of blaming a full room', () => {
   expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:503:ADMISSION_CLOSED'))).toBe(
     '지금은 입장을 받고 있지 않습니다. 서버가 준비되면 다시 시도해 주세요.',

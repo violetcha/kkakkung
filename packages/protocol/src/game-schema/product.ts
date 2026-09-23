@@ -100,6 +100,8 @@ export type PublicRoundState = Readonly<{
   roomExpiresInSeconds?: number;
   preparationIssue?: PreparationIssue;
   rematchState?: RematchState;
+  /** S15P21C204-370. 연결이 끊겨 무효가 된 경기에서 끊긴 참가자의 닉네임. ABORTED 에만 있다. */
+  abortedBy?: string;
 }>;
 
 export type ExchangeView = Readonly<{
@@ -303,6 +305,11 @@ export const PublicMatchState = schema(
     roomExpiresInSeconds: t.number(),
     preparationIssue: t.string<PreparationIssue>(),
     rematchState: t.string<RematchState>(),
+    /**
+     * S15P21C204-370. 연결이 끊겨 경기가 무효가 됐을 때 끊긴 참가자의 닉네임. 닉네임은 로비 명단에
+     * 이미 공개된 값이다. 그 밖의 무효 사유에는 없다.
+     */
+    abortedBy: t.string(),
   },
   'PublicMatchState',
 );
@@ -326,6 +333,7 @@ export function readPublicRoundState(state: {
   roomExpiresInSeconds?: number | null;
   preparationIssue?: string | null;
   rematchState?: string | null;
+  abortedBy?: string | null;
 }): PublicRoundState {
   const result = nullable(state.result);
   return {
@@ -354,6 +362,9 @@ export function readPublicRoundState(state: {
     ...(REMATCH_STATES.includes(state.rematchState as RematchState)
       ? { rematchState: state.rematchState as RematchState }
       : {}),
+    ...(state.phase === 'ABORTED' && typeof state.abortedBy === 'string' && state.abortedBy
+      ? { abortedBy: state.abortedBy }
+      : {}),
     ...(typeof state.roomExpiresInSeconds === 'number' &&
     Number.isFinite(state.roomExpiresInSeconds) &&
     state.roomExpiresInSeconds >= 0
@@ -378,4 +389,5 @@ export const PUBLIC_MATCH_STATE_FIELDS = [
   'roomExpiresInSeconds',
   'preparationIssue',
   'rematchState',
+  'abortedBy',
 ] as const;

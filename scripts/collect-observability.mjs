@@ -69,6 +69,7 @@ export const EVENT_NAMES = Object.freeze([
   'observability.dropped',
   'room.phase',
   'room.preparation_failed',
+  'room.match_aborted',
   'room.command_rejected',
   'room.load_ready',
   'room.heartbeat_stall',
