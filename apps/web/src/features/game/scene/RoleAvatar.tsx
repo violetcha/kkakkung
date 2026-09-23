@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, type Texture } from 'three';
 import type { VisibleEntity } from '@kkakkung/protocol/game-schema';
+import type { Role } from '@kkakkung/protocol/game-schema';
 import type { FaceTextures } from './face-textures';
 import type { QualityPreset } from './quality-presets';
 import { sampleActor } from './action-interpolation';
@@ -11,14 +12,25 @@ import { applyAvatarAnimation } from './AvatarAnimation';
 import { RunnerFaceSurface } from './RunnerFaceSurface';
 import { roleAssetRequest } from './role-avatar-state';
 import { NeutralAvatar, type NeutralAvatarResources } from './NeutralAvatar';
+import {
+  applyMeshyWalk,
+  createMeshyAvatarInstance,
+  loadMeshyAvatarTemplate,
+  type MeshyAvatarInstance,
+} from './meshy-avatar-instance';
 
 type Player = Extract<VisibleEntity, { kind: 'player' }>;
 export type AvatarRenderState = 'loading' | 'ready' | 'fallback' | 'removed';
 export type AvatarStateReporter = (playerId: string, state: AvatarRenderState) => void;
 
+type RoleAvatarInstance =
+  | Readonly<{ kind: 'meshy'; avatar: MeshyAvatarInstance }>
+  | Readonly<{ kind: 'contract'; avatar: AvatarInstance }>;
+
 export function RoleAvatar({
   player,
   ally,
+  observerRole,
   quality,
   faces,
   standIn,
@@ -28,6 +40,7 @@ export function RoleAvatar({
 }: {
   player: Player;
   ally: boolean;
+  observerRole: Role | null;
   quality: QualityPreset;
   faces?: FaceTextures;
   standIn?: Texture | null;
@@ -37,17 +50,17 @@ export function RoleAvatar({
 }) {
   const initial = sampleActor(player, renderTick());
   const overlayRoot = useRef<Group>(null);
-  const instanceRef = useRef<AvatarInstance | null>(null);
+  const instanceRef = useRef<RoleAvatarInstance | null>(null);
   const reporter = useRef(onState);
   reporter.current = onState;
-  const [instance, setInstance] = useState<AvatarInstance | null>(null);
+  const [instance, setInstance] = useState<RoleAvatarInstance | null>(null);
   const playerId = player.id;
-  const requestedRole = roleAssetRequest(player);
+  const requestedRole = roleAssetRequest(player, observerRole);
   const renderState = useRef<AvatarRenderState>(requestedRole ? 'loading' : 'fallback');
 
   useEffect(() => {
     let active = true;
-    let owned: AvatarInstance | null = null;
+    let owned: RoleAvatarInstance | null = null;
     const reportState = (state: AvatarRenderState) => {
       renderState.current = state;
       reporter.current?.(playerId, state);
@@ -59,24 +72,34 @@ export function RoleAvatar({
       return () => reporter.current?.(playerId, 'removed');
     }
     reportState('loading');
-    void loadRoleAvatar(requestedRole, quality).then((result) => {
-      if (!active) return;
-      if (result.status === 'fallback') {
-        reportState('fallback');
-        return;
-      }
+    void (async () => {
       try {
-        owned = createAvatarInstance(result.template);
+        const template = await loadMeshyAvatarTemplate(requestedRole);
+        if (!active) return;
+        owned = { kind: 'meshy', avatar: createMeshyAvatarInstance(template) };
         instanceRef.current = owned;
         setInstance(owned);
         reportState('ready');
       } catch {
-        reportState('fallback');
+        const result = await loadRoleAvatar(requestedRole, quality);
+        if (!active) return;
+        if (result.status === 'fallback') {
+          reportState('fallback');
+          return;
+        }
+        try {
+          owned = { kind: 'contract', avatar: createAvatarInstance(result.template) };
+          instanceRef.current = owned;
+          setInstance(owned);
+          reportState('ready');
+        } catch {
+          reportState('fallback');
+        }
       }
-    });
+    })();
     return () => {
       active = false;
-      owned?.dispose();
+      owned?.avatar.dispose();
       if (instanceRef.current === owned) instanceRef.current = null;
       reporter.current?.(playerId, 'removed');
     };
@@ -94,15 +117,16 @@ export function RoleAvatar({
     overlayRoot.current?.rotation.set(0, next.yaw, 0);
     const current = instanceRef.current;
     if (!current) return;
-    current.root.position.set(next.x, 0, next.z);
-    current.root.rotation.set(0, next.yaw, 0);
-    applyAvatarAnimation(current, next.stride, delta);
+    current.avatar.root.position.set(next.x, 0, next.z);
+    current.avatar.root.rotation.set(0, next.yaw, 0);
+    if (current.kind === 'meshy') applyMeshyWalk(current.avatar, next.stride);
+    else applyAvatarAnimation(current.avatar, next.stride, delta);
   });
 
-  const badgeY = player.role === 'tagger' ? 1.82 : 1.34;
+  const badgeY = player.role === 'tagger' ? 2.32 : 1.72;
   return (
     <group dispose={null}>
-      {instance && <primitive object={instance.scene} dispose={null} />}
+      {instance && <primitive object={instance.avatar.scene} dispose={null} />}
       <group ref={overlayRoot} position={[initial.x, 0, initial.z]} rotation={[0, initial.yaw, 0]}>
         {!instance && <NeutralAvatar resources={resources} />}
         {ally && (
@@ -113,9 +137,9 @@ export function RoleAvatar({
           />
         )}
       </group>
-      {player.role === 'runner' && instance?.faceSocket && (
+      {player.role === 'runner' && instance?.kind === 'contract' && instance.avatar.faceSocket && (
         <RunnerFaceSurface
-          socket={instance.faceSocket}
+          socket={instance.avatar.faceSocket}
           playerId={player.id}
           faces={faces}
           standIn={standIn}

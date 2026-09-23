@@ -7,6 +7,7 @@ import { prefetchAvatarAssets } from './avatar-loader';
 import { visibilityMask } from './visibility-mask';
 import { createNeutralAvatarResources } from './NeutralAvatar';
 import { RoleAvatar, type AvatarStateReporter } from './RoleAvatar';
+import { prefetchMeshyAvatarAssets } from './meshy-avatar-instance';
 
 export function FaceAvatars({
   view,
@@ -26,8 +27,9 @@ export function FaceAvatars({
   const resources = useMemo(createNeutralAvatarResources, []);
   useEffect(() => () => resources.dispose(), [resources]);
   useEffect(() => {
-    void prefetchAvatarAssets(quality);
+    void Promise.allSettled([prefetchMeshyAvatarAssets(), prefetchAvatarAssets(quality)]);
   }, [quality]);
+  const observerRole = view.self?.role ?? null;
   return (
     <group dispose={null}>
       {visibilityMask(view).players.map((player) => (
@@ -35,6 +37,7 @@ export function FaceAvatars({
           key={player.id}
           player={player}
           ally={player.role !== undefined && player.role === view.self?.role}
+          observerRole={observerRole}
           quality={quality}
           faces={faces}
           standIn={standIn}

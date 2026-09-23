@@ -254,7 +254,9 @@ export type DemoScenarioId = (typeof DEMO_SCENARIO_IDS)[number];
 const demoScenarioOptionKeySchema = z.enum(['role', 'distance', 'side', 'facing', 'installer']);
 export const demoScenarioOptionsSchema = z.strictObject({
   role: z.enum(['runner', 'tagger']).optional(),
-  distance: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  distance: z
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
+    .optional(),
   side: z.enum(['front', 'left', 'right', 'back']).optional(),
   facing: z.enum(['toward', 'away']).optional(),
   installer: z.enum(['puppet', 'me']).optional(),

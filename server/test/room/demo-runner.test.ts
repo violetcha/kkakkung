@@ -609,6 +609,13 @@ it('받지 않는 선택지는 거절한다', () => {
   expect(runner.status.scenario).toBeNull();
 });
 
+it('다가오기 대본은 다섯 칸 거리 선택을 받는다', () => {
+  const runner = createDemoRunner();
+  const operator = player({ playerId: 'operator', role: 'runner' });
+  const tagger = player({ playerId: 'puppet-tagger', role: 'tagger', cell: { x: 3, y: 3 } });
+  expect(runner.start('approach', world([operator, tagger]), { distance: 5 })).toBeNull();
+});
+
 it('관리자 상태가 없으면 관리자 주도 대본을 시작하지 않는다', () => {
   // 방(S15P21C204-318)이 채우기 전이다. 반쯤 도는 버튼을 보여 주지 않는다.
   const runner = createDemoRunner();

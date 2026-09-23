@@ -9,7 +9,7 @@ import {
 
 type DemoOptionValues = Readonly<{
   role?: 'tagger' | 'runner';
-  distance?: 1 | 2 | 3;
+  distance?: 1 | 2 | 3 | 4 | 5;
   side?: 'front' | 'left' | 'right' | 'back';
   facing?: 'toward' | 'away';
   installer?: 'puppet' | 'me';
@@ -34,7 +34,7 @@ const OPTION_LABELS: Readonly<Record<keyof DemoOptionValues, string>> = {
 
 const OPTION_VALUES: Readonly<Record<keyof DemoOptionValues, readonly string[]>> = {
   role: ['tagger', 'runner'],
-  distance: ['1', '2', '3'],
+  distance: ['1', '2', '3', '4', '5'],
   side: ['front', 'left', 'right', 'back'],
   facing: ['toward', 'away'],
   installer: ['puppet', 'me'],
@@ -46,6 +46,8 @@ const OPTION_VALUE_LABELS: Readonly<Record<string, string>> = {
   '1': '1칸',
   '2': '2칸',
   '3': '3칸',
+  '4': '4칸',
+  '5': '5칸',
   front: '앞',
   left: '왼쪽',
   right: '오른쪽',
