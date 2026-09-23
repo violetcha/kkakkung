@@ -108,8 +108,9 @@ const environment = z.object({
   // and taking a match room for a demonstration left players one room short while it was open.
   DEMO_MAX_ROOMS: z.coerce.number().int().min(1).max(3).default(1),
   // 발표 시연 방(showcase): 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. `/showcase` 는 GitLab SSO
-  // 뒤에 있고 운영 토큰은 필요 없다. 기본 켜짐이며 0 으로 내리면 발급 API 가 503 으로 답한다.
-  SHOWCASE_ROOMS: z.enum(['0', '1']).default('1'),
+  // 뒤에 있고 운영 토큰은 필요 없다. S15P21C204-361. 동시에 모이는 중일 수 있는 시연 방 수다. 기본 1,
+  // 발표 배포는 3. 0 으로 내리면 발급 API 가 503 으로 답한다. 시연 방은 MAX_ROOMS 안에서 함께 센다.
+  SHOWCASE_ROOMS: z.coerce.number().int().min(0).max(10).default(1),
 
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
@@ -325,7 +326,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     demoMaxRooms: raw.DEMO_MAX_ROOMS,
-    showcaseRooms: raw.SHOWCASE_ROOMS === '1',
+    showcaseRooms: raw.SHOWCASE_ROOMS,
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,
     operatingMode: raw.OPS_OPERATING_MODE,

@@ -5,7 +5,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { ShowcaseApp } from './ShowcaseApp';
+import { ShowcaseApp, showcaseEntryMessage } from './ShowcaseApp';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
@@ -130,4 +130,19 @@ it('S15P21C204-363: tells a showcase member the host closed the room and points 
   );
   expect(removed).toContain('방장이 대기방에서 내보냈습니다');
   expect(removed).toContain('>입장 화면으로<');
+});
+
+it('S15P21C204-362: tells a member the server is not admitting instead of blaming a full room', () => {
+  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:503:ADMISSION_CLOSED'))).toBe(
+    '지금은 입장을 받고 있지 않습니다. 서버가 준비되면 다시 시도해 주세요.',
+  );
+  // 코드가 없는 503 과 다른 코드는 전과 같은 문구다.
+  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:503'))).toContain('가득 찼거나');
+  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:503:CAPACITY'))).toContain(
+    '가득 찼거나',
+  );
+  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:409:ROLE_FULL'))).toContain(
+    '다른 역할',
+  );
+  expect(showcaseEntryMessage(new Error('CONNECTION_FAILED'))).toContain('네트워크');
 });

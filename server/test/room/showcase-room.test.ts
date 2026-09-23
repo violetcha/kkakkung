@@ -309,7 +309,7 @@ it('S15P21C204-363: closes the showcase room when the host leaves the waiting ro
     expect(disconnect).toHaveBeenCalledWith(SHOWCASE_CLOSED_CLOSE_CODE);
     expect(f.room.closing).toBe(true);
     expect(f.slots.joinableShowcaseRoom()).toBeNull();
-    expect(f.slots.formingShowcaseRoom()).toBe(false);
+    expect(f.slots.formingShowcaseRooms()).toBe(0);
     expect(f.sessions.sessionsInRoom(f.room.roomCode)).toHaveLength(0);
     // 소멸이 자리와 방 항목을 비우면 다음 /showcase 요청은 새 방을 연다.
     f.room.onDispose();
@@ -341,6 +341,9 @@ it('S15P21C204-360: frees the seats and the room entry on dispose without waitin
   };
   const f = fixture({ media });
   try {
+    // 363: 첫 이탈로 LOBBY 로 돌아온 뒤 방장이 나가면 방을 닫는다. 하네스의 Colyseus 방은 onCreate 를
+    // 거치지 않아 실제 disconnect 를 부를 수 없으니 여기서는 대체한다. 등록부 회수는 소멸이 맡는다.
+    f.room.disconnect = async () => {};
     f.join();
     for (const [index, player] of f.players.entries())
       f.command(player, 'READY', { ready: true }, index + 1);
@@ -362,7 +365,7 @@ it('S15P21C204-360: frees the seats and the room entry on dispose without waitin
     expect(f.slots.hasRoom(f.room.roomCode)).toBe(false);
     expect(f.slots.occupied(f.room.roomCode)).toBe(0);
     expect(f.slots.joinableShowcaseRoom()).toBeNull();
-    expect(f.slots.formingShowcaseRoom()).toBe(false);
+    expect(f.slots.formingShowcaseRooms()).toBe(0);
     // 방 한도가 1 인 이 픽스처에서도 다음 시연 방이 바로 열린다.
     expect(
       f.slots.reserve('SHOWC2', 'next-host', 1_000, { create: true, showcase: { role: 'runner' } }),
