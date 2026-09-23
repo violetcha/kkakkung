@@ -62,7 +62,7 @@ import { completeActions, reserveMove, type CompletedMove } from './movement.js'
 import { isWalkable } from './map/validate-template.js';
 import { visibilityOf } from './vision/visibility.js';
 import { terminateRunner, type TerminationOutcome } from './participation.js';
-import { createPriorityOrder } from './priority.js';
+import { MAX_RUNNERS, createPriorityOrder } from './priority.js';
 import { evaluateResult } from './result.js';
 import { reserveTurn } from './rotation.js';
 import {
@@ -143,7 +143,7 @@ function baseState(input: CreateMatchInput, mode: MatchState['mode']): MatchStat
     );
   }
   const runnerIds = order.filter((id) => players.get(id)!.role === 'runner');
-  // Practice layouts carry no exits and no runner triple: the 6-player invariants stay off.
+  // Practice layouts carry no exits and no runner order: the game invariants stay off.
   const registry =
     mode === 'game'
       ? createExitRegistry(input.layout.topology, input.layout.exits, runnerIds)
@@ -219,11 +219,36 @@ function refreshPerception(state: MatchState, tick: number): MatchState {
   return { ...state, visibility, knowledge: knowledge ?? state.knowledge };
 }
 
-/** Creates the authoritative game state. Six placed players, 3 taggers + 3 runners. */
+/**
+ * Creates the authoritative game state. Each team fields one to three players (3:3 for an
+ * ordinary match, 2:2 in the showcase room, S15P21C204-350), and the layout describes exactly
+ * this roster: one placement per player and nothing else, one exit per runner (checked by the
+ * exit registry), one territory per tagger. Leftovers from absent players are refused rather than
+ * ignored, so a layout prepared for a different roster never starts a match.
+ */
 export function createMatch(input: CreateMatchInput): MatchState {
-  const taggers = input.players.filter((p) => p.role === 'tagger').length;
-  const runners = input.players.filter((p) => p.role === 'runner').length;
-  if (taggers !== 3 || runners !== 3) throw new RangeError('a match needs 3 taggers and 3 runners');
+  const taggers = input.players.filter((p) => p.role === 'tagger');
+  const runners = input.players.filter((p) => p.role === 'runner');
+  if (taggers.length === 0 || runners.length === 0) {
+    throw new RangeError('a match needs at least one tagger and one runner');
+  }
+  if (taggers.length > MAX_RUNNERS || runners.length > MAX_RUNNERS) {
+    throw new RangeError('a match allows at most three players per team');
+  }
+  if (input.layout.players.length !== input.players.length) {
+    throw new RangeError(
+      `layout places ${input.layout.players.length} players for a roster of ${input.players.length}`,
+    );
+  }
+  const territoryOwners = new Set(input.layout.territories.map((t) => t.playerId));
+  if (
+    input.layout.territories.length !== taggers.length ||
+    taggers.some((t) => !territoryOwners.has(t.playerId))
+  ) {
+    throw new RangeError(
+      `layout has ${input.layout.territories.length} territories for ${taggers.length} taggers`,
+    );
+  }
   return baseState(input, 'game');
 }
 

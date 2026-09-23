@@ -560,8 +560,8 @@ describe(`G3-B trap and priority (${G3_RULES_LANDED.trap})`, () => {
     expect(t3).toEqual(t0);
     // Only candidates the caller left after ACTIVE/restraint/grace filters can be picked.
     expect(selectPriorityCandidate(a, 10, 10, [])).toBeUndefined();
-    expect(selectPriorityCandidate(a, 10, 10, [a[2], a[2]])).toBe(a[2]);
-    expect(selectPriorityCandidate(a, 10, 10, [a[1], a[2]])).toBe(a[1]);
+    expect(selectPriorityCandidate(a, 10, 10, [a[2]!, a[2]!])).toBe(a[2]);
+    expect(selectPriorityCandidate(a, 10, 10, [a[1]!, a[2]!])).toBe(a[1]);
     // Grace-only entrants filtered out by the caller: nobody is selected, nothing is consumed.
     const graceOnly = new Set<string>();
     expect(selectPriorityCandidate(a, 12, 10, graceOnly)).toBeUndefined();
