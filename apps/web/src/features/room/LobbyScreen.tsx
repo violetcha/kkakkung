@@ -317,7 +317,7 @@ export function LobbyScreen({
                     {player.playerId === selfId && pumpHost && (
                       <div className="lobby-seat-pump" ref={pumpHost} aria-hidden="true" />
                     )}
-                    <PlayerTileView playerId={player.playerId} face={faceOf?.(player.playerId)} />
+                    <PlayerTileView face={faceOf?.(player.playerId)} />
                   </div>
                   {player.playerId === roster.hostId && (
                     <span className="lobby-crown" aria-label="방장">

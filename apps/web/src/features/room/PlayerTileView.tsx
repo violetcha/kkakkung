@@ -1,15 +1,15 @@
-// S15P21C204-295. 대기실 타일 한 칸의 캐릭터. 경기에서 상대가 보는 그 아바타를 정면으로 세운다.
+// S15P21C204-295. 대기실 타일 한 칸의 캐릭터. 역할이 정해지기 전의 중립 몸을 정면으로 세운다.
 // 준비를 누르기 전에는 기본 얼굴이고, 카메라가 켜져 얼굴이 올라오면 그 영상이 얼굴에 붙는다.
 // 대기실에서는 움직이지 않으므로 프레임을 계속 돌리지 않는다(frameloop="demand").
 import { useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import type { Texture } from 'three';
-import type { VisibleEntity } from '@kkakkung/protocol/game-schema';
-import { Avatar, createAvatarResources } from '../game/scene/FaceAvatar';
+import { MeshBasicMaterial, PlaneGeometry, type Texture } from 'three';
+import { NeutralAvatar, createNeutralAvatarResources } from '../game/scene/NeutralAvatar';
 import { createDemoFaceTexture } from '../game/scene/demo-face';
 
-type PlayerEntity = Extract<VisibleEntity, { kind: 'player' }>;
-const noTick = () => null;
+/** 중립 몸의 머리(높이 0.72, 한 변 0.48) 앞면을 거의 다 덮는 얼굴 판. */
+const HEAD_Y = 0.72;
+const FACE_PLANE = new PlaneGeometry(0.418, 0.418);
 /** 머리·어깨가 크게 잡히는 정면 카메라. 내 캐릭터 창과 같은 눈높이다. */
 const CAMERA = Object.freeze({ position: [0, 0.72, -1.05] as const, fov: 30, lookAtY: 0.72 });
 
@@ -42,36 +42,37 @@ function LookAtAvatar({ face }: { face: Texture | null }) {
   return null;
 }
 
-function Standing({ playerId, face }: { playerId: string; face: Texture | null }) {
-  const resources = useMemo(createAvatarResources, []);
+function Standing({ face }: { face: Texture | null }) {
+  const resources = useMemo(createNeutralAvatarResources, []);
   useEffect(() => () => resources.dispose(), [resources]);
   const fallback = useMemo(createDemoFaceTexture, []);
   useEffect(() => () => fallback.dispose(), [fallback]);
-  // 대기실에서는 역할이 아직 없다. 역할 없는 아바타는 중립 회색으로 선다(FaceAvatar).
-  const player: PlayerEntity = {
-    id: playerId,
-    kind: 'player',
-    cell: { x: 0, y: 0 },
-    dir: 0,
-    action: null,
-  };
+  const surface = useMemo(() => new MeshBasicMaterial({ toneMapped: false }), []);
+  useEffect(() => () => surface.dispose(), [surface]);
+  const map = face ?? fallback;
+  if (surface.map !== map) {
+    surface.map = map;
+    surface.needsUpdate = true;
+  }
+  // 대기실에서는 역할이 아직 없어 경기용 아바타는 얼굴 없는 중립 몸으로 선다(RoleAvatar 는
+  // 도망자 GLB 에만 얼굴을 붙인다). 칸에서는 그 몸의 머리 앞에 얼굴 판을 직접 붙인다.
   return (
     <>
       <LookAtAvatar face={face} />
       <ambientLight intensity={0.9} color="#dfe8f3" />
       <directionalLight position={[1.2, 2.6, -2]} intensity={1.6} color="#f4f8ff" />
-      <Avatar
-        player={player}
-        ally
-        standIn={face ?? fallback}
-        resources={resources}
-        renderTick={noTick}
+      <NeutralAvatar resources={resources} />
+      <mesh
+        geometry={FACE_PLANE}
+        material={surface}
+        position={[0, HEAD_Y, -0.241]}
+        rotation={[0, Math.PI, 0]}
       />
     </>
   );
 }
 
-export function PlayerTileView({ playerId, face }: { playerId: string; face?: Texture | null }) {
+export function PlayerTileView({ face }: { face?: Texture | null }) {
   if (!face)
     return (
       <div className="tile-view lobby-placeholder" aria-hidden="true">
@@ -93,7 +94,7 @@ export function PlayerTileView({ playerId, face }: { playerId: string; face?: Te
         camera={{ position: [...CAMERA.position], fov: CAMERA.fov, near: 0.05, far: 10 }}
       >
         <color attach="background" args={['#0b0b0a']} />
-        <Standing playerId={playerId} face={face ?? null} />
+        <Standing face={face ?? null} />
       </Canvas>
     </div>
   );
