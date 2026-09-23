@@ -279,6 +279,16 @@ export function ProductApp({
       if (showcaseSession) window.location.assign('/showcase');
     });
   }, [demoSession, showcaseSession, leave]);
+  // S15P21C204-370. 방이 남아 있을 수 있는 끊김(만료·내보냄·시연·데모가 아닌 경우)에만 다시 들어올 코드를 준다.
+  const rejoinCode =
+    snapshot?.lost &&
+    !snapshot.roomExpired &&
+    !snapshot.removedByHost &&
+    !showcaseSession &&
+    !demoSession &&
+    code
+      ? code
+      : null;
   // S15P21C204-363. 방장이 시연 방을 닫아 끊긴 사람은 안내를 잠깐 보고 /showcase 로 돌아간다.
   const showcaseClosed = !!showcaseSession && !!snapshot?.lost && !!snapshot.showcaseClosed;
   useEffect(() => {
@@ -907,11 +917,19 @@ export function ProductApp({
         </>
       ) : snapshot.lost ? (
         <ConnectionLostScreen
-          onLeave={leaveByChoice}
+          onLeave={() => {
+            // S15P21C204-370. 그냥 끊긴 사람은 같은 방으로 돌아올 가능성이 크다. 참가 폼을 채워 둔다.
+            if (rejoinCode) {
+              setRoomCode(rejoinCode);
+              setCreateRoom(false);
+            }
+            leaveByChoice();
+          }}
           expired={snapshot.roomExpired}
           removed={snapshot.removedByHost}
           showcaseClosed={snapshot.showcaseClosed}
           showcase={!!showcaseSession}
+          roomCode={rejoinCode}
         />
       ) : (
         <>

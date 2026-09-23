@@ -4,8 +4,14 @@ export function ConnectionLostScreen({
   removed = false,
   showcaseClosed = false,
   showcase = false,
+  roomCode = null,
 }: {
   onLeave(): void;
+  /**
+   * S15P21C204-370. 끊긴 방의 코드. 방장이 로비로 돌아가면 이 코드로 다시 들어올 수 있으므로
+   * 알려 준다. 시연·만료·내보냄에는 돌아갈 방이 없어 쓰지 않는다.
+   */
+  roomCode?: string | null;
   expired?: boolean;
   removed?: boolean;
   /** S15P21C204-363. 시연 방의 방장이 나가 방이 닫혔다. */
@@ -33,7 +39,11 @@ export function ConnectionLostScreen({
             ? '이 방의 참가가 종료됐습니다. 입장 화면으로 돌아가 새 방을 만들거나 친구에게 다시 초대를 요청해 주세요.'
             : expired
               ? `사용하지 않는 방을 정리했습니다. ${showcase ? '시연 입장 화면에서 다시 들어와 주세요.' : '입장 화면에서 새 방을 만들거나 참가해 주세요.'}`
-              : `진행 중인 경기는 복원할 수 없습니다. ${showcase ? '시연 입장 화면에서 다시 들어와 주세요.' : '입장 화면에서 다시 참가해 주세요.'}`}
+              : showcase
+                ? '진행 중인 경기는 복원할 수 없습니다. 시연 입장 화면에서 다시 들어와 주세요.'
+                : roomCode
+                  ? `진행 중인 경기는 복원할 수 없습니다. 방장이 로비로 돌아가면 방 코드 ${roomCode}로 다시 참가할 수 있습니다.`
+                  : '진행 중인 경기는 복원할 수 없습니다. 입장 화면에서 다시 참가해 주세요.'}
       </p>
       <button onClick={onLeave}>{destination}</button>
     </section>

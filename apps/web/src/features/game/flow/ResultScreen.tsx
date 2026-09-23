@@ -67,6 +67,12 @@ export function ResultScreen({
         <p>
           현재 {connectedCount}/{capacity}명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수
           있습니다.
+          {/* S15P21C204-370. 끊긴 사람은 로비에서만 다시 들어올 수 있다. 방장이 할 일을 알려 준다. */}
+          {round.phase === 'ABORTED' &&
+            round.abortReason === 'GAME_CONNECTION_LOST' &&
+            (host
+              ? ' 로비로 돌아가면 연결이 끊긴 참가자가 같은 방 코드로 다시 들어올 수 있습니다.'
+              : ' 방장이 로비로 돌아가면 연결이 끊긴 참가자가 다시 들어올 수 있습니다.')}
         </p>
       )}
       {commandFeedback(request) && <p role="status">{commandFeedback(request)}</p>}

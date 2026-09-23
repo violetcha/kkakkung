@@ -59,6 +59,20 @@ describe('product match state (0.2.0)', () => {
     });
   });
 
+  // S15P21C204-370. 연결이 끊겨 무효가 된 판에서만 끊긴 사람의 닉네임을 읽는다.
+  it('reads who dropped only for an aborted round', () => {
+    const state = new PublicMatchState();
+    state.phase = 'ABORTED';
+    state.abortReason = 'GAME_CONNECTION_LOST';
+    state.abortedBy = '하나';
+    const { client } = roundTrip(state);
+    expect(readPublicRoundState(client).abortedBy).toBe('하나');
+    expect(readPublicRoundState({ ...client.toJSON(), phase: 'LOBBY' } as never).abortedBy).toBe(
+      undefined,
+    );
+    expect(readPublicRoundState(new PublicMatchState())).not.toHaveProperty('abortedBy');
+  });
+
   it('transmits null round fields as absent and normalizes them back to null', () => {
     const state = new PublicMatchState();
     state.matchId = 'match-1';

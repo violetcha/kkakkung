@@ -69,3 +69,47 @@ it('offers the operator a role for the next demo round instead of team modes', (
   expect(html).not.toContain('/6명');
   expect(html).toMatch(/aria-pressed="true"[^>]*>도망자로 재경기/);
 });
+
+// S15P21C204-370. 누가 끊겼는지와, 그 사람을 다시 받으려면 방장이 무엇을 해야 하는지 알린다.
+it('names the dropped player and tells the host how to take them back', () => {
+  const round = roundFixture({
+    phase: 'ABORTED',
+    abortReason: 'GAME_CONNECTION_LOST',
+    abortedBy: '둘',
+    rematchState: 'available',
+  });
+  const host = renderToStaticMarkup(
+    createElement(ResultScreen, {
+      round,
+      self: null,
+      host: true,
+      connectedCount: 5,
+      onRematch() {},
+    }),
+  );
+  expect(host).toContain('둘님의 연결이 끊겨 경기가 무효 처리되었습니다.');
+  expect(host).toContain(
+    '로비로 돌아가면 연결이 끊긴 참가자가 같은 방 코드로 다시 들어올 수 있습니다.',
+  );
+  const member = renderToStaticMarkup(
+    createElement(ResultScreen, {
+      round,
+      self: null,
+      host: false,
+      connectedCount: 5,
+      onRematch() {},
+    }),
+  );
+  expect(member).toContain('방장이 로비로 돌아가면 연결이 끊긴 참가자가 다시 들어올 수 있습니다.');
+  // 이름이 없으면 예전 문구 그대로다.
+  const unnamed = renderToStaticMarkup(
+    createElement(ResultScreen, {
+      round: roundFixture({ phase: 'ABORTED', abortReason: 'GAME_CONNECTION_LOST' }),
+      self: null,
+      host: true,
+      connectedCount: 5,
+      onRematch() {},
+    }),
+  );
+  expect(unnamed).toContain('게임 연결이 끊겨 경기가 무효 처리되었습니다.');
+});

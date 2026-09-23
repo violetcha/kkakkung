@@ -45,7 +45,10 @@ export function resultPresenter(
               ? '포획되었습니다'
               : '결과 대기',
     message: round.abortReason
-      ? ABORT_LABELS[round.abortReason]
+      ? round.abortReason === 'GAME_CONNECTION_LOST' && round.abortedBy
+        ? // S15P21C204-370. 누구 때문에 끝났는지 알아야 기다릴지 새로 모을지 정한다.
+          `${round.abortedBy}님의 연결이 끊겨 경기가 무효 처리되었습니다.`
+        : ABORT_LABELS[round.abortReason]
       : round.phase === 'ABORTED'
         ? '경기를 계속할 수 없어 무효 처리되었습니다. 연결 정리가 끝나면 방장이 다시 시작할 수 있습니다.'
         : ended
