@@ -421,6 +421,7 @@ export function createApplication<State = unknown>(
                 trustedProxy: product.trustProxy,
                 monotonicNow,
                 admissionTtlMs: config.demoAdmissionTtlMs,
+                ready: operationsReady,
                 cleanupReservations,
               })
             : createShowcaseUnavailableRoutes(product.trustProxy),

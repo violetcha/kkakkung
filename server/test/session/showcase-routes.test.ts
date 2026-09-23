@@ -30,6 +30,8 @@ describe('showcase room admission', () => {
   const now = 1_000_000;
   const sessions = new ProductSessionStore({ now: () => now });
   const slots = new SlotRegistry({ maxRooms: 2 });
+  // S15P21C204-362. 이 묶음은 서버가 열린 상태만 본다. 닫힌 문은 아래 별도 묶음이 본다.
+  const ready = true;
 
   beforeAll(async () => {
     const app = express();
@@ -41,6 +43,7 @@ describe('showcase room admission', () => {
         trustedProxy: true,
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
       }),
     );
     ({ server, endpoint } = await listen(app));
@@ -113,6 +116,7 @@ describe('showcase room admission', () => {
         trustedProxy: true,
         monotonicNow: () => now,
         admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
       }),
     );
     const local = await listen(app);
@@ -182,6 +186,51 @@ describe('showcase rooms disabled', () => {
       expect(response.status).toBe(401);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
+describe('showcase admission gate (S15P21C204-362)', () => {
+  it('answers ADMISSION_CLOSED without issuing a session while the server is not ready, then admits again', async () => {
+    // 2026-09-23 배포 서버가 LOCKED 인 동안 시연 세션이 발급되어 게임 페이지에서 NOT_READY 로 튕겼다.
+    // 일반 세션 발급과 같은 문을 여기서 먼저 지나, 첫 화면이 이유를 보여 준다.
+    const own = new SlotRegistry({ maxRooms: 1 });
+    const store = new ProductSessionStore({ now: () => 1_000_000 });
+    let ready = false;
+    const app = express();
+    app.use(express.json({ limit: '2kb' }));
+    app.use(
+      createShowcaseRoutes({
+        sessions: store,
+        slots: own,
+        trustedProxy: true,
+        monotonicNow: () => 1_000_000,
+        admissionTtlMs: 10 * 60_000,
+        ready: () => ready,
+      }),
+    );
+    const local = await listen(app);
+    try {
+      const call = (headers: Record<string, string> = { 'x-demo-admin': 'member' }) =>
+        fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify({ role: 'runner' }),
+        });
+      // 인증이 문보다 먼저다. 신원 없는 호출은 서버 상태를 알 수 없다.
+      expect((await call({})).status).toBe(401);
+      const closed = await call();
+      expect(closed.status).toBe(503);
+      expect(await closed.json()).toEqual({ error: 'ADMISSION_CLOSED' });
+      expect(own.roomCodes().size).toBe(0);
+
+      ready = true;
+      const opened = await call();
+      expect(opened.status).toBe(201);
+      const seat = showcaseRoomResponseSchema.parse(await opened.json());
+      expect(own.occupied(seat.roomCode)).toBe(1);
+    } finally {
+      await new Promise<void>((resolve) => local.server.close(() => resolve()));
     }
   });
 });
