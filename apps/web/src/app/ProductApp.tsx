@@ -1239,7 +1239,13 @@ export function ProductApp({
                             role="status"
                             data-faces={snapshot.faceRevision}
                           >
-                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개
+                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개 · 지금 보이는 사람
+                            {}
+                            {
+                              (view?.visibleEntities ?? []).filter((e) => e.kind === 'player')
+                                .length
+                            }
+                            명
                           </p>
                         )}
                         <LocalControls
