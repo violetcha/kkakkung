@@ -148,7 +148,7 @@ pipeline {
       steps {
         script { env.FAILED_STAGE = env.STAGE_NAME }
         // 단일 진입점 scripts/ci-verify.mjs: 도구체인 확인 → EXPECTED_SOURCE_SHA 대조 → frozen install
-        // → Chromium 확인 → pnpm verify 를 정확히 한 번 (format·lint·typecheck·test·build·e2e).
+        // → Chromium 확인 → CI_VERIFY_MODE 에 맞는 검사 계획(scripts/ci-plan.mjs, S15P21C204-368).
         // 개별 pnpm 검사 목록을 여기 다시 나열하지 않습니다 (DP-04).
         // jenkins uid 로 돌려 root 소유 파일이 안 남게 하고, pnpm store 는 호스트 jenkins 홈에 캐시합니다.
         //
@@ -194,7 +194,11 @@ pipeline {
           env.TREE_SHA = sh(
             script: env.MERGED_TREE == 'true' ? 'git write-tree' : 'git rev-parse HEAD^{tree}',
             returnStdout: true).trim()
-          env.VERIFIED_BY = sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA"', returnStdout: true).trim()
+          // S15P21C204-368. MR 과 배포는 검사 목록이 다르다(scripts/ci-plan.mjs). MR 은 바뀐 파일이
+          // 깨뜨릴 수 있는 것만, 배포는 MR 이 빼 둔 무거운 통합 시험을 돈다. 그래서 생략 기록도
+          // 범위별로 따로 둔다 — MR 이 검증한 트리라도 배포 검사는 돈다.
+          env.VERIFY_SCOPE = env.IS_DEPLOY == 'true' ? 'deploy' : 'mr'
+          env.VERIFIED_BY = sh(script: 'node scripts/verified-tree.mjs check --state-dir "$STATE_DIR" --tree "$TREE_SHA" --scope "$VERIFY_SCOPE"', returnStdout: true).trim()
         }
         sh '''
           if [ -n "$VERIFIED_BY" ]; then
@@ -206,9 +210,9 @@ pipeline {
           host_state() { echo "host $1: load=$(cut -d' ' -f1-3 /proc/loadavg) steal_ticks=$(awk '/^cpu /{print $9}' /proc/stat) idle_ticks=$(awk '/^cpu /{print $5}' /proc/stat)"; }
           host_state before-verify
           flock /var/lib/jenkins/verify.lock \
-            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
+            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e EXPECTED_SOURCE_SHA="$EXPECTED_SOURCE_SHA" -e CI_VERIFY_MODE="$VERIFY_SCOPE"             -e npm_config_prefix=/tmp/npm -e PNPM_HOME=/tmp/pnpm -e npm_config_store_dir=/tmp/pnpm-store             -v /var/lib/jenkins/.cache/pnpm-store:/tmp/pnpm-store             -v "$WORKSPACE:/workspace" -w /workspace "$CI_IMAGE:$CI_TAG"             node scripts/ci-verify.mjs
           host_state after-verify
-          node scripts/verified-tree.mjs record --state-dir "$STATE_DIR" --tree "$TREE_SHA" --commit "$GIT_SHA" --build "$JOB_NAME#$BUILD_NUMBER"
+          node scripts/verified-tree.mjs record --state-dir "$STATE_DIR" --tree "$TREE_SHA" --scope "$VERIFY_SCOPE" --commit "$GIT_SHA" --build "$JOB_NAME#$BUILD_NUMBER"
         '''
       }
     }
