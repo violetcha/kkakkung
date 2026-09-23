@@ -1229,28 +1229,42 @@ export function ProductApp({
                     id: 'device',
                     label: '조작 · 장치',
                     content: (
-                      <LocalControls
-                        status={snapshot.devices}
-                        mode={snapshot.interaction.mode}
-                        previewHost={preview}
-                        onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
-                        onMotion={async () => {
-                          await runtime.current?.calibrateMotion();
-                        }}
-                        onRecover={async () => {
-                          await runtime.current?.recoverDevices();
-                        }}
-                        onMicrophone={async (enabled) => {
-                          await runtime.current?.setMicrophone(enabled);
-                        }}
-                        consented={consent.consented}
-                        canRecover={
-                          !!round &&
-                          ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)
-                        }
-                        variant="full"
-                        bare
-                      />
+                      <>
+                        {/* S15P21C204-295. 상대 얼굴이 몇 개나 붙어 있는지. 화면에서 얼굴이
+                            안 보일 때 "트랙이 안 온 것"과 "와도 안 붙은 것"을 여기서 가른다.
+                            faceRevision 이 바뀔 때마다 다시 센다. */}
+                        {!!round && ['TEAM_PRACTICE', 'PLAYING'].includes(round.phase) && (
+                          <p
+                            className="pause-note"
+                            role="status"
+                            data-faces={snapshot.faceRevision}
+                          >
+                            받은 상대 얼굴 {runtime.current?.faces.count ?? 0}개
+                          </p>
+                        )}
+                        <LocalControls
+                          status={snapshot.devices}
+                          mode={snapshot.interaction.mode}
+                          previewHost={preview}
+                          onKeyboard={() => runtime.current?.selectInputMode('keyboard')}
+                          onMotion={async () => {
+                            await runtime.current?.calibrateMotion();
+                          }}
+                          onRecover={async () => {
+                            await runtime.current?.recoverDevices();
+                          }}
+                          onMicrophone={async (enabled) => {
+                            await runtime.current?.setMicrophone(enabled);
+                          }}
+                          consented={consent.consented}
+                          canRecover={
+                            !!round &&
+                            ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(round.phase)
+                          }
+                          variant="full"
+                          bare
+                        />
+                      </>
                     ),
                   },
                   {
