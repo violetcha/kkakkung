@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MEDIA_API_CEILINGS } from '../operations/ApiBudget.js';
+import { validateMonthlyUsageConfig, type MonthlyUsageConfig } from '../media/MonthlyUsageMeter.js';
 
 // Owned by F (F-01/DP-01). B maps the parsed values into
 // MediaConfiguration / admission policy; E never reads process.env directly.
@@ -111,6 +112,14 @@ const environment = z.object({
   // 뒤에 있고 운영 토큰은 필요 없다. 기본 켜짐이며 0 으로 내리면 발급 API 가 503 으로 답한다.
   SHOWCASE_ROOMS: z.enum(['0', '1']).default('1'),
 
+  // S15P21C204-364. LiveKit monthly participant-minute guard. The plan limit and the dashboard
+  // baseline ("<used minutes>@<ISO time read>") come together from the private env file; with
+  // neither the guard is off and the server says so at start. One without the other is refused.
+  LIVEKIT_MONTHLY_MINUTES: positiveSafeInt,
+  LIVEKIT_USAGE_BASELINE: z.string().trim().min(1).optional(),
+  LIVEKIT_MONTHLY_RESERVE_MINUTES: z.coerce.number().int().min(0).default(300),
+  LIVEKIT_BILLING_CYCLE_DAY: z.coerce.number().int().min(1).max(28).default(1),
+
   // Public window and budget policy (E operations).
   OPS_OPERATING_MODE: z.enum(['attested', 'continuous']).default('attested'),
   OPS_PUBLIC_WINDOW_OPENS_AT_EPOCH_MS: positiveSafeInt,
@@ -208,6 +217,24 @@ export function parseConfig(input: Record<string, string | undefined>) {
   // 않게 부팅에서 거절한다(S15P21C204-300).
   if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ORIGIN >= raw.MAX_ROOMS)
     throw new Error('MAX_ROOMS_PER_ORIGIN must be below MAX_ROOMS');
+  // S15P21C204-364. The limit and the baseline mean nothing apart: a limit without a baseline
+  // would count from zero and let the month overrun, a baseline without a limit guards nothing.
+  if ((raw.LIVEKIT_MONTHLY_MINUTES === undefined) !== (raw.LIVEKIT_USAGE_BASELINE === undefined))
+    throw new Error('LIVEKIT_MONTHLY_MINUTES and LIVEKIT_USAGE_BASELINE must be set together');
+  let monthlyUsage: MonthlyUsageConfig | null = null;
+  if (raw.LIVEKIT_MONTHLY_MINUTES !== undefined && raw.LIVEKIT_USAGE_BASELINE !== undefined) {
+    const match = /^(\d+)@(.+)$/.exec(raw.LIVEKIT_USAGE_BASELINE);
+    const readAt = match ? Date.parse(match[2]!) : Number.NaN;
+    if (!match || !Number.isSafeInteger(readAt))
+      throw new Error('LIVEKIT_USAGE_BASELINE must look like "<minutes>@<ISO-8601 time>"');
+    monthlyUsage = validateMonthlyUsageConfig({
+      limitMinutes: raw.LIVEKIT_MONTHLY_MINUTES,
+      reserveMinutes: raw.LIVEKIT_MONTHLY_RESERVE_MINUTES,
+      baselineMinutes: Number(match[1]),
+      baselineAtEpochMs: readAt,
+      cycleDay: raw.LIVEKIT_BILLING_CYCLE_DAY,
+    });
+  }
   if (raw.ALERT_WEBHOOK_CHANNEL !== undefined && raw.ALERT_WEBHOOK_URL === undefined)
     throw new Error('ALERT_WEBHOOK_CHANNEL requires ALERT_WEBHOOK_URL');
   if (raw.ALERT_WEBHOOK_URL !== undefined) {
@@ -325,6 +352,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     demoRooms: raw.DEMO_ROOMS === '1' && raw.OPS_TOKEN !== undefined,
     demoAdmissionTtlMs: raw.DEMO_ADMISSION_TTL_MS,
     demoMaxRooms: raw.DEMO_MAX_ROOMS,
+    livekitMonthlyUsage: monthlyUsage,
     showcaseRooms: raw.SHOWCASE_ROOMS === '1',
     serviceAudience: raw.SERVICE_AUDIENCE ?? null,
     sessionAdmissionMode,

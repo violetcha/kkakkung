@@ -275,6 +275,8 @@ export class OperationsController implements OperationsPort {
       remainingBytes: value.remainingBytes,
       checkedAtEpochMs: value.checkedAtEpochMs,
       ...(value.operatingMode ? { operatingMode: value.operatingMode } : {}),
+      // 364. Reported as the media layer counted it; it never changes admission or readiness.
+      ...(value.monthlyUsage ? { monthlyUsage: value.monthlyUsage } : {}),
     };
   }
 
