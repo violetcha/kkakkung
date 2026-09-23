@@ -2,7 +2,7 @@
 // preflight/runner rules without touching Cloud, devices or the network.
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,9 +52,9 @@ const ctx = {
 describe('vitest discovery keeps Cloud cases out of the default suite', () => {
   it('includes root contract and load tests and excludes *.cloud.test.ts by default', () => {
     const test = (defaultConfig as { test: { include: string[]; exclude: string[] } }).test;
-    expect(test.include).toContain('tests/contracts/**/*.test.ts');
-    expect(test.include).toContain('tests/load/**/*.test.ts');
-    expect(test.exclude).toContain('**/*.cloud.test.ts');
+    expect(test.include).toContain('tests/contracts/**/*.test.{ts,tsx}');
+    expect(test.include).toContain('tests/load/**/*.test.{ts,tsx}');
+    expect(test.exclude).toContain('**/*.cloud.test.{ts,tsx}');
   });
   it('cloud config lists only the two Cloud locations with a single worker and bounded timeouts', () => {
     const test = (
@@ -69,14 +69,57 @@ describe('vitest discovery keeps Cloud cases out of the default suite', () => {
       }
     ).test;
     expect(test.include).toEqual([
-      'server/test/media/**/*.cloud.test.ts',
-      'tests/cloud/**/*.cloud.test.ts',
+      'server/test/media/**/*.cloud.test.{ts,tsx}',
+      'tests/cloud/**/*.cloud.test.{ts,tsx}',
     ]);
     expect(test.maxWorkers).toBe(1);
     expect(test.fileParallelism).toBe(false);
     expect(test.testTimeout).toBe(120000);
     expect(test.hookTimeout).toBe(30000);
   });
+  /**
+   * S15P21C204-352. include 가 `*.test.ts` 뿐이라 `apps/web/src/app/demo-admin-app.test.tsx` 는
+   * 만들어진 뒤 한 번도 실행되지 않았다. 통과도 실패도 하지 않으면서 있는 것처럼 보이는 시험은
+   * 없느니만 못하다. 확장자 하나 때문에 시험이 조용히 빠지는 일을 여기서 막는다.
+   */
+  it('leaves no test file behind, whatever its extension', () => {
+    const patterns = [
+      ...(defaultConfig as { test: { include: string[] } }).test.include,
+      ...(cloudConfig as { test: { include: string[] } }).test.include,
+    ];
+    // 설정이 쓰는 글롭 문법만 다룬다: 디렉터리 건너뛰기, 이름 자리, 확장자 묶음.
+    const matcher = (glob: string) => {
+      const source = glob
+        .split('.')
+        .join('[.]')
+        .replace(/\{([^}]+)\}/g, (_, list: string) => `(?:${list.split(',').join('|')})`)
+        .split('**/')
+        .join('⁣')
+        .split('*')
+        .join('[^/]*')
+        .split('⁣')
+        .join('(?:[^/]*/)*');
+      return new RegExp(`^${source}$`);
+    };
+    const matchers = patterns.map(matcher);
+    expect(matchers.some((pattern) => pattern.test('apps/web/src/app/x.test.tsx'))).toBe(true);
+    expect(matchers.some((pattern) => pattern.test('apps/web/src/app/x.ts'))).toBe(false);
+
+    const skip = new Set(['node_modules', 'dist', 'coverage', 'test-results']);
+    const found: string[] = [];
+    const walk = (relative: string) => {
+      for (const entry of readdirSync(resolve(root, relative || '.'), { withFileTypes: true })) {
+        if (entry.name.startsWith('.') || skip.has(entry.name)) continue;
+        const next = relative ? `${relative}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(next);
+        else if (/[.]test[.]tsx?$/.test(entry.name)) found.push(next);
+      }
+    };
+    walk('');
+    expect(found.length).toBeGreaterThan(50);
+    expect(found.filter((file) => !matchers.some((pattern) => pattern.test(file)))).toEqual([]);
+  });
+
   it('fixes the Cloud case allowlist to exactly one file per case', () => {
     expect(Object.keys(CLOUD_CASES).sort()).toEqual(
       [

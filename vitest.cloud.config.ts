@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['server/test/media/**/*.cloud.test.ts', 'tests/cloud/**/*.cloud.test.ts'],
+    include: ['server/test/media/**/*.cloud.test.{ts,tsx}', 'tests/cloud/**/*.cloud.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     fileParallelism: false,
     maxWorkers: 1,
