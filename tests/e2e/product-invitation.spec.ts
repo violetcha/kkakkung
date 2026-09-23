@@ -119,7 +119,10 @@ test('team login enables creation and room-code admission without an invitation'
   await expect(page.getByText('유효한 초대 링크로 열어 주세요.')).toHaveCount(0);
   await page.getByLabel('닉네임').fill('team');
   await page.getByRole('button', { name: '방 만들기', exact: true }).click();
-  await expect(page.getByText('방이 가득 찼습니다.')).toBeVisible();
+  // S15P21C204-365. 방을 만들려는데 서비스가 찼으면 "방이 가득"이 아니라 서비스가 찼다고 말한다.
+  await expect(
+    page.getByText('지금은 열 수 있는 방이 모두 사용 중입니다.', { exact: false }),
+  ).toBeVisible();
   await page.getByRole('radio', { name: '친구 방 참가' }).check();
   await page.getByLabel('방 코드').fill('abcdef');
   await page.getByRole('button', { name: '방 참가', exact: true }).click();

@@ -38,6 +38,7 @@ import { crosshairState, installHint } from '../features/game/flow/install-hint'
 import { interactPrompt } from '../features/game/flow/interact-prompt';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
+import { sessionErrorLabel } from '../features/room/session-error-labels';
 import { PoseChallenge } from '../features/game/pose/PoseChallenge';
 import { KeyChallenge } from '../features/game/pose/KeyChallenge';
 import { PracticeScreen } from '../features/game/flow/PracticeScreen';
@@ -404,23 +405,10 @@ export function ProductApp({
         runtime.current = null;
         setSnapshot(null);
         setSessionCredential(null);
-        const labels: Record<string, string> = {
-          INVALID_REQUEST: '닉네임·초대 링크·방 코드를 확인해 주세요.',
-          INVALID_INVITATION:
-            access === 'gitlab-sso' && !invitation
-              ? '로그인을 확인할 수 없습니다. 페이지를 새로고침해 다시 로그인해 주세요.'
-              : '유효한 초대 링크가 필요합니다.',
-          CAPACITY: '방이 가득 찼습니다.',
-          TOO_MANY_ROOMS:
-            '이미 열어 둔 방이 있습니다. 쓰지 않는 방을 닫거나 잠시 뒤 다시 시도해 주세요.',
-          ROOM_NOT_AVAILABLE: '입장할 수 없는 방입니다.',
-          RATE_LIMITED: '잠시 기다린 뒤 다시 시도해 주세요.',
-          ADMISSION_CLOSED: '지금은 입장을 받고 있지 않습니다.',
-          INVALID_SESSION: '입장 시간이 만료됐습니다. 다시 입장해 주세요.',
-        };
         setError(
-          labels[cause instanceof Error ? cause.message : ''] ??
-            '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.',
+          sessionErrorLabel(cause instanceof Error ? cause.message : '', {
+            ssoWithoutInvitation: access === 'gitlab-sso' && !invitation,
+          }) ?? '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.',
         );
       }
     } finally {
