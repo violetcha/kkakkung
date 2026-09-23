@@ -938,12 +938,13 @@ export function stepMatch(state: MatchState, input: StepInput): StepResult<Match
 
 /** Fixes a runner's personal result once; repeated calls change nothing. */
 function endRunner(ctx: StepContext, runnerId: string, result: TerminationOutcome): void {
-  const termination = terminateRunner(ctx.state, runnerId, result, ctx.tick, () =>
-    nextEventId(ctx),
-  );
+  const termination = terminateRunner(ctx.state, runnerId, result, ctx.tick);
   if (!termination.changed) return;
   ctx.state = termination.state;
-  ctx.events.push(...termination.events);
+  // Ids come after the state swap. `terminateRunner` derives its state from the one it was
+  // given, so a callback minting ids inside it left the seq increment in a state that the swap
+  // above discarded, and the tick's next event reused the number (S15P21C204-351).
+  for (const draft of termination.events) ctx.events.push({ ...draft, eventId: nextEventId(ctx) });
   ctx.media.push(...termination.mediaIntents);
   ctx.endedThisStep.add(runnerId);
 }

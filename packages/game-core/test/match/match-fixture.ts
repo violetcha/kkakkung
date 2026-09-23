@@ -3,6 +3,7 @@ import type {
   CoreCommandType,
   CoreCommandPayloads,
   ControlIntent,
+  StepResult,
 } from '../../src/match/core-types.js';
 import { createMatch, createPractice, stepMatch, type MatchState } from '../../src/match/engine.js';
 import { bindFallbackPlayers } from '../../src/match/map/select-with-fallback.js';
@@ -107,13 +108,33 @@ export function command<K extends CoreCommandType>(
   } as CoreCommand<K>;
 }
 
+/** Identifier of every domain event and spatial sound in one step result, in emission order. */
+export function eventIdsOf(result: StepResult<MatchState>): string[] {
+  return result.events.map((e) => (e.type === 'SPATIAL_SOUND' ? e.sound.eventId : e.eventId));
+}
+
+/**
+ * S15P21C204-351. `DomainEvent.eventId` is unique within a tick ("each carries its own id").
+ * Every scripted step goes through this so a new event path that reuses a sequence number
+ * fails the test that exercises it, not a replay months later.
+ */
+export function assertUniqueEventIds(result: StepResult<MatchState>): void {
+  const ids = eventIdsOf(result);
+  const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+  if (duplicates.length > 0) {
+    throw new Error(`duplicate eventId in tick ${result.state.tick}: ${duplicates.join(', ')}`);
+  }
+}
+
 export function step(
   state: MatchState,
   tick: number,
   commands: readonly CoreCommand[] = [],
   controls: readonly ControlIntent[] = [],
 ) {
-  return stepMatch(state, { tick, commands, controls });
+  const result = stepMatch(state, { tick, commands, controls });
+  assertUniqueEventIds(result);
+  return result;
 }
 
 export function player(state: MatchState, id: string) {

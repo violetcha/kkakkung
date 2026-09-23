@@ -5,11 +5,21 @@ import type { KnowledgeRecord, MatchState, PlayerRecord } from './state.js';
 
 export type TerminationOutcome = 'ESCAPED' | 'CAPTURED';
 
+type PrivateEvent = Exclude<DomainEvent, { type: 'SPATIAL_SOUND' }>;
+type WithoutEventId<E> = E extends unknown ? Omit<E, 'eventId'> : never;
+/**
+ * S15P21C204-351. A personal event before the engine assigns its `eventId`. This module builds
+ * its next state from the `state` it was handed, so an id minted through a callback that also
+ * advanced the engine's `eventSeq` was lost when the engine adopted the returned state, and the
+ * tick's next event reused the number. The engine now numbers the drafts after the state swap.
+ */
+export type EventDraft = WithoutEventId<PrivateEvent>;
+
 export type TerminationResult = Readonly<{
   state: MatchState;
   /** True when this call changed the player from ACTIVE; false for repeats. */
   changed: boolean;
-  events: readonly DomainEvent[];
+  events: readonly EventDraft[];
   mediaIntents: readonly MediaIntent[];
 }>;
 
@@ -25,16 +35,14 @@ export function terminateRunner(
   playerId: string,
   outcome: TerminationOutcome,
   tick: number,
-  nextEventId: () => string,
 ): TerminationResult {
   const player = state.players.get(playerId);
   if (!player || player.role !== 'runner' || player.status !== 'ACTIVE') {
     return { state, changed: false, events: [], mediaIntents: [] };
   }
-  const events: DomainEvent[] = [];
+  const events: EventDraft[] = [];
   if (player.challenge) {
     events.push({
-      eventId: nextEventId(),
       tick,
       audience: [playerId],
       type: 'EXIT_CHALLENGE_ENDED',
