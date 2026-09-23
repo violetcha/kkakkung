@@ -18,9 +18,12 @@ services:
       # school or office onto one origin; a normal team opens one room and joins by invitation.
       MAX_ROOMS_PER_ORIGIN: '2'
       # S15P21C204-258: the operator demo room stays available so a demonstration needs no redeploy.
-      # It is still reachable only with OPS_TOKEN and has no entry point on the home screen, and it
-      # takes a room from MAX_ROOMS above while it is open.
+      # It has no entry point on the home screen: operators open it from /demo behind GitLab SSO.
       DEMO_ROOMS: '1'
+      # S15P21C204-312/353: demo rooms have their own budget, outside MAX_ROOMS/MAX_SLOTS above, and
+      # issue no media, so opening them costs no match room and no LiveKit usage. Three is the schema
+      # ceiling; it lets several operators demonstrate at once.
+      DEMO_MAX_ROOMS: '3'
       # Requires the loopback-only web proxy and host GitLab auth_request boundary.
       SERVICE_AUDIENCE: team
       SESSION_ADMISSION_MODE: gitlab-sso

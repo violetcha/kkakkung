@@ -35,7 +35,7 @@
 | `MEDIA_MAX_NORMAL/TOTAL_API_CALLS_PER_60S` | 운영 120 / 180          | 설정 상한 6,000 / 9,000(`MEDIA_API_CEILINGS`). 기본값 600 / 900                                                                                          |
 | API 경보                                   | total 설정의 90%        | 180이면 162. warning이라 로그에만 남고, 외부로는 429부터 알린다(6장 외부 알림)                                                                           |
 | `DEMO_ROOMS`                               | `1`(켜짐)               | 관리자 시연용 데모 방. 운영 토큰이 있어야 한다. 미디어를 쓰지 않으며 경기·시연 방 예산(`MAX_ROOMS`·`MAX_SLOTS`)과 따로 센다                              |
-| `DEMO_MAX_ROOMS`                           | `1`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                            |
+| `DEMO_MAX_ROOMS`                           | `3`                     | 동시에 열 수 있는 데모 방 수(1~3). 부하 여유는 "경기 방 `MAX_ROOMS` + 데모 방 이 값"으로 본다                                                            |
 | `SHOWCASE_ROOMS`                           | `1`(켜짐)               | 발표 시연 방(`/showcase`). 팀원 넷이 2:2 로 고정 소형 미로에서 3분을 뛴다. SSO 만 필요하고, 열려 있는 동안 방 수 예산에서 한 방을 쓴다                   |
 | `PRODUCT_MAP_TEMPLATE`                     | `maze-v1`               | 본경기 맵. 통로 1칸 미로가 기본(267·302). 개방 격자 `master-v1`도 인증되어 있어 골라 쓸 수 있다. `maps/<id>.json`과 `placements/<id>-fallback.json`이 짝 |
 
