@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { ShowcaseApp } from './ShowcaseApp';
 import { LobbyScreen } from '../features/room/LobbyScreen';
+import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { resultPresenter } from '../features/game/flow/result-presenter';
 import { roundFixture } from '../features/room/product-fixture';
@@ -114,4 +115,19 @@ it('counts remaining runners from the room size and keeps the ordinary timeout w
   expect(taggersWin.message).toBe('제한 시간이 끝나 술래 팀이 승리했습니다.');
   expect(taggersWin.counts.active).toBe(1);
   expect(resultPresenter(roundFixture(), null).counts.active).toBe(3);
+});
+
+it('S15P21C204-363: tells a showcase member the host closed the room and points back to /showcase', () => {
+  const closed = renderToStaticMarkup(
+    createElement(ConnectionLostScreen, { onLeave() {}, showcaseClosed: true, showcase: true }),
+  );
+  expect(closed).toContain('시연이 종료되었습니다');
+  expect(closed).toContain('시연 입장 화면으로');
+  expect(closed).not.toContain('입장 화면에서 새 방을');
+  // 일반 방의 문구는 그대로다.
+  const removed = renderToStaticMarkup(
+    createElement(ConnectionLostScreen, { onLeave() {}, removed: true }),
+  );
+  expect(removed).toContain('방장이 대기방에서 내보냈습니다');
+  expect(removed).toContain('>입장 화면으로<');
 });

@@ -22,7 +22,8 @@ const isDiagnostic =
   !window.location.hash;
 const DevelopmentApp = import.meta.env.DEV ? lazy(() => import('./DevelopmentApp')) : null;
 const PreviewApp = import.meta.env.DEV ? lazy(() => import('./PreviewApp')) : null;
-const initialRoom = isDemoAdmin || isShowcase ? '' : invitationRoom(window.location.hash);
+// 조각은 아래에서 소비되며 지워지므로, 초대 방 코드는 그 전에 읽어 둔다.
+const entryHash = window.location.hash;
 // S15P21C204-260. Operator demo entry, consumed before the invitation so its fragment is cleared.
 const demoSession =
   isDemoAdmin || isShowcase ? null : consumeDemoSession(window.location, window.history);
@@ -30,6 +31,10 @@ const showcaseSession =
   isDemoAdmin || isShowcase || demoSession
     ? null
     : consumeShowcaseSession(window.location, window.history);
+// S15P21C204-363. 시연·데모 조각의 `room=` 은 그 세션의 방이지 초대 방 코드가 아니다. 입장 폼에
+// "친구 방 참가 + 방 코드" 로 미리 채워지지 않게 한다.
+const initialRoom =
+  isDemoAdmin || isShowcase || demoSession || showcaseSession ? '' : invitationRoom(entryHash);
 const invitation =
   isDemoAdmin || isShowcase || demoSession || showcaseSession
     ? ''

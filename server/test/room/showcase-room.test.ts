@@ -8,9 +8,12 @@
  */
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { bindFallbackPlayers, matchCore } from '@kkakkung/game-core/match';
-import type { RoomRosterMessage } from '@kkakkung/protocol/game-messages';
+import {
+  SHOWCASE_CLOSED_CLOSE_CODE,
+  type RoomRosterMessage,
+} from '@kkakkung/protocol/game-messages';
 import type { CorePort, MatchLayout } from '../../src/game/ports.js';
 import { createKkakkungRoom } from '../../src/rooms/KkakkungRoom.js';
 import { ProductSessionStore } from '../../src/session/ProductSessionStore.js';
@@ -276,6 +279,39 @@ it('S15P21C204-350: a match the rules refuse ends preparation with its own reaso
     expect(f.room.abortReason).toBeNull();
     expect(f.room.blockedReason).toBe('MATCH_CREATE:a match needs 3 taggers and 3 runners');
     expect(f.room.driver.attached()).toHaveLength(0);
+  } finally {
+    f.close();
+  }
+});
+
+it('S15P21C204-363: closes the showcase room when the host leaves the waiting room, but only frees a seat when a member leaves', () => {
+  const f = fixture();
+  try {
+    f.join();
+    expect(f.room.phase).toBe('DEVICE_CHECK');
+    const host = f.players.find((p) => p.session.playerId === f.room.lobby.host)!;
+    const member = f.players.find((p) => p !== host)!;
+    const disconnect = vi.fn(async () => {});
+    f.room.disconnect = disconnect;
+
+    // 팀원이 나가면 자리만 비고 방은 그대로 모이는 중이다. 방장은 바뀌지 않는다.
+    f.room.onLeave(member.client);
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(f.room.closing).toBe(false);
+    expect(f.room.lobby.host).toBe(host.session.playerId);
+    expect(f.slots.occupied(f.room.roomCode)).toBe(3);
+    expect(f.slots.joinableShowcaseRoom()).toBe(f.room.roomCode);
+
+    // 방장이 나가면 승계 대신 방을 닫는다. 남은 둘은 시연 종료 코드로 끊긴다.
+    f.room.onLeave(host.client);
+    expect(disconnect).toHaveBeenCalledWith(SHOWCASE_CLOSED_CLOSE_CODE);
+    expect(f.room.closing).toBe(true);
+    expect(f.slots.joinableShowcaseRoom()).toBeNull();
+    expect(f.slots.formingShowcaseRoom()).toBe(false);
+    expect(f.sessions.sessionsInRoom(f.room.roomCode)).toHaveLength(0);
+    // 소멸이 자리와 방 항목을 비우면 다음 /showcase 요청은 새 방을 연다.
+    f.room.onDispose();
+    expect(f.slots.hasRoom(f.room.roomCode)).toBe(false);
   } finally {
     f.close();
   }
