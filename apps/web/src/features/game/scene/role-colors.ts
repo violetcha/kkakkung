@@ -12,14 +12,15 @@ export const ROLE_COLORS = Object.freeze({
 }) satisfies Readonly<Record<Role, Readonly<{ cloth: string; accent: string; boot: string }>>>;
 
 /**
- * Body shape per role, in scene units. A tagger is broader with a visor brim; a runner is
- * narrower and carries a satchel. Neither changes where the real face plane sits.
+ * Body shape per role, in scene units. A tagger is a hulking block body (S15P21C204-378): shoulders
+ * above the head, a hood behind it, long arms. A runner is narrower and carries a satchel. Neither
+ * changes where the real face plane sits.
  */
 export const ROLE_SILHOUETTE = Object.freeze({
-  tagger: Object.freeze({ shoulder: 0.42, brim: true, satchel: false }),
-  runner: Object.freeze({ shoulder: 0.32, brim: false, satchel: true }),
+  tagger: Object.freeze({ shoulder: 0.74, hood: true, satchel: false }),
+  runner: Object.freeze({ shoulder: 0.32, hood: false, satchel: true }),
 }) satisfies Readonly<
-  Record<Role, Readonly<{ shoulder: number; brim: boolean; satchel: boolean }>>
+  Record<Role, Readonly<{ shoulder: number; hood: boolean; satchel: boolean }>>
 >;
 
 /** CSS custom properties the HUD/minimap tokens should carry, with the same hex as the 3D cloth. */

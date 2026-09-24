@@ -18,13 +18,14 @@ import { resolveSceneTheme, type SceneThemeId } from './scene-theme';
 import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
+import { CELL } from './scene-model';
 
 /**
  * Background and fog per theme. The fog closes inside the server's 3.5-cell sight and the camera
  * draws a little past it, so nothing is clipped while still visible through the fog (377).
  */
 /** 1인칭 카메라가 그리는 끝. 서버 시야보다 길고, 두 테마의 안개가 완전히 닫힌 뒤다. */
-export const CAMERA_FAR = 3.6;
+export const CAMERA_FAR = 3.6 * CELL;
 
 export const sceneWorld = (theme: SceneThemeId) =>
   theme === 'block'
