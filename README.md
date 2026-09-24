@@ -3,24 +3,27 @@
 웹캠의 얼굴·상체 동작으로 좁은 시야의 미로를 움직이며 도망자 3명과 술래 3명이 3분 동안 탈출과 포획을 겨루는 웹 멀티플레이 숨바꼭질 게임이다. 가공된 실제 얼굴과 근거리 음성으로 상대의 존재를 느낀다.
 
 - 서비스: https://j15c204.p.ssafy.io (GitLab 프로젝트 `S15P21C204` Reporter 이상 멤버만 접속)
-- 현재 단계: 팀원 전용 MVP. 로그인 게이트와 공개 대상 설정만 바꾸면 공개할 수 있는 상태를 목표로 한다. 운영은 10방·60인까지 열려 있다. 게임 단독 부하는 60클라이언트 30분까지 확인했고, 실제 미디어 단계 부하는 아직 돌리지 않았다.
-- 제품 전체와 남은 과제: **[MVP 기획서](docs/spec/current.md)**
+- 제품 전체와 남은 과제: **[기획서](docs/product-spec.md)**
 
 ## 문서
 
-| 문서                                             | 내용                                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [MVP 기획서](docs/spec/current.md)               | 게임 규칙, 화면 흐름, 구현 현황, 남은 과제, 완성 순서                                 |
-| [결정 정정표](docs/spec/decisions.md)            | 사용자가 승인한 제품 결정 이력                                                        |
-| [아키텍처](docs/architecture.md)                 | workspace 구조, 제품 실행 경로, 수명 소유                                             |
-| [프로토콜](docs/protocol.md)                     | 입장 HTTP, Room 채널, 공개 상태, 거절 규칙                                            |
-| [미디어](docs/media.md)                          | LiveKit 권한·세대·음성, 보류된 split 기록                                             |
-| [운영](docs/operations.md)                       | 운영 모드·설정값·요청 상한·재시작 복구·장애 대응                                      |
-| [테스트](docs/testing.md)                        | 로컬 검사, Cloud·부하·6인 시험, 인수 판정                                             |
-| [인계 기록](docs/handoffs/)                      | 역할별(A 규칙·B 서버·C 웹·D 장치/미디어·E 미디어 권한/운영·F 인프라) 진입점과 남은 일 |
-| [협업 컨벤션](docs/collaboration-conventions.md) | Jira·브랜치·커밋·MR 규칙                                                              |
-| [제3자 자산](docs/third-party-assets.md)         | 모델·SDK 권리와 고지                                                                  |
-| [인프라](infra/README.md)                        | Jenkins 파이프라인, 배포 장벽, 호스트 구성, 롤백                                      |
+모든 문서는 기준 커밋의 코드에서 확인한 현재 사실만 적는다. 각 문서 첫 줄에 기준 커밋이 있다.
+
+| 문서                                             | 내용                                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| [기획서](docs/product-spec.md)                   | 게임 규칙, 화면 흐름, 조작, 운영 한도, 검증 현황, 남은 결함, 결정 질문 |
+| [웹 구현 명세](docs/impl/web.md)                 | 라우트, 입장, 화면, 입력, 장면·아바타, 브라우저 저장소, 빌드           |
+| [서버 구현 명세](docs/impl/server.md)            | HTTP, 환경 변수, 세션·자리, Room, 방 생명주기, 운영·관측               |
+| [게임 규칙 명세](docs/impl/game-core.md)         | 틱 처리, 이동·포획·승패, 장비, 교환·시야, 출구, 맵·배치                |
+| [프로토콜 명세](docs/impl/protocol.md)           | 메시지, 명령, 거절 코드, 공개 상태·개인 뷰, HTTP 계약                  |
+| [미디어 명세](docs/impl/media.md)                | 발급 조건, 세대·회수, 음성·효과음, 얼굴 합성·수신, 월 사용량           |
+| [인프라 명세](docs/impl/infra.md)                | Jenkins, 배포 시퀀스·스모크, compose·nginx, 스크립트, 검증 실행        |
+| [결정 정정표](docs/spec/decisions.md)            | 사용자가 승인한 제품 결정 이력                                         |
+| [운영](docs/operations.md)                       | 운영 절차와 장애 대응                                                  |
+| [화면 디자인](docs/design/ui-system.md)          | 화면 결·창 규칙                                                        |
+| [협업 컨벤션](docs/collaboration-conventions.md) | Jira·브랜치·커밋·MR 규칙                                               |
+| [제3자 자산](docs/third-party-assets.md)         | 모델·SDK 권리와 고지                                                   |
+| [인프라 절차](infra/README.md)                   | 호스트 구성과 배포·롤백 절차                                           |
 
 ## 구성
 
@@ -59,7 +62,7 @@ pnpm verify      # 포맷 → lint·의존 경계 → 타입 → 단위/통합 �
 pnpm test:maps   # 실제 맵 변형·연결성·fallback·선발
 ```
 
-Jenkins도 같은 `pnpm verify`를 한 번 실행하고, `develop` 병합은 제품 배포와 실제 Cloud 합성 6인 시험(DP-06)으로 이어진다. Cloud·실제 장치·부하 인수는 [테스트](docs/testing.md)의 별도 절차다.
+Jenkins는 `pnpm verify`를 그대로 돌리지 않고 MR·배포 모드별 검사 계획을 실행한다. `develop` 병합은 제품 배포와 실제 Cloud 합성 6인 시험(DP-06)으로 이어진다. 검사 계획과 Cloud·부하 시험 조건은 [인프라 명세](docs/impl/infra.md#13-검증-실행)에 있다.
 
 ## 기여
 

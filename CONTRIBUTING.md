@@ -2,7 +2,7 @@
 
 팀원과 AI는 먼저 [AGENTS.md](AGENTS.md)와 [팀 협업 컨벤션](docs/collaboration-conventions.md)을 읽는다. 커밋·MR 제목은 scope 없이 `type: 변경 내용`, 관련 Jira 키는 커밋 마지막 문단에 단독 줄로, MR 본문의 관련 Jira 항목에 각각 적는다. 실제 Git 신원을 유지하고 AI 공동 저자를 추가하지 않는다.
 
-제품 규칙은 [MVP 기획서](docs/spec/current.md)와 [결정 정정표](docs/spec/decisions.md)를 따른다. 미정 도망자 아이템을 임의로 설계·구현하지 않으며 술래 장비·구속·자연 만료·포획·포즈 등 확정 범위는 유지한다.
+제품 규칙은 [기획서](docs/product-spec.md)와 [결정 정정표](docs/spec/decisions.md)를 따른다. 미정 도망자 아이템을 임의로 설계·구현하지 않으며 술래 장비·구속·자연 만료·포획·포즈 등 확정 범위는 유지한다.
 
 ## 시작 전
 
@@ -11,7 +11,7 @@ Node.js `24.19.0`과 pnpm `11.19.0`을 쓰고 루트에서 `pnpm install --froze
 ## 변경 경계
 
 - `apps/web`은 브라우저 표현과 입력을 소유하며 서버 내부 패키지를 import하지 않는다.
-- `server`는 입장·Room·권위 조정·미디어·운영 IO를 소유한다. `server/src/domain`·`server/src/rooms` 경계는 [server/README.md](server/README.md)를 따른다.
+- `server`는 입장·Room·권위 조정·미디어·운영 IO를 소유한다. `server/src/domain`·`server/src/rooms` 경계는 [서버 구현 명세](docs/impl/server.md)를 따른다.
 - `packages/protocol` 변경은 웹과 서버 소비자를 함께 확인하고 버전 호환성과 거절 동작을 기록한다.
 - `packages/game-core`는 서버 전용 순수 규칙이다.
 - 실제 맵·fallback·튜닝·Secret·운영 기록을 웹이나 protocol로 옮기지 않는다.

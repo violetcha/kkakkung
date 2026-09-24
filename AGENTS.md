@@ -4,12 +4,12 @@
 
 ## 작업 시작
 
-1. 이 문서, [CONTRIBUTING.md](CONTRIBUTING.md), 변경 영역의 README를 읽는다. 제품 규칙과 현황은 [MVP 기획서](docs/spec/current.md), 승인 이력은 [결정 정정표](docs/spec/decisions.md), 구조는 [아키텍처](docs/architecture.md)를 확인한다. 요구가 충돌하면 사용자의 최신 결정과 결정 정정표를 우선한다.
+1. 이 문서, [CONTRIBUTING.md](CONTRIBUTING.md), 변경 영역의 README를 읽는다. 제품 규칙과 현황은 [기획서](docs/product-spec.md), 승인 이력은 [결정 정정표](docs/spec/decisions.md), 파트별 구현은 [구현 명세](docs/impl/)를 확인한다. 요구가 충돌하면 사용자의 최신 결정과 결정 정정표를 우선한다.
 2. 현재 브랜치와 미커밋 변경을 확인한다. 다른 작업자의 변경을 덮어쓰거나 작업과 무관한 파일을 정리하지 않는다.
 3. 관련 Jira가 있으면 제목·작업 내용·완료 조건을 읽는다. 키와 번호는 실제 값을 쓴다. 저장소 이름에서 키를 추측하지 않는다.
 4. 확정된 기술 스택(TypeScript·Colyseus·React·LiveKit)과 현재 구현을 유지한다. 이전 프로젝트의 Java/Spring 규칙을 적용하지 않는다.
 5. 도망자 아이템(MP-06·EQ-06·EQ-07·EQ-08·EQ-09·EQ-12)은 이번 MVP에서 제외된 결정 대기다. 구현·성공 stub·완료 집계를 만들지 않는다. 술래 장비·구속·자연 만료·포획·포즈는 확정 범위다.
-6. 역할별 공개 진입점과 남은 일은 [인계 기록](docs/handoffs/)에서 필요한 역할만 읽는다. 다른 역할 소유 파일을 바꿔야 하면 해당 담당의 검토를 받는다(공개 계약은 B, 설정·manifest·lockfile은 F).
+6. 파트별 공개 진입점과 확인된 한계는 [구현 명세](docs/impl/)에서 필요한 파트만 읽는다. 다른 역할 소유 파일을 바꿔야 하면 해당 담당의 검토를 받는다(공개 계약은 B, 설정·manifest·lockfile은 F).
 
 ## Jira와 브랜치
 
@@ -30,7 +30,7 @@
 
 - 설치는 루트에서 한다. 각 `package.json`과 루트 `pnpm-lock.yaml`이 의존성 기준이며 앱별 lockfile을 만들지 않는다.
 - `apps/web`: 화면과 입력. 서버 내부 코드와 `packages/game-core`를 import하지 않는다.
-- `server`: 입장·Room·권위 판정·미디어·운영 IO. 세부는 [server/README.md](server/README.md).
+- `server`: 입장·Room·권위 판정·미디어·운영 IO. 세부는 [서버 구현 명세](docs/impl/server.md).
 - `packages/protocol`: 공개 전송 계약과 Schema. 바꾸면 웹·서버 소비자와 거절 동작을 함께 확인한다.
 - `packages/game-core`: 서버 전용 순수 규칙. 실제 맵·튜닝·비밀을 웹이나 protocol로 옮기지 않는다.
 - `tests/contracts/shared`: 웹·서버 시험이 공유하는 계약 fixture. 제품 코드는 import하지 않는다.
