@@ -1392,14 +1392,15 @@ export function ProductApp({
                   onCancel={() => setDeviceCheck(false)}
                   onRetry={() => void startAndReady()}
                   extra={
-                    /* 운영자 시연 방에만 있는 빠져나가는 길. 그 방은 장치 없이도 돌려 봐야 한다. */
+                    /* 운영자 데모 방에만 있는 빠져나가는 길. 카메라 없이 확인할 때 쓰고, 이때는
+                       일반 방에서 카메라가 안 될 때처럼 키보드로 한다(S15P21C204-384). */
                     demoRoom && !selfReady ? (
                       <button
                         type="button"
                         className="quiet"
                         onClick={() => runtime.current?.ready(true)}
                       >
-                        점검 없이 준비 (데모)
+                        카메라 없이 키보드로 준비 (데모)
                       </button>
                     ) : null
                   }

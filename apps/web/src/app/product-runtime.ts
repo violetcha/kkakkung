@@ -272,18 +272,13 @@ export function bindProductRoom(
   const isDemoRoom = () => snapshot.demo != null;
   let pendingDemo: DemoStateMessage | null = null;
   /**
-   * S15P21C204-313. 데모 방은 기본 키보드로 시연한다(D3). 이동·회전·E 는 키보드 모드에서만 받는데
-   * (265) 모드의 기본값이 모션이라, 카메라 없이 들어온 관리자는 아무 키도 먹지 않았다. 출구 앞에
-   * 서도 E 로 탈출을 시작할 수 없었다. 보정을 마친 경우에만 모션을 유지한다.
+   * S15P21C204-384. 데모 방은 일반 방의 기능을 6명 없이 확인하는 곳이라 입력 규칙도 일반 방과 같다.
+   * 들어올 때 키보드로 바꾸지 않는다. 장치 점검을 마치면 모션이고, 점검 없이 준비한 관리자만
+   * 키보드로 한다(`ready`). 313 은 입장 즉시 키보드로 바꿔, 점검을 건너뛴 경기에서는 탈출 자세가
+   * 방향키 도전으로 바뀌고 자세 모델도 돌지 않았다.
    */
   const publishDemo = (demo: DemoStateMessage) => {
-    const first = snapshot.demo == null;
     publish({ demo });
-    if (first && interaction.mode === 'motion' && snapshot.devices.calibration !== 'ready') {
-      interaction = { ...interaction, mode: 'keyboard' };
-      publish({ interaction });
-      updateContext();
-    }
   };
   const publish = (patch: Partial<ProductSnapshot>) => {
     if (active) {
@@ -1379,12 +1374,22 @@ export function bindProductRoom(
       updateContext();
     },
     async calibrateMotion() {
-      if (
-        !canRecoverDevices() ||
-        snapshot.devices.camera !== 'ready' ||
-        snapshot.devices.calibration === 'running'
-      )
+      if (!canRecoverDevices() || snapshot.devices.calibration === 'running') return;
+      // S15P21C204-384. 카메라 없이 키보드로 하던 사람이 모션을 고르면 카메라부터 켠다. 전에는
+      // 카메라가 꺼져 있으면 아무 일도 하지 않아 단추가 먹지 않는 것처럼 보였다. 장치 시작은 켠 뒤
+      // 보정까지 이어서 하므로, 여기서는 그 결과로 모드만 정한다.
+      if (snapshot.devices.camera !== 'ready') {
+        const starter = bridge;
+        const started = ++deviceAction;
+        await starter.startDevices(microphoneWanted).catch(failed('장치 시작', DEVICE_NOTICE));
+        if (!canRecoverDevices() || starter !== bridge || started !== deviceAction) return;
+        if (snapshot.devices.calibration === 'ready') {
+          interaction = { ...interaction, mode: 'motion' };
+          publish({ interaction });
+          updateContext();
+        }
         return;
+      }
       const owner = bridge;
       const run = ++deviceAction;
       try {
@@ -1407,7 +1412,23 @@ export function bindProductRoom(
         )(cause);
       }
     },
-    ready: (value: boolean) => bridge.ready(value),
+    ready(value: boolean) {
+      const reported = bridge.ready(value);
+      // S15P21C204-384. 데모 방에서 점검 없이 준비하면 카메라가 없으니 키보드로 한다. 일반 방에서
+      // 카메라가 안 될 때 키보드로 넘어가는 것과 같은 자리다. 점검을 마친 사람은 모션 그대로다.
+      if (
+        reported &&
+        value &&
+        isDemoRoom() &&
+        snapshot.devices.calibration !== 'ready' &&
+        interaction.mode !== 'keyboard'
+      ) {
+        interaction = { ...interaction, mode: 'keyboard' };
+        publish({ interaction });
+        updateContext();
+      }
+      return reported;
+    },
     getLocalAudioStatus: () => ({
       ...bridge.runtime.getLocalAudioStatus(),
       preferences: audioPreferences,

@@ -56,7 +56,6 @@ export function DeviceCheckScreen({
   consented,
   onConsent,
   heading = '플레이 전 장치 점검',
-  demo = false,
 }: {
   status: DeviceStatus;
   ready?: boolean;
@@ -77,8 +76,6 @@ export function DeviceCheckScreen({
   consented: boolean;
   onConsent(): void;
   heading?: string;
-  /** Demo rooms can start with keyboard input and opt into the real check explicitly. */
-  demo?: boolean;
 }) {
   const [microphone, setMicrophone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,7 +96,6 @@ export function DeviceCheckScreen({
   const errorStep: DeviceCheckStepId | null = status.errorCode
     ? deviceCheckErrorStep(status.errorCode)
     : null;
-  const [demoChecking, setDemoChecking] = useState(false);
   const run = (work: () => Promise<unknown>) => {
     setBusy(true);
     void work().finally(() => setBusy(false));
@@ -111,34 +107,6 @@ export function DeviceCheckScreen({
     setPinned(next === auto ? null : next);
   };
   // 동의 전에는 장치 제어를 그리지 않는다: 누를 것이 없으면 실수로 켜질 일도 없다.
-  if (demo && !demoChecking)
-    return (
-      <section
-        className="device-check device-check-with-controls demo-device-check"
-        aria-label="데모 장치 점검"
-      >
-        <div className="device-check-flow">
-          <p className="eyebrow">DEMO ROOM</p>
-          <h2>데모 방 준비</h2>
-          <p>
-            데모 방은 카메라와 마이크 없이 바로 시작할 수 있습니다. 기본 조작은 키보드이며, 실제
-            장치 점검이 필요할 때만 아래에서 진행해 주세요.
-          </p>
-          <p className="demo-device-default">기본 조작 · 키보드</p>
-          <div className="actions">
-            {onReady && (
-              <button type="button" onClick={() => onReady(true)} disabled={ready}>
-                {ready ? '준비 완료' : '장치 점검 없이 준비 완료'}
-              </button>
-            )}
-            <button type="button" onClick={() => setDemoChecking(true)}>
-              장치 점검 진행
-            </button>
-          </div>
-          {ready && <p role="status">준비 완료. 다른 참가자를 기다리는 중입니다.</p>}
-        </div>
-      </section>
-    );
   if (!consented) return <ConsentGate onAccept={onConsent} />;
   return (
     <section
