@@ -17,6 +17,7 @@ import type { Role } from '@kkakkung/protocol/game-schema';
 import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
 import { cameraAction } from '../flow/camera-action';
+import { togglesMenu } from '../flow/menu-key';
 import { POSE_LABELS, PoseArmsNotice } from '../pose/PoseChallenge';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS, type Lesson } from './solo-world';
@@ -91,10 +92,7 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
   const settingsRef = useRef<HomeSettings>(DEFAULT_HOME_SETTINGS);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat) return;
-      // 탈출 도전 중 Esc 는 도전 취소가 먼저다(입력 런타임이 처리).
-      if (challengeActive.current) return;
-      setMenuOpen((open) => !open);
+      if (togglesMenu(event, challengeActive.current)) setMenuOpen((open) => !open);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

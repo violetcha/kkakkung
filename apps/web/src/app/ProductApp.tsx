@@ -25,6 +25,7 @@ import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen
 import { capacityNotice, useServiceCapacity } from '../features/room/service-capacity';
 import { preparationFeedback } from '../features/game/flow/preparation-feedback';
 import { commandFeedback } from '../features/game/flow/command-feedback';
+import { togglesMenu } from '../features/game/flow/menu-key';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
 import { ResultScreen } from '../features/game/flow/ResultScreen';
 import { GameHud } from '../features/game/flow/GameHud';
@@ -582,10 +583,14 @@ export function ProductApp({
       deviceCheck ? checkHost.current : (poseHost.current ?? facePump.current),
     );
   }, [inRoom, deviceCheck, posing]);
+  // S15P21C204-379. 탈출 도전 중 Esc 는 도전 취소만 한다. 설정 창까지 열리지 않게 한다.
+  const challengeActive = useRef(false);
+  challengeActive.current =
+    snapshot?.view?.self?.status === 'ACTIVE' && snapshot.view.self.challenge !== null;
   useEffect(() => {
     if (!inRoom) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.repeat) setRoomMenu((open) => !open);
+      if (togglesMenu(event, challengeActive.current)) setRoomMenu((open) => !open);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1288,7 +1293,8 @@ export function ProductApp({
                 eyebrow="설정"
                 title="설정"
                 initialTab="device"
-                lead={{ label: '방 나가기', danger: true, run: () => void leave() }}
+                // S15P21C204-379. 머리말·대기실 나가기와 같다: 데모 세션을 지우고 시연은 /showcase 로.
+                lead={{ label: '방 나가기', danger: true, run: leaveByChoice }}
                 tail={{ label: '닫기', run: () => setRoomMenu(false) }}
                 tabs={[
                   {
