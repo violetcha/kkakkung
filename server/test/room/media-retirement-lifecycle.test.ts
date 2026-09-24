@@ -887,3 +887,25 @@ it('names nobody when a round is voided for a reason other than a lost connectio
     f.close();
   }
 });
+
+// S15P21C204-380. 적 별칭은 실제 경기 동안 그대로다. 연습 인스턴스를 회수해도 지워지지 않는다.
+it('keeps enemy aliases when a practice instance retires and forgets them with the game', () => {
+  const f = fixture();
+  try {
+    const room = f.room as any;
+    const enemy = f.players[1]!.session.playerId;
+    const alias = room.aliases.aliasOf(enemy);
+    const practices = room.driver.attached().filter((i: any) => i.kind === 'practice');
+    expect(practices.length).toBeGreaterThan(0);
+    const { state, topology } = practices[0];
+    for (const instance of practices) room.retireInstance(instance.gameInstanceId, 'phase-change');
+    expect(room.aliases.aliasOf(enemy)).toBe(alias);
+
+    const game = room.context.createInstance('game');
+    room.driver.attach({ gameInstanceId: game.gameInstanceId, kind: 'game', state, topology });
+    room.retireInstance(game.gameInstanceId, 'round-ended');
+    expect(room.aliases.aliasOf(enemy)).not.toBe(alias);
+  } finally {
+    f.close();
+  }
+});

@@ -87,3 +87,17 @@ it.each([
   expect(result.message).toContain('승리');
   expect(result.remaining).toBeNull();
 });
+
+// S15P21C204-380. 도망자가 1~2명인 경기도 같은 사유 이름을 쓴다. 문구는 실제 수를 말한다.
+it.each([
+  ['two-escaped', 'runners', { escaped: 1, captured: 0 }, '도망자 1명이 탈출하여'],
+  ['two-captured', 'taggers', { escaped: 0, captured: 1 }, '도망자 1명을 포획하여'],
+  ['two-escaped', 'runners', { escaped: 2, captured: 1 }, '도망자 2명이 탈출하여'],
+] as const)('names the real count for %s with %o', (reason, winner, counts, text) => {
+  const result = resultPresenter(
+    roundFixture({ phase: 'RESULT', result: { reason, winner }, counts }),
+    null,
+    { runners: 1 },
+  );
+  expect(result.message).toContain(text);
+});

@@ -53,9 +53,10 @@ export function resultPresenter(
         ? '경기를 계속할 수 없어 무효 처리되었습니다. 연결 정리가 끝나면 방장이 다시 시작할 수 있습니다.'
         : ended
           ? reason === 'two-escaped'
-            ? '도망자 2명이 탈출하여 도망자 팀이 승리했습니다.'
+            ? // S15P21C204-380. 사유 이름은 3인 기준이지만 뜻은 과반이다. 실제 수를 쓴다.
+              `도망자 ${round.counts.escaped}명이 탈출하여 도망자 팀이 승리했습니다.`
             : reason === 'two-captured'
-              ? '도망자 2명을 포획하여 술래 팀이 승리했습니다.'
+              ? `도망자 ${round.counts.captured}명을 포획하여 술래 팀이 승리했습니다.`
               : reason === 'timeout'
                 ? round.result?.winner === 'runners'
                   ? '제한 시간이 끝났고 탈출이 포획보다 많아 도망자 팀이 승리했습니다.'

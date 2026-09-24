@@ -483,13 +483,18 @@ function handleExchangeAccept(ctx: StepContext, command: CoreCommand<'EXCHANGE_A
   }
   const verified = verifyAccept(ctx.state, command.actorId, exchangeId, ctx.tick);
   if (verified.status === 'rejected') {
-    if (verified.close) ctx.state = endExchange(ctx.state, verified.close);
+    if (verified.close) {
+      ctx.state = endExchange(ctx.state, verified.close);
+      // S15P21C204-380. The requester learns the session is gone, like every other end.
+      exchangeCanceled(ctx, verified.close, verified.code);
+    }
     return outcome(ctx, command, 'rejected', verified.code);
   }
   const merged = mergeKnowledge(ctx.state, verified.session);
   if (merged.status === 'unchanged') {
     // Nothing left to merge: the session ends without a knowledge or trace change.
     ctx.state = endExchange(ctx.state, verified.session);
+    exchangeCanceled(ctx, verified.session, 'NOT_ALLOWED');
     return outcome(ctx, command, 'rejected', 'NOT_ALLOWED');
   }
   ctx.state = endExchange(merged.state, verified.session);

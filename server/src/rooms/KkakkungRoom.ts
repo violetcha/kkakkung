@@ -60,7 +60,12 @@ import { MatchContext } from '../game/MatchContext.js';
 import { MatchDriver } from '../game/MatchDriver.js';
 import { projectPrivateBody, projectSpectateBody } from '../game/PlayerProjection.js';
 import { createEnemyAliases } from '../game/EnemyAliases.js';
-import { chooseSpectateTarget, spectateCandidates, spectatorLinks } from '../game/Spectate.js';
+import {
+  chooseSpectateTarget,
+  receivesMedia,
+  spectateCandidates,
+  spectatorLinks,
+} from '../game/Spectate.js';
 import type { RoomTickCoordinator } from '../game/RoomTickCoordinator.js';
 import type {
   CorePort,
@@ -418,10 +423,33 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       const instance = this.context.instanceOf(playerId);
       if (!instance || instance.kind !== purpose) return null;
       const attached = this.driver.instance(instance.gameInstanceId);
-      if (!attached || deps.core?.getPlayerSelf(attached.state, playerId)?.status !== 'ACTIVE')
+      if (!attached || !deps.core) return null;
+      // S15P21C204-380. 관전 중인 종료 도망자도 교체 grant를 받는다. 미디어 쪽은 관전 링크가 있는
+      // 사람을 이미 적격으로 두므로, 여기서 막으면 수신이 한 번 끊긴 관전자는 복구할 길이 없다.
+      if (
+        !receivesMedia(
+          deps.core.getFrame(attached.state).participants,
+          playerId,
+          this.spectateChoices.get(playerId),
+          instance.kind === 'game' && this.phase === 'PLAYING',
+        )
+      )
         return null;
       const mediaInstanceId = this.mediaInstances.get(instance.gameInstanceId);
       return mediaInstanceId ? { mediaInstanceId, gameInstanceId: instance.gameInstanceId } : null;
+    }
+
+    /** 진행 중인 경기에서 끝난 뒤 누군가를 지켜보는 도망자인가. */
+    private isWatching(playerId: string): boolean {
+      const instance = this.context.instanceOf(playerId);
+      const attached = instance ? this.driver.instance(instance.gameInstanceId) : null;
+      if (!instance || !attached || !deps.core) return false;
+      if (instance.kind !== 'game' || this.phase !== 'PLAYING') return false;
+      const participants = deps.core.getFrame(attached.state).participants;
+      return (
+        participants.find((p) => p.playerId === playerId)?.status !== 'ACTIVE' &&
+        chooseSpectateTarget(participants, playerId, this.spectateChoices.get(playerId)) !== null
+      );
     }
 
     async requestMediaGrant(
@@ -1979,10 +2007,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       gameInstanceId: string,
       reason: 'phase-change' | 'aborted' | 'round-ended',
     ) {
+      const kind = this.driver.instance(gameInstanceId)?.kind;
       this.driver.detach(gameInstanceId, reason === 'round-ended' ? 'ROUND_ENDED' : 'CANCELED');
       const members = this.context.retireInstance(gameInstanceId);
-      // 340. Aliases live exactly as long as the instance that minted them.
-      this.aliases.clear();
+      // 340. Aliases live as long as the real game. S15P21C204-380: retiring a practice instance
+      // used to forget them too, so they were not stable for the round as EnemyAliases promises.
+      if (kind === 'game') this.aliases.clear();
       const mediaInstanceId = this.mediaInstances.get(gameInstanceId);
       this.mediaInstances.delete(gameInstanceId);
       if (mediaInstanceId) {
@@ -2263,7 +2293,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
               mediaInstanceId: result.mediaInstanceId,
               receiverGeneration: result.receiverGeneration,
             });
-          this.abortMatch('MEDIA_UNAVAILABLE', `MEDIA_PREPARE:${result.code}`);
+          // S15P21C204-380. 관전자는 이미 경기를 끝낸 사람이다. 복구 실패는 그 화면만 멈추게 하고
+          // 남은 사람들의 경기를 무효로 만들지 않는다.
+          if (!this.isWatching(result.playerId))
+            this.abortMatch('MEDIA_UNAVAILABLE', `MEDIA_PREPARE:${result.code}`);
         }
       } else if (control.type === 'MEDIA_RETIRED') {
         const { result } = control;
