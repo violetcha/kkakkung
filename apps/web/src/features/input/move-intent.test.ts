@@ -111,6 +111,42 @@ describe('createMoveIntentController', () => {
     expect(base.timerCount).toBe(0);
   });
 
+  it('brakes motion and resumes a held lean after the normal forward hold time', () => {
+    const base = harness();
+    base.controller.updateMotion(FORWARD, 1000);
+    base.controller.updateMotion(FORWARD, 1000 + INPUT_TUNING.forwardHoldMs);
+    expect(base.sent).toEqual(['forward']);
+
+    base.controller.setBrake(true);
+    expect(base.sent).toEqual(['forward', null]);
+    base.controller.updateMotion(FORWARD, 1300);
+    base.controller.setBrake(false);
+    base.controller.updateMotion(FORWARD, 1500);
+    expect(base.sent).toEqual(['forward', null]);
+    // 브레이크 중 몸이 기울어진 상태여도, 해제 뒤에는 새 모션 표본부터 보통 유지 시간을 잰다.
+    base.controller.updateMotion(FORWARD, 1500 + INPUT_TUNING.forwardHoldMs - 1);
+    expect(base.sent).toEqual(['forward', null]);
+    base.controller.updateMotion(FORWARD, 1500 + INPUT_TUNING.forwardHoldMs);
+    expect(base.sent).toEqual(['forward', null, 'forward']);
+  });
+
+  it('does not replay motion observed only while the brake is held', () => {
+    const base = harness();
+    base.controller.setBrake(true);
+    base.controller.updateMotion(FORWARD, 1000);
+    base.controller.updateMotion(FORWARD, 1000 + INPUT_TUNING.forwardHoldMs * 2);
+    expect(base.sent).toEqual([]);
+
+    base.controller.setBrake(false);
+    base.controller.updateMotion(null, 2000);
+    expect(base.sent).toEqual([]);
+
+    // 실제 표본이 다시 들어온 뒤에만 정상 hold 판정이 새로 시작한다.
+    base.controller.updateMotion(FORWARD, 2100);
+    base.controller.updateMotion(FORWARD, 2100 + INPUT_TUNING.forwardHoldMs);
+    expect(base.sent).toEqual(['forward']);
+  });
+
   it('upgrades to continuous movement when the lean is kept, then refreshes every 100ms', () => {
     const base = harness();
     const armedAt = 1000 + INPUT_TUNING.forwardHoldMs;
@@ -335,6 +371,11 @@ describe('createMoveIntentController', () => {
     expect(base.sent).toEqual(['forward']);
     expect(base.timerCount).toBe(0);
     base.controller.updateMotion(FORWARD, 5000 + INPUT_TUNING.forwardHoldMs);
+    expect(base.sent).toEqual(['forward']);
+    base.controller.updateMotion(0, 6000);
+    base.controller.updateMotion(0, 6000 + INPUT_TUNING.neutralHoldMs);
+    base.controller.updateMotion(FORWARD, 7000);
+    base.controller.updateMotion(FORWARD, 7000 + INPUT_TUNING.forwardHoldMs);
     expect(base.sent).toEqual(['forward', 'forward']);
   });
 
