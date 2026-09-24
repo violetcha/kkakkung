@@ -74,6 +74,8 @@ export interface MoveIntentController {
    * backHoldMs)이 지나야 의도가 되고, 놓으면 즉시 멈춘다. 모션 모드의 키는 무시한다.
    */
   setKey(direction: MoveDirection, pressed: boolean): void;
+  /** 모션 모드의 수동 브레이크. 해제 뒤 중립 표본을 안정적으로 받아야 다시 움직인다. */
+  setBrake(pressed: boolean): void;
   /** 모드가 바뀌면 누르고 있던 키와 모션 후보를 모두 버린다. 구 입력을 새 모드로 이어 가지 않는다. */
   setMode(mode: InputMode): void;
   /** 장애·문맥 종료·잠금. held와 시작 시각을 비우고 direction null을 한 번 보낸다. */
@@ -102,6 +104,9 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
   /** 키를 누른 시각. 유지 시간을 채우기 전에는 의도를 만들지 않는다. */
   let keyForwardSince: number | null = null;
   let keyBackSince: number | null = null;
+  let brakePressed = false;
+  let brakeLatched = false;
+  let neutralSince: number | null = null;
   let timer: number | null = null;
   /** 누른 키의 유지 시간이 차는 순간 다시 판정하기 위한 일회성 타이머. */
   let keyTimer: number | null = null;
@@ -302,6 +307,17 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     beginTap(desired, nowMs);
   }
 
+  const stopMovement = () => {
+    clearMotion();
+    phase = 'idle';
+    armedAt = null;
+    armedDirection = null;
+    stopTapTimer();
+    stopUpgradeTimer();
+    stopTimer();
+    emit(null);
+  };
+
   return {
     updateMotion(relativeLeanRad, nowMs) {
       // S15P21C204-280. 이 표본이 해제를 처음 보이는 표본인지 알려면 직전 방향이 필요하다.
@@ -313,8 +329,23 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
       if (mode !== 'motion' || relativeLeanRad === null || !Number.isFinite(relativeLeanRad)) {
         // 보정 전이거나 표본이 없으면 모션 의도를 만들지 않는다.
         clearMotion();
+        neutralSince = null;
         markRelease();
         resolve();
+        return;
+      }
+      if (brakePressed || brakeLatched) {
+        stopMovement();
+        const neutral =
+          relativeLeanRad <= tuning.forwardExitRad && relativeLeanRad >= -tuning.backExitRad;
+        if (!neutral) neutralSince = null;
+        else {
+          neutralSince ??= nowMs;
+          if (nowMs - neutralSince >= tuning.neutralHoldMs) {
+            brakeLatched = false;
+            neutralSince = null;
+          }
+        }
         return;
       }
       const forwardMagnitude = relativeLeanRad > 0 ? relativeLeanRad : 0;
@@ -369,15 +400,30 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
       resolve();
     },
 
+    setBrake(pressed) {
+      if (mode !== 'motion') return;
+      if (brakePressed === pressed) return;
+      brakePressed = pressed;
+      if (pressed) {
+        neutralSince = null;
+        stopMovement();
+      }
+    },
+
     setMode(next) {
       if (next === mode) return;
       mode = next;
+      brakePressed = false;
       clearKeys();
       clearMotion();
+      neutralSince = null;
       resolve();
     },
 
     release() {
+      if (mode === 'motion') brakeLatched = true;
+      brakePressed = false;
+      neutralSince = null;
       clearMotion();
       clearKeys();
       phase = 'idle';
@@ -393,6 +439,9 @@ export function createMoveIntentController(deps: MoveIntentDeps): MoveIntentCont
     },
 
     reset() {
+      brakePressed = false;
+      brakeLatched = mode === 'motion';
+      neutralSince = null;
       clearMotion();
       clearKeys();
       phase = 'idle';

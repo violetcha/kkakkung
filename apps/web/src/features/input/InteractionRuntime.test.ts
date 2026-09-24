@@ -1006,6 +1006,65 @@ describe('createInteractionRuntime', () => {
     }
   });
 
+  it('keeps head-turn motion active while Space brakes body movement', async () => {
+    const keys = new Map<string, (event: KeyboardEvent) => void>();
+    const base = harness({
+      keyboardTarget: {
+        addEventListener: (type, listener) => keys.set(type, listener),
+        removeEventListener: (type) => keys.delete(type),
+      },
+    });
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const calibration = base.runtime.calibrate();
+      for (let frame = 1; frame <= 8; frame++) {
+        base.advance(40);
+        base.emit(frame);
+      }
+      await calibration;
+      base.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      });
+      const press = (type: string, code: string) => {
+        let prevented = false;
+        keys.get(type)?.({
+          code,
+          repeat: false,
+          isComposing: false,
+          target: null,
+          preventDefault: () => (prevented = true),
+        } as unknown as KeyboardEvent);
+        return prevented;
+      };
+      expect(press('keydown', 'Space')).toBe(true);
+      for (let frame = 9; frame <= 18; frame++) {
+        base.advance(50);
+        base.emit(frame, 1, 0.7, 0.2);
+      }
+      expect(
+        vi.mocked(base.deps.sendCommand).mock.calls.filter(([command]) => command.type === 'TURN'),
+      ).toHaveLength(1);
+      expect(
+        vi
+          .mocked(base.deps.sendCommand)
+          .mock.calls.filter(
+            ([command]) =>
+              command.type === 'MOVE_INTENT' && command.payload.direction === 'forward',
+          ),
+      ).toEqual([]);
+      press('keyup', 'Space');
+    } finally {
+      await base.runtime.dispose();
+    }
+  });
+
   it('ignores repeated action keys and installs the equipment selected by the screen', async () => {
     const listeners = new Map<string, (event: KeyboardEvent) => void>();
     const base = harness({

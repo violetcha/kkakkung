@@ -1370,6 +1370,11 @@ export const createInteractionRuntime = (
     const onKeyDown = (event: KeyboardEvent) => {
       // 입력 요소·IME 조합 중에는 게임 단축키를 만들지 않는다.
       if (event.isComposing || isTextEntryTarget(event.target)) return;
+      if (event.code === 'Space' && context.acceptsInput && !context.inChallenge) {
+        if (!event.repeat) move.setBrake(true);
+        event.preventDefault();
+        return;
+      }
       const action = ACTION_KEYS[event.code];
       if (action) {
         if (event.repeat) return;
@@ -1391,6 +1396,10 @@ export const createInteractionRuntime = (
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        move.setBrake(false);
+        return;
+      }
       const moveKey = MOVE_KEYS[event.code];
       if (moveKey) {
         move.setKey(moveKey, false);
