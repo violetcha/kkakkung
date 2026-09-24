@@ -1622,6 +1622,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         this.blockedReason = 'MEDIA_MONTHLY_LIMIT';
         return;
       }
+      // S15P21C204-372. 방은 대기방 예산으로 열리고, LiveKit 을 쓰는 경기는 동시에 MAX_ROOMS 판까지다.
+      // 자리가 없으면 장치 점검에 머물며 이유를 보인다. 방장이 다시 시작을 누르면 다시 본다.
+      if (!deps.slots.canStartMatch(this.roomCode)) {
+        this.blockedReason = 'MATCH_CAPACITY';
+        return;
+      }
       const now = deps.monotonicNow();
       if (!deps.core || !deps.practice || !deps.tuning) {
         this.blockedReason = 'PRACTICE_PRODUCER_MISSING';

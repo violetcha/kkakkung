@@ -288,7 +288,7 @@ describe('three showcase rooms at once (S15P21C204-361)', () => {
       const first = await fill();
       const second = await seat('runner');
       expect(second).not.toBe(first);
-      expect(own.formingShowcaseRooms()).toBe(2);
+      expect(own.showcaseRoomsInUse()).toBe(2);
       // 둘째 방에 빈 자리가 있는 동안은 셋째 방을 열지 않고 거기에 앉힌다.
       expect(await seat('tagger')).toBe(second);
       expect(await seat('runner')).toBe(second);
@@ -296,16 +296,20 @@ describe('three showcase rooms at once (S15P21C204-361)', () => {
       expect(own.occupied(second)).toBe(4);
       const third = await fill();
       expect(new Set([first, second, third]).size).toBe(3);
-      expect(own.formingShowcaseRooms()).toBe(3);
-      // 셋이 다 모이는 중이면 열셋째는 기다린다.
+      expect(own.showcaseRoomsInUse()).toBe(3);
+      // 셋이 다 쓰이는 중이면 열셋째는 기다린다.
       expect(await seat('runner')).toBe('503:CAPACITY');
-      // 시연 방 셋은 MAX_ROOMS 예산을 셋 쓴다.
       expect(own.roomCodes().size).toBe(3);
-      // 한 방이 시작하면 모이는 중이 둘이 되어 새 방이 열린다.
+      // S15P21C204-372. 경기 중인 시연 방도 LiveKit 을 쓰므로 여전히 센다.
       own.setPhase(first, 'TEAM_PRACTICE', 1_000_000);
+      expect(await seat('runner')).toBe('503:CAPACITY');
+      // 결과 화면으로 넘어간 방은 세지 않아 다음 시연이 새 방을 연다.
+      own.setPhase(first, 'RESULT', 1_000_000);
       const fourth = await seat('runner');
       expect(fourth).not.toBe('503:CAPACITY');
       expect(own.roomCodes().size).toBe(4);
+      // 시연 방은 일반 방 예산(maxRooms 10) 밖이다.
+      expect(own.capacity().lobbyRoomsInUse).toBe(0);
     } finally {
       await new Promise<void>((resolve) => local.server.close(() => resolve()));
     }

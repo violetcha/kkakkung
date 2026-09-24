@@ -6,6 +6,7 @@
 
 ### 입장
 
+0. (S15P21C204-372) 입장 화면은 `GET /api/capacity`로 `{matchesInUse, matchLimit, lobbyRoomsInUse, lobbyRoomLimit, admissionOpen, mediaBlocked}`를 받아 여유를 보인다. 개수만 담고 방 코드·참가자는 담지 않으며 no-store다. 입장 시도 한도(`/api/sessions`) 밖이라 화면 갱신이 입장 예산을 쓰지 않는다. 실패하거나 404면 표시만 빠지고 입장은 막지 않는다.
 1. 클라이언트가 `GET /api/sessions/access`로 해당 요청의 `{method: 'gitlab-sso' | 'invitation' | 'guest'}`을 확인한다. no-store이며 실제 신원·토큰은 반환하지 않는다. 기본 invitation에서는 운영자가 `POST /api/operations/invitations`(OPS_TOKEN)로 발급한 초대 토큰이 필요하다. 토큰은 방 코드와 다른 고엔트로피 값이며 서버는 해시만 저장한다.
 2. 클라이언트가 `POST /api/sessions`에 strict `SessionRequest`를 보낸다. 생성은 `{nickname, inviteToken?, createRoom: true}`(roomCode 금지), 참가는 `{nickname, inviteToken?, createRoom: false, roomCode}`다. inviteToken 생략은 명시적 GitLab SSO 모드에서 신뢰 프록시가 확인한 lab.ssafy.com 로그인 또는 명시적 guest 모드의 새 방 생성에서 가능하다. 게스트 친구 참가에는 방별 초대가 필요하며 명시한 링크는 생성/SSO 요청에서도 검증한다. POST는 매번 인증을 검사하며 access 응답이나 본문의 신원 주장으로 인증하지 않는다. 응답은 `SessionResponse {sessionToken, playerId, roomCode, expiresAt(epoch ms), protocolVersion: '0.2.0'}`이고 `Cache-Control: no-store`다.
 3. `Client.joinOrCreate('kkakkung', { token: sessionToken, roomCode, protocolVersion: '0.2.0' })`. 서버는 매칭 전에 세션·방 코드·버전·좌석·중복 연결을 검사한다(400 INVALID_JOIN, 409 PROTOCOL_MISMATCH, 401 INVALID_SESSION, 403 WRONG_ROOM/ROOM_CLOSED, 409 SESSION_IN_USE).

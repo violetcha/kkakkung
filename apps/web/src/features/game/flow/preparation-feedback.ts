@@ -12,6 +12,9 @@ const LABELS: Record<PreparationIssue, string> = {
   // S15P21C204-364. 다시 준비해도 풀리지 않으므로 재시도를 권하지 않는다.
   MEDIA_BUDGET_EXHAUSTED:
     '이번 달 영상·음성 사용량이 한도에 가까워 새 경기를 시작할 수 없습니다. 진행 중인 경기는 영향이 없습니다. 운영자에게 알려 주세요.',
+  // S15P21C204-372. 방은 남아 있고 자리가 나면 시작할 수 있다. 방장이 할 일을 말한다.
+  MATCH_CAPACITY_FULL:
+    '지금은 동시에 진행할 수 있는 경기가 모두 사용 중입니다. 방은 그대로 유지되니 잠시 뒤 방장이 다시 시작해 주세요.',
 };
 export function preparationFeedback(issue: PreparationIssue | undefined): string | null {
   return issue ? (LABELS[issue] ?? null) : null;

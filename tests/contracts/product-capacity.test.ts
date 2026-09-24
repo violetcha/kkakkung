@@ -31,6 +31,23 @@ describe('deployed product room capacity', () => {
     expect(demoBudget('attested')).toBe(demoBudget('continuous'));
   });
 
+  // S15P21C204-372. 방 만들기는 대기방 예산(30)을, 경기는 MAX_ROOMS 를 쓴다. 두 운영 모드가 같고,
+  // 경기 예산보다 작지 않으며 서버 스키마(1~50) 안이어야 기동이 막히지 않는다.
+  it('gives both product overlays the same lobby room budget, not below the match budget', () => {
+    const lobbyBudget = (mode: string) => {
+      const text = readFileSync(join(process.cwd(), productCapacityOverlay(mode)), 'utf8');
+      const values = [...text.matchAll(/^\s+LOBBY_MAX_ROOMS: '(\d+)'$/gm)].map((m) => m[1]);
+      expect(values, mode).toHaveLength(1);
+      return Number(values[0]);
+    };
+    expect(lobbyBudget('continuous')).toBe(30);
+    expect(lobbyBudget('attested')).toBe(lobbyBudget('continuous'));
+    expect(lobbyBudget('continuous')).toBeGreaterThanOrEqual(
+      Number(readProductCapacity(process.cwd(), 'continuous').MAX_ROOMS),
+    );
+    expect(lobbyBudget('continuous')).toBeLessThanOrEqual(50);
+  });
+
   it('keeps both product overlays at the same capacity', () => {
     expect(readProductCapacity(process.cwd(), 'continuous')).toEqual(
       readProductCapacity(process.cwd(), 'attested'),

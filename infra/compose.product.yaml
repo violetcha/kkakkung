@@ -12,6 +12,10 @@ services:
       # so the two deployment modes never differ in how much they open.
       MAX_ROOMS: '10'
       MAX_SLOTS: '60'
+      # S15P21C204-372: MAX_ROOMS/MAX_SLOTS above bound concurrent matches (practice to play, LiveKit).
+      # Lobby rooms are cheap and have their own, larger budget; a room counts against MAX_ROOMS
+      # only while its match runs. Showcase rooms (SHOWCASE_ROOMS) sit outside both.
+      LOBBY_MAX_ROOMS: '30'
       # S15P21C204-353: same demo budget as the continuous overlay (separate from MAX_ROOMS).
       DEMO_MAX_ROOMS: '3'
     volumes:

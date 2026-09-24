@@ -69,3 +69,21 @@ describe('계정별 방 예산 설정', () => {
     expect(() => parseConfig({ ...base, MAX_ROOMS_PER_ACCOUNT: 'one' })).toThrow();
   });
 });
+
+// S15P21C204-372. 방 만들기(대기방)와 경기는 예산이 다르다.
+describe('대기방 예산 설정', () => {
+  it('생략하면 경기 방 수와 같고, 운영은 더 크게 둘 수 있다', () => {
+    expect(parseConfig({ ...base, MAX_ROOMS: '1', MAX_SLOTS: '6' }).lobbyMaxRooms).toBe(1);
+    expect(
+      parseConfig({ ...base, MAX_ROOMS: '10', MAX_SLOTS: '60', LOBBY_MAX_ROOMS: '30' })
+        .lobbyMaxRooms,
+    ).toBe(30);
+  });
+
+  it('경기 방 수보다 작거나 범위를 벗어나면 부팅을 거절한다', () => {
+    expect(() =>
+      parseConfig({ ...base, MAX_ROOMS: '4', MAX_SLOTS: '24', LOBBY_MAX_ROOMS: '3' }),
+    ).toThrow('LOBBY_MAX_ROOMS must not be below MAX_ROOMS');
+    expect(() => parseConfig({ ...base, LOBBY_MAX_ROOMS: '51' })).toThrow();
+  });
+});

@@ -58,12 +58,37 @@ type RoomEntry = {
 };
 
 export const JOINABLE_PHASES: readonly Phase[] = ['LOBBY', 'DEVICE_CHECK'];
+/**
+ * S15P21C204-372. LiveKit 이 붙어 있는 단계. 경기 예산(maxRooms)은 이 단계에 있는 일반 방 수로 센다.
+ * 연습을 시작할 때 가져가고, 결과·무효·로비로 넘어가면 따로 돌려주지 않아도 풀린다.
+ */
+export const MATCH_PHASES: readonly Phase[] = [
+  'TEAM_PRACTICE',
+  'MAP_FINALIZING',
+  'GAME_LOADING',
+  'COUNTDOWN',
+  'PLAYING',
+];
+
+/** S15P21C204-372. 홈 화면이 보여 주는 여유. 개수만 담고 방 정보는 담지 않는다. */
+export type CapacitySnapshot = Readonly<{
+  matchesInUse: number;
+  matchLimit: number;
+  lobbyRoomsInUse: number;
+  lobbyRoomLimit: number;
+}>;
 
 export class SlotRegistry {
   private readonly rooms = new Map<string, RoomEntry>();
   readonly roomCapacity: number;
   readonly serviceCapacity: number;
+  /**
+   * 동시에 진행할 수 있는 경기(연습~경기) 수. LiveKit 을 쓰는 비싼 예산이다(S15P21C204-372 부터
+   * 방을 만드는 예산이 아니라 경기를 시작하는 예산).
+   */
   readonly maxRooms: number;
+  /** 동시에 열어 둘 수 있는 일반 방(대기방 포함) 수. 방 만들기가 쓴다(S15P21C204-372). */
+  readonly maxLobbyRooms: number;
   /** 한 주체가 동시에 열어 둘 수 있는 방 수(S15P21C204-293). */
   readonly maxRoomsPerOwner: number;
   /** 한 SSO 계정이 동시에 열어 둘 수 있는 방 수(S15P21C204-366). 출처와 따로 센다. */
@@ -71,8 +96,8 @@ export class SlotRegistry {
   /** 동시에 열 수 있는 데모 방 수. maxRooms 와 따로 센다(S15P21C204-312). */
   readonly maxDemoRooms: number;
   /**
-   * 동시에 모이는 중일 수 있는 시연 방 수(S15P21C204-361). 데모와 달리 따로 세지 않는다. 시연 방도
-   * maxRooms 와 서비스 좌석 한도 안에서 일반 방과 함께 센다.
+   * 동시에 쓰고 있을 수 있는 시연 방 수(S15P21C204-361). S15P21C204-372 부터 일반 방 예산과 따로
+   * 센다: 발표 중에 일반 방이 막히거나, 일반 방이 차서 발표가 막히지 않게 한다.
    */
   readonly maxShowcaseRooms: number;
 
@@ -80,6 +105,7 @@ export class SlotRegistry {
     roomCapacity?: number;
     serviceCapacity?: number;
     maxRooms: number;
+    maxLobbyRooms?: number;
     maxRoomsPerOwner?: number;
     maxRoomsPerAccount?: number;
     maxDemoRooms?: number;
@@ -88,6 +114,7 @@ export class SlotRegistry {
     this.roomCapacity = options.roomCapacity ?? 6;
     this.serviceCapacity = options.serviceCapacity ?? 60;
     this.maxRooms = options.maxRooms;
+    this.maxLobbyRooms = options.maxLobbyRooms ?? options.maxRooms;
     this.maxRoomsPerOwner = options.maxRoomsPerOwner ?? 2;
     this.maxRoomsPerAccount = options.maxRoomsPerAccount ?? 1;
     this.maxDemoRooms = options.maxDemoRooms ?? 1;
@@ -98,6 +125,8 @@ export class SlotRegistry {
       throw new Error('INVALID_MAX_SHOWCASE_ROOMS');
     if (!Number.isSafeInteger(this.maxRooms) || this.maxRooms < 1)
       throw new Error('INVALID_MAX_ROOMS');
+    if (!Number.isSafeInteger(this.maxLobbyRooms) || this.maxLobbyRooms < this.maxRooms)
+      throw new Error('INVALID_MAX_LOBBY_ROOMS');
     if (!Number.isSafeInteger(this.maxRoomsPerOwner) || this.maxRoomsPerOwner < 1)
       throw new Error('INVALID_MAX_ROOMS_PER_OWNER');
     if (!Number.isSafeInteger(this.maxRoomsPerAccount) || this.maxRoomsPerAccount < 1)
@@ -184,11 +213,38 @@ export class SlotRegistry {
     return total;
   }
 
-  /** Demo rooms, or every other room when `demo` is false. */
-  private roomsCounted(demo: boolean): number {
+  private roomsOfKind(kind: RoomKind): number {
     let count = 0;
-    for (const room of this.rooms.values()) if ((room.kind === 'demo') === demo) count += 1;
+    for (const room of this.rooms.values()) if (room.kind === kind) count += 1;
     return count;
+  }
+
+  /** 지금 연습~경기 중인 일반 방 수(S15P21C204-372). */
+  activeMatchRooms(): number {
+    let count = 0;
+    for (const room of this.rooms.values())
+      if (room.kind === 'match' && MATCH_PHASES.includes(room.phase)) count += 1;
+    return count;
+  }
+
+  /**
+   * 이 방이 연습을 시작해도 되는가. 일반 방만 경기 예산을 쓴다. 이미 경기 중인 방은 제 자리를
+   * 갖고 있으므로 막지 않는다. 시연·데모 방은 각자의 예산이 있다.
+   */
+  canStartMatch(roomCode: string): boolean {
+    const room = this.rooms.get(roomCode);
+    if (!room) return false;
+    if (room.kind !== 'match' || MATCH_PHASES.includes(room.phase)) return true;
+    return this.activeMatchRooms() < this.maxRooms;
+  }
+
+  capacity(): CapacitySnapshot {
+    return {
+      matchesInUse: this.activeMatchRooms(),
+      matchLimit: this.maxRooms,
+      lobbyRoomsInUse: this.roomsOfKind('match'),
+      lobbyRoomLimit: this.maxLobbyRooms,
+    };
   }
 
   occupied(roomCode: string): number {
@@ -226,8 +282,10 @@ export class SlotRegistry {
     if (!room) {
       if (!options.create) return 'ROOM_CLOSED';
       if (options.demo) {
-        if (this.roomsCounted(true) >= this.maxDemoRooms) return 'DEMO_LIMIT';
-      } else if (this.roomsCounted(false) >= this.maxRooms) return 'ROOM_LIMIT';
+        if (this.roomsOfKind('demo') >= this.maxDemoRooms) return 'DEMO_LIMIT';
+      } else if (options.showcase) {
+        if (this.showcaseRoomsInUse() >= this.maxShowcaseRooms) return 'ROOM_LIMIT';
+      } else if (this.roomsOfKind('match') >= this.maxLobbyRooms) return 'ROOM_LIMIT';
       // 전역 예산을 한 주체가 다 가져가지 못하게 한다. 방이 닫히면 항목이 사라지므로 따로
       // 정리할 계수기를 두지 않고 매번 센다(방은 최대 열 개다).
       const ownerLimit =
@@ -286,24 +344,28 @@ export class SlotRegistry {
   }
 
   /**
-   * 아직 모이는 중인(대기실·장치 점검, 닫히지 않은) 시연 방 수. 찼거나 잠긴 방도 모이는 중으로
-   * 센다. 경기가 시작되거나 끝난 방은 세지 않아 다음 시연이 새 방을 열 수 있다.
+   * 쓰고 있는(모이는 중이거나 경기 중인, 닫히지 않은) 시연 방 수. 찼거나 잠긴 방도 센다. 결과·무효
+   * 화면에 남은 방은 세지 않아 다음 시연이 새 방을 열 수 있다. S15P21C204-372 부터 시연 방은 일반
+   * 방 예산 밖이므로, 경기 중인 방도 세야 동시에 쓰는 LiveKit 이 SHOWCASE_ROOMS 판을 넘지 않는다.
    */
-  formingShowcaseRooms(): number {
+  showcaseRoomsInUse(): number {
     let count = 0;
     for (const room of this.rooms.values())
-      if (room.kind === 'showcase' && !room.closing && JOINABLE_PHASES.includes(room.phase))
+      if (
+        room.kind === 'showcase' &&
+        !room.closing &&
+        (JOINABLE_PHASES.includes(room.phase) || MATCH_PHASES.includes(room.phase))
+      )
         count += 1;
     return count;
   }
 
   /**
-   * S15P21C204-361. 들어갈 방이 없을 때 새 시연 방을 열 수 있는가. 모이는 중인 시연 방이 한도
-   * (maxShowcaseRooms) 미만이면 연다. 한도에 닿았으면 호출 측이 CAPACITY 로 기다리게 한다. 실제로
-   * 열리는지는 reserve 가 maxRooms·좌석 한도로 다시 판단한다.
+   * S15P21C204-361. 들어갈 방이 없을 때 새 시연 방을 열 수 있는가. 쓰고 있는 시연 방이 한도
+   * (maxShowcaseRooms) 미만이면 연다. 한도에 닿았으면 호출 측이 CAPACITY 로 기다리게 한다.
    */
   canOpenShowcaseRoom(): boolean {
-    return this.formingShowcaseRooms() < this.maxShowcaseRooms;
+    return this.showcaseRoomsInUse() < this.maxShowcaseRooms;
   }
 
   /** 시연 방 참가자가 고른 역할. 방이 역할을 배정할 때 계획으로 넘긴다. */
