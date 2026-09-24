@@ -240,6 +240,6 @@ docker logs --since 1h kkakkung-game 2>&1 | grep -E '"event":"(room.phase|room.p
 - 호스트 외부 백업과 실제 복원 훈련. 호스트 자체 장애는 외부 알림도 함께 멈춘다(호스트 밖 감시 없음).
 - Docker 메모리·CPU·PID 상한이 없다. 실제 게임·미디어·CI 조건에서 상한과 회복을 검증한다.
 - 단일 모드의 공유 방 첫 예약 fsync와 첫 journal 기록 사이 종료 공백.
-- 준비 단계 30초 반복 실패(S15P21C204-231)의 원인 확정. 재경기 뒤 입장 503(S15P21C204-236)은 로컬에서 재현되지 않았다. 재발하면 `/api/sessions` 응답, matchmake 오류 코드, 운영 status의 readiness·admission, room phase를 같은 시각으로 남긴다([B 인계](handoffs/B.md)).
+- 준비 단계 30초 반복 실패(S15P21C204-231)의 원인 확정. 재경기 뒤 입장 503(S15P21C204-236)은 로컬에서 재현되지 않았다. 재발하면 `/api/sessions` 응답, matchmake 오류 코드, 운영 status의 readiness·admission, room phase를 같은 시각으로 남긴다([B 인계](impl/server.md)).
 - 운영 방 수 상향: 게임 단독 60클라이언트 30분 → 실제 Cloud 1→3→5→10방 → 검증된 단계만큼 `MAX_ROOMS` 배포(S15P21C204-251).
 - Trivy HIGH/CRITICAL은 기록만 하고 배포를 막지 않는다. 실제 노출 경로 검토와 예외 기준이 필요하다.

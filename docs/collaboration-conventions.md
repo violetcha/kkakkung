@@ -8,7 +8,7 @@ AI 도구가 지침을 자동으로 읽는다고 가정하지 않는다. 대괄�
 
 ```text
 저장소 루트의 AGENTS.md와 docs/collaboration-conventions.md를 먼저 읽고 따라줘.
-제품 기준은 docs/spec/current.md와 docs/spec/decisions.md야.
+제품 기준은 docs/product-spec.md와 docs/spec/decisions.md, 파트별 구현은 docs/impl/야.
 이번 작업은 [작업 내용]이고, 관련 Jira는 [실제 이슈 키 또는 없음]이야.
 커밋·MR 제목은 scope 없이 type: 변경 내용 형식, 커밋 마지막 문단에는 Jira 키만 단독 줄로 적어줘.
 이번 실행 범위는 [예: 구현·검증·로컬 커밋까지]야. 푸시·MR 생성·병합은 [내가 직접 / 요청할 때만] 해줘.
@@ -122,9 +122,9 @@ Windows PowerShell 5.1에서 `Set-Content -Encoding utf8`로 만든 메시지 �
 
 공개 계약을 바꾸면 해당 생산자와 소비자 담당이 함께 리뷰한다(예: 서버 private-view·응답 → 웹·비전, 미디어 바인딩·세대 → 서버 Room·비전, 센서 callback → 웹, Worker·CSP → 비전).
 
-## 인계 기록
+## 구현 문서
 
-역할별 공개 인계는 [handoffs](handoffs/)에 둔다. 각자 자기 역할 파일만 고치고, 다른 역할에 필요한 변경은 자기 파일의 “요청” 표에 구체적으로 적는다. 날짜별 작업 일지는 쌓지 않는다. 현재 유효한 진입점·계약·남은 일만 유지하고 끝난 이력은 git 기록과 MR에 남긴다.
+파트별 구현은 [구현 명세](impl/)에 둔다. 코드를 바꾸면 그 동작을 소유한 파트 문서를 같은 변경에서 고친다. 문서는 코드에서 확인한 현재 사실만 적고, 수치·조건마다 코드 줄을 근거로 단다. 날짜별 작업 일지는 쌓지 않고 끝난 이력은 git 기록과 MR에 남긴다.
 
 ## 병합과 배포
 

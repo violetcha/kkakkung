@@ -129,7 +129,7 @@ MR 빌드는 GitLab 이 보낸 커밋을 체크아웃 HEAD 와 대조하고, dev
 ## 알고 있어야 할 것
 
 - 빌드가 컨트롤러(built-in node)에서 돕니다. 서버 한 대라 에이전트 분리 실익이 적어 안 나눕니다. 서버가 늘면 노드 추가 + `agent { label }`.
-- 현재 Verify는 Chromium을 준비하고 `scripts/ci-plan.mjs`가 정한 검사만 돈다(S15P21C204-368, [테스트 안내](../../docs/testing.md#ci-검사-계획)). 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
+- 현재 Verify는 Chromium을 준비하고 `scripts/ci-plan.mjs`가 정한 검사만 돈다(S15P21C204-368, [테스트 안내](../../docs/impl/infra.md#3-ci-검증-진입점과-검사-계획)). 별도 Cloud/실장치 인수는 포함하지 않는다. 도구체인·SHA·jenkins UID의 설치는 `scripts/ci-verify.mjs`와 Jenkinsfile을 따른다.
 
 ## 8. GitLab SSO 게이트 (2026-09-09 적용)
 
@@ -173,7 +173,7 @@ Deploy 단계는 `scripts/verify-release.mjs` → `scripts/deploy-release.mjs` �
 
 | 항목         | 값                                                                                                                                                                                                              |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 프로파일     | Build with Parameters의 `RELEASE_PROFILE`: product(기본) 또는 skeleton. [테스트](../../docs/testing.md)를 따른다.                                                                                               |
+| 프로파일     | Build with Parameters의 `RELEASE_PROFILE`: product(기본) 또는 skeleton. [테스트](../../docs/impl/infra.md#13-검증-실행)를 따른다.                                                                               |
 | 운영 토큰    | Secret file `kkakkung-production-env`의 `OPS_TOKEN`을 서버와 제품 배포 러너가 함께 읽는다. 내부 시험 키 `SMOKE_INTERNAL_TOKEN`과 `SMOKE_INTERNAL_BASE_URL`도 같은 파일에 둔다. 개인 SSO 쿠키는 사용하지 않는다. |
 | preflight    | continuous는 검증된 SHA/lock별 유계 DP-06 계획을 자동 생성한다. attested는 `/opt/kkakkung/cloud-preflight.json`이 필요하다.                                                                                     |
 | 운영 정책    | 기본 continuous는 service-operations.json과 capability를 검사한다. attested는 기존 공식 잔량·유효기간을 검사한다. [운영](../../docs/operations.md)을 따른다.                                                    |
