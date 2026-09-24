@@ -4,7 +4,7 @@ import {
   BLOCK,
   BLOCK_LIGHTING,
   BLOCK_PALETTE,
-  SERVER_VIEW_RANGE,
+  SERVER_VIEW_DISTANCE,
   blockTexture,
   blockTilePixels,
   createBlockResources,
@@ -76,15 +76,15 @@ describe('block lighting and fog', () => {
     for (const theme of ['block', 'facility'] as const) {
       const world = sceneWorld(theme);
       expect(world.fogNear).toBeLessThan(world.fogFar);
-      expect(world.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
+      expect(world.fogFar).toBeLessThanOrEqual(SERVER_VIEW_DISTANCE);
     }
-    expect(BLOCK.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
-    expect(FACILITY.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
+    expect(BLOCK.fogFar).toBeLessThanOrEqual(SERVER_VIEW_DISTANCE);
+    expect(FACILITY.fogFar).toBeLessThanOrEqual(SERVER_VIEW_DISTANCE);
   });
 
   it('closes the fog before the camera stops drawing, so the far wall fades instead of being cut', () => {
     // S15P21C204-377. 그리기 끝이 안개 끝보다 앞이면 먼 벽이 반쯤 안개 낀 채 잘려 보인다.
-    expect(CAMERA_FAR).toBeGreaterThanOrEqual(SERVER_VIEW_RANGE);
+    expect(CAMERA_FAR).toBeGreaterThanOrEqual(SERVER_VIEW_DISTANCE);
     for (const theme of ['block', 'facility'] as const)
       expect(sceneWorld(theme).fogFar).toBeLessThan(CAMERA_FAR);
   });

@@ -20,7 +20,7 @@ it('separates the roles by hue, not only by brightness', () => {
 
 it('changes shape as well as colour, so a colour-blind player still tells them apart', () => {
   expect(ROLE_SILHOUETTE.tagger.shoulder).toBeGreaterThan(ROLE_SILHOUETTE.runner.shoulder);
-  expect(ROLE_SILHOUETTE.tagger.brim).not.toBe(ROLE_SILHOUETTE.runner.brim);
+  expect(ROLE_SILHOUETTE.tagger.hood).not.toBe(ROLE_SILHOUETTE.runner.hood);
   expect(ROLE_SILHOUETTE.tagger.satchel).not.toBe(ROLE_SILHOUETTE.runner.satchel);
 });
 

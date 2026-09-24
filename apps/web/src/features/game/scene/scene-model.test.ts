@@ -1,41 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { Euler, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, Vector3 } from 'three';
-import { CHARACTER, cellPosition, directionYaw, wallModel } from './scene-model';
+import { CELL, CHARACTER, cellPosition, directionYaw, wallModel } from './scene-model';
+
+// S15P21C204-382. 한 칸은 화면에서 CELL 미터다. 칸 좌표에 CELL 을 곱한 자리가 화면 자리다.
+const at = (x: number, y: number, z: number) => [x * CELL, y, z * CELL];
 
 describe('product scene coordinates', () => {
   it('keeps the cell origin and a shared head/body size for both teams', () => {
-    expect(cellPosition({ x: 0, y: 31 })).toEqual([0, 0, 31]);
+    expect(cellPosition({ x: 0, y: 31 })).toEqual(at(0, 0, 31));
     expect(CHARACTER.head).toBeGreaterThan(CHARACTER.body);
   });
   it('keeps each face on the boundary of its wall cell', () => {
-    expect(([0, 1, 2, 3] as const).map((side) => wallModel({ x: 4, y: 5, side }).position)).toEqual(
-      [
-        [4, 0.6, 4.5],
-        [4.5, 0.6, 5],
-        [4, 0.6, 5.5],
-        [3.5, 0.6, 5],
-      ],
+    const expected = [at(4, 0.6, 4.5), at(4.5, 0.6, 5), at(4, 0.6, 5.5), at(3.5, 0.6, 5)];
+    ([0, 1, 2, 3] as const).forEach((side) =>
+      wallModel({ x: 4, y: 5, side }).position.forEach((value, axis) =>
+        expect(value).toBeCloseTo(expected[side]![axis]!),
+      ),
     );
   });
 
   const faces = [
-    { side: 0, passage: [4, 0.6, 4] },
-    { side: 1, passage: [5, 0.6, 5] },
-    { side: 2, passage: [4, 0.6, 6] },
-    { side: 3, passage: [3, 0.6, 5] },
+    { side: 0, passage: at(4, 0.6, 4) },
+    { side: 1, passage: at(5, 0.6, 5) },
+    { side: 2, passage: at(4, 0.6, 6) },
+    { side: 3, passage: at(3, 0.6, 5) },
   ] as const;
 
   it.each(faces)(
     'faces the passage and culls the wall interior for side $side',
     ({ side, passage }) => {
       const model = wallModel({ x: 4, y: 5, side });
-      const mesh = new Mesh(new PlaneGeometry(1, 1.2), new MeshBasicMaterial());
+      const mesh = new Mesh(new PlaneGeometry(CELL, 1.2), new MeshBasicMaterial());
       mesh.position.fromArray(model.position);
       mesh.rotation.set(...model.rotation);
       mesh.updateMatrixWorld(true);
       const center = new Vector3(...model.position);
-      const fromPassage = new Vector3(...passage);
-      const fromInterior = new Vector3(4, 0.6, 5);
+      const fromPassage = new Vector3(...(passage as [number, number, number]));
+      const fromInterior = new Vector3(4 * CELL, 0.6, 5 * CELL);
       try {
         const frontRay = new Raycaster(fromPassage, center.clone().sub(fromPassage).normalize());
         const backRay = new Raycaster(fromInterior, center.clone().sub(fromInterior).normalize());
@@ -52,7 +53,9 @@ describe('product scene coordinates', () => {
     'points exit offsets and local +Z attachments into passage $side',
     ({ side, passage }) => {
       const model = wallModel({ x: 4, y: 5, side });
-      const outward = new Vector3(...passage).sub(new Vector3(...model.position)).normalize();
+      const outward = new Vector3(...(passage as [number, number, number]))
+        .sub(new Vector3(...model.position))
+        .normalize();
       const attachmentNormal = new Vector3(0, 0, 1).applyEuler(new Euler(...model.rotation));
       expect(new Vector3(...model.normal).distanceTo(outward)).toBeCloseTo(0);
       expect(attachmentNormal.distanceTo(outward)).toBeCloseTo(0);

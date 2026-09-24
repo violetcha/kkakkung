@@ -1,6 +1,6 @@
 import type { PrivateView } from '@kkakkung/protocol/game-schema';
 import { visibleEquipment } from '../equipment/equipment-presenter';
-import { wallModel } from './scene-model';
+import { CELL, wallModel } from './scene-model';
 import { EQUIPMENT_COLORS } from './facility-theme';
 import { TRAP_MODEL, trapJawHeight, trapTopHeight } from './equipment-model';
 
@@ -37,7 +37,10 @@ export function EquipmentObjects({ view }: { view: PrivateView }) {
             </mesh>
           </group>
         ) : (
-          <group key={item.id} position={[item.cell.x, plate.height / 2, item.cell.y]}>
+          <group
+            key={item.id}
+            position={[item.cell.x * CELL, plate.height / 2, item.cell.y * CELL]}
+          >
             <mesh>
               <boxGeometry args={[plate.width, plate.height, plate.width]} />
               <meshStandardMaterial

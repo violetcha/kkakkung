@@ -7,6 +7,7 @@ import {
   RGBAFormat,
   SRGBColorSpace,
 } from 'three';
+import { CELL } from './scene-model';
 
 /**
  * S15P21C204-268. The dark block theme: block forms and 16×16 pixel tiles borrowed from the
@@ -20,11 +21,11 @@ import {
  * half-fogged at the far plane.
  */
 export const BLOCK = Object.freeze({
-  wallHeight: 1.2,
-  ceilingHeight: 1.2,
+  wallHeight: 1.4,
+  ceilingHeight: 1.4,
   background: '#030303',
-  fogNear: 1.6,
-  fogFar: 3.4,
+  fogNear: 1.6 * CELL,
+  fogFar: 3.4 * CELL,
   ambient: 0.16,
   /** Pixel tile edge; every texture in this theme is this many texels square. */
   tile: 16,
@@ -35,6 +36,8 @@ export const BLOCK = Object.freeze({
  * game-core; `tests/contracts/view-geometry.test.ts` fixes it against the core's `VIEW_RANGE`.
  */
 export const SERVER_VIEW_RANGE = 3.5;
+/** S15P21C204-382. 서버 시야를 화면 거리(미터)로. 안개·그리기 거리는 이 값과 비교한다. */
+export const SERVER_VIEW_DISTANCE = SERVER_VIEW_RANGE * CELL;
 
 /**
  * The carried lantern lights the scene. Its reach ends with the fog so nothing lit is hidden
@@ -43,7 +46,7 @@ export const SERVER_VIEW_RANGE = 3.5;
  */
 export const BLOCK_LIGHTING = Object.freeze({
   ambientColor: '#6d7a8c',
-  lantern: { color: '#ffd9a1', intensity: 3.2, distance: 4.8, decay: 1.8 },
+  lantern: { color: '#ffd9a1', intensity: 3.2, distance: 4.8 * CELL, decay: 1.8 },
   /** Where the lantern hangs in the player's own frame: right hand, slightly forward. */
   lanternOffset: [0.28, 0.62, -0.12] as const,
 });
@@ -163,8 +166,8 @@ export function createBlockResources() {
   const floor = blockTexture('floor');
   const ceiling = blockTexture('ceiling');
   const geometry = {
-    floor: new PlaneGeometry(1, 1),
-    wall: new PlaneGeometry(1, BLOCK.wallHeight),
+    floor: new PlaneGeometry(CELL, CELL),
+    wall: new PlaneGeometry(CELL, BLOCK.wallHeight),
     /** Lantern body and tools are boxes too; shared so the held tool and the sconce match. */
     cube: new BoxGeometry(1, 1, 1),
   };

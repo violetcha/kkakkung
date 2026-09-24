@@ -74,6 +74,8 @@ export function renderFixture(
         kind: 'player' as const,
         cell: { x: x!, y: y! },
         dir: 2 as const,
+        // S15P21C204-378. 술래와 도망자를 섞어 세워 두 체형을 나란히 검수한다.
+        role: index % 2 === 0 ? ('tagger' as const) : ('runner' as const),
         action: null,
       })),
     );

@@ -1,5 +1,5 @@
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { directionYaw } from './scene-model';
+import { CELL, directionYaw } from './scene-model';
 export function sampleAction(action: Action, tick: number) {
   const alpha = Math.min(
     1,
@@ -22,4 +22,13 @@ export function sampleActor(
   return self.action && tick !== null && Number.isFinite(tick)
     ? sampleAction(self.action, tick)
     : { x: self.cell.x, z: self.cell.y, yaw: directionYaw(self.dir), stride: null };
+}
+
+/** sampleActor 를 화면 좌표(미터)로. 미니맵은 칸 좌표인 sampleActor 를 그대로 쓴다. */
+export function worldActor(
+  self: { cell: Cell; dir: Dir; action?: Action | null },
+  tick: number | null,
+) {
+  const s = sampleActor(self, tick);
+  return { ...s, x: s.x * CELL, z: s.z * CELL };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BoxGeometry, MeshStandardMaterial, TextureLoader, type Texture } from 'three';
 import type { Cell, Dir, WallFace } from '@kkakkung/protocol/game-schema';
-import { CHARACTER, cellPosition, directionYaw, wallKey, wallModel } from './scene-model';
+import { CELL, CHARACTER, cellPosition, directionYaw, wallKey, wallModel } from './scene-model';
 import { createFacilityResources, FACILITY, type BackroomsTextureSet } from './facility-theme';
 import { BLOCK, createBlockResources, isMossyFace } from './block-theme';
 import { DEFAULT_SCENE_THEME, type SceneThemeId } from './scene-theme';
@@ -90,6 +90,11 @@ function BlockTerrain({ cells, walls }: { cells: readonly Cell[]; walls: readonl
           geometry={block.geometry.wall}
           material={isMossyFace(wall) ? block.material.mossWall : block.material.wall}
           {...wallModel(wall)}
+          position={[
+            wallModel(wall).position[0],
+            BLOCK.wallHeight / 2,
+            wallModel(wall).position[2],
+          ]}
         />
       ))}
     </>
@@ -217,7 +222,7 @@ function FacilityTerrain({
             <mesh
               geometry={facility.geometry.joint}
               material={facility.material.trim}
-              position={[-0.493, FACILITY.wallLift, 0.004]}
+              position={[-(CELL / 2 - 0.007), FACILITY.wallLift, 0.004]}
             />
           )}
         </group>

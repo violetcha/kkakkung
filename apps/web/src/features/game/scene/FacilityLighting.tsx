@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, Object3D } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { sampleActor } from './action-interpolation';
+import { worldActor } from './action-interpolation';
 import type { QualityPreset } from './quality-presets';
 import { FACILITY, LIGHTING } from './facility-theme';
 
@@ -22,7 +22,7 @@ export function FacilityLighting({
     return object;
   }, []);
   useFrame(() => {
-    const sample = sampleActor(self, renderTick());
+    const sample = worldActor(self, renderTick());
     light.current?.position.set(sample.x, 0, sample.z);
     light.current?.rotation.set(0, sample.yaw, 0);
   });

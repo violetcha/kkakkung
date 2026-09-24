@@ -5,7 +5,7 @@ import { createFacilityResources, FACILITY } from './facility-theme';
 import { RENDER_SCENES, SELF_MOTIONS, renderFixture } from './render-fixture';
 import { sampleActor } from './action-interpolation';
 import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
-import { wallModel } from './scene-model';
+import { CELL, wallModel } from './scene-model';
 import { visibleExitModel } from './visible-exit-model';
 import { visibilityMask } from './visibility-mask';
 
@@ -67,9 +67,9 @@ it('facility walls and their raised panels face the passage on all four exit sid
         mesh.position.fromArray(model.position);
         mesh.rotation.set(...model.rotation);
         mesh.updateMatrixWorld(true);
-        const origin = new Vector3(exit.approach.x, 0.6, exit.approach.y);
+        const origin = new Vector3(exit.approach.x * CELL, 0.6, exit.approach.y * CELL);
         const center = new Vector3(...model.position);
-        const interior = new Vector3(exit.wall.x, 0.6, exit.wall.y);
+        const interior = new Vector3(exit.wall.x * CELL, 0.6, exit.wall.y * CELL);
         expect(
           new Raycaster(origin, center.clone().sub(origin).normalize()).intersectObject(mesh)
             .length,

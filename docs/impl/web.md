@@ -726,7 +726,8 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 - 1인칭 카메라는 보간된 셀·방향을 따른다. 눈높이는 `CHARACTER.eyeHeight = 0.8`이고, 시선 방향으로 `0.001` 앞당긴다.
 - 세로 FOV는 가로 반시야각 40°를 화면비로 환산한 `2·atan(tan40°/max(0.1, aspect))`다.
-- 제품 Canvas는 near `0.03`, far `CAMERA_FAR = 3.6`(서버 시야 3.5보다 조금 멀고, 두 테마의 안개가 닫힌 뒤), 초기 위치 `[0, 0.8, 0]`, `antialias false`, `dpr = QUALITY_PRESETS[quality].dpr`다. 프레임 루프는 `paused`일 때만 `never`인데, 제품 방은 `paused`를 넘기지 않는다.
+- 한 칸은 화면에서 `CELL = 1.2`미터다(S15P21C204-382). 칸 좌표에 `CELL`을 곱한 자리에 바닥·벽·출구·장비·아바타·카메라를 둔다(`cellPosition`, `wallModel`, `worldActor`). 미니맵과 서버 판정·목소리 감쇠는 칸 단위라 영향이 없다. 한 칸 이동 시간은 서버 값 그대로라 화면상 속도는 `CELL`배다.
+- 제품 Canvas는 near `0.03`, far `CAMERA_FAR = 3.6 × CELL`(서버 시야 3.5칸보다 조금 멀고, 두 테마의 안개가 닫힌 뒤), 초기 위치 `[0, 0.8, 0]`, `antialias false`, `dpr = QUALITY_PRESETS[quality].dpr`다. 프레임 루프는 `paused`일 때만 `never`인데, 제품 방은 `paused`를 넘기지 않는다.
 - 진단 Canvas는 카메라 `[0, 36, 30]`, 고정 FOV 48°의 격자·상자 화면이다.
 
 근거: [FirstPersonCamera.tsx:6](../../apps/web/src/features/game/scene/FirstPersonCamera.tsx#L6), [FirstPersonCamera.tsx:13](../../apps/web/src/features/game/scene/FirstPersonCamera.tsx#L13), [scene-model.ts:3](../../apps/web/src/features/game/scene/scene-model.ts#L3), [WorldCanvas.tsx:84](../../apps/web/src/features/game/scene/WorldCanvas.tsx#L84), [WorldCanvas.tsx:87](../../apps/web/src/features/game/scene/WorldCanvas.tsx#L87), [WorldCanvas.tsx:127](../../apps/web/src/features/game/scene/WorldCanvas.tsx#L127)
@@ -735,12 +736,12 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 테마는 URL `?theme=`, 저장값 `kkakkung.scene-theme`, 기본 `facility` 순으로 정한다.
 
-| 선택                        | 값                                                                                                                                                                                                                                                                                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `facility`(백룸 복도, 기본) | 배경 `#211b0e`, 안개 `1.8`–`3.4`, 벽 높이 `1.9`. 벽 색 텍스처는 공개 `/textures/backrooms/seamless.png`(가로 반복, 세로 거울 반복, `repeat 1×2`, 선형 필터와 mipmap)다. 불러오지 못하면 코드가 만든 128×128 벽 텍스처와 색 `#b18b36`을 쓴다. 바닥은 코드가 만든 128×128 텍스처다. roughness·normal map은 두 품질 모두 쓰지 않는다(경로가 `null`). |
-| `block`(어두운 블록)        | 배경 `#030303`, 안개 `1.6`–`3.4`, 벽 높이 `1.2`. 코드가 만든 `16×16` DataTexture(돌·이끼·바닥·천장)를 nearest 필터, mipmap 없이 쓴다. `(x·7 + y·3 + side) % 5 === 0`인 벽면은 이끼. 1인칭 손 도구를 든다.                                                                                                                                         |
-| `medium`                    | `dpr [1, 1.25]`(기기 배율을 따르되 1~1.25로 자름). facility의 패널·레일·이음 형상을 그린다.                                                                                                                                                                                                                                                       |
-| `low`                       | `dpr [1, 1]`. facility의 패널·레일·이음 형상을 빼고 그린다.                                                                                                                                                                                                                                                                                       |
+| 선택                        | 값                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `facility`(백룸 복도, 기본) | 배경 `#211b0e`, 안개 `1.8`–`3.4`칸(`× CELL`), 벽 높이 `1.9`. 손전등 세기 `5.8`, 도달 `4.8`칸. 벽 색 텍스처는 공개 `/textures/backrooms/seamless.png`(가로 반복, 세로 거울 반복, `repeat 1×2`, 선형 필터와 mipmap)다. 불러오지 못하면 코드가 만든 128×128 벽 텍스처와 색 `#b18b36`을 쓴다. 바닥은 코드가 만든 128×128 텍스처다. roughness·normal map은 두 품질 모두 쓰지 않는다(경로가 `null`). |
+| `block`(어두운 블록)        | 배경 `#030303`, 안개 `1.6`–`3.4`칸(`× CELL`), 벽·천장 높이 `1.4`. 코드가 만든 `16×16` DataTexture(돌·이끼·바닥·천장)를 nearest 필터, mipmap 없이 쓴다. `(x·7 + y·3 + side) % 5 === 0`인 벽면은 이끼. 1인칭 손 도구를 든다.                                                                                                                                                                     |
+| `medium`                    | `dpr [1, 1.25]`(기기 배율을 따르되 1~1.25로 자름). facility의 패널·레일·이음 형상을 그린다.                                                                                                                                                                                                                                                                                                    |
+| `low`                       | `dpr [1, 1]`. facility의 패널·레일·이음 형상을 빼고 그린다.                                                                                                                                                                                                                                                                                                                                    |
 
 프리셋의 `antialias: false`와 `postprocessing: false` 필드는 어디서도 읽지 않는다. 적용되는 값은 `dpr`뿐이다. 술래에게는 1인칭 잡기 손(`GrabHand`)을 그리고, 잡기 입력마다 손 연출을 다시 시작한다.
 
@@ -762,13 +763,15 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
   - VideoTexture는 매 프레임 `needsUpdate`로 올린다.
 - 역할별 실루엣:
 
-| 역할       | 어깨 폭 | 모양 | 옷/강조/신발 색                   |
-| ---------- | ------- | ---- | --------------------------------- |
-| `tagger`   | `0.42`  | 챙   | `#b8402f` / `#f0a070` / `#3a1a14` |
-| `runner`   | `0.32`  | 가방 | `#2f9f96` / `#8fe6d8` / `#12302e` |
-| 없음(중립) | `0.36`  | 없음 | `#5e5a52` / `#8a857b` / `#1f2223` |
+| 역할       | 어깨 폭 | 모양           | 옷/강조/신발 색                   |
+| ---------- | ------- | -------------- | --------------------------------- |
+| `tagger`   | `0.5`   | 아래 술래 체형 | `#b8402f` / `#f0a070` / `#3a1a14` |
+| `runner`   | `0.32`  | 가방           | `#2f9f96` / `#8fe6d8` / `#12302e` |
+| 없음(중립) | `0.36`  | 없음           | `#5e5a52` / `#8a857b` / `#1f2223` |
 
-- 보는 사람과 같은 역할이면 머리 위(`y 1.035`)에 아군 배지 구(반지름 `0.032`)를 단다.
+- 술래 체형(`TAGGER_BODY`, `tagger-body.ts`, S15P21C204-378): 머리 큐브와 얼굴 판은 모든 역할과 같은 크기·높이(중심 `0.72`)이고, 그 둘레를 괴수 체형으로 키운다. 세 층으로 좁아지며 솟는 어깨(꼭대기 `1.07`), 두 층 등 혹(꼭대기 `1.18`), 폭 `0.74` 가슴, 굵은 두 토막 팔 끝의 손과 발톱 세 개(끝 `0.10`, 무릎 아래), 짧고 굵은 다리. 몸은 `#8a2218`, 허리·눈썹뼈·손·발은 `#1a1010`, 눈썹뼈 앞 붉은 눈 두 개는 `#ff2a1a`(조명 무관 재질). 팔 포함 폭은 중심에서 `0.53`(칸 폭의 절반 안쪽).
+- 술래 상자들은 재질별로 한 도형으로 합쳐(`createTaggerGeometry`) 모든 술래가 같이 쓴다. 움직이지 않는 몸 3개, 팔·다리는 한쪽 몫 2개씩이라 술래 한 명을 11번 그린다.
+- 보는 사람과 같은 역할이면 머리 위에 아군 배지 구(반지름 `0.032`)를 단다. 높이는 `y 1.035`, 술래는 등 혹 위 `1.24`.
 - 위치·방향은 서버 행동의 보간을 따른다. 팔다리 흔들림은 같은 진행도에서 만든 장식이다.
 
 근거: [FaceAvatar.tsx:27](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L27), [FaceAvatar.tsx:43](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L43), [FaceAvatar.tsx:64](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L64), [FaceAvatar.tsx:133](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L133), [FaceAvatar.tsx:141](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L141), [FaceAvatar.tsx:145](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L145), [FaceAvatar.tsx:163](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L163), [FaceAvatar.tsx:226](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L226), [FaceAvatar.tsx:251](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L251), [role-colors.ts:9](../../apps/web/src/features/game/scene/role-colors.ts#L9), [role-colors.ts:18](../../apps/web/src/features/game/scene/role-colors.ts#L18), [scene-model.ts:3](../../apps/web/src/features/game/scene/scene-model.ts#L3), [ProductApp.tsx:213](../../apps/web/src/app/ProductApp.tsx#L213)
@@ -777,7 +780,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 - `SelfAvatarView`는 혼자 연습 화면과 제품의 `SelfCorner`(팀 연습·경기의 우상단, `activeSelf`이고 설정 창이 닫혀 있을 때) 두 곳에서 쓴다.
 - 게시되는 것과 같은 가공 얼굴 스트림을 화면에 붙이지 않은 video(음소거)로 받아 VideoTexture로 만든다. 스트림이 없으면 그림 얼굴(`createDemoFaceTexture`)을 쓴다.
-- Canvas 설정은 `dpr [1, 1.5]`, `antialias true`, `alpha true`, 카메라 `[0, 0.8, -1.75]`·`fov 30`·near/far `0.05/10`·`lookAtY 0.5`다.
+- Canvas 설정은 `dpr [1, 1.5]`, `antialias true`, `alpha true`, 카메라 `[0, 0.8, -2.3]`·`fov 30`·near/far `0.05/10`·`lookAtY 0.6`이다(술래 등 혹과 팔까지 담는다).
 - 아바타는 제자리에 두고, 방향은 매 프레임 차이의 `0.1`만큼 따라 돌아 회전이 보이게 한다.
 
 근거: [SelfCorner.tsx:46](../../apps/web/src/features/game/flow/SelfCorner.tsx#L46), [SelfCorner.tsx:50](../../apps/web/src/features/game/flow/SelfCorner.tsx#L50), [SelfAvatarView.tsx:22](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L22), [SelfAvatarView.tsx:24](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L24), [SelfAvatarView.tsx:35](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L35), [SelfAvatarView.tsx:75](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L75), [SelfAvatarView.tsx:99](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L99), [SelfAvatarView.tsx:111](../../apps/web/src/features/game/solo/SelfAvatarView.tsx#L111), [ProductApp.tsx:1107](../../apps/web/src/app/ProductApp.tsx#L1107)

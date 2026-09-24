@@ -1,7 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { sampleActor } from './action-interpolation';
+import { worldActor } from './action-interpolation';
 import { CHARACTER } from './scene-model';
 export const verticalFov = (aspect: number) =>
   (2 * Math.atan(Math.tan((40 * Math.PI) / 180) / Math.max(0.1, aspect)) * 180) / Math.PI;
@@ -30,7 +30,7 @@ export function FirstPersonCamera({
 }) {
   const size = useThree((state) => state.size);
   useFrame(({ camera }) => {
-    const placement = cameraPlacement(sampleActor(self, renderTick()));
+    const placement = cameraPlacement(worldActor(self, renderTick()));
     camera.position.set(...placement.position);
     camera.rotation.set(...placement.rotation);
     if (camera instanceof PerspectiveCamera) {

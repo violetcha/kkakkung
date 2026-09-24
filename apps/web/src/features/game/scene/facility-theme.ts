@@ -10,6 +10,7 @@ import {
   type Texture,
 } from 'three';
 import type { QualityPreset } from './quality-presets';
+import { CELL } from './scene-model';
 
 export const FACILITY = Object.freeze({
   wallHeight: 1.9,
@@ -18,8 +19,8 @@ export const FACILITY = Object.freeze({
   background: '#211b0e',
   // S15P21C204-377. 서버 시야 3.5셀 바로 안쪽(3.4)에서 안개가 완전히 닫히고, 카메라는 3.6까지
   // 그린다. 먼 벽이 반쯤 안개 낀 채 그리기 끝에서 잘리지 않고 배경색으로 스며든다.
-  fogNear: 1.8,
-  fogFar: 3.4,
+  fogNear: 1.8 * CELL,
+  fogFar: 3.4 * CELL,
   ambient: 0.34,
 });
 
@@ -31,7 +32,15 @@ export const FACILITY = Object.freeze({
 export const LIGHTING = Object.freeze({
   ambientColor: '#d2bd72',
   hemisphere: { sky: '#d8c77d', ground: '#4b3b1f', intensity: 0.64 },
-  spot: { color: '#ffe29a', intensity: 5.2, distance: 4.8, angle: 0.88, penumbra: 0.82, decay: 2 },
+  spot: {
+    color: '#ffe29a',
+    // S15P21C204-382. 칸이 1.2배라 2.5칸 앞이 3m 다. 가까운 벽(0.5m)이 씻기지 않는 한도 안에서 올린다.
+    intensity: 5.8,
+    distance: 4.8 * CELL,
+    angle: 0.88,
+    penumbra: 0.82,
+    decay: 2,
+  },
   fill: { color: '#d8b96a', intensity: 0.46, distance: 1.8, decay: 2 },
 });
 
@@ -93,10 +102,10 @@ export function createFacilityResources(
   const floorTexture = surfaceTexture('floor');
   const detailed = quality === 'medium';
   const geometry = {
-    floor: new PlaneGeometry(1, 1),
-    wall: new PlaneGeometry(1, FACILITY.wallHeight),
-    panel: detailed ? new PlaneGeometry(1, 0.14) : null,
-    rail: detailed ? new BoxGeometry(1, 0.035, 0.022) : null,
+    floor: new PlaneGeometry(CELL, CELL),
+    wall: new PlaneGeometry(CELL, FACILITY.wallHeight),
+    panel: detailed ? new PlaneGeometry(CELL, 0.14) : null,
+    rail: detailed ? new BoxGeometry(CELL, 0.035, 0.022) : null,
     joint: detailed ? new BoxGeometry(0.012, FACILITY.wallHeight, 0.012) : null,
     lamp: new BoxGeometry(0.5, 0.035, 0.16),
     tube: new BoxGeometry(0.39, 0.009, 0.06),

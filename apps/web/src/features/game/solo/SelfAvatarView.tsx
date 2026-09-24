@@ -6,7 +6,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import type { Group, Texture, VideoTexture } from 'three';
 import type { ActiveSelf, VisibleEntity } from '@kkakkung/protocol/game-schema';
 import { Avatar, createAvatarResources } from '../scene/FaceAvatar';
-import { sampleActor } from '../scene/action-interpolation';
+import { worldActor } from '../scene/action-interpolation';
 import { videoFaceTexture } from '../scene/face-textures';
 import { createDemoFaceTexture } from '../scene/demo-face';
 
@@ -18,8 +18,11 @@ type Props = {
   faceStream(): MediaStream | null;
 };
 
-/** 머리·어깨가 크게 잡히는 정면 카메라(F5 두 번 느낌). 16:9 창에서 세로가 기준이다. */
-const CAMERA = Object.freeze({ position: [0, 0.8, -1.75] as const, fov: 30, lookAtY: 0.5 });
+/**
+ * 머리·어깨가 크게 잡히는 정면 카메라(F5 두 번 느낌). 16:9 창에서 세로가 기준이다.
+ * S15P21C204-378. 술래는 등 혹이 1.18까지 솟고 팔까지 폭이 넓어, 물러서고 시선을 올려 다 담는다.
+ */
+const CAMERA = Object.freeze({ position: [0, 0.8, -2.3] as const, fov: 30, lookAtY: 0.6 });
 /** 회전할 때 카메라가 따라 도는 속도. 1이면 즉시(회전이 안 보임), 작을수록 몸이 도는 게 오래 보인다. */
 const FOLLOW = 0.1;
 
@@ -64,7 +67,7 @@ function SelfAvatar({ self, renderTick, faceStream }: Props) {
   useFrame(() => {
     // Avatar 는 행동대로 자기 위치·방향을 움직인다. 바깥에서 위치는 그대로 되돌려 창 가운데에 두고,
     // 방향은 조금 늦게 따라 돌아 회전하는 몸이 보이게 한다(스냅 없음).
-    const now = sampleActor(self, renderTick());
+    const now = worldActor(self, renderTick());
     slide.current?.position.set(-now.x, 0, -now.z);
     if (turn.current) {
       const current = turn.current.rotation.y;

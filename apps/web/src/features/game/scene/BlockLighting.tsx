@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { sampleActor } from './action-interpolation';
+import { worldActor } from './action-interpolation';
 import { BLOCK, BLOCK_LIGHTING } from './block-theme';
 
 /**
@@ -19,7 +19,7 @@ export function BlockLighting({
 }) {
   const carrier = useRef<Group>(null);
   useFrame(() => {
-    const sample = sampleActor(self, renderTick());
+    const sample = worldActor(self, renderTick());
     carrier.current?.position.set(sample.x, 0, sample.z);
     carrier.current?.rotation.set(0, sample.yaw, 0);
   });
