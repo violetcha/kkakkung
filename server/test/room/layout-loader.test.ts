@@ -159,6 +159,54 @@ describe('LayoutLoader', () => {
         seed: 0,
       }),
     ).toMatchObject({ status: 'unavailable', code: 'LAYOUT_UNAVAILABLE' });
+    // S15P21C204-383. The batch bound is the tuning's attemptsPerBatch, not a fixed 8.
+    const widerBatch = new LayoutLoader({
+      ...fakeMapPorts({ failOnline: true, batch: 9 }),
+      readFile: f.readFile,
+      now: fakeClock(0).now,
+      yieldToEventLoop: async () => undefined,
+      maxBatch: 9,
+    });
+    expect(
+      await widerBatch.prepare({
+        masterPath: 'master.json',
+        fallbackPath: 'fallback.json',
+        templateId: 'tpl',
+        templateVersion: 'v1',
+        players,
+        seed: 0,
+      }),
+    ).toMatchObject({ status: 'selected' });
+  });
+
+  // S15P21C204-383. A structurally valid template whose passages are broken never reaches a match.
+  it('refuses a variant that fails the connectivity check', async () => {
+    const f = files();
+    const ports = fakeMapPorts({ failOnline: true });
+    const loader = new LayoutLoader({
+      ...ports,
+      maps: {
+        ...ports.maps,
+        validateConnectivity: () => ({ ok: false, issues: [{ code: 'DISCONNECTED' }] }),
+      },
+      readFile: f.readFile,
+      now: fakeClock(0).now,
+      yieldToEventLoop: async () => undefined,
+    });
+    expect(
+      await loader.prepare({
+        masterPath: 'master.json',
+        fallbackPath: 'fallback.json',
+        templateId: 'tpl',
+        templateVersion: 'v1',
+        players,
+        seed: 0,
+      }),
+    ).toMatchObject({
+      status: 'unavailable',
+      code: 'LOADER_FAILED',
+      diagnostic: 'connectivity:DISCONNECTED',
+    });
   });
 
   it('returns to preparation on missing files, invalid JSON, invalid templates and structurally broken fallbacks', async () => {

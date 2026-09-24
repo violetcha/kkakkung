@@ -110,6 +110,9 @@ export class LayoutLoader {
     if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffff_ffff)
       return fail('LOADER_FAILED', 'seed');
     const template = sorted[input.seed % sorted.length]!;
+    const connectivity = this.deps.maps.validateConnectivity?.(template);
+    if (connectivity && !connectivity.ok)
+      return fail('LOADER_FAILED', `connectivity:${connectivity.issues[0]?.code ?? 'UNKNOWN'}`);
     const fallback = await this.readFallback(input.fallbackPath, template);
     if (!fallback) return fail('LOADER_FAILED', 'fallback-structure');
     const selectionInput: LayoutSelectionInput = {

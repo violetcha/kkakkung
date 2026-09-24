@@ -11,6 +11,11 @@ export function planPrune(input: {
   protect: readonly string[];
   nowMs: number;
 }): { remove: ImageTag[]; kept: KeptImage[] };
+export function runningTagsFrom(
+  images: string,
+  repository: string,
+  tagsOf: (id: string) => readonly string[],
+): string[];
 export function parseArgs(argv: readonly string[]): {
   keep: number;
   minAgeMinutes: number;
