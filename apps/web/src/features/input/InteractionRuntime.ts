@@ -937,6 +937,12 @@ export const createInteractionRuntime = (
   let calibrationPending: Promise<DeviceStatus> | null = null;
 
   const vision = options.vision ?? browserVision();
+  /**
+   * S15P21C204-374. 자세·손은 모션 입력과 보정만 읽는다. 키보드 모드에서는 둘을 추론하지 않아 CPU 를
+   * 렌더에 돌려준다. 얼굴은 가공 얼굴·입력 폴백이 쓰므로 계속 돈다. 모션으로 돌아오거나 보정을
+   * 시작하면 다음 프레임부터 다시 돈다.
+   */
+  const bodyModelsWanted = () => context.get()?.mode !== 'keyboard' || calibrationPending !== null;
 
   /** 세 종료 경로가 공유하는 단일 정리 수명. */
   const lifecycle: MediaLifecycle = createMediaLifecycle({
@@ -1336,7 +1342,10 @@ export const createInteractionRuntime = (
         if (sent) models.markSent(frame.sampledAtMs, frame.models);
         return sent;
       },
-      selectModels: (nowMs) => models.select(nowMs),
+      selectModels: (nowMs) =>
+        bodyModelsWanted()
+          ? models.select(nowMs)
+          : models.select(nowMs).filter((kind) => kind === 'face'),
       onError: (code) => {
         if (disposed || generation !== runtimeGeneration || !scheduler) return;
         failVision(code);

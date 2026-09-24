@@ -78,46 +78,58 @@ function vessels(): readonly Vessel[] {
 
 const VESSELS = vessels();
 
+const paths = (color: string, scale: number) =>
+  VESSELS.map(
+    (vessel) =>
+      `<path d="${vessel.d}" vector-effect="non-scaling-stroke" stroke="${color}" stroke-width="${(vessel.width * scale).toFixed(2)}"/>`,
+  ).join('');
+
+/**
+ * S15P21C204-374. 핏줄 전체를 SVG 문서 한 장으로 만든다. `<img>` 로 얹으면 브라우저가 필터·가장자리
+ * 가림까지 한 번만 그려 두고, 경기 중에는 그 그림을 캔버스 위에 겹치기만 한다. 전에는 화면 위의
+ * SVG 에 난류 필터·곱하기 합성·흐림·마스크가 걸려 3D 화면이 바뀔 때마다 전부 다시 합성됐다.
+ *
+ * 선 굵기는 화면 픽셀 기준(non-scaling-stroke)이라 창 크기가 달라도 같은 굵기로 보인다. 곱하기
+ * 합성은 뺐다. 대신 선 색을 곱하기 결과만큼 어둡게 눌러 두어 전과 같은 톤으로 보인다.
+ */
+export function veinImageSvg(): string {
+  const stroke = 'fill="none" stroke-linecap="round" filter="url(#warp)"';
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+    '<defs>' +
+    // 경로를 흔들어 손으로 그은 선처럼 만든다.
+    '<filter id="warp" x="-10%" y="-10%" width="120%" height="120%">' +
+    '<feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" seed="41" result="noise"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="bent"/>' +
+    '<feGaussianBlur in="bent" stdDeviation="0.25"/>' +
+    '</filter>' +
+    '<filter id="bleed" x="-10%" y="-10%" width="120%" height="120%">' +
+    '<feGaussianBlur stdDeviation="0.3"/>' +
+    '</filter>' +
+    // 가장자리에만 남기고 안쪽으로 갈수록 사라진다. 시야 가운데는 가리지 않는다.
+    '<radialGradient id="edge" gradientUnits="userSpaceOnUse" cx="50" cy="50" r="76" ' +
+    'gradientTransform="translate(50 50) scale(1 0.92) translate(-50 -50)">' +
+    '<stop offset="0.4" stop-color="#000"/><stop offset="0.94" stop-color="#fff"/>' +
+    '</radialGradient>' +
+    '<mask id="fade" maskUnits="userSpaceOnUse" x="-5" y="-5" width="110" height="110">' +
+    '<rect x="-5" y="-5" width="110" height="110" fill="url(#edge)"/>' +
+    '</mask>' +
+    '</defs>' +
+    '<g mask="url(#fade)">' +
+    // 두 겹: 번진 어두운 피와 그 위의 또렷한 줄. 겹쳐야 살 밑의 핏줄로 보인다.
+    `<g opacity="0.55" filter="url(#bleed)"><g ${stroke}>${paths('#3e0303', 2.4)}</g></g>` +
+    `<g opacity="0.95"><g ${stroke}>${paths('#640909', 1)}</g></g>` +
+    '</g>' +
+    '</svg>'
+  );
+}
+
+const VEIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(veinImageSvg())}`;
+
 export function TaggerVeins() {
   return (
     <div className="vein-frame" aria-hidden="true">
-      <svg
-        className="vein-lines"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        focusable="false"
-      >
-        <filter id="vein-warp" x="-10%" y="-10%" width="120%" height="120%">
-          {/* 경로를 흔들어 손으로 그은 선처럼 만든다. 번짐은 아주 조금만. */}
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.03"
-            numOctaves="3"
-            seed="41"
-            result="noise"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="2.4"
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="bent"
-          />
-          <feGaussianBlur in="bent" stdDeviation="0.25" />
-        </filter>
-        {/* 두 겹: 번진 어두운 피와 그 위의 또렷한 줄. 겹쳐야 살 밑의 핏줄로 보인다. */}
-        <g className="vein-bleed" filter="url(#vein-warp)">
-          {VESSELS.map((vessel) => (
-            <path key={vessel.d} d={vessel.d} strokeWidth={vessel.width * 2.4} />
-          ))}
-        </g>
-        <g className="vein-core" filter="url(#vein-warp)">
-          {VESSELS.map((vessel) => (
-            <path key={vessel.d} d={vessel.d} strokeWidth={vessel.width} />
-          ))}
-        </g>
-      </svg>
+      <img className="vein-lines" src={VEIN_IMAGE} alt="" draggable={false} />
       <span className="vein-glow" />
     </div>
   );
