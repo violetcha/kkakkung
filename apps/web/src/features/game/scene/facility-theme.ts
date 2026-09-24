@@ -16,10 +16,10 @@ export const FACILITY = Object.freeze({
   ceilingHeight: 1.9,
   wallLift: 0.35,
   background: '#211b0e',
-  // S15P21C204-302. 서버 시야가 3.5→5.0셀이 되면서 두 안개 거리를 같은 비율로 올렸다. 페이드
-  // 모양은 그대로 두고 늘어난 거리만 실제로 보이게 한다.
-  fogNear: 2.4,
-  fogFar: 4.6,
+  // S15P21C204-377. 서버 시야 3.5셀 바로 안쪽(3.4)에서 안개가 완전히 닫히고, 카메라는 3.6까지
+  // 그린다. 먼 벽이 반쯤 안개 낀 채 그리기 끝에서 잘리지 않고 배경색으로 스며든다.
+  fogNear: 1.8,
+  fogFar: 3.4,
   ambient: 0.34,
 });
 

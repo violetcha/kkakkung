@@ -15,15 +15,16 @@ import {
  * sight so the picture never shows more than the rules do. The palette is the logo's:
  * black, cracked bone-grey stone, dark brown seams.
  *
- * S15P21C204-302 scaled both fog distances by the same factor as the server sight (3.5 -> 5.0), so
- * the corridor fades on the same curve as before and the extra range is actually visible.
+ * S15P21C204-377. The server sight is 3.5 cells. The fog closes completely at 3.4, just inside it,
+ * and the camera draws to 3.6, so the corridor fades into the background instead of being cut off
+ * half-fogged at the far plane.
  */
 export const BLOCK = Object.freeze({
   wallHeight: 1.2,
   ceilingHeight: 1.2,
   background: '#030303',
-  fogNear: 2.1,
-  fogFar: 4.6,
+  fogNear: 1.6,
+  fogFar: 3.4,
   ambient: 0.16,
   /** Pixel tile edge; every texture in this theme is this many texels square. */
   tile: 16,
@@ -33,7 +34,7 @@ export const BLOCK = Object.freeze({
  * The server never shows farther than this (spec 7.2). Kept here because apps/web must not import
  * game-core; `tests/contracts/view-geometry.test.ts` fixes it against the core's `VIEW_RANGE`.
  */
-export const SERVER_VIEW_RANGE = 5.0;
+export const SERVER_VIEW_RANGE = 3.5;
 
 /**
  * The carried lantern lights the scene. Its reach ends with the fog so nothing lit is hidden

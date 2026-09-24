@@ -12,7 +12,7 @@ import {
 } from './block-theme';
 import { FACILITY } from './facility-theme';
 import { relativeLuminance } from './role-colors';
-import { sceneWorld } from './WorldCanvas';
+import { CAMERA_FAR, sceneWorld } from './WorldCanvas';
 
 /** Relative light a point light leaves on a surface `distance` away (three's physical falloff). */
 const lanternTerm = (distance: number) =>
@@ -80,6 +80,13 @@ describe('block lighting and fog', () => {
     }
     expect(BLOCK.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
     expect(FACILITY.fogFar).toBeLessThanOrEqual(SERVER_VIEW_RANGE);
+  });
+
+  it('closes the fog before the camera stops drawing, so the far wall fades instead of being cut', () => {
+    // S15P21C204-377. 그리기 끝이 안개 끝보다 앞이면 먼 벽이 반쯤 안개 낀 채 잘려 보인다.
+    expect(CAMERA_FAR).toBeGreaterThanOrEqual(SERVER_VIEW_RANGE);
+    for (const theme of ['block', 'facility'] as const)
+      expect(sceneWorld(theme).fogFar).toBeLessThan(CAMERA_FAR);
   });
 
   it('lights with one carried lantern that reaches the fog end but does not wash a near wall', () => {

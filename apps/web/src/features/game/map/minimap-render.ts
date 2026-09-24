@@ -43,7 +43,7 @@ export const MINIMAP_COLORS = Object.freeze({
   windowExitMine: '#d9b25a',
   windowExitOther: '#9d9889',
 });
-/** 창 모드 시야 부채꼴: 서버 시야(3.5셀)를 따라 셀 단위 반지름과 각도(라디안). */
+/** 창 모드 시야 부채꼴: 서버 시야(3.5셀) 안쪽으로 셀 단위 반지름과 각도(라디안). */
 export const MINIMAP_CONE = Object.freeze({ radiusCells: 3.2, spreadRad: Math.PI / 2 });
 
 export const roleMarkColor = (role: Role) =>

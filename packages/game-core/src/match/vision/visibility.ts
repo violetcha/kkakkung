@@ -26,14 +26,17 @@ export const FOV_HALF_DEGREES = 40;
  * quarter of what the open grid did (2.41 vs 9.70 mean visible cells per heading), and at 3.5 the
  * junction ahead was outside sight on 24% of headings, so a runner committed to a corridor blind.
  * At 5.0 that is 9%, for +15% visible cells; past 5.0 the curve flattens (6.5 is only +20%).
+ *
+ * S15P21C204-377 set it back to 3.5 by product decision: 5 cells showed too much of the maze, and
+ * the web camera already drew only 3.5. The screen and the rules now end at the same distance.
  */
-export const VIEW_RANGE = 5.0;
+export const VIEW_RANGE = 3.5;
 /**
  * Candidate cells are collected from this square around the camera before the cone and the rays
  * narrow them, so it must cover VIEW_RANGE or the range is silently truncated: at range 5.5 a
  * radius of 4 still produced the range-4.5 result. Keep this at or above ceil(VIEW_RANGE).
  */
-const CANDIDATE_RADIUS = 5;
+const CANDIDATE_RADIUS = 4;
 const FACE_OFFSET = 0.02;
 const COS_HALF_FOV = Math.cos((FOV_HALF_DEGREES * Math.PI) / 180);
 
