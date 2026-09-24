@@ -52,8 +52,9 @@ function sameCells(a: readonly Cell[], b: readonly Cell[]): boolean {
 /**
  * Re-checks a complete MatchLayout against a template with the full rule set:
  * identical topology, 3+3 roster, territory/region identity, start validity,
- * distances, and exit constraints. Used for fallback certification and as a
- * self-check of online selection; nothing is inferred from hashes or versions.
+ * distances, and exit constraints. Used only for fallback certification; an
+ * online selection result is returned without a re-validation pass here.
+ * Nothing is inferred from hashes or versions.
  */
 export function validateLayout(
   template: LayoutTemplate,

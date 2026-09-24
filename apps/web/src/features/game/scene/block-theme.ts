@@ -170,7 +170,7 @@ export function createBlockResources() {
   };
   const material = {
     wall: new MeshStandardMaterial({ map: stone, roughness: 1, metalness: 0 }),
-    /** Every third wall face is mossy; the choice is by cell parity, not random, so it is stable. */
+    /** One face in five is mossy (see `isMossyFace`'s `% 5`); the choice is by cell parity, not random, so it is stable. */
     mossWall: new MeshStandardMaterial({ map: moss, roughness: 1, metalness: 0 }),
     floor: new MeshStandardMaterial({ map: floor, roughness: 0.55, metalness: 0.08 }),
     ceiling: new MeshStandardMaterial({ map: ceiling, roughness: 1, metalness: 0 }),

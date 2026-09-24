@@ -23,6 +23,7 @@ import type { AppConfig } from './config/env.js';
 import { LayoutLoader } from './game/LayoutLoader.js';
 import { createServerEpoch } from './game/MatchContext.js';
 import { RoomTickCoordinator } from './game/RoomTickCoordinator.js';
+import { answerWebhook } from './media/webhook-answer.js';
 import type {
   CorePort,
   CreateOperatorAuth,
@@ -353,8 +354,10 @@ export function createApplication<State = unknown>(
         async (req, res) => {
           if (!media) return void res.status(503).json({ error: 'MEDIA_UNAVAILABLE' });
           const raw = typeof req.body === 'string' ? req.body : '';
-          const result = await media.handleWebhook(raw, String(req.headers.authorization ?? ''));
-          res.status(200).json(result);
+          const answer = await answerWebhook(() =>
+            media.handleWebhook(raw, String(req.headers.authorization ?? '')),
+          );
+          res.status(answer.status).json(answer.body);
         },
       );
       app.use(express.json({ limit: '2kb' }));

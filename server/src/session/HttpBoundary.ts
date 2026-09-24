@@ -1,7 +1,10 @@
 /**
  * Common HTTP entry boundary installed in front of every request listener, including the
- * Colyseus matchmaking router. It runs before `/matchmake/*`, OPTIONS pre-flight and Express:
+ * Colyseus matchmaking router. It runs before `/matchmake/*`, OPTIONS pre-flight and Express, in
+ * this order:
  *
+ * - Rate: if a rate gate (`policy.allowRequest`) is configured, it is checked first, before the
+ *   origin and before any body is read; a request it rejects ends with 429 regardless of origin.
  * - Origin: an absent header is allowed (development CLI/health, server-to-server); a present
  *   header must exactly match one allowed http/https origin. `null`, empty and multiple
  *   origins are rejected with 403 before any body is read or seat reserved.

@@ -1,12 +1,9 @@
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import type { TrackRegistry } from './TrackRegistry.js';
+import { WebhookAuthenticationError } from './webhook-answer.js';
 
-export class WebhookAuthenticationError extends Error {
-  readonly statusCode = 401;
-  constructor() {
-    super('INVALID_WEBHOOK');
-  }
-}
+export { WebhookAuthenticationError, answerWebhook } from './webhook-answer.js';
+
 export type WebhookVerifier = Pick<WebhookReceiver, 'receive'>;
 const events = new Set([
   'track_published',

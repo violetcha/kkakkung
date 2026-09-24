@@ -124,8 +124,9 @@ const SHOWCASE_SEED = 20260922;
 const SHOWCASE_VACANT_PREFIX = 'showcase-vacant-';
 /**
  * S15P21C204-312. How long an empty demo room waits for its operator to come back. A refresh
- * takes seconds; after this the room closes and frees its `MAX_ROOMS` slot, because a demo
- * round has no deadline and would otherwise hold the slot for as long as the process lives.
+ * takes seconds; after this the room closes and frees its slot in the demo rooms' own budget
+ * (`maxDemoRooms`, separate from `MAX_ROOMS`), because a demo round has no deadline and would
+ * otherwise hold the slot for as long as the process lives.
  */
 const DEMO_REJOIN_GRACE_MS = 120_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';

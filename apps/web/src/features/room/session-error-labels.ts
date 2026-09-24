@@ -17,7 +17,7 @@ const LABELS: Record<SessionErrorCode, string> = {
     '다른 창이나 탭에서 이미 방에 참가 중입니다. 그 창을 닫은 뒤 다시 시도해 주세요.',
 };
 
-/** 세션이 끊긴 뒤 다시 들어올 때 클라이언트가 스스로 내는 코드. 서버 목록에는 없다. */
+/** 세션이 끊긴 뒤 다시 들어올 때 Room 입장 오류 메시지로 받는 코드. 서버 오류 목록에는 없다. */
 const CLIENT_LABELS: Readonly<Record<string, string>> = {
   INVALID_SESSION: '입장 시간이 만료됐습니다. 다시 입장해 주세요.',
 };

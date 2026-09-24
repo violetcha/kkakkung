@@ -7,8 +7,8 @@ export type QualityPreset = 'medium' | 'low';
  * of the screen it was shown on.
  */
 export const QUALITY_PRESETS = {
-  medium: { dpr: [1, 1.25] as [number, number], antialias: false, postprocessing: false },
-  low: { dpr: [1, 1] as [number, number], antialias: false, postprocessing: false },
+  medium: { dpr: [1, 1.25] as [number, number] },
+  low: { dpr: [1, 1] as [number, number] },
 } as const;
 export function createQualityControl(apply: (value: QualityPreset) => void) {
   let current: QualityPreset = 'medium';

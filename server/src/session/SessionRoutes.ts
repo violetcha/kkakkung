@@ -15,6 +15,7 @@ import {
   roomInvitationRequestSchema,
   sessionCancelRequestSchema,
   sessionRequestSchema,
+  type SessionCancelErrorCode,
   type SessionErrorCode,
   type SessionResponse,
   type RoomInvitationErrorCode,
@@ -144,12 +145,14 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
   router.delete(ROOM_INVITATION_ROUTE, (req, res) => manageInvitation(req, res, true));
   router.delete(SESSION_CANCEL_ROUTE, (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
+    // S15P21C204-381. The codes come from the shared contract, not free literals.
+    const refuse = (status: number, error: SessionCancelErrorCode) =>
+      void res.status(status).json({ error });
     // Cleanup remains available while admission is closed. No caller-supplied identity.
     if (!sessionCancelRequestSchema.safeParse(req.body === '' ? {} : (req.body ?? {})).success)
-      return void res.status(400).json({ error: 'INVALID_REQUEST' });
+      return refuse(400, 'INVALID_REQUEST');
     const header = req.headers.authorization;
-    if (!header?.startsWith('Bearer ') || header.length <= 7)
-      return void res.status(401).json({ error: 'INVALID_SESSION' });
+    if (!header?.startsWith('Bearer ') || header.length <= 7) return refuse(401, 'INVALID_SESSION');
     const session = deps.sessions.authenticate(header.slice(7));
     // Expired/already-canceled credentials have no reservation to modify.
     if (!session) {
@@ -162,7 +165,7 @@ export function createSessionRoutes(deps: SessionRouteDeps): Router {
       state === 'JOINED' ||
       state === 'RETIRING'
     )
-      return void res.status(409).json({ error: 'SESSION_IN_USE' });
+      return refuse(409, 'SESSION_IN_USE');
     // No await between ownership/state check, slot release and session invalidation.
     if (state === 'RESERVED') deps.slots.release(session.roomCode, session.playerId);
     deps.sessions.invalidate(session.sessionId);

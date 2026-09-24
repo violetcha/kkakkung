@@ -10,8 +10,9 @@
 //   node scripts/check-livekit-usage.mjs --state /opt/kkakkung/livekit-usage-state.json
 //   LIVEKIT_USAGE_DRY_RUN=1 node scripts/check-livekit-usage.mjs --state <file>
 //
-// Exit codes: 0 checked and delivered, 1 provider/notification failure, 2 configuration or
-// usage error, 3 Analytics API is unavailable or credentials are rejected.
+// Exit codes: 0 checked and delivered, 1 any other provider/connection/notification failure
+// (unreachable, timeout, rate limited, HTTP error, invalid response), 2 configuration or usage
+// error, 3 only when the Analytics API rejects the credentials (401/403).
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';

@@ -1,6 +1,7 @@
 // S15P21C204-295. 대기실 타일 한 칸의 캐릭터. 경기에서 상대가 보는 그 아바타를 정면으로 세운다.
 // 준비를 누르기 전에는 기본 얼굴이고, 카메라가 켜져 얼굴이 올라오면 그 영상이 얼굴에 붙는다.
-// 대기실에서는 움직이지 않으므로 프레임을 계속 돌리지 않는다(frameloop="demand").
+// 얼굴이 없으면 자리표시 svg만 그리고 Canvas 자체를 만들지 않는다. Canvas 는 얼굴이 있을 때만
+// 서므로 항상 계속 돈다(frameloop="always"); invalidate 로 필요할 때만 그리는 경로는 없다.
 import { useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import type { Texture } from 'three';

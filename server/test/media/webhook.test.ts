@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { AccessToken } from 'livekit-server-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { LiveKitWebhook } from '../../src/media/LiveKitWebhook.js';
+import {
+  LiveKitWebhook,
+  WebhookAuthenticationError,
+  answerWebhook,
+} from '../../src/media/LiveKitWebhook.js';
 import { TrackRegistry } from '../../src/media/TrackRegistry.js';
 
 // Synthetic, local-only signing material; no Cloud request or real credential is used.
@@ -107,5 +111,28 @@ describe('SDK authenticated raw webhook handling', () => {
       status: 'ignored',
     });
     expect(s.query).not.toHaveBeenCalled();
+  });
+});
+
+// S15P21C204-381. The route answers a signature failure with 401, not the generic 400.
+describe('answerWebhook', () => {
+  it('answers 200 with the handler result and 401 for a bad signature', async () => {
+    await expect(answerWebhook(async () => ({ accepted: true }))).resolves.toEqual({
+      status: 200,
+      body: { accepted: true },
+    });
+    await expect(
+      answerWebhook(async () => {
+        throw new WebhookAuthenticationError();
+      }),
+    ).resolves.toEqual({ status: 401, body: { error: 'INVALID_WEBHOOK' } });
+  });
+
+  it('leaves any other failure to the error handler', async () => {
+    await expect(
+      answerWebhook(async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
   });
 });

@@ -1,6 +1,6 @@
 // D-10 / IN-08. 회전 모션·키 발동.
 // 한 번 발동하면 latch를 잠그고 중립 안정 구간을 지나야 다음 회전을 만든다.
-// 서버 6 Tick 행동과 1개 버퍼를 따르며 웹에 무한 행동 큐를 만들지 않는다.
+// 서버 PRODUCT_ACTION_TICKS.turn(8 Tick) 행동과 1개 버퍼를 따르며 웹에 무한 행동 큐를 만들지 않는다.
 // S15P21C204-265. 키보드 회전도 같은 규칙이다: 키를 turnHoldMs 유지해야 한 번 발동하고,
 // 놓은 뒤 neutralHoldMs가 지나야 다음 회전을 받는다. 즉시 반응하는 키는 모션보다 유리하다.
 import { applyHysteresis } from './one-euro-filter';

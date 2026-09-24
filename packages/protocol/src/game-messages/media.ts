@@ -111,11 +111,6 @@ export const mediaStatusReportSchema = mediaScopeSchema.extend({
 });
 export type MediaStatusReport = z.infer<typeof mediaStatusReportSchema>;
 
-export const mediaRefreshRequestSchema = mediaScopeSchema.extend({
-  lastBindingRevision: revision,
-});
-export type MediaRefreshRequest = z.infer<typeof mediaRefreshRequestSchema>;
-
 export const MEDIA_ROUTES = {
   grants: '/api/media/grants',
   report: '/api/media/report',
