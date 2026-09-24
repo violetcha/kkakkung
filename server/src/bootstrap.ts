@@ -116,6 +116,11 @@ export type ProductProfile<State = unknown> = Readonly<{
   layouts: {
     maps: MapPreparationPort;
     selection: LayoutSelectionPort;
+    /**
+     * S15P21C204-383. The tuning file's online selection budget. Absent keeps the loader's
+     * built-in LAYOUT_BUDGET (the same numbers the shipped tuning carries).
+     */
+    budget?: Readonly<{ maxAttempts: number; onlineMapBudgetMs: number; attemptsPerBatch: number }>;
     masterPath: string;
     fallbackPath: string;
     templateId: string;
@@ -586,6 +591,13 @@ export function createApplication<State = unknown>(
               maps: product.layouts.maps,
               selection: product.layouts.selection,
               now: monotonicNow,
+              ...(product.layouts.budget
+                ? {
+                    budgetMs: product.layouts.budget.onlineMapBudgetMs,
+                    maxAttempts: product.layouts.budget.maxAttempts,
+                    maxBatch: product.layouts.budget.attemptsPerBatch,
+                  }
+                : {}),
             }),
             masterPath: product.layouts.masterPath,
             fallbackPath: product.layouts.fallbackPath,

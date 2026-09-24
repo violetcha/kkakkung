@@ -8,6 +8,7 @@ import {
   hasNewInformation,
   matchCore,
   preparePracticeLayout,
+  validateConnectivity,
   validateTemplate,
   validateTuning,
   type MatchState,
@@ -190,11 +191,19 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
       return hasNewInformation(knowledgeFrom, knowledgeTo, state.exits);
     },
     layouts: {
-      maps: { validateTemplate, createTemplateVariants },
+      maps: {
+        validateTemplate,
+        createTemplateVariants,
+        validateConnectivity: (template) =>
+          validateConnectivity(template, {
+            minSpawnNeighbors: tuning.template.layout.minSpawnNeighbors,
+          }),
+      },
       selection: createLayoutSelector({
         layout: tuning.template.layout,
         selection: tuning.template.selection,
       }),
+      budget: tuning.template.selection,
       ...fallbackSource,
       bySize,
     },

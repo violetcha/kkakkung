@@ -234,6 +234,15 @@ export type MapVariantsResult =
 export interface MapPreparationPort {
   validateTemplate(raw: unknown, source: MapSource): MapTemplateResult;
   createTemplateVariants(template: LayoutTemplate): MapVariantsResult;
+  /**
+   * S15P21C204-383. Passage connectivity of the variant a match will play: one component, spawns
+   * and exit approaches in the core. Only the shipped-template tests checked this before, so a
+   * structurally valid but broken map reached a match. Absent skips the check.
+   */
+  validateConnectivity?(template: LayoutTemplate): Readonly<{
+    ok: boolean;
+    issues: readonly Readonly<{ code: string }>[];
+  }>;
 }
 export type PracticeLayoutResult =
   | Readonly<{ status: 'ready'; layout: MatchLayout }>

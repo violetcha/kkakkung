@@ -7,7 +7,7 @@
 // tag had been attached to a cache-hit image created 25 minutes earlier it sorted as old and was
 // removed one second before #140's Trivy scan looked for it. A tag is therefore only removable when
 // its image was last tagged more than --min-age-minutes ago, on top of keeping the newest --keep
-// tags, every --protect tag and the tags of running containers.
+// tags, every --protect tag and the tags of running containers (also when they run by image ID).
 //
 //   node scripts/prune-release-images.mjs --keep 5 --min-age-minutes 60 \
 //     --protect <tag> [--protect <tag>] [--dry-run] kkakkung-game kkakkung-web
@@ -102,12 +102,35 @@ function listImages(repository) {
   }));
 }
 
+/**
+ * Tags of `repository` that running containers use. `images` is `docker ps {{.Image}}` output.
+ * S15P21C204-383: releases run by image ID (`sha256:...`, see deploy-release.mjs), which the
+ * repository prefix never matched, so those containers protected nothing. An ID is resolved to
+ * its tags with `tagsOf`.
+ */
+export function runningTagsFrom(images, repository, tagsOf) {
+  const prefix = `${repository}:`;
+  const tags = new Set();
+  for (const line of String(images).split(/\r?\n/)) {
+    const image = line.trim();
+    if (image.startsWith(prefix)) tags.add(image.slice(prefix.length));
+    else if (/^(sha256:)?[0-9a-f]{12,64}$/.test(image))
+      for (const ref of tagsOf(image))
+        if (ref.startsWith(prefix)) tags.add(ref.slice(prefix.length));
+  }
+  return [...tags];
+}
+
 function runningTags(repository) {
-  return docker(['ps', '--format', '{{.Image}}'])
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((image) => image.startsWith(`${repository}:`))
-    .map((image) => image.slice(repository.length + 1));
+  const tagsOf = (id) => {
+    try {
+      const refs = JSON.parse(docker(['image', 'inspect', id, '--format', '{{json .RepoTags}}']));
+      return Array.isArray(refs) ? refs : [];
+    } catch {
+      return [];
+    }
+  };
+  return runningTagsFrom(docker(['ps', '--format', '{{.Image}}']), repository, tagsOf);
 }
 
 export function main(argv, { log = console.log, nowMs = Date.now() } = {}) {

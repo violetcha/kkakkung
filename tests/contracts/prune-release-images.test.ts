@@ -8,6 +8,7 @@ import {
   parseArgs,
   parseDockerTime,
   planPrune,
+  runningTagsFrom,
 } from '../../scripts/prune-release-images.mjs';
 
 const HOUR = 60 * 60_000;
@@ -129,5 +130,16 @@ describe('prune-release-images', () => {
     expect(() => parseArgs(['--keep', '0', 'x'])).toThrow(/--keep/);
     expect(() => parseArgs([])).toThrow(/repository/);
     expect(() => parseArgs(['--bogus', 'x'])).toThrow(/unknown option/);
+  });
+});
+
+// S15P21C204-383. Releases run by image ID, so running-container protection resolves IDs to tags.
+describe('running container protection', () => {
+  it('protects tags of containers started by tag or by image ID', () => {
+    const id = 'sha256:' + 'a'.repeat(64);
+    const tagsOf = (ref: string) => (ref === id ? ['kkakkung-game:1234abcd', 'other:latest'] : []);
+    const ps = ['kkakkung-game:feedbeef', id, 'kkakkung-web:00000000', 'redis:7', ''].join('\n');
+    expect(runningTagsFrom(ps, 'kkakkung-game', tagsOf).sort()).toEqual(['1234abcd', 'feedbeef']);
+    expect(runningTagsFrom(ps, 'kkakkung-web', tagsOf)).toEqual(['00000000']);
   });
 });
