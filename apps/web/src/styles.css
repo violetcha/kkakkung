@@ -3448,40 +3448,14 @@
   pointer-events: none;
   overflow: hidden;
 }
+/* S15P21C204-374. 핏줄은 필터·가장자리 가림까지 한 번 그려 둔 그림 한 장이다(TaggerVeins). 합성
+   효과를 걸지 않아 3D 화면이 바뀔 때 겹치기만 한다. */
 .vein-lines {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-/* 핏줄 선. 어둡게 눌러 화면 위에 뜨지 않고 유리 안쪽에 붙은 것처럼 보이게 한다. */
-.vein-lines path {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-.vein-lines g {
-  mix-blend-mode: multiply;
-}
-/* 번진 피: 굵고 흐리게 깔린다. */
-.vein-bleed path {
-  stroke: #5c0505;
-}
-.vein-bleed {
-  opacity: 0.55;
-  filter: blur(2px);
-}
-/* 또렷한 줄: 그 위에 가늘고 진하게 올라간다. */
-.vein-core path {
-  stroke: #8d0f0f;
-}
-.vein-core {
-  opacity: 0.95;
-}
-/* 가장자리에만 남기고 안쪽으로 갈수록 사라진다. 시야는 가리지 않는다. */
-.vein-frame > * {
-  mask-image: radial-gradient(ellipse 76% 70% at 50% 50%, #0000 40%, #000 94%);
+  user-select: none;
 }
 /* 가장자리에 아주 옅게 고인 붉은 기. 숨을 쉬듯 느리게 진해진다. */
 .vein-glow {

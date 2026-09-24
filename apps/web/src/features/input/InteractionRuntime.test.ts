@@ -85,9 +85,21 @@ function harness(
     },
     set onerror(_handler: ((event: unknown) => void) | null) {},
   };
+  // 시험이 frame() 으로 한 프레임씩 민다. 부르지 않으면 이전처럼 아무 프레임도 뽑지 않는다.
+  let scheduled: (() => void) | null = null;
+  let nextBitmap: ImageBitmap | null = null;
   const source: FrameSource = {
-    schedule: () => () => undefined,
-    grab: async () => null,
+    schedule: (callback) => {
+      scheduled = callback;
+      return () => {
+        if (scheduled === callback) scheduled = null;
+      };
+    },
+    grab: async () => {
+      const bitmap = nextBitmap;
+      nextBitmap = null;
+      return bitmap;
+    },
     now: () => clock,
   };
   const environment: DeviceEnvironment = {
@@ -184,6 +196,21 @@ function harness(
     statuses,
     previews,
     posted,
+    /** 카메라 한 프레임을 펌프에 넣고, 이번에 Worker 로 보낸 모델 목록을 돌려준다. */
+    frame: async () => {
+      const before = posted.length;
+      nextBitmap = { close: () => undefined } as unknown as ImageBitmap;
+      const tick = scheduled;
+      scheduled = null;
+      tick?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      const sent = posted
+        .slice(before)
+        .find((message) => (message as { type?: string }).type === 'frame') as
+        { models: readonly string[] } | undefined;
+      return sent?.models ?? null;
+    },
     advance: (ms: number) => {
       clock += ms;
     },
@@ -1211,6 +1238,70 @@ describe('createInteractionRuntime', () => {
     expect(base.posted[0]).toMatchObject({ type: 'init', runtimeGeneration: 1 });
     expect(base.statuses.at(-1)).toMatchObject({ camera: 'ready', vision: 'loading' });
     expect(base.previews[0]).not.toBeNull();
+  });
+
+  // S15P21C204-374. 키보드 모드에서 자세·손은 아무도 읽지 않는다. 얼굴만 추론해 CPU 를 렌더에 돌려주고,
+  // 모션으로 돌아오거나 보정을 시작하면 다시 돈다.
+  it('infers only the face in keyboard mode and resumes the body models for motion or calibration', async () => {
+    const base = harness();
+    try {
+      await base.runtime.startDevices({ microphone: false });
+      base.ready();
+      const context = {
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'keyboard',
+        pageActive: true,
+      } as const;
+      let frameId = 0;
+      const next = async () => {
+        base.advance(200);
+        const models = await base.frame();
+        base.emit(++frameId, 1, 0.01, 0, 'face');
+        return models;
+      };
+      expect(await next()).toEqual(['face', 'pose', 'gesture']);
+      base.runtime.setContext(context);
+      expect(await next()).toEqual(['face']);
+      expect(await next()).toEqual(['face']);
+      void base.runtime.calibrate();
+      expect(await next()).toEqual(['face', 'pose', 'gesture']);
+    } finally {
+      await base.runtime.dispose();
+    }
+    const motion = harness();
+    try {
+      await motion.runtime.startDevices({ microphone: false });
+      motion.ready();
+      motion.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'keyboard',
+        pageActive: true,
+      });
+      motion.advance(200);
+      expect(await motion.frame()).toEqual(['face']);
+      motion.emit(1, 1, 0.01, 0, 'face');
+      motion.runtime.setContext({
+        matchId: 'm',
+        selfPlayerId: 'self',
+        phase: 'PLAYING',
+        role: 'runner',
+        status: 'ACTIVE',
+        mode: 'motion',
+        pageActive: true,
+      });
+      motion.advance(200);
+      expect(await motion.frame()).toEqual(['face', 'pose', 'gesture']);
+    } finally {
+      await motion.runtime.dispose();
+    }
   });
 
   it('never reports vision ready from the model load alone', async () => {
