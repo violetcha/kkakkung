@@ -81,6 +81,11 @@ export const PREPARATION_ISSUES = [
    * 읽는 쪽은 모르는 값을 버리므로(아래 reader) 옛 클라이언트는 안내 없이 대기만 한다.
    */
   'MEDIA_BUDGET_EXHAUSTED',
+  /**
+   * S15P21C204-372. 동시에 진행할 수 있는 경기가 모두 사용 중이다. 방은 그대로 두고, 자리가 나면
+   * 방장이 다시 시작한다.
+   */
+  'MATCH_CAPACITY_FULL',
 ] as const;
 export type PreparationIssue = (typeof PREPARATION_ISSUES)[number];
 export const REMATCH_STATES = ['available', 'settling', 'requested'] as const;

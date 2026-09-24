@@ -97,16 +97,18 @@ describe('SlotRegistry', () => {
   });
 
   // 시연 방(331)은 실제 사람이 뛰므로 경기 방과 같은 예산을 쓴다. 데모 방만 따로 센다.
-  it('counts showcase rooms in the player budget, not the demo budget', () => {
+  it('counts showcase seats in the player budget but not showcase rooms in the room budget', () => {
+    // S15P21C204-372. 시연 방은 일반 방 수 예산 밖이다. 좌석은 서비스 좌석 한도 안에서 센다.
     const slots = new SlotRegistry({ maxRooms: 1, maxDemoRooms: 1 });
     expect(slots.reserve('S00001', 'a', 0, { create: true, showcase: { role: 'runner' } })).toBe(
       'reserved',
     );
-    expect(slots.reserve('M00001', 'p0', 0, { create: true })).toBe('ROOM_LIMIT');
+    expect(slots.reserve('M00001', 'p0', 0, { create: true })).toBe('reserved');
+    expect(slots.reserve('M00002', 'p1', 0, { create: true })).toBe('ROOM_LIMIT');
     expect(
       slots.reserve('D00001', 'operator', 0, { create: true, demo: { operatorRole: 'runner' } }),
     ).toBe('reserved');
-    expect(slots.playerOccupied()).toBe(1);
+    expect(slots.playerOccupied()).toBe(2);
   });
 
   it('exposes join order and read-only activity counts without double counting', () => {
@@ -161,31 +163,67 @@ describe('SlotRegistry', () => {
     expect(new SlotRegistry({ maxRooms: 10 }).maxRoomsPerOwner).toBe(2);
   });
 
-  it('S15P21C204-361: counts showcase rooms inside maxRooms and caps how many may be forming at once', () => {
-    // 시연 방은 데모 방과 달리 따로 세지 않는다. 셋이 모이는 중이면 일반 방은 둘만 남는다.
-    const slots = new SlotRegistry({ maxRooms: 5, maxShowcaseRooms: 3 });
+  it('S15P21C204-361/372: keeps showcase rooms in their own budget, playing ones included', () => {
+    // 372 부터 시연 방은 일반 방 예산 밖이다. 발표가 일반 방을 막지도, 일반 방이 발표를 막지도 않는다.
+    const slots = new SlotRegistry({ maxRooms: 2, maxShowcaseRooms: 3 });
     const showcase = { create: true, showcase: { role: 'runner' as const } };
     expect(slots.canOpenShowcaseRoom()).toBe(true);
     expect(slots.reserve('SHOW01', 's1', 0, showcase)).toBe('reserved');
     expect(slots.reserve('SHOW02', 's2', 0, showcase)).toBe('reserved');
-    expect(slots.formingShowcaseRooms()).toBe(2);
-    expect(slots.canOpenShowcaseRoom()).toBe(true);
+    expect(slots.showcaseRoomsInUse()).toBe(2);
     expect(slots.reserve('SHOW03', 's3', 0, showcase)).toBe('reserved');
-    expect(slots.formingShowcaseRooms()).toBe(3);
     expect(slots.canOpenShowcaseRoom()).toBe(false);
+    expect(slots.reserve('SHOW04', 's4', 0, showcase)).toBe('ROOM_LIMIT');
     // 빈 자리가 있는 방은 가장 먼저 열린 방부터 채운다.
     expect(slots.joinableShowcaseRoom()).toBe('SHOW01');
 
+    // 시연 방 셋이 있어도 일반 방은 제 예산을 다 쓴다.
     expect(slots.reserve('ROOM01', 'a1', 0, { create: true })).toBe('reserved');
     expect(slots.reserve('ROOM02', 'b1', 0, { create: true })).toBe('reserved');
     expect(slots.reserve('ROOM03', 'c1', 0, { create: true })).toBe('ROOM_LIMIT');
 
-    // 경기가 시작된 시연 방은 모이는 중이 아니라 다음 시연이 새 방을 열 수 있다. 방 수 예산은 그대로 쓴다.
-    slots.setPhase('SHOW01', 'TEAM_PRACTICE', 0);
-    expect(slots.formingShowcaseRooms()).toBe(2);
-    expect(slots.canOpenShowcaseRoom()).toBe(true);
+    // 경기 중인 시연 방도 LiveKit 을 쓰므로 센다. 결과 화면에 남은 방은 세지 않는다.
+    slots.setPhase('SHOW01', 'PLAYING', 0);
+    expect(slots.showcaseRoomsInUse()).toBe(3);
     expect(slots.joinableShowcaseRoom()).toBe('SHOW02');
-    expect(slots.reserve('ROOM03', 'c1', 0, { create: true })).toBe('ROOM_LIMIT');
+    slots.setPhase('SHOW01', 'RESULT', 0);
+    expect(slots.showcaseRoomsInUse()).toBe(2);
+    expect(slots.canOpenShowcaseRoom()).toBe(true);
+  });
+
+  // S15P21C204-372. 방 만들기는 대기방 예산을, 연습 시작은 경기 예산을 쓴다.
+  it('S15P21C204-372: opens lobby rooms up to their own limit and starts at most maxRooms matches', () => {
+    const slots = new SlotRegistry({ maxRooms: 2, maxLobbyRooms: 4 });
+    for (const code of ['ROOM01', 'ROOM02', 'ROOM03', 'ROOM04'])
+      expect(slots.reserve(code, code + '-host', 0, { create: true })).toBe('reserved');
+    expect(slots.reserve('ROOM05', 'e1', 0, { create: true })).toBe('ROOM_LIMIT');
+    expect(slots.capacity()).toEqual({
+      matchesInUse: 0,
+      matchLimit: 2,
+      lobbyRoomsInUse: 4,
+      lobbyRoomLimit: 4,
+    });
+
+    // 연습을 시작한 방만 경기 예산을 쓴다. 세 번째 방은 자리가 날 때까지 기다린다.
+    expect(slots.canStartMatch('ROOM01')).toBe(true);
+    slots.setPhase('ROOM01', 'TEAM_PRACTICE', 0);
+    slots.setPhase('ROOM02', 'PLAYING', 0);
+    expect(slots.canStartMatch('ROOM03')).toBe(false);
+    // 이미 경기 중인 방은 제 자리를 갖고 있다.
+    expect(slots.canStartMatch('ROOM02')).toBe(true);
+    expect(slots.capacity().matchesInUse).toBe(2);
+
+    // 결과 화면으로 넘어가면 따로 돌려주지 않아도 자리가 풀린다.
+    slots.setPhase('ROOM02', 'RESULT', 0);
+    expect(slots.canStartMatch('ROOM03')).toBe(true);
+    expect(slots.canStartMatch('NOPE00')).toBe(false);
+  });
+
+  it('S15P21C204-372: refuses a lobby limit below the match limit and defaults to it', () => {
+    expect(() => new SlotRegistry({ maxRooms: 3, maxLobbyRooms: 2 })).toThrow(
+      'INVALID_MAX_LOBBY_ROOMS',
+    );
+    expect(new SlotRegistry({ maxRooms: 3 }).maxLobbyRooms).toBe(3);
   });
 
   it('refuses a nonsensical showcase cap and defaults to one forming room', () => {

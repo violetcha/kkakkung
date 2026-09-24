@@ -70,6 +70,10 @@ const environment = z.object({
   // actually load-tested may be opened (QA-10/QA-11 raise this step by step).
   MAX_ROOMS: z.coerce.number().int().min(1).max(10).default(1),
   MAX_SLOTS: z.coerce.number().int().min(6).max(60).default(6),
+  // S15P21C204-372. 동시에 열어 둘 수 있는 일반 방(대기방) 수. 방 만들기가 쓰는 예산이다.
+  // MAX_ROOMS 는 이제 동시에 진행하는 경기(연습~경기, LiveKit 사용) 수다. 로비는 가벼워 넉넉히
+  // 두고, 경기만 부하 시험으로 검증한 수로 묶는다. 생략하면 MAX_ROOMS 와 같다(예전 동작).
+  LOBBY_MAX_ROOMS: z.coerce.number().int().min(1).max(50).optional(),
   // S15P21C204-300. 한 출처(IPv4 주소 또는 IPv6 /64)가 동시에 열어 둘 수 있는 방 수. 공유
   // NAT 뒤에서는 여러 사람이 한 출처로 묶이므로 "한 사람" 이 아니라 "한 회선" 기준이다.
   // 정상 6인은 방 하나에 초대로 모이므로 영향이 없다. 올리면 전역 예산을 한 회선이 더 많이
@@ -223,6 +227,8 @@ export function parseConfig(input: Record<string, string | undefined>) {
     throw new Error('MAX_SLOTS must equal MAX_ROOMS * 6 (six seats per room)');
   // 출처 상한이 전역 방 수 이상이면 상한이 아무것도 막지 않는다. 설정 실수로 조용히 꺼지지
   // 않게 부팅에서 거절한다(S15P21C204-300).
+  if (raw.LOBBY_MAX_ROOMS !== undefined && raw.LOBBY_MAX_ROOMS < raw.MAX_ROOMS)
+    throw new Error('LOBBY_MAX_ROOMS must not be below MAX_ROOMS');
   if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ORIGIN >= raw.MAX_ROOMS)
     throw new Error('MAX_ROOMS_PER_ORIGIN must be below MAX_ROOMS');
   if (raw.MAX_ROOMS > 1 && raw.MAX_ROOMS_PER_ACCOUNT >= raw.MAX_ROOMS)
@@ -342,6 +348,7 @@ export function parseConfig(input: Record<string, string | undefined>) {
     mediaMode: raw.MEDIA_MODE,
     maxRooms: raw.MAX_ROOMS,
     maxSlots: raw.MAX_SLOTS,
+    lobbyMaxRooms: raw.LOBBY_MAX_ROOMS ?? raw.MAX_ROOMS,
     maxRoomsPerOrigin: raw.MAX_ROOMS_PER_ORIGIN,
     maxRoomsPerAccount: raw.MAX_ROOMS_PER_ACCOUNT,
     opsDataDir: raw.OPS_DATA_DIR,

@@ -18,6 +18,7 @@ import type { AppConfig } from '../config/env.js';
 import { loadRuntimeEvidence } from '../config/RuntimeEvidence.js';
 import { createMediaCoordinator } from '../media/MediaCoordinator.js';
 import { createOperatorAuth } from '../operations/OperatorAuth.js';
+import { SHOWCASE_CAPACITY } from '../session/SlotRegistry.js';
 import { MAP_TEMPLATE_BY_SIZE } from './map-templates.js';
 
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -91,6 +92,7 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
   return {
     strictProduct: true,
     maxRooms: config.maxRooms,
+    lobbyMaxRooms: config.lobbyMaxRooms,
     maxRoomsPerOrigin: config.maxRoomsPerOrigin,
     maxRoomsPerAccount: config.maxRoomsPerAccount,
     demoMaxRooms: config.demoMaxRooms,
@@ -156,7 +158,8 @@ export async function loadProductProfile(config: AppConfig): Promise<ProductProf
             operationTimeoutMs: config.operationTimeoutMs!,
             subscriptionMode: config.subscriptionMode,
             initialBudget: null,
-            maxConcurrentParticipants: config.maxSlots,
+            // S15P21C204-372. 시연 방은 경기 예산 밖이므로 그 좌석만큼 동시 참가자 한도를 더한다.
+            maxConcurrentParticipants: config.maxSlots + config.showcaseRooms * SHOWCASE_CAPACITY,
             ...config.mediaApiLimits!,
             monthlyUsage: config.livekitMonthlyUsage,
           }

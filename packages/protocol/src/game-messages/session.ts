@@ -18,6 +18,26 @@ export const SESSION_CANCEL_ERROR_CODES = [
   'SESSION_IN_USE',
 ] as const;
 export type SessionCancelErrorCode = (typeof SESSION_CANCEL_ERROR_CODES)[number];
+/**
+ * S15P21C204-372. 지금 방을 만들고 경기를 시작할 여유가 있는지. 홈 화면이 방 만들기 전에 보여 준다.
+ * 개수와 상태만 담고 방 코드·참가자는 담지 않는다. `/api/sessions` 밑에 두지 않는 것은 입장 시도
+ * 한도를 화면 갱신이 갉아먹지 않게 하려는 것이다.
+ */
+export const SERVICE_CAPACITY_ROUTE = '/api/capacity';
+const count = z.number().int().nonnegative();
+export const serviceCapacitySchema = z.strictObject({
+  /** 지금 연습~경기 중인 일반 방 수와 동시에 진행할 수 있는 경기 수. */
+  matchesInUse: count,
+  matchLimit: count,
+  /** 지금 열려 있는 일반 방(대기방 포함) 수와 한도. */
+  lobbyRoomsInUse: count,
+  lobbyRoomLimit: count,
+  /** 새 입장을 받는 중인가. 점검(배포 drain) 중이면 false. */
+  admissionOpen: z.boolean(),
+  /** 월 영상·음성 사용량 한도로 새 경기를 막고 있는가. */
+  mediaBlocked: z.boolean(),
+});
+export type ServiceCapacity = z.infer<typeof serviceCapacitySchema>;
 export const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export const nicknameSchema = z.string().min(1).max(20);

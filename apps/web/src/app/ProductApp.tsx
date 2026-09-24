@@ -22,6 +22,7 @@ import { LocalControls } from '../features/game/flow/LocalControls';
 import { AudioControls } from '../features/game/flow/AudioControls';
 import type { AudioPreferences } from '../features/media/audio-preferences';
 import { ConnectionLostScreen } from '../features/game/flow/ConnectionLostScreen';
+import { capacityNotice, useServiceCapacity } from '../features/room/service-capacity';
 import { preparationFeedback } from '../features/game/flow/preparation-feedback';
 import { commandFeedback } from '../features/game/flow/command-feedback';
 import { LoadingOverlay } from '../features/game/flow/LoadingOverlay';
@@ -271,6 +272,10 @@ export function ProductApp({
   }, [cancelPendingAdmission]);
   // S15P21C204-312. 관리자가 직접 나가면 이 탭에 남긴 데모 세션도 지운다. 새로고침(pagehide)은
   // 나가는 것이 아니므로 그대로 두어 같은 경기로 돌아오게 한다.
+  // S15P21C204-372. 입장 화면이 보이는 동안 서비스 여유를 보여 준다.
+  const capacity = capacityNotice(
+    useServiceCapacity(!snapshot && !solo && homePanel === 'admission'),
+  );
   const leaveByChoice = useCallback(() => {
     if (demoSession) forgetDemoSession();
     // S15P21C204-363. 시연 참가자는 /showcase 에서만 들어오므로 이 페이지의 입장 폼으로 떨어질 일이
@@ -834,6 +839,7 @@ export function ProductApp({
                             className="join-submit"
                             disabled={
                               joining ||
+                              (createRoom && !!capacity?.createBlocked) ||
                               (!invitation &&
                                 access !== 'gitlab-sso' &&
                                 !(access === 'guest' && createRoom))
@@ -848,6 +854,11 @@ export function ProductApp({
                           )}
                         </div>
                       </form>
+                      {capacity && (
+                        <p className="pause-note" role="status" aria-label="서비스 여유">
+                          {capacity.text}
+                        </p>
+                      )}
                       {!invitation && access === 'checking' && (
                         <p className="pause-note">접속 상태 확인 중…</p>
                       )}

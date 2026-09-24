@@ -66,7 +66,8 @@ import { createReservationCleanup } from './session/ReservationCleanup.js';
 import { RoomExpiry } from './session/RoomExpiry.js';
 import { clientOrigin, createSessionRoutes, type AdmissionState } from './session/SessionRoutes.js';
 import { SessionStore } from './session/SessionStore.js';
-import { SlotRegistry } from './session/SlotRegistry.js';
+import { SHOWCASE_CAPACITY, SlotRegistry } from './session/SlotRegistry.js';
+import { createCapacityRoutes } from './session/CapacityRoutes.js';
 import { readFile } from 'node:fs/promises';
 
 /**
@@ -82,6 +83,8 @@ export type ProductProfile<State = unknown> = Readonly<{
   epochNow?: () => number;
   random?: () => number;
   maxRooms: number;
+  /** 동시에 열어 둘 수 있는 일반 방 수(S15P21C204-372). 생략하면 maxRooms 와 같다. */
+  lobbyMaxRooms?: number;
   /** 한 출처가 동시에 열어 둘 수 있는 방 수(S15P21C204-300). 생략하면 레지스트리 기본값. */
   maxRoomsPerOrigin?: number;
   /** 한 SSO 계정이 동시에 열어 둘 수 있는 방 수(S15P21C204-366). 생략하면 레지스트리 기본값. */
@@ -193,6 +196,14 @@ export function createApplication<State = unknown>(
   const slots = product
     ? new SlotRegistry({
         maxRooms: product.maxRooms,
+        // 설정 단계(env.ts)가 대기방 한도가 경기 한도보다 작지 않은지 이미 본다. 시험처럼 경기 한도만
+        // 바꾼 구성은 대기방 한도를 그만큼으로 본다.
+        maxLobbyRooms: Math.max(product.lobbyMaxRooms ?? product.maxRooms, product.maxRooms),
+        // S15P21C204-372. 좌석 한도는 대기방 전부와 시연 방이 찼을 때다. 경기 좌석(LiveKit)은 경기
+        // 예산과 미디어 참가자 한도가 따로 묶는다.
+        serviceCapacity:
+          Math.max(product.lobbyMaxRooms ?? product.maxRooms, product.maxRooms) * 6 +
+          Math.max(config.showcaseRooms, 0) * SHOWCASE_CAPACITY,
         ...(product.maxRoomsPerOrigin === undefined
           ? {}
           : { maxRoomsPerOwner: product.maxRoomsPerOrigin }),
@@ -416,6 +427,15 @@ export function createApplication<State = unknown>(
             ...(roomInvitations ? { roomInvitations } : {}),
             canManageInvitations: (session) =>
               directory.get(session.roomCode)?.canManageInvitations(session.playerId) === true,
+          }),
+        );
+        // S15P21C204-372. 홈 화면의 여유 표시. 입장 시도 한도 밖의 읽기 전용 경로다.
+        app.use(
+          createCapacityRoutes({
+            slots,
+            admission,
+            canStartMatch: () => media?.allowsNewMatch?.() ?? true,
+            cleanupReservations,
           }),
         );
         // S15P21C204-367. 로그인 게이트는 SSAFY 계정 전체를 통과시키므로 `/demo`·`/showcase` 의

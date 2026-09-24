@@ -14,6 +14,12 @@ it('explains the monthly media limit without telling players to retry', () => {
   expect(text).toContain('진행 중인 경기는 영향이 없습니다');
   expect(text).not.toContain('다시 준비');
 });
+// S15P21C204-372. 경기 자리가 없을 때는 방이 남아 있고 나중에 다시 시작하면 된다고 알린다.
+it('tells the room to wait for a free match slot instead of leaving', () => {
+  const text = preparationFeedback('MATCH_CAPACITY_FULL');
+  expect(text).toContain('경기가 모두 사용 중');
+  expect(text).toContain('방은 그대로');
+});
 it('distinguishes pending, denied, and uncertain commands without disclosing raw errors', () => {
   const request = {
     requestId: 'x',
