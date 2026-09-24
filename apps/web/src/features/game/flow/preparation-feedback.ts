@@ -14,7 +14,9 @@ const LABELS: Record<PreparationIssue, string> = {
     '이번 달 영상·음성 사용량이 한도에 가까워 새 경기를 시작할 수 없습니다. 진행 중인 경기는 영향이 없습니다. 운영자에게 알려 주세요.',
   // S15P21C204-372. 방은 남아 있고 자리가 나면 시작할 수 있다. 방장이 할 일을 말한다.
   MATCH_CAPACITY_FULL:
-    '지금은 동시에 진행할 수 있는 경기가 모두 사용 중입니다. 방은 그대로 유지되니 잠시 뒤 방장이 다시 시작해 주세요.',
+    '지금은 동시에 진행할 수 있는 경기가 모두 사용 중입니다. 방은 그대로 유지되니 자리가 나면 여기서 알려 드립니다.',
+  // 대기열이 없으므로 먼저 시작한 방이 자리를 가져간다. 방장에게 지금 누르라고 알린다.
+  MATCH_SLOT_AVAILABLE: '경기 자리가 났습니다. 방장이 지금 시작하면 바로 들어갑니다.',
 };
 export function preparationFeedback(issue: PreparationIssue | undefined): string | null {
   return issue ? (LABELS[issue] ?? null) : null;

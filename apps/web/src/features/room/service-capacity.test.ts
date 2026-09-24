@@ -14,7 +14,11 @@ const base = {
 const respond = (make: () => Response) => (async () => make()) as unknown as typeof fetch;
 
 it('shows free match slots and lets people create a room', () => {
-  expect(capacityNotice(base)).toEqual({ text: '지금 경기 가능 7/10', createBlocked: false });
+  expect(capacityNotice(base)).toEqual({
+    text: '지금 경기 가능 7/10 · 대기방 여유 18/30',
+    createBlocked: false,
+  });
+  expect(capacityNotice({ ...base, lobbyRoomsInUse: 30 })!.text).toContain('대기방 여유 0/30');
 });
 
 it('blocks creating, not joining, when every lobby room is taken or the service is draining', () => {

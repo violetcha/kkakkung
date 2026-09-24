@@ -86,6 +86,11 @@ export const PREPARATION_ISSUES = [
    * 방장이 다시 시작한다.
    */
   'MATCH_CAPACITY_FULL',
+  /**
+   * S15P21C204-372. 경기 자리가 없어 기다리던 방에 자리가 났다. 방장이 지금 시작할 수 있다. 대기열은
+   * 없어서 다른 방이 먼저 시작하면 다시 MATCH_CAPACITY_FULL 로 돌아간다.
+   */
+  'MATCH_SLOT_AVAILABLE',
 ] as const;
 export type PreparationIssue = (typeof PREPARATION_ISSUES)[number];
 export const REMATCH_STATES = ['available', 'settling', 'requested'] as const;
