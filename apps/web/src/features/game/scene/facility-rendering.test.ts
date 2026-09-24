@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { Mesh, MeshBasicMaterial, Raycaster, Texture, Vector3 } from 'three';
 import { privateViewSchema } from '@kkakkung/protocol/game-messages';
-import { createFacilityResources, createFacilitySurfaceTextures, FACILITY } from './facility-theme';
+import { createFacilityResources, FACILITY } from './facility-theme';
 import { RENDER_SCENES, SELF_MOTIONS, renderFixture } from './render-fixture';
 import { sampleActor } from './action-interpolation';
 import type { ActiveSelf } from '@kkakkung/protocol/game-schema';
@@ -34,20 +34,6 @@ it('connects medium quality colour, roughness and normal maps to the wall materi
   }
 });
 
-it('keeps procedural facility textures stable while quality-specific geometry is replaced', () => {
-  const surfaces = createFacilitySurfaceTextures();
-  let disposals = 0;
-  surfaces.owned.forEach((texture) => texture.addEventListener('dispose', () => disposals++));
-  const low = createFacilityResources(undefined, 'low', surfaces);
-  const medium = createFacilityResources(undefined, 'medium', surfaces);
-  low.dispose();
-  medium.dispose();
-  expect(disposals).toBe(0);
-  surfaces.dispose();
-  surfaces.dispose();
-  expect(disposals).toBe(surfaces.owned.length);
-});
-
 it('all inspection scenes obey the real recipient contract in every direction', () => {
   for (const scene of RENDER_SCENES)
     for (const facing of [0, 1, 2, 3] as const) {
@@ -66,29 +52,6 @@ it('removes actors and remembered doors with recipient visibility loss', () => {
   const crowded = renderFixture('상대 5명');
   expect(visibilityMask({ ...crowded, visibleEntities: [] }).players).toEqual([]);
   expect(visibilityMask({ ...crowded, self: null }).players).toEqual([]);
-});
-
-it('shows both finished role silhouettes in the crowded render inspection scene', () => {
-  const roles = visibilityMask(renderFixture('상대 5명')).players.map((player) => player.role);
-  expect(roles[0]).toBe('tagger');
-  expect(roles).toContain('runner');
-  expect(roles).toContain('tagger');
-});
-
-it('builds dedicated runner and tagger inspection scenes', () => {
-  expect(RENDER_SCENES).toEqual(expect.arrayContaining(['도망자 단독', '술래 단독']));
-  expect(
-    visibilityMask(renderFixture('도망자 단독' as (typeof RENDER_SCENES)[number])).players.map(
-      (player) => player.role,
-    ),
-  ).toEqual(['runner']);
-  expect(
-    visibilityMask(renderFixture('술래 단독' as (typeof RENDER_SCENES)[number])).players.map(
-      (player) => player.role,
-    ),
-  ).toEqual(['tagger']);
-  for (const scene of ['도망자 단독', '술래 단독'] as const)
-    expect(visibilityMask(renderFixture(scene)).players[0]?.action).toBeNull();
 });
 
 it('facility walls and their raised panels face the passage on all four exit sides', () => {

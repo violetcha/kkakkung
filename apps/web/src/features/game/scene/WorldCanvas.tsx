@@ -18,7 +18,6 @@ import { resolveSceneTheme, type SceneThemeId } from './scene-theme';
 import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
-import type { AvatarStateReporter } from './RoleAvatar';
 
 /** Background and fog per theme. The fog never reaches past the server's 3.5-cell sight. */
 export const sceneWorld = (theme: SceneThemeId) =>
@@ -39,7 +38,6 @@ export function WorldCanvas({
   renderTick = () => null,
   paused = false,
   onMetrics,
-  onAvatarState,
 }: {
   scene?: ComponentProps<typeof ScenePrimitives>;
   view?: PrivateView;
@@ -61,7 +59,6 @@ export function WorldCanvas({
    */
   paused?: boolean;
   onMetrics?(metrics: FrameMetrics): void;
-  onAvatarState?: AvatarStateReporter;
 } = {}) {
   const players = useAppStore((state) => state.players);
   const sessionId = useAppStore((state) => state.sessionId);
@@ -107,7 +104,6 @@ export function WorldCanvas({
           renderTick={renderTick}
           theme={theme}
           quality={quality}
-          onAvatarState={onAvatarState}
         />
         {onMetrics && <FrameMetricsProbe report={onMetrics} />}
       </Canvas>
