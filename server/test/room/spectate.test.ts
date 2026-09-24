@@ -6,6 +6,7 @@ import type { GameSubject } from '../../src/game/ports.js';
 import {
   chooseSpectateTarget,
   isSpectator,
+  receivesMedia,
   spectateCandidates,
   spectatorLinks,
 } from '../../src/game/Spectate.js';
@@ -63,5 +64,22 @@ describe('spectate target choice', () => {
       { playerId: 'r3', targetId: 'r2' },
     ]);
     expect(spectatorLinks(roster(), new Map())).toEqual([]);
+  });
+});
+
+// S15P21C204-380. The room half of media eligibility: ACTIVE players, and watching ended runners.
+describe('media eligibility', () => {
+  it('lets an ACTIVE player and a watching ended runner take a grant while spectating is on', () => {
+    const frame = roster({ r1: 'CAPTURED' });
+    expect(receivesMedia(frame, 'r2', undefined, true)).toBe(true);
+    expect(receivesMedia(frame, 't1', undefined, false)).toBe(true);
+    expect(receivesMedia(frame, 'r1', undefined, true)).toBe(true);
+  });
+
+  it('refuses an ended runner outside a running game or with nobody left to watch', () => {
+    expect(receivesMedia(roster({ r1: 'CAPTURED' }), 'r1', undefined, false)).toBe(false);
+    const allEnded = roster({ r1: 'CAPTURED', r2: 'ESCAPED', r3: 'CAPTURED' });
+    expect(receivesMedia(allEnded, 'r1', undefined, true)).toBe(false);
+    expect(receivesMedia(roster(), 'ghost', undefined, true)).toBe(false);
   });
 });

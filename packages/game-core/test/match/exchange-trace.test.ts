@@ -152,6 +152,13 @@ describe('delayed tagger trace of a successful exchange', () => {
     const refused = step(equal, 100, [command('r-b', 'EXCHANGE_ACCEPT', { exchangeId: 'xch-1' })]);
     expect(refused.outcomes[0]).toMatchObject({ result: 'rejected', code: 'NOT_ALLOWED' });
     expect(refused.state.traces.size).toBe(0);
+    // S15P21C204-380. Both parties hear that the session ended, the requester included.
+    expect(refused.events.filter((e) => e.type === 'EXCHANGE_CANCELED')).toEqual([
+      expect.objectContaining({
+        audience: ['r-a', 'r-b'],
+        payload: { exchangeId: 'xch-1', reason: 'NOT_ALLOWED' },
+      }),
+    ]);
     equal = refused.state;
     for (let tick = 101; tick <= 125; tick += 1) {
       const result = step(equal, tick);

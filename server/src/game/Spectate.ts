@@ -45,3 +45,19 @@ export function spectatorLinks(
   }
   return links;
 }
+
+/**
+ * S15P21C204-380. Whether a player may take a media grant in this frame: an ACTIVE participant, or
+ * an ended runner that is watching someone (only while spectating is possible). The media side
+ * already keeps a listed spectator eligible, so this is the room half of the same rule.
+ */
+export function receivesMedia(
+  participants: readonly GameSubject[],
+  playerId: string,
+  preferred: string | null | undefined,
+  spectatable: boolean,
+): boolean {
+  const self = participants.find((p) => p.playerId === playerId);
+  if (self?.status === 'ACTIVE') return true;
+  return spectatable && chooseSpectateTarget(participants, playerId, preferred) !== null;
+}

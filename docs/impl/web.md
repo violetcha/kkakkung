@@ -602,8 +602,8 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | 경우                           | 제목                       | 본문                                                                                                                                 |
 | ------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `ABORTED`                      | 경기 무효                  | 11.2의 중단 사유 문구. 사유가 없으면 `경기를 계속할 수 없어 무효 처리되었습니다. 연결 정리가 끝나면 방장이 다시 시작할 수 있습니다.` |
-| `RESULT`, `two-escaped`        | 도망자 승리                | 도망자 2명이 탈출하여 도망자 팀이 승리했습니다.                                                                                      |
-| `RESULT`, `two-captured`       | 술래 승리                  | 도망자 2명을 포획하여 술래 팀이 승리했습니다.                                                                                        |
+| `RESULT`, `two-escaped`        | 도망자 승리                | 도망자 N명이 탈출하여 도망자 팀이 승리했습니다. N은 `counts.escaped`.                                                                |
+| `RESULT`, `two-captured`       | 술래 승리                  | 도망자 N명을 포획하여 술래 팀이 승리했습니다. N은 `counts.captured`.                                                                 |
 | `RESULT`, `timeout`, 도망자 승 | 도망자 승리                | 제한 시간이 끝났고 탈출이 포획보다 많아 도망자 팀이 승리했습니다.                                                                    |
 | `RESULT`, `timeout`, 술래 승   | 술래 승리                  | 제한 시간이 끝나 술래 팀이 승리했습니다.                                                                                             |
 | `PLAYING` 중 개인 종료         | 탈출 성공 / 포획되었습니다 | 참가가 종료되었습니다. 경기가 끝날 때까지 팀의 공개 결과를 확인할 수 있습니다.                                                       |
@@ -613,7 +613,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 집계 줄은 `탈출 n · 포획 n · 종료 시 남은 도망자/활동 중인 도망자 n`이다. 도망자 수는 `capacity / 2`다.
 - 경기 중이면 `남은 시간 N초`를 표시한다.
 
-근거: [result-presenter.ts:17](../../apps/web/src/features/game/flow/result-presenter.ts#L17), [result-presenter.ts:33](../../apps/web/src/features/game/flow/result-presenter.ts#L33), [result-presenter.ts:47](../../apps/web/src/features/game/flow/result-presenter.ts#L47), [result-presenter.ts:65](../../apps/web/src/features/game/flow/result-presenter.ts#L65), [ResultScreen.tsx:32](../../apps/web/src/features/game/flow/ResultScreen.tsx#L32), [ResultScreen.tsx:43](../../apps/web/src/features/game/flow/ResultScreen.tsx#L43)
+근거: [result-presenter.ts:17](../../apps/web/src/features/game/flow/result-presenter.ts#L17), [result-presenter.ts:33](../../apps/web/src/features/game/flow/result-presenter.ts#L33), [result-presenter.ts:47](../../apps/web/src/features/game/flow/result-presenter.ts#L47), [result-presenter.ts:66](../../apps/web/src/features/game/flow/result-presenter.ts#L66), [ResultScreen.tsx:32](../../apps/web/src/features/game/flow/ResultScreen.tsx#L32), [ResultScreen.tsx:43](../../apps/web/src/features/game/flow/ResultScreen.tsx#L43)
 
 ### 11.2 중단 사유
 
