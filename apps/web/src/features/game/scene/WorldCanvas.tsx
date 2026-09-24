@@ -19,7 +19,13 @@ import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
 
-/** Background and fog per theme. The fog never reaches past the server's 3.5-cell sight. */
+/**
+ * Background and fog per theme. The fog closes inside the server's 3.5-cell sight and the camera
+ * draws a little past it, so nothing is clipped while still visible through the fog (377).
+ */
+/** 1인칭 카메라가 그리는 끝. 서버 시야보다 길고, 두 테마의 안개가 완전히 닫힌 뒤다. */
+export const CAMERA_FAR = 3.6;
+
 export const sceneWorld = (theme: SceneThemeId) =>
   theme === 'block'
     ? { background: BLOCK.background, fogNear: BLOCK.fogNear, fogFar: BLOCK.fogFar }
@@ -78,7 +84,7 @@ export function WorldCanvas({
         frameloop={paused ? 'never' : 'always'}
         dpr={QUALITY_PRESETS[quality].dpr}
         gl={{ antialias: false }}
-        camera={{ position: [0, 0.8, 0], near: 0.03, far: 3.5 }}
+        camera={{ position: [0, 0.8, 0], near: 0.03, far: CAMERA_FAR }}
         aria-label="까꿍 미로"
         data-theme={theme}
       >
