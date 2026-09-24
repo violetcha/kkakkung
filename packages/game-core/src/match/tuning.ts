@@ -37,7 +37,11 @@ export const MATCH_TUNING_RANGES = Object.freeze({
   grabTicks: Object.freeze({ min: 1, max: 20 }),
 });
 
-/** Defaults for fixtures: 600ms move, 400ms turn, and a 300ms grab window. */
+/**
+ * The shipped production speeds (600ms move, 400ms turn, 300ms grab window), pinned by
+ * `template.test.ts` and used by `tests/fixtures/g3-scenarios.ts`. The shared core-rule test
+ * fixture is deliberately different (9/6 ticks) and does not read this constant.
+ */
 export const MATCH_TUNING_DEFAULTS = Object.freeze({ moveTicks: 12, turnTicks: 8, grabTicks: 6 });
 
 const LAYOUT_FIELDS: readonly (keyof LayoutConstraints)[] = [

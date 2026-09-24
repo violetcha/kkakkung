@@ -43,7 +43,8 @@ export const roomAccessSchema = z.strictObject({
 export type RoomAccessMessage = z.infer<typeof roomAccessSchema>;
 /**
  * S15P21C204-311. 방이 고른 맵 크기. roomAccess 와 같은 이유로 별도 채널이다 — 예전 클라이언트는
- * 바뀌지 않은 roster 를 그대로 읽는다. 방장만 바꿀 수 있고 LOBBY 에서만 바뀐다.
+ * 바뀌지 않은 roster 를 그대로 읽는다. 방장만 바꿀 수 있다. 일반·데모 방은 LOBBY·DEVICE_CHECK
+ * 에서 바뀌고(313), 시연 방은 소형 맵 고정이라 어디서도 받지 않는다.
  */
 export const roomMapSchema = z.strictObject({
   matchId: matchIdSchema,

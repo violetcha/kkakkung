@@ -234,6 +234,25 @@ export async function runRelease(input, adapters) {
     return requestId;
   };
 
+  /**
+   * S15P21C204-381. A drain that the server accepted but that then failed leaves the old server
+   * closed to new rooms while nothing replaces it. Ask it to resume once. This is best effort: a
+   * drain still queued answers 409 and an unresolved retirement blocks resume on the server, and
+   * either way the release still ends with the drain failure.
+   */
+  const reopenAfterFailedDrain = async (error, tagForId) => {
+    if (!(error instanceof ReleaseStop)) return;
+    if (['DRAIN_CONFLICT', 'DRAIN_REJECTED'].includes(error.reason)) return;
+    try {
+      const requestId = `deploy-${tagForId}-drain-abort-resume-${adapters.now()}`;
+      await command('resume', requestId, deadlines.resumeMs, 'DRAIN_ABORT_RESUME');
+      const after = await operationsStatus();
+      ok('DRAIN_ABORT_RESUME state', `admission=${after.admission}`);
+    } catch (resumeError) {
+      if (!(resumeError instanceof ReleaseStop)) throw resumeError;
+    }
+  };
+
   const waitReady = async (label) => {
     const started = adapters.now();
     let sawRecovering = false;
@@ -541,8 +560,14 @@ export async function runRelease(input, adapters) {
         'failed startup recovery',
         'prior drain, no new grants, normal stop, writer released, state archived',
       );
-    } else if (useOperations) await drain('DRAIN', manifest.tag);
-    else
+    } else if (useOperations) {
+      try {
+        await drain('DRAIN', manifest.tag);
+      } catch (error) {
+        await reopenAfterFailedDrain(error, manifest.tag);
+        throw error;
+      }
+    } else
       record(
         'drain',
         'NOT_RUN',

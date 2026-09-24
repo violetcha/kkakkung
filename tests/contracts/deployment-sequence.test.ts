@@ -498,9 +498,10 @@ describe('barrier before the swap', () => {
       exitCode: 1,
     });
     expect(h.calls.compose).toEqual([]);
-    // One drain POST only; every poll used that same requestId (no duplicate drain).
-    expect(h.calls.posts).toHaveLength(1);
-    expect(new Set(h.calls.polls)).toEqual(new Set([h.calls.posts[0]!.requestId]));
+    // One drain POST only (no duplicate drain); S15P21C204-381 then asks the old server to
+    // resume once. The release still reports the drain failure.
+    expect(h.calls.posts.map((p) => p.action)).toEqual(['drain', 'resume']);
+    expect(h.calls.polls[0]).toBe(h.calls.posts[0]!.requestId);
   });
 
   it('drain failed, or succeeded with an unresolved retirement, keeps the old image', async () => {
@@ -523,6 +524,28 @@ describe('barrier before the swap', () => {
     });
     expect(failed.calls.compose).toEqual([]);
     expect(unresolved.calls.compose).toEqual([]);
+  });
+
+  // S15P21C204-381. An accepted drain that failed reopens the old server instead of leaving it
+  // DRAINING with nothing to replace it. A drain the server never accepted changes nothing.
+  it('resumes the old server after an accepted drain fails, not after a refused one', async () => {
+    const failed = harness(world({ drainSnapshots: [{ status: 'failed', code: 'X' }] }));
+    const out = await runRelease(failed.input(), failed.adapters);
+    expect(out).toMatchObject({ result: 'FAILED', reason: 'DRAIN_FAILED' });
+    expect(failed.calls.posts.map((p) => p.action)).toEqual(['drain', 'resume']);
+    expect(failed.calls.posts[1]!.requestId).toMatch(/-drain-abort-resume-/);
+    expect(failed.calls.compose).toEqual([]);
+
+    const refusedResume = harness(
+      world({
+        drainSnapshots: [{ status: 'failed', code: 'X' }],
+        resumeSnapshots: [{ status: 'failed', code: 'RESUME_NOT_READY' }],
+      }),
+    );
+    expect(await runRelease(refusedResume.input(), refusedResume.adapters)).toMatchObject({
+      result: 'FAILED',
+      reason: 'DRAIN_FAILED',
+    });
   });
 });
 

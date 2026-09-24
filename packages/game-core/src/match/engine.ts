@@ -254,8 +254,10 @@ export function createMatch(input: CreateMatchInput): MatchState {
 
 /**
  * Practice instance for one team (up to three players of `input.role`). Uses the
- * same pure rules for movement, turning, exchange, and tagger equipment; contact
- * capture, team result, and the round deadline stay disabled.
+ * same pure rules for movement, turning, and exchange; contact capture, team
+ * result, and the round deadline stay disabled. Tagger equipment does not really
+ * fire here: there is no priority order/startTick (`priority` is null in practice
+ * mode), and sensors have no opposing runner in the room to detect.
  */
 export function createPractice(input: CreatePracticeInput): MatchState {
   if (input.players.length === 0 || input.players.length > 3) {

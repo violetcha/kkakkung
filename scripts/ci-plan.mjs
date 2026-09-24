@@ -57,7 +57,6 @@ export const ASSET_PATHS = Object.freeze([
   'apps/web/src/features/game/pose/',
   'apps/web/src/features/game/scene/',
   'scripts/check-product-assets.mjs',
-  'scripts/lib/avatar-product-assets.mjs',
   'scripts/lib/vision-asset-notices.mjs',
   ...DEPENDENCIES,
 ]);

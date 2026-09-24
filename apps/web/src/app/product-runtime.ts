@@ -487,8 +487,9 @@ export function bindProductRoom(
   });
   /**
    * S15P21C204-295. 얼굴 텍스처를 들고 있을 사람들. 경기 중에는 내 시야에 보이는 사람뿐이고,
-   * 대기실(LOBBY·DEVICE_CHECK)에서는 같은 방의 참가자다. 대기실 타일이 준비한 사람의 실제
-   * 가공 얼굴을 보여 주기 때문이다. 방 밖으로는 나가지 않는다: 같은 미디어 scope 안이다.
+   * 대기실(LOBBY·DEVICE_CHECK)에서는 같은 방의 참가자다. 대기실에는 미디어 승인이 없어 남의
+   * 가공 얼굴은 실제로 오지 않는다: 실제로 그려지는 것은 내 타일(로컬 합성)뿐이고 나머지는
+   * 텍스처가 없는 기본 얼굴로 선다. 그래도 목록은 방 밖으로 나가지 않는다: 같은 미디어 scope 안이다.
    */
   const visibleFaceIds = (view: PrivateView | null): readonly string[] => {
     if (view?.self?.status === 'ACTIVE' || view?.spectating)

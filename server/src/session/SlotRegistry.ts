@@ -1,8 +1,9 @@
 /**
  * Logical seat accounting across rooms: RESERVED (session issued), JOINED (connected) and
  * RETIRING (left but remote media not yet confirmed released). A match room holds 6 seats and a
- * demo room holds 1; service capacity is 60 seats and the number of rooms is the F-verified
- * limit. Both limits count the rooms players join (match and showcase): demo rooms have their own
+ * demo room holds 1; service capacity and the number of rooms are computed limits passed in by
+ * the caller (`serviceCapacity` defaults to 60, `roomCapacity` to 6), F-verified at deploy time.
+ * Both limits count the rooms players join (match and showcase): demo rooms have their own
  * small room budget (S15P21C204-312), so a demonstration never takes a room or a seat away. A RETIRING seat still counts; only `releaseConfirmed` (after E confirms retirement)
  * frees it.
  */

@@ -15,7 +15,7 @@ export const PRODUCT_CLIENT_MESSAGES = {
   heartbeatAck: 'game-heartbeat-ack',
   clockProbe: 'clock-probe',
   mediaBindingsRefresh: 'media-bindings-refresh',
-  /** Operator-only demo room (S15P21C204-259). Ordinary rooms refuse it. */
+  /** Operator-only demo room (S15P21C204-259). An ordinary room silently ignores it: no rejection is sent. */
   demoScenario: 'demo-scenario',
   /** Operator-only demo room control (S15P21C204-318). */
   demoControl: 'demo-control',
@@ -79,7 +79,7 @@ export const commandEnvelopeSchema = z.discriminatedUnion('type', [
   envelope('ROOM_KICK', { targetPlayerId: playerIdSchema }),
   /** S15P21C204-311. 방장이 로비에서 맵 크기를 고른다. */
   envelope('ROOM_MAP_SIZE', { size: z.enum(MAP_SIZES) }),
-  /** S15P21C204-295. 여섯 명이 모두 준비한 뒤, 방장이 직접 시작한다. */
+  /** S15P21C204-295. 방의 모든 자리가 준비한 뒤(일반·데모 6, 시연 4), 방장이 직접 시작한다. */
   envelope('ROOM_START', {}),
   envelope('PRACTICE_READY', { ready: z.boolean() }),
   envelope('LOAD_READY', {
@@ -116,7 +116,10 @@ export const COMMAND_TYPES = commandEnvelopeSchema.options.map(
   (option) => option.shape.type.value,
 ) as readonly CommandType[];
 
-/** Commands the game core processes. The rest are room phase commands handled by the server. */
+/**
+ * Room-phase commands the server Room handles directly. Everything else is a core command
+ * that the game core processes.
+ */
 export const PHASE_COMMAND_TYPES = [
   'READY',
   'ROOM_LOCK',

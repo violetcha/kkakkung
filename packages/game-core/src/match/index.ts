@@ -330,7 +330,7 @@ export {
 } from './engine.js';
 
 // ---------------------------------------------------------------------------
-// Development exports. KkakkungRoom (0-stage) still calls these through
+// Development exports. DevKkakkungRoom still calls these through
 // server/src/domain. They are not the product rules and will be retired when
 // B switches the room to the product facade.
 // ---------------------------------------------------------------------------

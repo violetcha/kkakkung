@@ -1,8 +1,9 @@
 // Owned by F (F-07 / DP-05). Local alert state derived from registered metrics.
 //
-// There is no external notification channel in the MVP. An alert here is a local state that
-// operations code (E's readiness lock, F's deploy runner) can read, and a structured event
-// that lands in the log. Nothing in this module claims to have paged anyone.
+// This module never pages anyone itself: it only derives local alert state that operations code
+// (E's readiness lock, F's deploy runner) can read, and emits a structured event that lands in
+// the log. The one external channel, a Mattermost/Slack webhook, is a separate module
+// (`AlertNotifier.ts`'s `createWebhookSender`) that watches these transitions from outside.
 //
 // Rules the contract test pins down:
 // - `media.retirement.unresolved` raises MEDIA_RETIREMENT_UNRESOLVED and it stays active until

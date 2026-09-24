@@ -1,8 +1,10 @@
 /**
- * Six-seat waiting phases. LOBBY holds until six logical seats are connected, DEVICE_CHECK
- * collects each player's own READY report (a client claim that local device checks passed),
- * and when all six report ready the server assigns 3 runners / 3 taggers from the seeded
- * random source or from the rematch role plan. Roles are never broadcast in the roster.
+ * Waiting phases for a room's seats (six for a match room, four for showcase). LOBBY holds until
+ * every seat is connected, DEVICE_CHECK collects each player's own READY report (a client claim
+ * that local device checks passed); once every seat reports ready the room is `all-ready`, but
+ * roles are only assigned once the host sends ROOM_START — readiness alone does not start it.
+ * Roles are drawn from `options.random` (plain `Math.random` unless a caller injects a seeded
+ * source, e.g. in tests) or from the rematch role plan. Roles are never broadcast in the roster.
  */
 import type { RoomRosterMessage } from '@kkakkung/protocol/game-messages';
 import type { Phase, Role } from '@kkakkung/protocol/game-schema';

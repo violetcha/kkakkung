@@ -1,5 +1,7 @@
 // S15P21C204-295. 설정 창의 갈래 내용. 홈과 게임 안이 같은 줄을 본다.
-// 저장소는 하나(home-settings)다. 게임 안에서 바꾼 값도 즉시 저장되고 다음 판에 이어진다.
+// 저장소는 하나(home-settings)다. 다만 즉시 저장은 홈 옵션과 혼자 연습뿐이다. 방 안 설정(Esc)의
+// 화면·소리 변경은 그 판의 runtime 값만 바꿀 뿐 home-settings 에 쓰지 않아 다음 입장에 이어지지
+// 않는다.
 import type { ReactNode } from 'react';
 import type { Role } from '@kkakkung/protocol/game-schema';
 import type { HomeSettings } from '../../room/home-settings';
