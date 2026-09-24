@@ -976,6 +976,50 @@ it('keeps keyboard input usable during device recovery and requires explicit mot
   }
 });
 
+// S15P21C204-384. 카메라 없이 키보드로 하던 사람이 모션을 고르면 카메라부터 켜고 보정한다.
+it('starts the camera before calibrating when motion is chosen with the camera off', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  f.runtime.selectInputMode('keyboard');
+  const ready = {
+    ...INITIAL_DEVICES,
+    camera: 'ready',
+    vision: 'ready',
+    calibration: 'ready',
+  } as const;
+  vi.mocked(f.fake.startDevices).mockImplementation(async () => {
+    f.callbacks.onDeviceStatus({ ...INITIAL_DEVICES, camera: 'ready', vision: 'ready' });
+    return { ...INITIAL_DEVICES, camera: 'ready', vision: 'ready' };
+  });
+  vi.mocked(f.fake.calibrate).mockImplementation(async () => {
+    f.callbacks.onDeviceStatus(ready);
+    return ready;
+  });
+  try {
+    await f.runtime.calibrateMotion();
+    expect(f.fake.startDevices).toHaveBeenCalledOnce();
+    expect(f.fake.calibrate).toHaveBeenCalledOnce();
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('motion');
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
+it('stays on keyboard when the camera still cannot start', async () => {
+  const f = fixture();
+  f.state({ phase: 'PLAYING' });
+  f.messages.get('private-view')!(viewFixture());
+  f.runtime.selectInputMode('keyboard');
+  try {
+    await f.runtime.calibrateMotion();
+    expect(f.fake.startDevices).toHaveBeenCalledOnce();
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+  } finally {
+    await f.runtime.leave();
+  }
+});
+
 it('does not overwrite a newer keyboard choice when calibration completes', async () => {
   const f = fixture();
   f.state({ phase: 'PLAYING' });
@@ -1485,9 +1529,10 @@ it('sends READY without a device check only in a demo room', async () => {
       failureCode: null,
       operatorExit: null,
     });
-    // 카메라 없이 들어온 관리자는 키보드로 조작한다. 모션 모드면 이동·회전·E 가 먹지 않는다.
-    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
+    // S15P21C204-384. 들어올 때는 일반 방처럼 모션 그대로다. 점검 없이 준비한 관리자만 키보드다.
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('motion');
     expect(f.runtime.ready(true)).toBe(true);
+    expect(f.runtime.getSnapshot().interaction.mode).toBe('keyboard');
     expect(readies()).toHaveLength(1);
     expect((readies()[0]![1] as { payload: unknown }).payload).toEqual({ ready: true });
   } finally {
