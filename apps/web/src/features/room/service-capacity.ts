@@ -37,7 +37,11 @@ export function capacityNotice(capacity: ServiceCapacity | null): CapacityNotice
       text: '지금은 점검 중이라 입장을 받지 않습니다. 잠시 뒤 다시 시도해 주세요.',
       createBlocked: true,
     };
-  const matches = `지금 경기 가능 ${Math.max(0, capacity.matchLimit - capacity.matchesInUse)}/${capacity.matchLimit}`;
+  // 경기 자리와 대기방 여유를 함께 보인다. 방을 만들 수 있는지는 대기방이, 바로 시작할 수 있는지는
+  // 경기 자리가 정한다.
+  const matches =
+    `지금 경기 가능 ${Math.max(0, capacity.matchLimit - capacity.matchesInUse)}/${capacity.matchLimit}` +
+    ` · 대기방 여유 ${Math.max(0, capacity.lobbyRoomLimit - capacity.lobbyRoomsInUse)}/${capacity.lobbyRoomLimit}`;
   if (capacity.lobbyRoomsInUse >= capacity.lobbyRoomLimit)
     return {
       text: `${matches} · 열 수 있는 방이 모두 사용 중입니다. 방 코드로 참가하거나 잠시 뒤 다시 시도해 주세요.`,

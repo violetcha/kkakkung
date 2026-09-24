@@ -19,6 +19,8 @@ it('tells the room to wait for a free match slot instead of leaving', () => {
   const text = preparationFeedback('MATCH_CAPACITY_FULL');
   expect(text).toContain('경기가 모두 사용 중');
   expect(text).toContain('방은 그대로');
+  expect(text).toContain('자리가 나면 여기서 알려');
+  expect(preparationFeedback('MATCH_SLOT_AVAILABLE')).toContain('지금 시작하면');
 });
 it('distinguishes pending, denied, and uncertain commands without disclosing raw errors', () => {
   const request = {

@@ -74,8 +74,19 @@ it('keeps a ready room waiting while every match slot is in use, then starts it 
     // 방은 그대로 남아 있다. 새로 만들 필요가 없다.
     expect(slots.hasRoom('ABCDEF')).toBe(true);
 
-    // 다른 방이 결과 화면으로 넘어가면 자리가 난다. 방장이 다시 누르면 들어간다.
+    // 다른 방이 결과 화면으로 넘어가면 자리가 나고, 누르지 않아도 방 안내가 바뀐다.
     slots.setPhase('OTHER1', 'RESULT', 0);
+    room.tick();
+    expect(room.state.preparationIssue).toBe('MATCH_SLOT_AVAILABLE');
+    expect(room.phase).toBe('DEVICE_CHECK');
+    // 대기열은 없다. 누르기 전에 다른 방이 먼저 시작하면 안내가 다시 자리 없음으로 돌아간다.
+    slots.setPhase('OTHER1', 'TEAM_PRACTICE', 0);
+    room.tick();
+    expect(room.state.preparationIssue).toBe('MATCH_CAPACITY_FULL');
+    slots.setPhase('OTHER1', 'RESULT', 0);
+    room.tick();
+    expect(room.state.preparationIssue).toBe('MATCH_SLOT_AVAILABLE');
+    // 방장이 누르면 들어간다.
     start();
     room.tick();
     expect(room.phase).toBe('TEAM_PRACTICE');

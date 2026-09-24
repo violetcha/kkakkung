@@ -1175,10 +1175,24 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.syncPublic();
     }
 
+    /**
+     * S15P21C204-372. 경기 자리가 없어 기다리던 방에 자리가 났는지 매 tick 다시 본다. 대기열은 두지
+     * 않는다: 안내만 "지금 시작할 수 있다"로 바꾸고, 시작은 방장이 누른다. 그 사이 다른 방이 먼저
+     * 시작하면 안내는 다시 "자리 없음"으로 돌아간다.
+     */
+    private refreshMatchCapacityNotice() {
+      if (this.blockedReason !== 'MATCH_CAPACITY' && this.blockedReason !== 'MATCH_CAPACITY_OPEN')
+        return;
+      this.blockedReason = deps.slots.canStartMatch(this.roomCode)
+        ? 'MATCH_CAPACITY_OPEN'
+        : 'MATCH_CAPACITY';
+    }
+
     private advancePhase(now: number) {
       switch (this.phase) {
         case 'LOBBY':
         case 'DEVICE_CHECK':
+          this.refreshMatchCapacityNotice();
           this.evaluateWaiting();
           return;
         case 'TEAM_PRACTICE': {
