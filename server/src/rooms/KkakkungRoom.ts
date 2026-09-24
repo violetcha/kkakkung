@@ -1792,7 +1792,9 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       // 방이 로비에서 고른 크기의 템플릿으로 준비한다.
       // 고르지 않은 방은 PRODUCT_MAP_TEMPLATE 을 따른다(로더의 약속). 크기의 기본값이 'large' 라
       // 그대로 찾으면 명시한 템플릿(예: master-v1 비교 실행)이 조용히 무시된다.
-      const chosen = this.roomMapRevision > 0;
+      // S15P21C204-376. 시연 방은 크기를 고르지 않지만 small 로 고정해 방송한다. 고른 방처럼
+      // 그 크기의 템플릿을 써야 방송한 맵과 경기 맵이 같다.
+      const chosen = this.showcase || this.roomMapRevision > 0;
       const { masterPath, fallbackPath, templateId, templateVersion } =
         (chosen ? deps.layouts.bySize?.[this.roomMapSize] : undefined) ?? deps.layouts;
       const revision = ++this.layoutRevision;

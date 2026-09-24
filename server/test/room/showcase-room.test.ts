@@ -50,10 +50,20 @@ function fixture(
   const slots = new SlotRegistry({ maxRooms: 1 });
   const core = options.core ?? new FakeCore();
   const layoutOf = options.layout ?? ((players: readonly RosterEntry[]) => layoutFor(players));
-  const prepared: { players: { playerId: string; role: string }[]; seed: number }[] = [];
+  const prepared: {
+    players: { playerId: string; role: string }[];
+    seed: number;
+    templateId: string;
+    masterPath: string;
+  }[] = [];
   const loader = {
     prepare: async (input: any) => {
-      prepared.push({ players: input.players, seed: input.seed });
+      prepared.push({
+        players: input.players,
+        seed: input.seed,
+        templateId: input.templateId,
+        masterPath: input.masterPath,
+      });
       return {
         status: 'selected',
         source: { templateId: 't', templateVersion: 'v1', templateHash: 'h', variantId: 'r0' },
@@ -203,6 +213,9 @@ it('prepares the small maze with a fixed seed and six template slots, then creat
     // 로더는 소형 템플릿과 고정 시드를 받고, 빈 두 자리는 이름만 있는 참가자로 채워진다.
     expect(f.prepared).toHaveLength(1);
     const request = f.prepared[0]!;
+    // S15P21C204-376. 방송하는 small 과 같은 템플릿으로 준비해야 한다. 기본(large)으로 떨어지면 안 된다.
+    expect(request.templateId).toBe('small');
+    expect(request.masterPath).toBe('small-master');
     expect(request.seed).toBe(20260922);
     expect(request.players).toHaveLength(6);
     expect(request.players.filter((p) => p.role === 'runner')).toHaveLength(3);
