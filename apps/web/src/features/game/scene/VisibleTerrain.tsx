@@ -10,7 +10,6 @@ import type { FaceTextures } from './face-textures';
 import type { OwnerNames } from './ExitOwnerLabel';
 import type { SceneThemeId } from './scene-theme';
 import type { QualityPreset } from './quality-presets';
-import type { AvatarStateReporter } from './RoleAvatar';
 export function VisibleTerrain({
   view,
   ownerNames,
@@ -19,7 +18,6 @@ export function VisibleTerrain({
   renderTick,
   theme,
   quality = 'medium',
-  onAvatarState,
 }: {
   view: PrivateView;
   ownerNames?: OwnerNames;
@@ -29,7 +27,6 @@ export function VisibleTerrain({
   renderTick?(): number | null;
   theme?: SceneThemeId;
   quality?: QualityPreset;
-  onAvatarState?: AvatarStateReporter;
 }) {
   // S15P21C204-327. 이 화면은 서버 패치마다, 즉 초당 20번 다시 렌더된다. 마스크를 그때마다 새
   // 객체로 만들면 시야가 하나도 안 바뀐 판에서도 R3F 가 지형 메시를 통째로 재조정한다.
@@ -39,14 +36,7 @@ export function VisibleTerrain({
       <ScenePrimitives {...mask} players={[]} theme={theme} quality={quality} />
       <VisibleExits view={view} ownerNames={ownerNames} />
       <EquipmentObjects view={view} />
-      <FaceAvatars
-        view={view}
-        faces={faces}
-        standIn={standIn}
-        quality={quality}
-        renderTick={renderTick}
-        onAvatarState={onAvatarState}
-      />
+      <FaceAvatars view={view} faces={faces} standIn={standIn} renderTick={renderTick} />
     </>
   );
 }
