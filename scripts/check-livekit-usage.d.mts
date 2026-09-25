@@ -86,4 +86,9 @@ export function collectUsage(
   window: { start: string; end: string };
   records: { sessionId: string; minutes: number }[];
 }>;
+export function failureState<T extends object>(
+  previous: T,
+  code: string,
+  atMs: number,
+): T & { lastFailureCode: string; lastFailureNoticeAtMs: number };
 export function formatFailureNotice(code: string, label?: string): string;

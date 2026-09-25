@@ -1112,8 +1112,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           if (this.lobby.evaluate(this.phase) !== 'all-ready')
             return { result: 'rejected', code: 'NOT_READY' };
           // S15P21C204-295. 데모 방도 같은 길을 걷는다. 운영자가 보려는 것이 경기 화면만은
-          // 아니다: 팀 연습도 실제 방과 같은 화면이어야 확인할 수 있다. 인형은 준비를 보고하지
-          // 않으므로 연습은 제한 시간(60초)을 다 쓰거나 운영자가 끝내면 다음 단계로 간다.
+          // 아니다: 팀 연습도 실제 방과 같은 화면이어야 확인할 수 있다. 인형은 연습 준비를 곧바로
+          // 보고하므로(settlePuppets) 운영자가 준비하면 다음 단계로 간다(S15P21C204-394에서 주석 정정).
           this.startPractice();
           return { result: 'applied', code: null };
         }

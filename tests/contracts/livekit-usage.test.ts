@@ -9,6 +9,7 @@ import {
   analyticsWindow,
   collectUsage,
   decideUsage,
+  failureState,
   formatFailureNotice,
   formatUsageNotice,
   mergeUsage,
@@ -191,5 +192,20 @@ describe('LiveKit usage monitor', () => {
     expect(job).toContain("credentialsId: 'mattermost-webhook'");
     expect(job).toContain('node scripts/check-livekit-usage.mjs --state');
     expect(job).not.toMatch(/echo[^\n]*(LIVEKIT|MM_WEBHOOK)|set -x/);
+  });
+
+  // S15P21C204-394. A failed first run must not mark the month as started, or the next run skips
+  // the baseline check and counts this month from zero.
+  it('keeps a failed first run a first run, so the baseline still applies next time', () => {
+    const failed = failureState(INITIAL_USAGE_STATE, 'ANALYTICS_FAILED', at);
+    expect(failed.periodId).toBeNull();
+    expect(failed).toMatchObject({
+      lastFailureCode: 'ANALYTICS_FAILED',
+      lastFailureNoticeAtMs: at,
+    });
+    const merged = mergeUsage(failed, monthPeriodId(at), [], at, 1234);
+    expect(summarizeUsage(merged, at, thresholds).observedMinutes).toBe(1234);
+    const running = { ...INITIAL_USAGE_STATE, periodId: '2026-09' };
+    expect(failureState(running, 'ANALYTICS_FAILED', at).periodId).toBe('2026-09');
   });
 });
