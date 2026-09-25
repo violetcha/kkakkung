@@ -20,13 +20,8 @@ describe('backroomsTexturePaths', () => {
     });
   });
 
-  it('keeps every user-provided source address explicit', () => {
-    expect(BACKROOMS_TEXTURE_PATHS).toEqual({
-      albedo: '/textures/backrooms/albedo.png',
-      roughness: '/textures/backrooms/roughness.png',
-      normal: '/textures/backrooms/normal.png',
-      seamless: '/textures/backrooms/seamless.png',
-    });
+  it('ships only the tileable wall texture', () => {
+    expect(BACKROOMS_TEXTURE_PATHS).toEqual({ seamless: '/textures/backrooms/seamless.png' });
   });
 });
 

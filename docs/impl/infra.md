@@ -796,5 +796,5 @@ BLOCKED 스텁의 유일한 시험은 본문에서 무조건 `BLOCKED:` 오류�
 - `infra/README.md`, `infra/SSO.md`, `infra/jenkins/SETUP.md`: 근거 불인정 문서.
 - `infra/.env.example`, `infra/production.env.example`, `infra/sso.env.example`: 변수 이름의 틀이다. 값의 의미는 server.md 소유이고, 이 문서에서는 주석 불일치 한 곳만 인용했다.
 - `scripts/*.d.mts`, `scripts/lib/*.d.mts` 28개: 짝이 되는 `.mjs`의 타입 선언이라 동작이 없다.
-- `server/config/tuning/mvp-v1.json`, `server/content/maps/*.json` 5개, `server/content/placements/*.json` 4개: 값과 의미는 [game-core.md](game-core.md) 소유다. 여기서는 미로 생성기와 공개 번들 검사의 입력으로만 다뤘다.
+- `server/config/tuning/mvp-v4.json`, `server/content/maps/*.json` 5개, `server/content/placements/*.json` 4개: 값과 의미는 [game-core.md](game-core.md) 소유다. 여기서는 미로 생성기와 공개 번들 검사의 입력으로만 다뤘다.
 - `generate-maze-template.mjs`의 미로 조각·배치 인증 알고리즘, `collect-six-device-results.mjs`의 필드별 규칙 전부, `gate-artifacts.mjs`의 G2·G6 통합 판정(`tests/load/TenRoomSchedule.ts`), `run-game-load.mjs`의 단계 판정(`tests/load/GameLoadScenario.ts`), `run-media-load.mjs`의 예산 계산(`tests/load/MediaLoadScenario.ts`), `tests/cloud/Deployment*` 하네스의 내부 모듈(브라우저 풀·만남·연습 접근·수신 판정): 입출력과 종료 코드만 설명했다.

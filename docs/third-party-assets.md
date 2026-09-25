@@ -53,7 +53,7 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 | `fonts/` (WOFF2 6·OFL 원문)    | 갈무리 픽셀 글꼴 4종·나눔명조 2종  | Lee Minseo(quiple)·Google Inc., SIL OFL 1.1 | 있음 — 고지 화면 |
 | `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득         | 고지 대상 자체   |
 | `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산            | 없음             |
-| `textures/backrooms/` (PNG 4)  | 백룸 벽지 PBR 재질                 | 프로젝트 구성원 제공 렌더 자산              | 없음             |
+| `textures/backrooms/` (PNG 1)  | 백룸 벽지 재질                     | 프로젝트 구성원 제공 렌더 자산              | 없음             |
 
 나눔명조(S15P21C204-295)는 제목용 명조로 `@fontsource/nanum-myeongjo` 5.2.5(Google Fonts 배포본)의
 한글·라틴 400 서브셋 WOFF2 두 개를 그대로 담았다. 그 패키지의 LICENSE 는 저작권자를 Google Inc. 로
@@ -125,20 +125,16 @@ OFL 원문은 배포 의존성과 함께 보존하며, 사용자용 오픈소스
 167,732bytes, SHA256
 `9ab237541afc01f03da4081fe3739bf12ac273a34e8cefc5d3ccdaed0bd10258`이다.
 
-### 백룸 벽지 PBR 재질
+### 백룸 벽지 재질
 
-`apps/web/public/textures/backrooms/`의 네 PNG는 S15P21C204-279에서 프로젝트 구성원이
-게임 미로에 적용하도록 제공한 1,254×1,254 RGB 렌더 자산이다. 원본 파일명과 저장소 파일명은
-각각 `ALBEDO.PNG` → `albedo.png`, `ROUGHNESS.PNG` → `roughness.png`, `NORMAL.PNG` →
-`normal.png`, `SEAMLESSTEXTURE.PNG` → `seamless.png`다. 프로젝트 제공 자산과 같은 조건으로
+`apps/web/public/textures/backrooms/seamless.png`는 S15P21C204-279에서 프로젝트 구성원이
+게임 미로에 적용하도록 제공한 1,254×1,254 RGB 렌더 자산이다. 원본 파일명은 `SEAMLESSTEXTURE.PNG`다. 함께 받은
+`ALBEDO`·`ROUGHNESS`·`NORMAL` PNG는 타일이 이어지지 않아 쓰지 않았고 S15P21C204-397에서 지웠다. 프로젝트 제공 자산과 같은 조건으로
 관리하고 백룸형 벽 재질 외 용도로 재배포하지 않는다.
 
-| 파일            | bytes     | SHA256                                                             |
-| --------------- | --------- | ------------------------------------------------------------------ |
-| `albedo.png`    | 2,405,956 | `0b6c52856da3263301c6a70df27c8ab6fcb2a95b8ea8946b7008a4bfc133158d` |
-| `normal.png`    | 2,826,563 | `471ff2b0f8e8c632e1740f2671eb8b719d039d10e7388eff28c26e8ffea8251d` |
-| `roughness.png` | 2,789,068 | `19a243bf589347e98c7d8a3d00b4f3330ac944fe995fb6e75c14e567ae231667` |
-| `seamless.png`  | 2,507,573 | `e3f8176a84b135cd935cbbbbc6e6b64db7c8b5bd97bf4b4544307444cdb26df7` |
+| 파일           | bytes     | SHA256                                                             |
+| -------------- | --------- | ------------------------------------------------------------------ |
+| `seamless.png` | 2,507,573 | `e3f8176a84b135cd935cbbbbc6e6b64db7c8b5bd97bf4b4544307444cdb26df7` |
 
 ## 자산 추가 기록
 

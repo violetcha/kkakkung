@@ -115,7 +115,7 @@ describe('explicit local product configuration', () => {
     expect(config.mediaMode).toBe('disabled');
     expect(config.assetVersion).toBe('c-primitives-1');
     expect(config.contentDir).toBe('server/content');
-    expect(config.tuningPath).toBe('server/config/tuning/mvp-v1.json');
+    expect(config.tuningPath).toBe('server/config/tuning/mvp-v4.json');
     expect(config.trustProxyHops).toBe(0);
   });
 

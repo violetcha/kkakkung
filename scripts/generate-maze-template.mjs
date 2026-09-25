@@ -37,7 +37,7 @@ import {
 } from '@kkakkung/game-core/match';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TUNING_PATH = resolve(root, 'server/config/tuning/mvp-v1.json');
+const TUNING_PATH = resolve(root, 'server/config/tuning/mvp-v4.json');
 const mapPath = (id) => resolve(root, `server/content/maps/${id}.json`);
 const fallbackPath = (id) => resolve(root, `server/content/placements/${id}-fallback.json`);
 
