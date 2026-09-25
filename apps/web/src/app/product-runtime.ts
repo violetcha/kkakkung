@@ -30,7 +30,13 @@ import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import { mediaFailureText, mediaRequestError } from '../features/media/media-request-error';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import { turnLeadActive, type TurnLead } from '../features/game/scene/turn-lead';
-import { moveLeadActive, moveLeadTarget, type MoveLead } from '../features/game/scene/move-lead';
+import {
+  moveChainTarget,
+  moveLeadActive,
+  moveLeadTarget,
+  type MoveChain,
+  type MoveLead,
+} from '../features/game/scene/move-lead';
 import type { PoseMissReason } from '../features/game/pose/pose-evaluator';
 import {
   createChallengeController,
@@ -252,6 +258,11 @@ export function bindProductRoom(
   let moveLead: { from: Cell; to: Cell; dir: Dir; startedAtMs: number } | null = null;
   const currentMoveLead = (): MoveLead | null =>
     moveLead ? { ...moveLead, ageMs: deps.now() - moveLead.startedAtMs } : null;
+  // S15P21C204-399. 이어 걷기 선반영. 누르고 있는 이동 방향과, 이동 중에 회전을 보낸 그 이동의 끝 틱.
+  let heldMove: 'forward' | 'back' | null = null;
+  let turnSentBeforeTick: number | null = null;
+  const currentMoveChain = (): MoveChain | null =>
+    moveChainTarget(snapshot.view ?? null, heldMove, turnSentBeforeTick);
   let startPending: { exitId: string; requestId: string; until: number | null } | null = null;
   const challenge = createChallengeController((command) => sendCommand(command));
   let bindings: MediaBindings | null = null;
@@ -1000,6 +1011,10 @@ export function bindProductRoom(
       publish({ exitStarting: true });
     }
     const requestId = commands.send(command);
+    if (command.type === 'MOVE_INTENT' && requestId) heldMove = command.payload.direction;
+    // 이동 중 보낸 회전은 서버가 다음 동작으로 미뤄 둔다. 그 칸 끝에서는 이어 걷지 않는다.
+    if (command.type === 'TURN' && requestId && own?.status === 'ACTIVE' && own.action)
+      turnSentBeforeTick = own.action.endTick;
     // S15P21C204-388. 멈춰 있을 때 보낸 회전은 카메라가 먼저 돈다. 이동 중이면 서버가 다음 동작으로
     // 미뤄 두므로 예측하지 않는다. 앞선 예측이 아직 살아 있으면 겹쳐 만들지 않는다.
     if (
@@ -1569,6 +1584,8 @@ export function bindProductRoom(
     mediaScopeForResume: () => lastIssuedMediaScope,
     /** S15P21C204-389. 카메라가 먼저 시작하는 한 칸 이동. 판정에는 쓰지 않는다. */
     moveLead: currentMoveLead,
+    /** S15P21C204-399. 이어 걷기 선반영. 해당이 없으면 null. */
+    moveChain: currentMoveChain,
     getSnapshot: () => snapshot,
     async leave() {
       audioPreferences = DEFAULT_AUDIO_PREFERENCES;

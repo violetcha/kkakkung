@@ -1123,6 +1123,7 @@ export function ProductApp({
                     renderTick={() => runtime.current?.renderTick() ?? null}
                     turnLead={() => runtime.current?.turnLead() ?? null}
                     moveLead={() => runtime.current?.moveLead() ?? null}
+                    moveChain={() => runtime.current?.moveChain() ?? null}
                     {...(metrics.current
                       ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
                       : {})}

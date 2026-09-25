@@ -4,6 +4,13 @@ import {
   type GameHeartbeat,
 } from '@kkakkung/protocol/game-messages';
 
+/**
+ * S15P21C204-399. 최근 측정 몇 개를 계속 이어 쓴다. 예전에는 10초마다 새로 재기 전에 측정을 통째로
+ * 비워, 새 측정 세 개가 모일 때까지(약 0.6초) 렌더 틱을 몰랐다. 그동안 캐릭터와 카메라가 보간 없이
+ * 칸 중앙으로만 그려져 11초마다 걷기가 칸 단위로 끊겼다.
+ */
+const CLOCK_SAMPLE_WINDOW = 8;
+
 export function createClockSync(deps: {
   now(): number;
   uuid(): string;
@@ -35,10 +42,7 @@ export function createClockSync(deps: {
     poll() {
       const now = deps.now();
       if (now < nextProbe) return;
-      if (burst === 0) {
-        burst = 5;
-        samples = [];
-      }
+      if (burst === 0) burst = 5;
       const probe = { probeId: deps.uuid(), clientSentAtMs: now };
       pending.set(probe.probeId, now);
       deps.send(probe);
@@ -62,6 +66,9 @@ export function createClockSync(deps: {
       const rtt = now - sent - (r.serverSentAtMs - r.serverReceivedAtMs);
       if (rtt < 0 || rtt > 1000 || r.serverSentAtMs < r.serverReceivedAtMs) return false;
       samples.push({ rtt, offset: (r.serverReceivedAtMs - sent + (r.serverSentAtMs - now)) / 2 });
+      // 가장 오래된 측정부터 버린다. 새 측정이 모이는 동안에도 앞선 추정이 그대로 남는다.
+      if (samples.length > CLOCK_SAMPLE_WINDOW)
+        samples.splice(0, samples.length - CLOCK_SAMPLE_WINDOW);
       return true;
     },
     anchor(value: GameHeartbeat) {

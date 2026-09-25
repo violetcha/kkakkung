@@ -2,7 +2,8 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, Object3D } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { worldActor } from './action-interpolation';
+import { shownWorldActor } from './action-interpolation';
+import type { MoveChain, MoveLead } from './move-lead';
 import type { QualityPreset } from './quality-presets';
 import { FACILITY, LIGHTING } from './facility-theme';
 
@@ -10,10 +11,15 @@ export function FacilityLighting({
   self,
   quality,
   renderTick,
+  moveLead,
+  moveChain,
 }: {
   self: { cell: Cell; dir: Dir; action?: Action | null };
   quality: QualityPreset;
   renderTick(): number | null;
+  /** S15P21C204-399. 카메라와 같은 선반영. 관전 중에는 없다. */
+  moveLead?(): MoveLead | null;
+  moveChain?(): MoveChain | null;
 }) {
   const light = useRef<Group>(null);
   const target = useMemo(() => {
@@ -22,7 +28,7 @@ export function FacilityLighting({
     return object;
   }, []);
   useFrame(() => {
-    const sample = worldActor(self, renderTick());
+    const sample = shownWorldActor(self, renderTick(), moveLead?.() ?? null, moveChain?.() ?? null);
     light.current?.position.set(sample.x, 0, sample.z);
     light.current?.rotation.set(0, sample.yaw, 0);
   });
