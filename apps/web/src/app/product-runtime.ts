@@ -109,6 +109,8 @@ export interface ProductRoomPort {
   onMessage(type: string, handler: (value: unknown) => void): () => void;
   onStateChange(handler: (state: PublicMatchState) => void): () => void;
   onLeave(handler: (code?: number) => void): () => void;
+  /** S15P21C204-391. 연결이 끊겨 재접속 중(dropped)이거나 같은 자리로 돌아왔다(restored). */
+  onConnection?(handler: (state: 'dropped' | 'restored') => void): () => void;
   onError(handler: () => void): () => void;
   leave(): Promise<unknown>;
 }
@@ -146,6 +148,8 @@ export type ProductSnapshot = {
   keyIndex: number;
   practiceReady: boolean;
   lost: boolean;
+  /** S15P21C204-391. 끊긴 연결을 되살리는 중. 서버는 그동안 자리를 비워 둔다. */
+  reconnecting?: boolean;
   roomExpired?: boolean;
   removedByHost?: boolean;
   /** S15P21C204-363. 시연 방의 방장이 나가 방이 닫혔다. 페이지는 `/showcase` 첫 화면으로 돌아간다. */
@@ -473,6 +477,7 @@ export function bindProductRoom(
     audioPreferences = DEFAULT_AUDIO_PREFERENCES;
     publish({
       lost: true,
+      reconnecting: false,
       roomExpired: code === ROOM_EXPIRED_CLOSE_CODE,
       removedByHost: code === ROOM_REMOVED_CLOSE_CODE,
       showcaseClosed: code === SHOWCASE_CLOSED_CLOSE_CODE,
@@ -1260,6 +1265,13 @@ export function bindProductRoom(
     void connectForView();
   }
   unsubscribers.push(room.onStateChange(sync), room.onLeave(lose), room.onError(lose));
+  if (room.onConnection)
+    unsubscribers.push(
+      room.onConnection((state) => {
+        if (!active || snapshot.lost) return;
+        publish({ reconnecting: state === 'dropped' });
+      }),
+    );
   const on = (type: string, handler: (value: unknown) => void) =>
     unsubscribers.push(
       room.onMessage(type, (value) => {

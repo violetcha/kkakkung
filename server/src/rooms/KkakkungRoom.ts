@@ -12,6 +12,7 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  CloseCode,
   Room,
   ServerError,
   type AuthContext,
@@ -131,6 +132,13 @@ const SHOWCASE_SEAT_PREFIX = 'showcase-seat-';
  * otherwise hold the slot for as long as the process lives.
  */
 const DEMO_REJOIN_GRACE_MS = 120_000;
+/**
+ * S15P21C204-391. How long a player who dropped during a running match (normal or showcase room)
+ * may come back to the same seat. The character stays where it was (no input arrives, so a held
+ * move lapses) and can still be caught; the round goes on. Past this, the drop is handled exactly
+ * as before: CONNECTION_LOST voids the round with GAME_CONNECTION_LOST.
+ */
+export const MATCH_REJOIN_GRACE_MS = 25_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -280,6 +288,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      * ended choice falls back to roster order at read time; cleared with every new round.
      */
     private readonly spectateChoices = new Map<string, string>();
+    /** S15P21C204-391. Players inside the rejoin grace, with its monotonic deadline. */
+    private readonly awaitingRejoin = new Map<string, number>();
     private readonly mediaInstances = new Map<string, string>();
     private readonly playerGenerations = new Map<
       string,
@@ -769,8 +779,60 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.syncPublic();
     }
 
+    /**
+     * S15P21C204-391. Only a running match waits for a dropped player. Everywhere else, and in demo
+     * rooms (which keep their own seat), the drop goes straight on to onLeave as before.
+     */
+    private canAwaitRejoin(playerId: string) {
+      return (
+        !this.demo &&
+        !this.closing &&
+        !this.disposed &&
+        this.phase === 'PLAYING' &&
+        this.context.instanceOf(playerId) !== null
+      );
+    }
+
+    /**
+     * Colyseus calls this for a drop without consent. Returning without allowReconnection hands
+     * the client to onLeave at once. Inside the grace nothing is reported: no CONNECTION_LOST, the
+     * seat, session and media generation stay, and only liveness tracking pauses.
+     */
+    onDrop(client: Client) {
+      const auth = this.playersByConnection.get(client.sessionId);
+      if (!auth || !this.canAwaitRejoin(auth.playerId)) return;
+      this.heartbeat.forget(client.sessionId);
+      this.clockSync.forget(client.sessionId);
+      if (this.clientsByPlayer.get(auth.playerId) === client)
+        this.clientsByPlayer.delete(auth.playerId);
+      this.awaitingRejoin.set(auth.playerId, deps.monotonicNow() + MATCH_REJOIN_GRACE_MS);
+      this.lobby.setConnected(auth.playerId, false);
+      this.broadcastRoster();
+      this.syncPublic();
+      // Colyseus rejects this on timeout and then calls onLeave; that rejection is expected.
+      this.allowReconnection(client, MATCH_REJOIN_GRACE_MS / 1000).catch(() => undefined);
+    }
+
+    /** The same connection came back inside the grace. It gets its whole private view again. */
+    onReconnect(client: Client) {
+      const auth = this.playersByConnection.get(client.sessionId);
+      if (!auth) return;
+      this.awaitingRejoin.delete(auth.playerId);
+      this.clientsByPlayer.set(auth.playerId, client);
+      this.lobby.setConnected(auth.playerId, true);
+      this.heartbeat.register(client.sessionId, auth.playerId, deps.monotonicNow());
+      this.broadcastRoster();
+      this.dispatcher.publishView(auth.playerId, 'initial', this.phase);
+      this.syncPublic();
+    }
+
     onLeave(client: Client) {
-      this.removeConnection(client);
+      // S15P21C204-391. A grace that ran out ends like any lost connection: the round is voided.
+      const auth = this.playersByConnection.get(client.sessionId);
+      const waited = auth ? this.awaitingRejoin.delete(auth.playerId) : false;
+      if (waited && auth && !this.clientsByPlayer.has(auth.playerId))
+        this.clientsByPlayer.set(auth.playerId, client);
+      this.removeConnection(client, waited);
     }
 
     private removeConnection(client: Client, heartbeatLost = false) {
@@ -1172,6 +1234,12 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         if (control.type !== 'CONNECTION_LOST') continue;
         const client = this.clientsByPlayer.get(control.playerId);
         if (!client) continue;
+        // S15P21C204-391. In a running match a silent connection is closed as one that may come
+        // back (4010): the room's onDrop gives it the rejoin grace and the SDK reconnects.
+        if (this.canAwaitRejoin(control.playerId)) {
+          client.leave(CloseCode.MAY_TRY_RECONNECT, 'HEARTBEAT_TIMEOUT');
+          continue;
+        }
         // Clean up synchronously before this tick evaluates readiness. A later onLeave is safe.
         this.removeConnection(client, true);
         client.leave(4000, 'HEARTBEAT_TIMEOUT');

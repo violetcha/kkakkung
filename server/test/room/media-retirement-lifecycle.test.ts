@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Inspect private room state in this isolated lifecycle harness; product transport is covered separately. */
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createKkakkungRoom } from '../../src/rooms/KkakkungRoom.js';
 import { ProductSessionStore } from '../../src/session/ProductSessionStore.js';
 import { SlotRegistry } from '../../src/session/SlotRegistry.js';
@@ -911,4 +911,74 @@ it('keeps enemy aliases when a practice instance retires and forgets them with t
   } finally {
     f.close();
   }
+});
+
+// S15P21C204-391. 경기 중 끊긴 사람은 25초 동안 같은 자리로 돌아올 수 있다. 그동안 경기는 이어진다.
+describe('rejoin grace during a running match', () => {
+  const graceFixture = () => {
+    const f = fixture();
+    const room = f.room as any;
+    room.setPhase('PLAYING');
+    const allowed: { client: unknown; seconds: number }[] = [];
+    room.allowReconnection = (client: unknown, seconds: number) => {
+      allowed.push({ client, seconds });
+      return Promise.resolve(client);
+    };
+    return { f, room, allowed, player: f.players[2]! };
+  };
+
+  it('keeps the seat, session and match while the player is away, and restores it on return', () => {
+    const { f, room, allowed, player } = graceFixture();
+    try {
+      room.onDrop(player.client);
+      expect(allowed).toEqual([{ client: player.client, seconds: 25 }]);
+      expect(room.phase).toBe('PLAYING');
+      expect(f.sessions.get(player.session.sessionId)).not.toBeNull();
+      expect(f.slots.slotState('ABCDEF', player.session.playerId)).toBe('JOINED');
+      expect(room.connectionLosses).toEqual([]);
+      expect(
+        room.lobby.list().find((p: any) => p.playerId === player.session.playerId),
+      ).toMatchObject({ connected: false });
+      const back = { sessionId: player.client.sessionId, send() {}, leave() {} };
+      room.onReconnect(back);
+      expect(room.clientsByPlayer.get(player.session.playerId)).toBe(back);
+      expect(
+        room.lobby.list().find((p: any) => p.playerId === player.session.playerId),
+      ).toMatchObject({ connected: true });
+      expect(room.awaitingRejoin.size).toBe(0);
+    } finally {
+      f.close();
+    }
+  });
+
+  it('ends an expired grace like any lost connection', () => {
+    const { f, room, player } = graceFixture();
+    try {
+      room.onDrop(player.client);
+      // Colyseus calls onLeave once the reconnection timed out.
+      room.onLeave(player.client);
+      expect(room.connectionLosses).toEqual([expect.objectContaining({ nickname: 'test2' })]);
+      expect(f.sessions.get(player.session.sessionId)).toBeNull();
+      expect(room.awaitingRejoin.size).toBe(0);
+    } finally {
+      f.close();
+    }
+  });
+
+  it('does not wait outside a running match', () => {
+    const f = fixture();
+    try {
+      const room = f.room as any;
+      const allowed: unknown[] = [];
+      room.allowReconnection = (client: unknown) => {
+        allowed.push(client);
+        return Promise.resolve(client);
+      };
+      room.onDrop(f.players[2]!.client);
+      expect(room.phase).toBe('TEAM_PRACTICE');
+      expect(allowed).toEqual([]);
+    } finally {
+      f.close();
+    }
+  });
 });

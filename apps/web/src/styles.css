@@ -3527,6 +3527,15 @@
   pointer-events: none;
 }
 /* S15P21C204-388. 지금은 먹지 않는 키. 할 일을 알려 주는 문구라 흐리게 둔다. */
+/* S15P21C204-391. 연결이 끊겨 기다리는 동안의 안내. 경기 화면 위에 한 줄로 뜬다. */
+.rejoin-notice {
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 6px;
+  background: rgba(20, 16, 10, 0.82);
+  color: #ffd98a;
+  font-size: var(--text-small);
+}
 .interact-prompt[data-blocked] {
   opacity: 0.72;
 }
