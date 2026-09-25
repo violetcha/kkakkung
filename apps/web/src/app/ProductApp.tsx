@@ -1063,6 +1063,7 @@ export function ProductApp({
                     standIn={demoFace.current}
                     grabAnimationId={snapshot.grabAnimationId}
                     renderTick={() => runtime.current?.renderTick() ?? null}
+                    turnLead={() => runtime.current?.turnLead() ?? null}
                     {...(metrics.current
                       ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
                       : {})}
@@ -1142,7 +1143,11 @@ export function ProductApp({
                 )}
                 {/* 십자선 아래 상호작용 줄. 아이템(핫바)과 달리 지금 앞에 있는 것에 쓰는 키다. */}
                 {interactiveWorld && interact && (
-                  <p className="interact-prompt" role="status">
+                  <p
+                    className="interact-prompt"
+                    role="status"
+                    data-blocked={interact.blocked || undefined}
+                  >
                     <kbd>{interact.key}</kbd>
                     {interact.label}
                   </p>

@@ -3526,6 +3526,13 @@
   white-space: nowrap;
   pointer-events: none;
 }
+/* S15P21C204-388. 지금은 먹지 않는 키. 할 일을 알려 주는 문구라 흐리게 둔다. */
+.interact-prompt[data-blocked] {
+  opacity: 0.72;
+}
+.interact-prompt[data-blocked] kbd {
+  opacity: 0.6;
+}
 .interact-prompt kbd {
   min-width: 20px;
   padding: 1px 5px;

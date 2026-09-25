@@ -1,5 +1,6 @@
 import {
   readPublicRoundState,
+  type Dir,
   type PublicMatchState,
   type PublicRoundState,
   type PrivateView,
@@ -26,6 +27,7 @@ import {
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
+import { turnLeadActive, type TurnLead } from '../features/game/scene/turn-lead';
 import type { PoseMissReason } from '../features/game/pose/pose-evaluator';
 import {
   createChallengeController,
@@ -224,6 +226,9 @@ export function bindProductRoom(
   const faces = createFaceTextures(videoFaceTexture);
   let sensorGeneration = -1;
   let practiceReadyReported = false;
+  let turnLead: { fromDir: Dir; direction: 'left' | 'right'; startedAtMs: number } | null = null;
+  const currentTurnLead = (): TurnLead | null =>
+    turnLead ? { ...turnLead, ageMs: deps.now() - turnLead.startedAtMs } : null;
   let startPending: { exitId: string; requestId: string; until: number | null } | null = null;
   const challenge = createChallengeController((command) => sendCommand(command));
   let bindings: MediaBindings | null = null;
@@ -947,6 +952,21 @@ export function bindProductRoom(
       publish({ exitStarting: true });
     }
     const requestId = commands.send(command);
+    // S15P21C204-388. 멈춰 있을 때 보낸 회전은 카메라가 먼저 돈다. 이동 중이면 서버가 다음 동작으로
+    // 미뤄 두므로 예측하지 않는다. 앞선 예측이 아직 살아 있으면 겹쳐 만들지 않는다.
+    if (
+      command.type === 'TURN' &&
+      requestId &&
+      own?.status === 'ACTIVE' &&
+      own.action === null &&
+      own.challenge === null &&
+      !turnLeadActive(currentTurnLead())
+    )
+      turnLead = {
+        fromDir: own.dir,
+        direction: command.payload.direction,
+        startedAtMs: deps.now(),
+      };
     if (
       command.type === 'GRAB_INTENT' &&
       requestId &&
@@ -1474,6 +1494,8 @@ export function bindProductRoom(
     },
     serverNow: clock.serverNow,
     renderTick: clock.renderTick,
+    /** S15P21C204-388. 카메라가 먼저 도는 회전. 판정에는 쓰지 않는다. */
+    turnLead: currentTurnLead,
     getSnapshot: () => snapshot,
     async leave() {
       audioPreferences = DEFAULT_AUDIO_PREFERENCES;
