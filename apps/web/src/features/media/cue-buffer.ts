@@ -17,13 +17,16 @@ export const CUE_KINDS = [
   'victory',
   'defeat',
   'aborted',
+  // S15P21C204-386. 술래 팀 경보. 거리와 상관없이 모든 술래에게 울린다(HUNTER_MARKER 와 같은 순간).
+  'sensor-alarm',
+  'trap-alarm',
 ] as const;
 export type CueKind = (typeof CUE_KINDS)[number];
 
 const DURATION_S: Record<CueKind, number> = {
   countdown: 0.1,
   start: 0.32,
-  restrained: 0.42,
+  restrained: 0.9,
   captured: 0.7,
   escaped: 0.6,
   'exit-failed': 0.28,
@@ -34,6 +37,8 @@ const DURATION_S: Record<CueKind, number> = {
   victory: 1.0,
   defeat: 1.0,
   aborted: 0.55,
+  'sensor-alarm': 0.75,
+  'trap-alarm': 0.62,
 };
 
 const TWO_PI = 2 * Math.PI;
@@ -54,10 +59,14 @@ function sample(kind: CueKind, t: number, noise: number, duration: number): numb
     case 'start':
       return 0.6 * twoNotes(660, 990, 0.14, t, duration);
     case 'restrained': {
-      // 쇳소리: 짧은 잡음 타격 뒤 낮은 금속 울림.
-      const strike = noise * Math.exp(-60 * t);
-      const ring = (tone(210, t) + 0.5 * tone(315, t)) * Math.exp(-7 * t);
-      return 0.55 * strike + 0.4 * ring * (0.7 + 0.3 * tone(18, t));
+      // S15P21C204-386. 덫이 닫히는 소리: 날카로운 타격 두 번(철컥) 뒤 낮게 오래 우는 쇠 울림과
+      // 사슬이 흔들리는 떨림. 다른 안내음과 헷갈리지 않게 가장 무겁고 길다.
+      const second = t - 0.07;
+      const strike =
+        noise * Math.exp(-70 * t) + (second > 0 ? 0.8 * noise * Math.exp(-70 * second) : 0);
+      const ring = (tone(120, t) + 0.6 * tone(183, t) + 0.3 * tone(262, t)) * Math.exp(-3.2 * t);
+      const rattle = noise * (0.5 + 0.5 * Math.sign(tone(23, t))) * Math.exp(-5 * t);
+      return 0.6 * strike + 0.42 * ring + 0.12 * rattle;
     }
     case 'captured': {
       // 220Hz에서 110Hz로 미끄러지는 낮은 음과 잡음.
@@ -88,6 +97,20 @@ function sample(kind: CueKind, t: number, noise: number, duration: number): numb
     }
     case 'aborted':
       return 0.45 * tone(330 + 12 * tone(5, t), t) * Math.exp(-3 * t);
+    case 'sensor-alarm': {
+      // 감지기: 삐-삐-삐. 높은 두 음을 번갈아 세 번 낸다.
+      const step = Math.min(2, Math.floor(t / 0.25));
+      const local = t - step * 0.25;
+      if (local > 0.16) return 0;
+      const hz = step === 1 ? 1568 : 1318.5;
+      return 0.42 * Math.sign(tone(hz, t)) * 0.6 * Math.sin((Math.PI * local) / 0.16);
+    }
+    case 'trap-alarm': {
+      // 덫: 철컥 한 번과 낮게 내려가는 경고음.
+      const strike = noise * Math.exp(-60 * t);
+      const hz = 330 - 120 * Math.min(1, t / duration);
+      return 0.45 * strike + 0.4 * Math.sign(Math.sin(TWO_PI * hz * t)) * Math.exp(-3.5 * t);
+    }
   }
 }
 

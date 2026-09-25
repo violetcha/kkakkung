@@ -19,7 +19,9 @@ it('separates restraint from immunity by state attribute and glyph instead of a 
   const restrained = render(160, null);
   expect(restrained).toContain('class="restraint-hud"');
   expect(restrained).not.toContain('class="notice"');
-  expect(restrained).toMatch(/data-state="restrained"[^>]*>[^<]*⛓[^<]*구속 3초/);
+  // S15P21C204-386. 사용자가 정한 문구. 남은 초를 그대로 넣는다.
+  expect(restrained).toContain('덫을 밟았습니다! 3초 동안 움직일 수 없습니다!');
+  expect(restrained).toMatch(/data-state="restrained"[^>]*>[^<]*⛓/);
   const immune = render(null, 140);
   expect(immune).toMatch(/data-state="immune"[^>]*>[^<]*◈[^<]*구속 면역 2초/);
   expect(immune).not.toContain('data-state="restrained"');

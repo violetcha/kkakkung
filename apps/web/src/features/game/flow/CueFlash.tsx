@@ -9,7 +9,7 @@ export const CUE_FLASH_LABEL: Record<FlashKind, string> = {
   captured: '포획되었습니다',
   escaped: '탈출했습니다',
   'exit-failed': '탈출에 실패했습니다',
-  restrained: '덫에 걸렸습니다',
+  restrained: '덫을 밟았습니다! 3초 동안 움직일 수 없습니다!',
   victory: '승리',
   defeat: '패배',
   // S15P21C204-307. 서버가 들려준 장비 발동. 누가 밟았는지는 말하지 않는다.

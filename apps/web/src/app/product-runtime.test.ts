@@ -1665,6 +1665,58 @@ it('plays state cues once, defers count cues behind my own ending and flashes th
   expect(played()).toHaveLength(5);
 });
 
+// S15P21C204-386. 덫·감지기 표식은 모든 술래에게 온다. 거리와 상관없이 경보음·플래시·위쪽 알림을
+// 한 번씩 내고, 방향을 붙인다. 교환 흔적은 조용히 지도에만 남는다.
+it('alarms every tagger once per trap or sensor marker, with a direction, and keeps exchanges quiet', () => {
+  const f = fixture();
+  const played = () => vi.mocked(f.fake.playCue!).mock.calls.map(([kind]) => kind);
+  const view = viewFixture();
+  if (view.self?.status !== 'ACTIVE') throw Error('active self required');
+  f.state({ phase: 'PLAYING', stateVersion: 11, counts: { escaped: 0, captured: 0 } });
+  f.messages.get('private-view')!({
+    ...view,
+    stateVersion: 11,
+    self: { ...view.self, role: 'tagger', cell: { x: 10, y: 10 } },
+  });
+  const marker = (markerId: string, kind: 'trap' | 'sensor' | 'exchange', x: number, y: number) =>
+    f.messages.get('private-event')!({
+      matchId: 'm',
+      gameScope: view.gameScope,
+      eventId: `e-${markerId}`,
+      tick: 100,
+      stateVersion: 11,
+      type: 'HUNTER_MARKER',
+      payload: {
+        markerId,
+        kind,
+        point: { x, y },
+        occurredTick: 100,
+        showAtTick: 100,
+        expiresTick: 1000,
+      },
+    });
+  marker('mk-trap', 'trap', 20, 2);
+  expect(played()).toEqual(['trap-alarm']);
+  expect(f.runtime.getSnapshot().cueFlash).toMatchObject({ kind: 'trap' });
+  expect(f.runtime.getSnapshot().stageAlert).toMatchObject({
+    kind: 'trap',
+    text: '▲ 덫 작동 · 북동쪽 약 13칸',
+  });
+  // 같은 표식이 다시 와도 두 번 울리지 않는다.
+  marker('mk-trap', 'trap', 20, 2);
+  expect(played()).toEqual(['trap-alarm']);
+  marker('mk-sensor', 'sensor', 10, 30);
+  expect(played()).toEqual(['trap-alarm', 'sensor-alarm']);
+  expect(f.runtime.getSnapshot().stageAlert?.text).toBe('▣ 감지기 작동 · 남쪽 약 20칸');
+  marker('mk-x', 'exchange', 12, 10);
+  expect(played()).toEqual(['trap-alarm', 'sensor-alarm']);
+  expect(f.runtime.getSnapshot().markers.map((m) => m.markerId)).toEqual([
+    'mk-trap',
+    'mk-sensor',
+    'mk-x',
+  ]);
+});
+
 // S15P21C204-334. 끝까지 남은 생존자는 결과 전이에서 개인 뷰가 비워져 역할을 잃는다.
 it.each([
   ['runner', 'runners', 'victory', '승리'],

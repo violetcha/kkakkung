@@ -97,14 +97,14 @@ describe('restraint trap target selection and single shot', () => {
     const chosen = priorityPick(armed, 50, ['r-a', 'r-b']);
     const other = chosen === 'r-a' ? 'r-b' : 'r-a';
     // 30 ticks of restraint on the priority winner only.
-    expect(player(fired.state, chosen).restraintUntilTick).toBe(80);
+    expect(player(fired.state, chosen).restraintUntilTick).toBe(110);
     expect(player(fired.state, other).restraintUntilTick).toBeNull();
     expect(trapOf(fired.state).state).toBe('SPENT');
     expect(markers(fired.events)).toHaveLength(1);
     expect(trapSounds(fired.events)).toHaveLength(1);
 
     // The target hears about its own restraint through the self projection.
-    expect(getPlayerSelf(fired.state, chosen)).toMatchObject({ restraintUntilTick: 80 });
+    expect(getPlayerSelf(fired.state, chosen)).toMatchObject({ restraintUntilTick: 110 });
     // The device stays spent and nobody else is restrained afterwards.
     const later = idleUntil(fired.state, 51, 60);
     expect(trapOf(later).state).toBe('SPENT');
@@ -123,7 +123,7 @@ describe('restraint trap target selection and single shot', () => {
     ]).state;
     const fired = step(idleUntil(walking, 42, 49), 50);
     // The filter runs before the choice: the immune runner does not consume the shot.
-    expect(player(fired.state, other).restraintUntilTick).toBe(80);
+    expect(player(fired.state, other).restraintUntilTick).toBe(110);
     expect(player(fired.state, winner).restraintUntilTick).toBeNull();
     expect(trapOf(fired.state).state).toBe('SPENT');
     expect(markers(fired.events)).toHaveLength(1);
@@ -223,7 +223,7 @@ describe('restraint trap target selection and single shot', () => {
       equipmentId: 'eq-1',
       ownerId: 't-a',
       cell: TRAP_CELL,
-      restrainedUntilTick: 80,
+      restrainedUntilTick: 110,
     });
   });
 
@@ -233,7 +233,7 @@ describe('restraint trap target selection and single shot', () => {
     expect(result.state).not.toBe(armed);
     // One state carries both halves; the source state is untouched.
     expect(player(result.state, 't-a').ownedEquipment[0]!.state).toBe('SPENT');
-    expect(player(result.state, 'r-a').restraintUntilTick).toBe(80);
+    expect(player(result.state, 'r-a').restraintUntilTick).toBe(110);
     expect(player(armed, 't-a').ownedEquipment[0]!.state).toBe('ARMED');
     expect(player(armed, 'r-a').restraintUntilTick).toBeNull();
     // A spent device picks nobody again, whatever moves arrive.

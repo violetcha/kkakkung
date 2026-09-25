@@ -11,7 +11,7 @@ export const EVENT_TTL_MS = 6000;
 /** 카운트다운은 매 초 울려 다른 줄을 밀어내므로 로그에 남기지 않는다. */
 const TEXT: Partial<Record<CueKind, string>> = {
   start: '경기 시작',
-  restrained: '덫에 걸렸습니다',
+  restrained: '덫을 밟았습니다! 3초 동안 움직일 수 없습니다!',
   captured: '포획되었습니다',
   escaped: '탈출했습니다',
   'exit-failed': '탈출에 실패했습니다',

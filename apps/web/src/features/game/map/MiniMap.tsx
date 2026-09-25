@@ -134,7 +134,9 @@ export function MiniMap({
             : '내 주변 · 흰 점 = 나 · 부채꼴 = 시선 · M = 전체 지도'}
         {operatorExit && <span className="mini-map-operator-exit"> · O 운영자 출구</span>}
       </figcaption>
-      {pastEventMarkers(view, markers, tick).length > 0 && <p>빈 원은 과거 사건 위치입니다.</p>}
+      {pastEventMarkers(view, markers, tick).length > 0 && (
+        <p>▲ 덫 · ■ 감지기 · ○ 교환: 과거 사건 위치입니다.</p>
+      )}
       {mapDrawModel(view, tick)?.exits.map((exit, index) => (
         <div key={exit.exitId}>
           {index + 1}.{' '}
