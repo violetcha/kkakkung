@@ -63,6 +63,30 @@ it('does not present a clock when the demo round has no deadline', () => {
   expect(html).not.toContain('시간 확인 중');
 });
 
+// S15P21C204-400. 시연 방은 일찍 끝나지 않고 3분이 끝났을 때 탈출과 포획 수로 가린다.
+it('states the showcase time-out rule instead of the two-person goal', () => {
+  const self = viewFixture().self!;
+  if (self.status !== 'ACTIVE') throw Error('active self required');
+  const render = (role: 'runner' | 'tagger') =>
+    renderToStaticMarkup(
+      createElement(GameHud, {
+        round: roundFixture({
+          serverTick: 100,
+          deadlineTick: 3600,
+          counts: { escaped: 1, captured: 0 },
+        }),
+        self: { ...self, role },
+        showcase: true,
+      }),
+    );
+  const runner = render('runner');
+  expect(runner).toContain('3분이 끝났을 때 탈출이 포획보다 많으면 승리');
+  expect(runner).not.toContain('2명');
+  expect(runner).toMatch(/data-outcome="escape"[^>]*>[^<]*탈출 1</);
+  expect(runner).not.toContain('/2');
+  expect(render('tagger')).toContain('3분이 끝났을 때 포획이 탈출보다 많거나 같으면 승리');
+});
+
 // S15P21C204-342. 데모 라운드는 시간 초과로 끝나지 않는다(316). "시간을 버티면 승리" 는 거짓이다.
 it('tells a tagger there is no clock to outlast in a demo round', () => {
   const self = viewFixture().self!;
