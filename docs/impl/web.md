@@ -1,4 +1,4 @@
-> 기준: origin/develop 200d186273d7 (2026-09-24). 이후 S15P21C204-376(시연 방 맵)·377(시야·안개) 변경을 반영했다.
+> 기준: origin/develop fb73992 (2026-09-25). 코드 링크의 줄 번호도 이 커밋에 맞췄다.
 
 # 웹 구현 명세
 
@@ -48,7 +48,7 @@ ESLint는 `apps/web/**/*.{ts,tsx}`에서 `@kkakkung/game-core`, `@kkakkung/game-
 
 fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `60000ms`를 더한 값이다. 초대의 `room` 힌트는 이동 편의일 뿐이고, 실제 방 권한은 세션 발급과 Room 입장에서 서버가 검사한다.
 
-근거: [App.tsx:26](../../apps/web/src/app/App.tsx#L26), [App.tsx:28](../../apps/web/src/app/App.tsx#L28), [App.tsx:36](../../apps/web/src/app/App.tsx#L36), [App.tsx:44](../../apps/web/src/app/App.tsx#L44), [product-session.ts:30](../../apps/web/src/features/room/product-session.ts#L30), [product-session.ts:39](../../apps/web/src/features/room/product-session.ts#L39), [product-session.ts:272](../../apps/web/src/features/room/product-session.ts#L272), [product-session.ts:287](../../apps/web/src/features/room/product-session.ts#L287), [product-session.ts:307](../../apps/web/src/features/room/product-session.ts#L307), [product-session.ts:321](../../apps/web/src/features/room/product-session.ts#L321), [product-session.ts:339](../../apps/web/src/features/room/product-session.ts#L339), [ProductApp.tsx:306](../../apps/web/src/app/ProductApp.tsx#L306), [runtime-metrics.ts:277](../../apps/web/src/app/runtime-metrics.ts#L277), [runtime-metrics.ts:288](../../apps/web/src/app/runtime-metrics.ts#L288)
+근거: [App.tsx:26](../../apps/web/src/app/App.tsx#L26), [App.tsx:28](../../apps/web/src/app/App.tsx#L28), [App.tsx:36](../../apps/web/src/app/App.tsx#L36), [App.tsx:44](../../apps/web/src/app/App.tsx#L44), [product-session.ts:30](../../apps/web/src/features/room/product-session.ts#L30), [product-session.ts:39](../../apps/web/src/features/room/product-session.ts#L39), [product-session.ts:272](../../apps/web/src/features/room/product-session.ts#L272), [product-session.ts:287](../../apps/web/src/features/room/product-session.ts#L287), [product-session.ts:307](../../apps/web/src/features/room/product-session.ts#L307), [product-session.ts:321](../../apps/web/src/features/room/product-session.ts#L321), [product-session.ts:339](../../apps/web/src/features/room/product-session.ts#L339), [ProductApp.tsx:308](../../apps/web/src/app/ProductApp.tsx#L308), [runtime-metrics.ts:277](../../apps/web/src/app/runtime-metrics.ts#L277), [runtime-metrics.ts:288](../../apps/web/src/app/runtime-metrics.ts#L288)
 
 ### 2.3 진단 화면(개발 빌드 전용)
 
@@ -126,7 +126,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 입장 창의 갈래는 `방 잡기`(입장 폼), `튜토리얼`(누르면 혼자 연습으로 전환, 14절), `게임 방법`(안내 문구)이다.
 - 입장 창의 발치에는 `6인 멀티플레이`·`PC · 카메라 필수`와 `/licenses/index.html`(오픈소스 고지) 링크가 있다.
 
-근거: [ProductApp.tsx:109](../../apps/web/src/app/ProductApp.tsx#L109), [ProductApp.tsx:113](../../apps/web/src/app/ProductApp.tsx#L113), [ProductApp.tsx:705](../../apps/web/src/app/ProductApp.tsx#L705), [ProductApp.tsx:729](../../apps/web/src/app/ProductApp.tsx#L729), [ProductApp.tsx:752](../../apps/web/src/app/ProductApp.tsx#L752), [ProductApp.tsx:773](../../apps/web/src/app/ProductApp.tsx#L773), [ProductApp.tsx:782](../../apps/web/src/app/ProductApp.tsx#L782), [ProductApp.tsx:912](../../apps/web/src/app/ProductApp.tsx#L912)
+근거: [ProductApp.tsx:111](../../apps/web/src/app/ProductApp.tsx#L111), [ProductApp.tsx:115](../../apps/web/src/app/ProductApp.tsx#L115), [ProductApp.tsx:707](../../apps/web/src/app/ProductApp.tsx#L707), [ProductApp.tsx:731](../../apps/web/src/app/ProductApp.tsx#L731), [ProductApp.tsx:754](../../apps/web/src/app/ProductApp.tsx#L754), [ProductApp.tsx:775](../../apps/web/src/app/ProductApp.tsx#L775), [ProductApp.tsx:784](../../apps/web/src/app/ProductApp.tsx#L784), [ProductApp.tsx:914](../../apps/web/src/app/ProductApp.tsx#L914)
 
 ### 4.2 입장 폼 규칙
 
@@ -140,7 +140,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | 제출 비활성 | `joining` 중이거나, 만들기인데 여유 표시의 `createBlocked`가 참이거나, 초대 토큰이 없고 `access`가 `gitlab-sso`가 아니며 `guest`+만들기도 아닌 경우. |
 | 단추 문구   | `입장 중…` / `방 만들기` / `방 참가`. `joining` 동안 입력을 잠그고 `입장 취소`를 표시한다.                                                           |
 
-근거: [ProductApp.tsx:95](../../apps/web/src/app/ProductApp.tsx#L95), [ProductApp.tsx:382](../../apps/web/src/app/ProductApp.tsx#L382), [ProductApp.tsx:390](../../apps/web/src/app/ProductApp.tsx#L390), [ProductApp.tsx:799](../../apps/web/src/app/ProductApp.tsx#L799), [ProductApp.tsx:841](../../apps/web/src/app/ProductApp.tsx#L841), [ProductApp.tsx:853](../../apps/web/src/app/ProductApp.tsx#L853), [ProductApp.tsx:861](../../apps/web/src/app/ProductApp.tsx#L861), [session.ts:43](../../packages/protocol/src/game-messages/session.ts#L43), [product-session.ts:63](../../apps/web/src/features/room/product-session.ts#L63)
+근거: [ProductApp.tsx:97](../../apps/web/src/app/ProductApp.tsx#L97), [ProductApp.tsx:384](../../apps/web/src/app/ProductApp.tsx#L384), [ProductApp.tsx:392](../../apps/web/src/app/ProductApp.tsx#L392), [ProductApp.tsx:801](../../apps/web/src/app/ProductApp.tsx#L801), [ProductApp.tsx:843](../../apps/web/src/app/ProductApp.tsx#L843), [ProductApp.tsx:855](../../apps/web/src/app/ProductApp.tsx#L855), [ProductApp.tsx:863](../../apps/web/src/app/ProductApp.tsx#L863), [session.ts:43](../../packages/protocol/src/game-messages/session.ts#L43), [product-session.ts:63](../../apps/web/src/features/room/product-session.ts#L63)
 
 ### 4.3 접속 방식별 안내
 
@@ -154,7 +154,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 초대 토큰이 있으면 `access` 값과 무관하게 만들기와 참가 모두 제출할 수 있다.
 
-근거: [ProductApp.tsx:218](../../apps/web/src/app/ProductApp.tsx#L218), [ProductApp.tsx:875](../../apps/web/src/app/ProductApp.tsx#L875), [ProductApp.tsx:881](../../apps/web/src/app/ProductApp.tsx#L881), [ProductApp.tsx:886](../../apps/web/src/app/ProductApp.tsx#L886), [ProductApp.tsx:895](../../apps/web/src/app/ProductApp.tsx#L895)
+근거: [ProductApp.tsx:220](../../apps/web/src/app/ProductApp.tsx#L220), [ProductApp.tsx:877](../../apps/web/src/app/ProductApp.tsx#L877), [ProductApp.tsx:883](../../apps/web/src/app/ProductApp.tsx#L883), [ProductApp.tsx:888](../../apps/web/src/app/ProductApp.tsx#L888), [ProductApp.tsx:897](../../apps/web/src/app/ProductApp.tsx#L897)
 
 ### 4.4 대기방 여유 표시
 
@@ -170,7 +170,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 참가는 어느 경우에도 막지 않는다.
 
-근거: [ProductApp.tsx:278](../../apps/web/src/app/ProductApp.tsx#L278), [ProductApp.tsx:870](../../apps/web/src/app/ProductApp.tsx#L870), [service-capacity.ts:33](../../apps/web/src/features/room/service-capacity.ts#L33), [service-capacity.ts:42](../../apps/web/src/features/room/service-capacity.ts#L42), [service-capacity.ts:66](../../apps/web/src/features/room/service-capacity.ts#L66)
+근거: [ProductApp.tsx:280](../../apps/web/src/app/ProductApp.tsx#L280), [ProductApp.tsx:872](../../apps/web/src/app/ProductApp.tsx#L872), [service-capacity.ts:33](../../apps/web/src/features/room/service-capacity.ts#L33), [service-capacity.ts:42](../../apps/web/src/features/room/service-capacity.ts#L42), [service-capacity.ts:66](../../apps/web/src/features/room/service-capacity.ts#L66)
 
 ### 4.5 입장 오류 문구
 
@@ -190,7 +190,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | `INVALID_SESSION`                                           | 입장 시간이 만료됐습니다. 다시 입장해 주세요.                                                                                                        |
 | 그 밖(`CONNECTION_FAILED`, `INVALID_RESPONSE`, 모르는 코드) | 연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.                                                                                          |
 
-근거: [session-error-labels.ts:5](../../apps/web/src/features/room/session-error-labels.ts#L5), [session-error-labels.ts:21](../../apps/web/src/features/room/session-error-labels.ts#L21), [session-error-labels.ts:30](../../apps/web/src/features/room/session-error-labels.ts#L30), [ProductApp.tsx:441](../../apps/web/src/app/ProductApp.tsx#L441)
+근거: [session-error-labels.ts:5](../../apps/web/src/features/room/session-error-labels.ts#L5), [session-error-labels.ts:21](../../apps/web/src/features/room/session-error-labels.ts#L21), [session-error-labels.ts:30](../../apps/web/src/features/room/session-error-labels.ts#L30), [ProductApp.tsx:443](../../apps/web/src/app/ProductApp.tsx#L443)
 
 ## 5. Room 연결, 동기화와 끊김
 
@@ -207,7 +207,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
    - 웹이 발급한 예약은 취소하고 4.5 문구를 표시한다.
 7. `입장 취소`와 머리말 `나가기`는 `leaveByChoice`를 부른다. 데모면 저장된 세션을 지우고, 방을 정리한 뒤 시연이면 `/showcase`로 이동한다.
 
-근거: [ProductApp.tsx:352](../../apps/web/src/app/ProductApp.tsx#L352), [ProductApp.tsx:370](../../apps/web/src/app/ProductApp.tsx#L370), [ProductApp.tsx:392](../../apps/web/src/app/ProductApp.tsx#L392), [ProductApp.tsx:415](../../apps/web/src/app/ProductApp.tsx#L415), [ProductApp.tsx:426](../../apps/web/src/app/ProductApp.tsx#L426), [ProductApp.tsx:281](../../apps/web/src/app/ProductApp.tsx#L281), [product-session.ts:130](../../apps/web/src/features/room/product-session.ts#L130), [product-session.ts:168](../../apps/web/src/features/room/product-session.ts#L168)
+근거: [ProductApp.tsx:354](../../apps/web/src/app/ProductApp.tsx#L354), [ProductApp.tsx:372](../../apps/web/src/app/ProductApp.tsx#L372), [ProductApp.tsx:394](../../apps/web/src/app/ProductApp.tsx#L394), [ProductApp.tsx:417](../../apps/web/src/app/ProductApp.tsx#L417), [ProductApp.tsx:428](../../apps/web/src/app/ProductApp.tsx#L428), [ProductApp.tsx:283](../../apps/web/src/app/ProductApp.tsx#L283), [product-session.ts:130](../../apps/web/src/features/room/product-session.ts#L130), [product-session.ts:168](../../apps/web/src/features/room/product-session.ts#L168)
 
 ### 5.2 페이지 활성과 주기 작업
 
@@ -215,7 +215,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - `pagehide`면 Room을 정리한다(`leave`). 이때 데모 세션은 지우지 않아 새로고침하면 같은 경기로 돌아온다.
 - ProductApp은 100ms마다 런타임 `poll()`을 부르고 서버 시각을 읽는다.
 
-근거: [ProductApp.tsx:322](../../apps/web/src/app/ProductApp.tsx#L322), [ProductApp.tsx:333](../../apps/web/src/app/ProductApp.tsx#L333)
+근거: [ProductApp.tsx:324](../../apps/web/src/app/ProductApp.tsx#L324), [ProductApp.tsx:335](../../apps/web/src/app/ProductApp.tsx#L335)
 
 ### 5.3 시계, 명령, 개인 이벤트
 
@@ -330,7 +330,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | 내 장치 상태  | 준비했고 장치 줄이 있을 때 `웹캠`·`얼굴 추적`·`중립 자세 보정`·`마이크`를 표시. 상태 문구는 `idle` 꺼짐, `off` 사용 안 함, `ready` 준비됨, `locked` 권한 필요, `denied` 허용 안 됨, `failed` 다시 점검, `requesting` 권한 확인 중, `loading` 불러오는 중, `running` 보정 중. |
 | 개인정보 안내 | 맵 칸 안의 접힘 상자에 `PRIVACY_NOTICE` 문장.                                                                                                                                                                                                                                |
 
-근거: [LobbyScreen.tsx:17](../../apps/web/src/features/room/LobbyScreen.tsx#L17), [LobbyScreen.tsx:27](../../apps/web/src/features/room/LobbyScreen.tsx#L27), [LobbyScreen.tsx:141](../../apps/web/src/features/room/LobbyScreen.tsx#L141), [LobbyScreen.tsx:146](../../apps/web/src/features/room/LobbyScreen.tsx#L146), [LobbyScreen.tsx:157](../../apps/web/src/features/room/LobbyScreen.tsx#L157), [LobbyScreen.tsx:167](../../apps/web/src/features/room/LobbyScreen.tsx#L167), [LobbyScreen.tsx:193](../../apps/web/src/features/room/LobbyScreen.tsx#L193), [LobbyScreen.tsx:207](../../apps/web/src/features/room/LobbyScreen.tsx#L207), [LobbyScreen.tsx:231](../../apps/web/src/features/room/LobbyScreen.tsx#L231), [LobbyScreen.tsx:255](../../apps/web/src/features/room/LobbyScreen.tsx#L255), [LobbyScreen.tsx:265](../../apps/web/src/features/room/LobbyScreen.tsx#L265), [LobbyScreen.tsx:299](../../apps/web/src/features/room/LobbyScreen.tsx#L299), [LobbyScreen.tsx:306](../../apps/web/src/features/room/LobbyScreen.tsx#L306), [ProductApp.tsx:503](../../apps/web/src/app/ProductApp.tsx#L503), [ProductApp.tsx:1007](../../apps/web/src/app/ProductApp.tsx#L1007), [ProductApp.tsx:1021](../../apps/web/src/app/ProductApp.tsx#L1021)
+근거: [LobbyScreen.tsx:17](../../apps/web/src/features/room/LobbyScreen.tsx#L17), [LobbyScreen.tsx:27](../../apps/web/src/features/room/LobbyScreen.tsx#L27), [LobbyScreen.tsx:141](../../apps/web/src/features/room/LobbyScreen.tsx#L141), [LobbyScreen.tsx:146](../../apps/web/src/features/room/LobbyScreen.tsx#L146), [LobbyScreen.tsx:157](../../apps/web/src/features/room/LobbyScreen.tsx#L157), [LobbyScreen.tsx:167](../../apps/web/src/features/room/LobbyScreen.tsx#L167), [LobbyScreen.tsx:193](../../apps/web/src/features/room/LobbyScreen.tsx#L193), [LobbyScreen.tsx:207](../../apps/web/src/features/room/LobbyScreen.tsx#L207), [LobbyScreen.tsx:231](../../apps/web/src/features/room/LobbyScreen.tsx#L231), [LobbyScreen.tsx:255](../../apps/web/src/features/room/LobbyScreen.tsx#L255), [LobbyScreen.tsx:265](../../apps/web/src/features/room/LobbyScreen.tsx#L265), [LobbyScreen.tsx:299](../../apps/web/src/features/room/LobbyScreen.tsx#L299), [LobbyScreen.tsx:306](../../apps/web/src/features/room/LobbyScreen.tsx#L306), [ProductApp.tsx:505](../../apps/web/src/app/ProductApp.tsx#L505), [ProductApp.tsx:1009](../../apps/web/src/app/ProductApp.tsx#L1009), [ProductApp.tsx:1023](../../apps/web/src/app/ProductApp.tsx#L1023)
 
 ### 7.2 대기실 얼굴
 
@@ -341,7 +341,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 얼굴이 있으면 Canvas를 연다. 설정은 `dpr 1`, `antialias true`, `powerPreference low-power`, 카메라 `[0, 0.72, -1.05]`·`fov 30`·near/far `0.05/10`·`lookAtY 0.72`이다. 역할 없는 `Avatar`(중립 회색, `ally` 배지)에 그 텍스처를 `standIn`으로 붙인다.
 - 텍스처는 80ms마다 `needsUpdate`로 올린다. 처음에는 120ms 간격으로 8번 더 다시 그린다.
 
-근거: [ProductApp.tsx:168](../../apps/web/src/app/ProductApp.tsx#L168), [ProductApp.tsx:249](../../apps/web/src/app/ProductApp.tsx#L249), [LobbyScreen.tsx:317](../../apps/web/src/features/room/LobbyScreen.tsx#L317), [PlayerTileView.tsx:15](../../apps/web/src/features/room/PlayerTileView.tsx#L15), [PlayerTileView.tsx:25](../../apps/web/src/features/room/PlayerTileView.tsx#L25), [PlayerTileView.tsx:37](../../apps/web/src/features/room/PlayerTileView.tsx#L37), [PlayerTileView.tsx:66](../../apps/web/src/features/room/PlayerTileView.tsx#L66), [PlayerTileView.tsx:78](../../apps/web/src/features/room/PlayerTileView.tsx#L78), [PlayerTileView.tsx:92](../../apps/web/src/features/room/PlayerTileView.tsx#L92)
+근거: [ProductApp.tsx:170](../../apps/web/src/app/ProductApp.tsx#L170), [ProductApp.tsx:251](../../apps/web/src/app/ProductApp.tsx#L251), [LobbyScreen.tsx:317](../../apps/web/src/features/room/LobbyScreen.tsx#L317), [PlayerTileView.tsx:15](../../apps/web/src/features/room/PlayerTileView.tsx#L15), [PlayerTileView.tsx:25](../../apps/web/src/features/room/PlayerTileView.tsx#L25), [PlayerTileView.tsx:37](../../apps/web/src/features/room/PlayerTileView.tsx#L37), [PlayerTileView.tsx:66](../../apps/web/src/features/room/PlayerTileView.tsx#L66), [PlayerTileView.tsx:78](../../apps/web/src/features/room/PlayerTileView.tsx#L78), [PlayerTileView.tsx:92](../../apps/web/src/features/room/PlayerTileView.tsx#L92)
 
 ### 7.3 방 관리와 맵 크기
 
@@ -359,7 +359,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 시연 방은 `small`로 고정되고 `시연 맵은 16x16으로 고정되어 있습니다.`를 표시한다.
 - 데모 방에는 `준비 완료를 누르기 전까지 고를 수 있습니다. 시연은 인형이 덜 걷는 15×15 가 빠릅니다.` 안내가 붙는다.
 
-근거: [LobbyScreen.tsx:247](../../apps/web/src/features/room/LobbyScreen.tsx#L247), [LobbyScreen.tsx:280](../../apps/web/src/features/room/LobbyScreen.tsx#L280), [LobbyScreen.tsx:344](../../apps/web/src/features/room/LobbyScreen.tsx#L344), [LobbyScreen.tsx:386](../../apps/web/src/features/room/LobbyScreen.tsx#L386), [map-size.ts:23](../../apps/web/src/features/room/map-size.ts#L23), [map-size.ts:35](../../apps/web/src/features/room/map-size.ts#L35), [ProductApp.tsx:982](../../apps/web/src/app/ProductApp.tsx#L982), [ProductApp.tsx:990](../../apps/web/src/app/ProductApp.tsx#L990)
+근거: [LobbyScreen.tsx:247](../../apps/web/src/features/room/LobbyScreen.tsx#L247), [LobbyScreen.tsx:280](../../apps/web/src/features/room/LobbyScreen.tsx#L280), [LobbyScreen.tsx:344](../../apps/web/src/features/room/LobbyScreen.tsx#L344), [LobbyScreen.tsx:386](../../apps/web/src/features/room/LobbyScreen.tsx#L386), [map-size.ts:23](../../apps/web/src/features/room/map-size.ts#L23), [map-size.ts:35](../../apps/web/src/features/room/map-size.ts#L35), [ProductApp.tsx:984](../../apps/web/src/app/ProductApp.tsx#L984), [ProductApp.tsx:992](../../apps/web/src/app/ProductApp.tsx#L992)
 
 ### 7.4 초대 링크
 
@@ -586,7 +586,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
   - 데모의 운영자 출구는 원 안 마름모와 `O`로 따로 그린다.
 - 그릴 결과(크기·축척·보간 위치·지형 수·출구·표식)가 같으면 다시 그리지 않는다. 칸 크기는 정수 픽셀이고, 배율은 `devicePixelRatio`의 내림값을 1~2로 제한한다.
 
-근거: [minimap-render.ts:9](../../apps/web/src/features/game/map/minimap-render.ts#L9), [minimap-render.ts:14](../../apps/web/src/features/game/map/minimap-render.ts#L14), [minimap-render.ts:47](../../apps/web/src/features/game/map/minimap-render.ts#L47), [minimap-render.ts:229](../../apps/web/src/features/game/map/minimap-render.ts#L229), [minimap-render.ts:270](../../apps/web/src/features/game/map/minimap-render.ts#L270), [minimap-render.ts:351](../../apps/web/src/features/game/map/minimap-render.ts#L351), [minimap-render.ts:414](../../apps/web/src/features/game/map/minimap-render.ts#L414), [map-draw-model.ts:13](../../apps/web/src/features/game/map/map-draw-model.ts#L13), [past-event-markers.ts:9](../../apps/web/src/features/game/map/past-event-markers.ts#L9), [MiniMap.tsx:37](../../apps/web/src/features/game/map/MiniMap.tsx#L37), [MiniMap.tsx:58](../../apps/web/src/features/game/map/MiniMap.tsx#L58), [minimap-zoom.ts:8](../../apps/web/src/features/game/map/minimap-zoom.ts#L8), [minimap-zoom.ts:47](../../apps/web/src/features/game/map/minimap-zoom.ts#L47), [ProductApp.tsx:468](../../apps/web/src/app/ProductApp.tsx#L468)
+근거: [minimap-render.ts:16](../../apps/web/src/features/game/map/minimap-render.ts#L16), [minimap-render.ts:21](../../apps/web/src/features/game/map/minimap-render.ts#L21), [minimap-render.ts:54](../../apps/web/src/features/game/map/minimap-render.ts#L54), [minimap-render.ts:236](../../apps/web/src/features/game/map/minimap-render.ts#L236), [minimap-render.ts:303](../../apps/web/src/features/game/map/minimap-render.ts#L303), [minimap-render.ts:384](../../apps/web/src/features/game/map/minimap-render.ts#L384), [minimap-render.ts:447](../../apps/web/src/features/game/map/minimap-render.ts#L447), [map-draw-model.ts:13](../../apps/web/src/features/game/map/map-draw-model.ts#L13), [past-event-markers.ts:9](../../apps/web/src/features/game/map/past-event-markers.ts#L9), [MiniMap.tsx:37](../../apps/web/src/features/game/map/MiniMap.tsx#L37), [MiniMap.tsx:58](../../apps/web/src/features/game/map/MiniMap.tsx#L58), [minimap-zoom.ts:8](../../apps/web/src/features/game/map/minimap-zoom.ts#L8), [minimap-zoom.ts:47](../../apps/web/src/features/game/map/minimap-zoom.ts#L47), [ProductApp.tsx:470](../../apps/web/src/app/ProductApp.tsx#L470)
 
 ### 10.7 플래시와 사건 기록
 
@@ -617,7 +617,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 집계 줄은 `탈출 n · 포획 n · 종료 시 남은 도망자/활동 중인 도망자 n`이다. 도망자 수는 `capacity / 2`다.
 - 경기 중이면 `남은 시간 N초`를 표시한다.
 
-근거: [result-presenter.ts:17](../../apps/web/src/features/game/flow/result-presenter.ts#L17), [result-presenter.ts:33](../../apps/web/src/features/game/flow/result-presenter.ts#L33), [result-presenter.ts:47](../../apps/web/src/features/game/flow/result-presenter.ts#L47), [result-presenter.ts:66](../../apps/web/src/features/game/flow/result-presenter.ts#L66), [ResultScreen.tsx:32](../../apps/web/src/features/game/flow/ResultScreen.tsx#L32), [ResultScreen.tsx:43](../../apps/web/src/features/game/flow/ResultScreen.tsx#L43)
+근거: [result-presenter.ts:17](../../apps/web/src/features/game/flow/result-presenter.ts#L17), [result-presenter.ts:33](../../apps/web/src/features/game/flow/result-presenter.ts#L33), [result-presenter.ts:47](../../apps/web/src/features/game/flow/result-presenter.ts#L47), [result-presenter.ts:66](../../apps/web/src/features/game/flow/result-presenter.ts#L66), [ResultScreen.tsx:35](../../apps/web/src/features/game/flow/ResultScreen.tsx#L35), [ResultScreen.tsx:46](../../apps/web/src/features/game/flow/ResultScreen.tsx#L46)
 
 ### 11.2 중단 사유
 
@@ -644,7 +644,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - `settling`이면 `다음 경기를 위해 연결을 정리하고 있습니다. 재경기를 선택하면 준비되는 대로 이동합니다.`
 - 일반 방에서 연결 인원이 자리보다 적으면 `현재 n/capacity명입니다. 로비에서 추가 참가자를 모은 뒤 시작할 수 있습니다.`를 표시한다. 연결 끊김 중단이면 로비 재참가 안내를 덧붙인다.
 
-근거: [ResultScreen.tsx:33](../../apps/web/src/features/game/flow/ResultScreen.tsx#L33), [ResultScreen.tsx:48](../../apps/web/src/features/game/flow/ResultScreen.tsx#L48), [ResultScreen.tsx:53](../../apps/web/src/features/game/flow/ResultScreen.tsx#L53), [ResultScreen.tsx:66](../../apps/web/src/features/game/flow/ResultScreen.tsx#L66), [ResultScreen.tsx:79](../../apps/web/src/features/game/flow/ResultScreen.tsx#L79), [ResultScreen.tsx:93](../../apps/web/src/features/game/flow/ResultScreen.tsx#L93), [ProductApp.tsx:1047](../../apps/web/src/app/ProductApp.tsx#L1047)
+근거: [ResultScreen.tsx:36](../../apps/web/src/features/game/flow/ResultScreen.tsx#L36), [ResultScreen.tsx:51](../../apps/web/src/features/game/flow/ResultScreen.tsx#L51), [ResultScreen.tsx:66](../../apps/web/src/features/game/flow/ResultScreen.tsx#L66), [ResultScreen.tsx:79](../../apps/web/src/features/game/flow/ResultScreen.tsx#L79), [ResultScreen.tsx:93](../../apps/web/src/features/game/flow/ResultScreen.tsx#L93), [ResultScreen.tsx:103](../../apps/web/src/features/game/flow/ResultScreen.tsx#L103), [ProductApp.tsx:1049](../../apps/web/src/app/ProductApp.tsx#L1049)
 
 ## 12. 방 안 설정 창
 
@@ -672,6 +672,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | ------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `KeyW`/`ArrowUp`, `KeyS`/`ArrowDown`                    | 키보드 모드만    | 전진·후진. 전진 180ms, 후진 320ms를 누르고 있어야 의도가 된다. 의도를 보내고 100ms 뒤 해제해 한 칸만 가고, 누른 지 400ms가 되면 100ms마다 갱신하는 연속 이동으로 바뀐다. 두 키를 함께 누르면 중립. 놓으면 멈춘다. |
 | `KeyA`/`ArrowLeft`, `KeyD`/`ArrowRight`                 | 키보드 모드만    | 90° 회전(`TURN`). 150ms 누르면 한 번 발동하고 잠긴다. 모든 키를 놓고 150ms가 지나야 다음 회전을 받는다. 두 방향을 함께 누르면 버린다.                                                                             |
+| `Space`                                                 | 모션 모드만      | 브레이크(S15P21C204-385). 누르는 동안 몸 기울임 이동을 멈추고 새 이동을 만들지 않는다. 놓으면 다시 기울임을 받는다. 입력 문맥이 있고 도전 중이 아닐 때만. 키보드 모드에서는 아무 일도 없다.                       |
 | `KeyE`                                                  | 두 모드          | 들어온 교환 수락 → 마주 본 내 출구 도전 시작(`EXIT_START`) → 옆 아군에게 교환 요청. 이미 보낸 요청이 있으면 새 요청을 만들지 않는다.                                                                              |
 | `KeyF`                                                  | 두 모드          | 술래만. 설치 중이면 `INSTALL_CANCEL`, 아니면 선택 장비 `INSTALL`. 도망자에게는 행동이 없다.                                                                                                                       |
 | `KeyG`                                                  | 두 모드          | `PLAYING`의 술래만 `GRAB_INTENT`.                                                                                                                                                                                 |
@@ -683,7 +684,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 게임 keydown(`InteractionRuntime`)은 `isComposing`이거나, 대상이 `INPUT`·`TEXTAREA`·`SELECT`이거나, contentEditable이면 무시한다. 행동 키(E·F·G·1·2·Escape)는 repeat이면 무시한다.
 
-근거: [interaction-context.ts:69](../../apps/web/src/features/input/interaction-context.ts#L69), [interaction-context.ts:79](../../apps/web/src/features/input/interaction-context.ts#L79), [InteractionRuntime.ts:515](../../apps/web/src/features/input/InteractionRuntime.ts#L515), [InteractionRuntime.ts:527](../../apps/web/src/features/input/InteractionRuntime.ts#L527), [InteractionRuntime.ts:537](../../apps/web/src/features/input/InteractionRuntime.ts#L537), [InteractionRuntime.ts:1372](../../apps/web/src/features/input/InteractionRuntime.ts#L1372), [InteractionRuntime.ts:1380](../../apps/web/src/features/input/InteractionRuntime.ts#L1380), [gesture-intent.ts:96](../../apps/web/src/features/input/gesture-intent.ts#L96), [gesture-intent.ts:124](../../apps/web/src/features/input/gesture-intent.ts#L124), [gesture-intent.ts:232](../../apps/web/src/features/input/gesture-intent.ts#L232), [gesture-intent.ts:243](../../apps/web/src/features/input/gesture-intent.ts#L243), [move-intent.ts:58](../../apps/web/src/features/input/move-intent.ts#L58), [move-intent.ts:183](../../apps/web/src/features/input/move-intent.ts#L183), [move-intent.ts:246](../../apps/web/src/features/input/move-intent.ts#L246), [move-intent.ts:350](../../apps/web/src/features/input/move-intent.ts#L350), [turn-intent.ts:166](../../apps/web/src/features/input/turn-intent.ts#L166), [turn-intent.ts:185](../../apps/web/src/features/input/turn-intent.ts#L185), [key-challenge.ts:4](../../apps/web/src/features/game/pose/key-challenge.ts#L4), [KeyChallenge.tsx:24](../../apps/web/src/features/game/pose/KeyChallenge.tsx#L24), [minimap-zoom.ts:18](../../apps/web/src/features/game/map/minimap-zoom.ts#L18), [debug-feed.ts:84](../../apps/web/src/features/debug/debug-feed.ts#L84), [SoloPracticeScreen.tsx:81](../../apps/web/src/features/game/solo/SoloPracticeScreen.tsx#L81), [ProductApp.tsx:113](../../apps/web/src/app/ProductApp.tsx#L113)
+근거: [interaction-context.ts:69](../../apps/web/src/features/input/interaction-context.ts#L69), [interaction-context.ts:79](../../apps/web/src/features/input/interaction-context.ts#L79), [InteractionRuntime.ts:515](../../apps/web/src/features/input/InteractionRuntime.ts#L515), [InteractionRuntime.ts:527](../../apps/web/src/features/input/InteractionRuntime.ts#L527), [InteractionRuntime.ts:537](../../apps/web/src/features/input/InteractionRuntime.ts#L537), [InteractionRuntime.ts:1372](../../apps/web/src/features/input/InteractionRuntime.ts#L1372), [InteractionRuntime.ts:1385](../../apps/web/src/features/input/InteractionRuntime.ts#L1385), [gesture-intent.ts:96](../../apps/web/src/features/input/gesture-intent.ts#L96), [gesture-intent.ts:124](../../apps/web/src/features/input/gesture-intent.ts#L124), [gesture-intent.ts:232](../../apps/web/src/features/input/gesture-intent.ts#L232), [gesture-intent.ts:243](../../apps/web/src/features/input/gesture-intent.ts#L243), [move-intent.ts:58](../../apps/web/src/features/input/move-intent.ts#L58), [move-intent.ts:188](../../apps/web/src/features/input/move-intent.ts#L188), [move-intent.ts:251](../../apps/web/src/features/input/move-intent.ts#L251), [move-intent.ts:381](../../apps/web/src/features/input/move-intent.ts#L381), [turn-intent.ts:166](../../apps/web/src/features/input/turn-intent.ts#L166), [turn-intent.ts:185](../../apps/web/src/features/input/turn-intent.ts#L185), [key-challenge.ts:4](../../apps/web/src/features/game/pose/key-challenge.ts#L4), [KeyChallenge.tsx:24](../../apps/web/src/features/game/pose/KeyChallenge.tsx#L24), [minimap-zoom.ts:18](../../apps/web/src/features/game/map/minimap-zoom.ts#L18), [debug-feed.ts:84](../../apps/web/src/features/debug/debug-feed.ts#L84), [SoloPracticeScreen.tsx:81](../../apps/web/src/features/game/solo/SoloPracticeScreen.tsx#L81), [ProductApp.tsx:115](../../apps/web/src/app/ProductApp.tsx#L115), [InteractionRuntime.ts:1373](../../apps/web/src/features/input/InteractionRuntime.ts#L1373), [move-intent.ts:403](../../apps/web/src/features/input/move-intent.ts#L403)
 
 ### 13.2 모션과 손동작
 
@@ -696,11 +697,12 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | 주먹        | 모션 모드의 `PLAYING` 술래만. 즉시 `GRAB_INTENT`를 보내고, 유지하면 200ms마다 다시 보낸다.                                                                                                                                                                                                                             |
 | 펼친 손바닥 | 600ms 유지 뒤 교환 수락·요청(출구 시작은 안 함). 손을 내렸다가(`none`) 다시 해야 재발동.                                                                                                                                                                                                                               |
 | V 손동작    | 600ms 유지 뒤 술래 설치·취소.                                                                                                                                                                                                                                                                                          |
+| 재개        | 입력 문맥이 풀리거나(`clearHolds`) 입력이 초기화되면 모션 이동을 잠근다. 기울임이 해제 임계 안(전진 `0.06`·후진 `0.045`)에 150ms 머물러야 다시 받는다(S15P21C204-385). 몸을 기울인 채 문맥이 돌아와도 바로 움직이지 않는다.                                                                                            |
 | 보정        | 신선한 표본 8개, 산포 `0.1745rad` 이하.                                                                                                                                                                                                                                                                                |
 | 필터        | One Euro(최소 차단 1Hz, beta 0.01, 도함수 차단 1Hz). 간격이 500ms를 넘으면 필터와 유지를 초기화.                                                                                                                                                                                                                       |
 | 장애 폴백   | 새 추론 결과가 1500ms 동안 없거나(`INFERENCE_STALLED`), 얼굴이 1500ms 동안 계속 무효하거나(`FACE_INVALID`), 카메라 종료(`CAMERA_ENDED`)·Worker 오류(`WORKER_ERROR`)가 나면 키보드 모드로 바꾸고 유지 중인 입력을 버린다. 모션 복귀는 새 보정과 명시적 모션 선택이 모두 있어야 한다. 마이크만 실패하면 모션을 유지한다. |
 
-근거: [input-tuning.ts:45](../../apps/web/src/features/input/input-tuning.ts#L45), [input-tuning.ts:51](../../apps/web/src/features/input/input-tuning.ts#L51), [input-tuning.ts:55](../../apps/web/src/features/input/input-tuning.ts#L55), [input-tuning.ts:57](../../apps/web/src/features/input/input-tuning.ts#L57), [input-tuning.ts:59](../../apps/web/src/features/input/input-tuning.ts#L59), [input-tuning.ts:75](../../apps/web/src/features/input/input-tuning.ts#L75), [move-intent.ts:306](../../apps/web/src/features/input/move-intent.ts#L306), [turn-intent.ts:131](../../apps/web/src/features/input/turn-intent.ts#L131), [gesture-intent.ts:14](../../apps/web/src/features/input/gesture-intent.ts#L14), [gesture-intent.ts:185](../../apps/web/src/features/input/gesture-intent.ts#L185), [gesture-intent.ts:202](../../apps/web/src/features/input/gesture-intent.ts#L202), [input-fallback.ts:10](../../apps/web/src/features/input/input-fallback.ts#L10), [input-fallback.ts:55](../../apps/web/src/features/input/input-fallback.ts#L55), [input-fallback.ts:115](../../apps/web/src/features/input/input-fallback.ts#L115), [product-runtime.ts:193](../../apps/web/src/app/product-runtime.ts#L193), [InteractionRuntime.ts:879](../../apps/web/src/features/input/InteractionRuntime.ts#L879)
+근거: [input-tuning.ts:45](../../apps/web/src/features/input/input-tuning.ts#L45), [input-tuning.ts:51](../../apps/web/src/features/input/input-tuning.ts#L51), [input-tuning.ts:55](../../apps/web/src/features/input/input-tuning.ts#L55), [input-tuning.ts:57](../../apps/web/src/features/input/input-tuning.ts#L57), [input-tuning.ts:59](../../apps/web/src/features/input/input-tuning.ts#L59), [input-tuning.ts:75](../../apps/web/src/features/input/input-tuning.ts#L75), [move-intent.ts:306](../../apps/web/src/features/input/move-intent.ts#L306), [turn-intent.ts:131](../../apps/web/src/features/input/turn-intent.ts#L131), [gesture-intent.ts:14](../../apps/web/src/features/input/gesture-intent.ts#L14), [gesture-intent.ts:185](../../apps/web/src/features/input/gesture-intent.ts#L185), [gesture-intent.ts:202](../../apps/web/src/features/input/gesture-intent.ts#L202), [input-fallback.ts:10](../../apps/web/src/features/input/input-fallback.ts#L10), [input-fallback.ts:55](../../apps/web/src/features/input/input-fallback.ts#L55), [input-fallback.ts:115](../../apps/web/src/features/input/input-fallback.ts#L115), [product-runtime.ts:193](../../apps/web/src/app/product-runtime.ts#L193), [InteractionRuntime.ts:879](../../apps/web/src/features/input/InteractionRuntime.ts#L879), [move-intent.ts:337](../../apps/web/src/features/input/move-intent.ts#L337), [move-intent.ts:423](../../apps/web/src/features/input/move-intent.ts#L423), [InteractionRuntime.ts:906](../../apps/web/src/features/input/InteractionRuntime.ts#L906)
 
 ## 14. 혼자 연습(튜토리얼)
 
@@ -775,10 +777,11 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 - 술래 체형(`TAGGER_BODY`, `tagger-body.ts`, S15P21C204-378): 머리 큐브와 얼굴 판은 모든 역할과 같은 크기·높이(중심 `0.72`)이고, 그 둘레를 괴수 체형으로 키운다. 세 층으로 좁아지며 솟는 어깨(꼭대기 `1.07`), 두 층 등 혹(꼭대기 `1.18`), 폭 `0.74` 가슴, 굵은 두 토막 팔 끝의 손과 발톱 세 개(끝 `0.10`, 무릎 아래), 짧고 굵은 다리. 몸은 `#8a2218`, 허리·눈썹뼈·손·발은 `#1a1010`, 눈썹뼈 앞 붉은 눈 두 개는 `#ff2a1a`(조명 무관 재질). 팔 포함 폭은 중심에서 `0.53`(칸 폭의 절반 안쪽).
 - 술래 상자들은 재질별로 한 도형으로 합쳐(`createTaggerGeometry`) 모든 술래가 같이 쓴다. 움직이지 않는 몸 3개, 팔·다리는 한쪽 몫 2개씩이라 술래 한 명을 11번 그린다.
+- 서버는 같은 편에게만 역할을 붙여 보낸다. 세계 화면은 역할이 없는 보이는 참가자를 적으로 보고 보는 사람 역할의 반대 몸으로 그린다(`withAvatarRole`, S15P21C204-378). 그래서 도망자에게 술래가 괴수 몸으로 보인다. 보는 사람 역할을 모르면 그대로 두고, 아군 배지는 서버가 준 역할로만 정한다. 근거: [FaceAvatar.tsx:320](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L320), [FaceAvatar.tsx:345](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L345).
 - 보는 사람과 같은 역할이면 머리 위에 아군 배지 구(반지름 `0.032`)를 단다. 높이는 `y 1.035`, 술래는 등 혹 위 `1.24`.
 - 위치·방향은 서버 행동의 보간을 따른다. 팔다리 흔들림은 같은 진행도에서 만든 장식이다.
 
-근거: [FaceAvatar.tsx:27](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L27), [FaceAvatar.tsx:43](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L43), [FaceAvatar.tsx:64](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L64), [FaceAvatar.tsx:133](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L133), [FaceAvatar.tsx:141](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L141), [FaceAvatar.tsx:145](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L145), [FaceAvatar.tsx:163](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L163), [FaceAvatar.tsx:226](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L226), [FaceAvatar.tsx:251](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L251), [role-colors.ts:9](../../apps/web/src/features/game/scene/role-colors.ts#L9), [role-colors.ts:18](../../apps/web/src/features/game/scene/role-colors.ts#L18), [scene-model.ts:3](../../apps/web/src/features/game/scene/scene-model.ts#L3), [ProductApp.tsx:214](../../apps/web/src/app/ProductApp.tsx#L214)
+근거: [FaceAvatar.tsx:28](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L28), [FaceAvatar.tsx:43](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L43), [FaceAvatar.tsx:63](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L63), [FaceAvatar.tsx:146](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L146), [FaceAvatar.tsx:154](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L154), [FaceAvatar.tsx:158](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L158), [FaceAvatar.tsx:176](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L176), [FaceAvatar.tsx:237](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L237), [FaceAvatar.tsx:346](../../apps/web/src/features/game/scene/FaceAvatar.tsx#L346), [role-colors.ts:9](../../apps/web/src/features/game/scene/role-colors.ts#L9), [role-colors.ts:19](../../apps/web/src/features/game/scene/role-colors.ts#L19), [scene-model.ts:3](../../apps/web/src/features/game/scene/scene-model.ts#L3), [ProductApp.tsx:216](../../apps/web/src/app/ProductApp.tsx#L216)
 
 ### 15.5 내 캐릭터 창
 
@@ -798,7 +801,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 홈 옵션의 배경 움직임을 끄거나 기기가 `prefers-reduced-motion: reduce`면 멈춘다. 멈췄거나 탭이 숨겨졌으면 `frameloop='demand'`다.
 - 렌더 오류가 나면 배경만 빠진다.
 
-근거: [LobbyBackdrop.tsx:8](../../apps/web/src/features/room/LobbyBackdrop.tsx#L8), [LobbyBackdrop.tsx:45](../../apps/web/src/features/room/LobbyBackdrop.tsx#L45), [LobbyBackdrop.tsx:100](../../apps/web/src/features/room/LobbyBackdrop.tsx#L100), [LobbyBackdrop.tsx:137](../../apps/web/src/features/room/LobbyBackdrop.tsx#L137), [LobbyBackdrop.tsx:163](../../apps/web/src/features/room/LobbyBackdrop.tsx#L163), [ProductApp.tsx:683](../../apps/web/src/app/ProductApp.tsx#L683)
+근거: [LobbyBackdrop.tsx:8](../../apps/web/src/features/room/LobbyBackdrop.tsx#L8), [LobbyBackdrop.tsx:45](../../apps/web/src/features/room/LobbyBackdrop.tsx#L45), [LobbyBackdrop.tsx:100](../../apps/web/src/features/room/LobbyBackdrop.tsx#L100), [LobbyBackdrop.tsx:137](../../apps/web/src/features/room/LobbyBackdrop.tsx#L137), [LobbyBackdrop.tsx:163](../../apps/web/src/features/room/LobbyBackdrop.tsx#L163), [ProductApp.tsx:685](../../apps/web/src/app/ProductApp.tsx#L685)
 
 ## 16. 브라우저 저장소
 
