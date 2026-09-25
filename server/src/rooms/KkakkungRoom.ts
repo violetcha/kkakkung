@@ -122,6 +122,8 @@ const SHOWCASE_MAP_SIZE: MapSize = 'small';
 const SHOWCASE_SEED = 20260922;
 /** 템플릿의 빈 시작 자리를 채우는 이름 접두. 경기에는 들어오지 않는다. */
 const SHOWCASE_VACANT_PREFIX = 'showcase-vacant-';
+/** S15P21C204-390. 시연 방 배치에 넘기는 자리 이름. 실제 참가자 ID 는 경기를 만들 때 되돌린다. */
+const SHOWCASE_SEAT_PREFIX = 'showcase-seat-';
 /**
  * S15P21C204-312. How long an empty demo room waits for its operator to come back. A refresh
  * takes seconds; after this the room closes and frees its slot in the demo rooms' own budget
@@ -269,6 +271,8 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private readonly clientsByPlayer = new Map<string, Client>();
     private readonly playersByConnection = new Map<string, SessionAuth>();
     private readonly roles = new Map<string, Role>();
+    /** S15P21C204-390. 시연 방 배치의 자리 이름 → 실제 참가자 ID. 배치를 준비할 때마다 다시 만든다. */
+    private showcaseSeats = new Map<string, string>();
     /** 340. Opaque per-round ids for enemy players; shared by views, bindings and audio policy. */
     private readonly aliases = createEnemyAliases();
     /**
@@ -947,8 +951,6 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         SPECTATE: ['PLAYING'],
       };
       if (!allowed[type]?.includes(this.phase)) return 'INVALID_PHASE';
-      // 시연 방은 재경기가 없다. 결과 화면까지가 시연이고, 다음 시연은 새 방으로 연다.
-      if (type === 'REMATCH' && this.showcase) return 'NOT_ALLOWED';
       if (
         (type === 'ROOM_LOCK' ||
           type === 'ROOM_KICK' ||
@@ -1086,6 +1088,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
           return result;
         }
         case 'REMATCH': {
+          // S15P21C204-390. 시연 방도 같은 자리로 다시 할 수 있다(리허설·발표 중 실수). 역할은
+          // /showcase 에서 고른 자리가 정하므로 역할 바꾸기는 받지 않는다.
+          if (this.showcase && command.payload.mode === 'swap')
+            return { result: 'rejected', code: 'NOT_ALLOWED' };
           const hadPending = this.rematch.pending !== null;
           const decision = this.rematch.apply({
             actorId: entry.actorId,
@@ -1393,28 +1399,53 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     /**
      * 맵 템플릿은 도망자 셋·술래 셋의 시작 자리를 요구한다. 시연 방은 둘씩만 있으므로 비어 있는
      * 자리를 이름만 있는 참가자로 채워 준비하고, 경기를 만들 때 `showcaseLayout` 이 다시 뗀다.
+     *
+     * S15P21C204-390. 배치는 역할마다 참가자 ID 를 문자열 순으로 정렬해 시작 자리를 나눈다. 시연
+     * 방의 ID 는 입장마다 새로 뽑혀, 맵·시드가 같아도 누가 어느 자리·출구를 받는지가 매번 달랐다.
+     * 그래서 시연 방은 배치에 실제 ID 대신 **자리 이름**(역할별로 /showcase 에서 고른 순서 1·2,
+     * 빈 자리 3)을 넘기고, 경기를 만들 때 `showcaseLayout` 이 실제 ID 로 되돌린다. 같은 자리는
+     * 매번 같은 시작 칸·같은 출구를 받는다.
      */
     private layoutRoster(): { playerId: string; role: Role }[] {
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       if (!this.showcase) return players;
+      this.showcaseSeats = new Map();
+      const seated: { playerId: string; role: Role }[] = [];
       for (const role of ['runner', 'tagger'] as const) {
-        let missing = 3 - players.filter((p) => p.role === role).length;
-        for (let index = 1; missing > 0; index++, missing--)
-          players.push({ playerId: `${SHOWCASE_VACANT_PREFIX}${role}-${index}`, role });
+        const members = players.filter((p) => p.role === role);
+        for (let index = 1; index <= 3; index++) {
+          const member = members[index - 1];
+          const seatId = member
+            ? `${SHOWCASE_SEAT_PREFIX}${role}-${index}`
+            : `${SHOWCASE_VACANT_PREFIX}${role}-${index}`;
+          if (member) this.showcaseSeats.set(seatId, member.playerId);
+          seated.push({ playerId: seatId, role });
+        }
       }
-      return players;
+      return seated;
     }
 
     /** 비어 있는 자리에 붙은 시작 위치·출구·영역을 떼어 실제 참가자만 남긴다. */
     private showcaseLayout(
       layout: import('../game/ports.js').MatchLayout,
     ): import('../game/ports.js').MatchLayout {
-      const real = (playerId: string) => this.roles.has(playerId);
+      // 자리 이름을 실제 참가자 ID 로 되돌리고, 사람이 없는 빈 자리는 뗀다.
+      const seats = this.showcaseSeats;
+      const real = (seatId: string) => seats.get(seatId);
       return {
         ...layout,
-        players: layout.players.filter((p) => real(p.playerId)),
-        exits: layout.exits.filter((exit) => real(exit.ownerId)),
-        territories: layout.territories.filter((t) => real(t.playerId)),
+        players: layout.players.flatMap((p) => {
+          const playerId = real(p.playerId);
+          return playerId ? [{ ...p, playerId }] : [];
+        }),
+        exits: layout.exits.flatMap((exit) => {
+          const ownerId = real(exit.ownerId);
+          return ownerId ? [{ ...exit, ownerId }] : [];
+        }),
+        territories: layout.territories.flatMap((t) => {
+          const playerId = real(t.playerId);
+          return playerId ? [{ ...t, playerId }] : [];
+        }),
       };
     }
 

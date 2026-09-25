@@ -397,3 +397,71 @@ it('S15P21C204-360: frees the seats and the room entry on dispose without waitin
     f.close();
   }
 });
+
+// S15P21C204-390. 발표는 대본대로 움직인다. 같은 자리(역할별로 고른 순서)는 매번 같은 시작 칸과
+// 같은 출구를 받아야 한다. 참가자 ID 는 입장마다 새로 뽑히므로 배치에는 자리 이름을 넘긴다.
+it('S15P21C204-390: hands the loader seat names, so the same seat gets the same start and exit every run', async () => {
+  const runs: { cells: Map<string, string>; exits: Map<string, string> }[] = [];
+  for (let run = 0; run < 2; run++) {
+    const f = fixture({ core: matchCore, layout: smallMazeLayout });
+    try {
+      await reachMapFinalizing(f);
+      await f.flush();
+      await f.flush();
+      expect(f.room.phase).toBe('GAME_LOADING');
+      expect(f.prepared[0]!.players.map((p) => p.playerId)).toEqual([
+        'showcase-seat-runner-1',
+        'showcase-seat-runner-2',
+        'showcase-vacant-runner-3',
+        'showcase-seat-tagger-1',
+        'showcase-seat-tagger-2',
+        'showcase-vacant-tagger-3',
+      ]);
+      // 자리: 도망자 1 = players[0], 도망자 2 = players[3], 술래 1 = players[1], 술래 2 = players[2].
+      const seatOf = new Map([
+        [f.players[0]!.session.playerId, 'runner-1'],
+        [f.players[3]!.session.playerId, 'runner-2'],
+        [f.players[1]!.session.playerId, 'tagger-1'],
+        [f.players[2]!.session.playerId, 'tagger-2'],
+      ]);
+      const created = f.core.calls?.find?.((call) => call.method === 'createMatch');
+      const layout = (created?.args as any)?.layout ?? f.room.pendingLayout?.layout;
+      const frame = matchCore.getFrame(f.room.driver.attached()[0]!.state) as any;
+      const cells = new Map<string, string>();
+      for (const participant of frame.participants)
+        cells.set(seatOf.get(participant.playerId)!, `${participant.cell.x},${participant.cell.y}`);
+      const exits = new Map<string, string>();
+      for (const exit of frame.exits ?? layout?.exits ?? [])
+        exits.set(seatOf.get(exit.ownerId)!, `${exit.wall.x},${exit.wall.y},${exit.wall.side}`);
+      expect([...cells.keys()].sort()).toEqual(['runner-1', 'runner-2', 'tagger-1', 'tagger-2']);
+      runs.push({ cells, exits });
+    } finally {
+      f.close();
+    }
+  }
+  expect(runs[1]!.cells).toEqual(runs[0]!.cells);
+  expect(runs[1]!.exits).toEqual(runs[0]!.exits);
+});
+
+// S15P21C204-390. 리허설·발표 중 실수하면 같은 넷이 같은 자리로 바로 다시 한다. 역할 바꾸기는 없다.
+it('S15P21C204-390: lets the showcase host restart with the same seats but not swap roles', () => {
+  const f = fixture();
+  try {
+    f.join();
+    f.room.phase = 'RESULT';
+    const host = f.players[0]!;
+    // 명령은 줄을 서고 다음 틱에 처리된다.
+    const before = f.room.matchId;
+    f.command(host, 'REMATCH', { mode: 'swap' }, 50);
+    f.tick();
+    expect(f.room.phase).toBe('RESULT');
+    expect(f.room.matchId).toBe(before);
+    // 같은 자리로 다시: 새 라운드가 곧바로 시작되고(미디어 없음), 역할은 /showcase 자리 그대로다.
+    f.command(host, 'REMATCH', { mode: 'same' }, 51);
+    f.tick();
+    expect(f.room.phase).not.toBe('RESULT');
+    expect(f.room.matchId).not.toBe(before);
+  } finally {
+    f.close();
+  }
+});
