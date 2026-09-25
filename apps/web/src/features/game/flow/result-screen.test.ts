@@ -51,7 +51,8 @@ it('keeps recovery controls available after a rejected rematch', () => {
   expect(html).toContain('재경기를 시작하지 못했습니다');
 });
 
-// S15P21C204-318. 데모 재경기는 관리자의 다음 역할을 고른다. "역할 바꿔"·로비·인원 안내는 맞지 않는다.
+// S15P21C204-318. 데모 재경기는 관리자의 다음 역할을 고른다. "역할 바꿔"·인원 안내는 맞지 않는다.
+// S15P21C204-396. 로비 복귀 재경기는 일반 방 기능이라 데모에서도 확인할 수 있게 둔다.
 it('offers the operator a role for the next demo round instead of team modes', () => {
   const element = createElement(ResultScreen, {
     round: roundFixture({ phase: 'RESULT', rematchState: 'available' }),
@@ -65,7 +66,7 @@ it('offers the operator a role for the next demo round instead of team modes', (
   expect(html).toContain('도망자로 재경기');
   expect(html).toContain('술래로 재경기');
   expect(html).not.toContain('역할 바꿔 재경기');
-  expect(html).not.toContain('로비로 돌아가기');
+  expect(html).toContain('로비로 돌아가기');
   expect(html).not.toContain('/6명');
   expect(html).toMatch(/aria-pressed="true"[^>]*>도망자로 재경기/);
 });

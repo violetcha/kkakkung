@@ -55,7 +55,7 @@ export function ResultScreen({
             : round.rematchState === 'settling'
               ? '다음 경기를 위해 연결을 정리하고 있습니다. 재경기를 선택하면 준비되는 대로 이동합니다.'
               : demo
-                ? '다음 경기에서 맡을 역할을 고르세요. 인형이 준비를 대신합니다.'
+                ? '다음 경기에서 맡을 역할을 고르거나 로비로 돌아가세요. 인형이 준비를 대신합니다.'
                 : showcase && host
                   ? '같은 자리로 다시 시작하면 같은 맵·같은 시작 위치·같은 출구로 다시 합니다.'
                   : host
@@ -88,6 +88,10 @@ export function ResultScreen({
               {role === 'runner' ? '도망자로 재경기' : '술래로 재경기'}
             </button>
           ))}
+          {/* S15P21C204-396. 일반 방의 로비 복귀 재경기도 데모에서 확인한다. 역할은 관리자 선택을 유지한다. */}
+          <button disabled={pending} onClick={() => onRematch('lobby')}>
+            로비로 돌아가기
+          </button>
         </div>
       )}
       {host && ended && showcase && (

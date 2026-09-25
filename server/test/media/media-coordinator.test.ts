@@ -1269,3 +1269,13 @@ it('counts connected participants toward the monthly guard and closes new matche
   );
   expect(saved.countedMs).toBeGreaterThanOrEqual(100 * 60_000);
 });
+
+// S15P21C204-396. JOURNAL_NOT_WRITABLE 경보에 값을 대는 곳이 없었다. 초기화 전에는 모른다(null).
+it('reports whether the operations journal can write once initialized', async () => {
+  const f = await fixture();
+  expect(f.coordinator.journalWritable()).toBeNull();
+  await ready(f);
+  expect(f.coordinator.journalWritable()).toBe(true);
+  await f.coordinator.close();
+  expect(f.coordinator.journalWritable()).toBeNull();
+});

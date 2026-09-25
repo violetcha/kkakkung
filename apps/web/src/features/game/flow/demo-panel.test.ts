@@ -114,9 +114,10 @@ it('has a user-facing label for every known failure code', () => {
   for (const code of demoFailureCodes()) expect(code).not.toBe('');
 });
 
-it('disables controls before the round starts and explains why', () => {
+// S15P21C204-396. 패널은 팀 연습과 경기 중에만 보이므로 경기 전은 팀 연습이다.
+it('disables controls during team practice and explains why', () => {
   const html = renderToStaticMarkup(
-    createElement(DemoPanel, { demo: state(), phase: 'DEVICE_CHECK', onRun: () => {} }),
+    createElement(DemoPanel, { demo: state(), phase: 'TEAM_PRACTICE', onRun: () => {} }),
   );
   expect(html).toContain('경기가 시작되면 시나리오를 실행할 수 있습니다.');
   expect(html.match(/disabled=""/g)).toHaveLength(3);
@@ -133,8 +134,7 @@ it('lets the operator end the round even while a scenario is stuck', () => {
   expect(abort(render({ running: 'capture', step: 'chase-operator' }, 'PLAYING'))).not.toContain(
     'disabled',
   );
-  expect(abort(render({}, 'DEVICE_CHECK'))).toContain('disabled');
-  expect(abort(render({}, 'RESULT'))).toContain('disabled');
+  expect(abort(render({}, 'TEAM_PRACTICE'))).toContain('disabled');
 });
 
 // S15P21C204-342. 관리자를 기다리는 대본은 2분 동안 다른 버튼을 잠근다. 라운드를 끝내지 않고

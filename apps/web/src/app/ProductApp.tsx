@@ -6,6 +6,10 @@ import {
   productRoomPort,
   cancelSessionReservation,
   forgetDemoSession,
+  forgetMatchRejoin,
+  reconnectProductRoom,
+  rememberMatchRejoin,
+  type MatchRejoin,
 } from '../features/room/product-session';
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
@@ -81,6 +85,7 @@ export function ProductApp({
   initialRoom = '',
   demoSession,
   showcaseSession,
+  matchRejoin,
 }: {
   invitation: string;
   initialRoom?: string;
@@ -88,6 +93,8 @@ export function ProductApp({
   demoSession?: SessionResponse;
   /** 발표 시연 방 세션. `/showcase` 가 발급해 주소 조각으로 넘긴다. 미디어는 일반 경기와 같다. */
   showcaseSession?: SessionResponse;
+  /** S15P21C204-396. 경기 중 새로고침한 탭이 돌아갈 자리. */
+  matchRejoin?: MatchRejoin;
 }) {
   // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
   // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
@@ -217,6 +224,9 @@ export function ProductApp({
   useEffect(() => () => demoFace.current?.dispose(), []);
   const generation = useRef(0);
   const pendingSession = useRef<SessionResponse | null>(null);
+  // S15P21C204-396. 새로고침할 때 돌아올 기록을 적으려고 붙은 방과 세션을 기억한다.
+  const joinedRoom = useRef<Awaited<ReturnType<typeof joinProductRoom>> | null>(null);
+  const joinedSession = useRef<SessionResponse | null>(null);
   useEffect(() => {
     let active = true;
     setAccess('checking');
@@ -282,6 +292,7 @@ export function ProductApp({
   );
   const leaveByChoice = useCallback(() => {
     if (demoSession) forgetDemoSession();
+    forgetMatchRejoin();
     // S15P21C204-363. 시연 참가자는 /showcase 에서만 들어오므로 이 페이지의 입장 폼으로 떨어질 일이
     // 없다. 방을 정리한 뒤 시연 첫 화면으로 돌려보낸다.
     void leave().finally(() => {
@@ -326,6 +337,29 @@ export function ProductApp({
       runtime.current?.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
     const blur = () => runtime.current?.setPageActive(false);
     const pagehide = () => {
+      // S15P21C204-396. 일반 방 경기 중의 새로고침은 나가는 것이 아니다. 방을 떠난다고 알리면 서버가
+      // 그 자리를 바로 풀어 경기가 무효가 된다. 돌아올 기록만 적고 연결은 그냥 끊기게 둔다(391 유예).
+      const current = runtime.current;
+      const room = joinedRoom.current;
+      const session = joinedSession.current;
+      const now = current?.getSnapshot();
+      if (
+        current &&
+        room &&
+        session &&
+        !demoSession &&
+        !showcaseSession &&
+        now?.round?.phase === 'PLAYING' &&
+        !now.lost &&
+        room.reconnectionToken
+      ) {
+        rememberMatchRejoin({
+          session,
+          reconnectionToken: room.reconnectionToken,
+          mediaScope: current.mediaScopeForResume(),
+        });
+        return;
+      }
       void leave();
     };
     document.addEventListener('visibilitychange', active);
@@ -351,6 +385,13 @@ export function ProductApp({
     };
   }, [leave, cancelPendingAdmission]);
   const demoEntry = useRef<Promise<void>>(Promise.resolve());
+  // S15P21C204-396. 새로고침 전 경기로 돌아간다. 실패하면(유예가 끝남·방이 닫힘) 홈에 그대로 남는다.
+  const rejoinTried = useRef(false);
+  useEffect(() => {
+    if (!matchRejoin || rejoinTried.current) return;
+    rejoinTried.current = true;
+    demoEntry.current = demoEntry.current.then(() => enter(matchRejoin.session, matchRejoin));
+  }, [matchRejoin]);
   useEffect(() => {
     // The operator's demo session opens its room straight away: there is no form for it.
     // 시연 방 세션도 같다: 역할과 이름은 /showcase 에서 이미 골랐다.
@@ -368,7 +409,7 @@ export function ProductApp({
     await enter();
   }
   /** Joins with a session: the form requests one, the demo entry already has it. */
-  async function enter(given: SessionResponse | null = null) {
+  async function enter(given: SessionResponse | null = null, rejoin: MatchRejoin | null = null) {
     if (joining || runtime.current || solo) return;
     // A demo session is handed to the page and cannot be asked for again, so the page never throws
     // it away: an abandoned seat is freed by the server's own admission deadline instead. Only a
@@ -396,7 +437,9 @@ export function ProductApp({
         return;
       }
       if (owned) pendingSession.current = session;
-      const room = await joinProductRoom(session);
+      const room = rejoin
+        ? await reconnectProductRoom(rejoin.reconnectionToken)
+        : await joinProductRoom(session);
       joined = room;
       if (pendingSession.current === session) pendingSession.current = null;
       if (run !== generation.current) {
@@ -411,7 +454,10 @@ export function ProductApp({
           if (run === generation.current) setSnapshot(value);
         },
         ...(metrics.current ? { metrics: metrics.current } : {}),
+        ...(rejoin?.mediaScope ? { resumeMediaScope: rejoin.mediaScope } : {}),
       });
+      joinedRoom.current = room;
+      joinedSession.current = session;
       runtime.current.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
       // 홈 옵션을 이 입장에 적용한다. 경기 중 바꾼 값은 그 방에서만 유효하다.
       runtime.current.quality(settings.quality);
@@ -425,7 +471,7 @@ export function ProductApp({
       setSessionCredential(session.sessionToken);
     } catch (cause) {
       // 끝났거나 닫힌 데모 방이다. 새로고침이 거기로 다시 가지 않게 한다.
-      if (!owned) forgetDemoSession();
+      if (!owned && demoSession) forgetDemoSession();
       // S15P21C204-363. 시연 세션의 입장 거절은 이 페이지의 입장 폼이 아니라 /showcase 가 다시 받는다.
       if (!owned && showcaseSession && run === generation.current) {
         window.location.assign('/showcase');
@@ -441,9 +487,11 @@ export function ProductApp({
         setSnapshot(null);
         setSessionCredential(null);
         setError(
-          sessionErrorLabel(cause instanceof Error ? cause.message : '', {
-            ssoWithoutInvitation: access === 'gitlab-sso' && !invitation,
-          }) ?? '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.',
+          rejoin
+            ? '새로고침 전 경기로 돌아가지 못했습니다. 경기가 끝났거나 자리를 비워 둔 시간이 지났습니다.'
+            : (sessionErrorLabel(cause instanceof Error ? cause.message : '', {
+                ssoWithoutInvitation: access === 'gitlab-sso' && !invitation,
+              }) ?? '연결할 수 없습니다. 로그인과 네트워크 상태를 확인해 주세요.'),
         );
       }
     } finally {

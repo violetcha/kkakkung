@@ -495,5 +495,6 @@ export type ProductMediaRuntime = MediaCoordinator &
       | 'releaseMatch'
       | 'allowsNewMatch'
       | 'monthlyUsage'
+      | 'journalWritable'
     >
   >;
