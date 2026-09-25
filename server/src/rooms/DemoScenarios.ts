@@ -219,8 +219,8 @@ export const STEP_TIMEOUT_TICKS = 2400;
 const ARM_WAIT_TICKS = 60;
 /** The rules require the pose to stand for two seconds before a report can succeed. */
 const POSE_HOLD_TICKS = 50;
-/** An exchange offer lives 2 seconds (40 ticks); a session that never appears was refused. */
-const EXCHANGE_OFFER_TICKS = 40;
+/** An exchange offer lives 4 seconds (80 ticks, S15P21C204-389); a session that never appears was refused. */
+const EXCHANGE_OFFER_TICKS = 80;
 /** A trace shows 1 second after the exchange and stays 2 seconds: the scenario waits it out. */
 const TRACE_SHOW_TICKS = 60;
 /**

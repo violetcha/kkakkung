@@ -1,5 +1,6 @@
 import {
   readPublicRoundState,
+  type Cell,
   type Dir,
   type PublicMatchState,
   type PublicRoundState,
@@ -28,6 +29,7 @@ import {
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import { turnLeadActive, type TurnLead } from '../features/game/scene/turn-lead';
+import { moveLeadActive, moveLeadTarget, type MoveLead } from '../features/game/scene/move-lead';
 import type { PoseMissReason } from '../features/game/pose/pose-evaluator';
 import {
   createChallengeController,
@@ -237,6 +239,9 @@ export function bindProductRoom(
   let turnLead: { fromDir: Dir; direction: 'left' | 'right'; startedAtMs: number } | null = null;
   const currentTurnLead = (): TurnLead | null =>
     turnLead ? { ...turnLead, ageMs: deps.now() - turnLead.startedAtMs } : null;
+  let moveLead: { from: Cell; to: Cell; dir: Dir; startedAtMs: number } | null = null;
+  const currentMoveLead = (): MoveLead | null =>
+    moveLead ? { ...moveLead, ageMs: deps.now() - moveLead.startedAtMs } : null;
   let startPending: { exitId: string; requestId: string; until: number | null } | null = null;
   const challenge = createChallengeController((command) => sendCommand(command));
   let bindings: MediaBindings | null = null;
@@ -992,13 +997,27 @@ export function bindProductRoom(
       own?.status === 'ACTIVE' &&
       own.action === null &&
       own.challenge === null &&
-      !turnLeadActive(currentTurnLead())
+      !turnLeadActive(currentTurnLead()) &&
+      !moveLeadActive(currentMoveLead())
     )
       turnLead = {
         fromDir: own.dir,
         direction: command.payload.direction,
         startedAtMs: deps.now(),
       };
+    // S15P21C204-389. 멈춰 있다가 보낸 한 칸 이동도 카메라가 먼저 시작한다. 앞 칸이 내가 아는
+    // 통로이고 구속·도전 중이 아닐 때만이다(서버가 거절하는 경우가 그 셋뿐이다). 유지 중 다시
+    // 보내는 이동 의도는 서버 이동이 이미 시작됐거나 예측이 살아 있어 새로 만들지 않는다.
+    if (
+      command.type === 'MOVE_INTENT' &&
+      requestId &&
+      own?.status === 'ACTIVE' &&
+      !turnLeadActive(currentTurnLead()) &&
+      !moveLeadActive(currentMoveLead())
+    ) {
+      const to = moveLeadTarget(snapshot.view, command.payload.direction);
+      if (to) moveLead = { from: own.cell, to, dir: own.dir, startedAtMs: deps.now() };
+    }
     if (
       command.type === 'GRAB_INTENT' &&
       requestId &&
@@ -1528,6 +1547,8 @@ export function bindProductRoom(
     renderTick: clock.renderTick,
     /** S15P21C204-388. 카메라가 먼저 도는 회전. 판정에는 쓰지 않는다. */
     turnLead: currentTurnLead,
+    /** S15P21C204-389. 카메라가 먼저 시작하는 한 칸 이동. 판정에는 쓰지 않는다. */
+    moveLead: currentMoveLead,
     getSnapshot: () => snapshot,
     async leave() {
       audioPreferences = DEFAULT_AUDIO_PREFERENCES;

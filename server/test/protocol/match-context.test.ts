@@ -13,7 +13,7 @@ const tuning: MatchTuning = {
   armTicks: 20,
   restraintTicks: 60,
   restraintImmunityTicks: 40,
-  exchangeExpiryTicks: 40,
+  exchangeExpiryTicks: 80,
   exitMinimumTicks: 40,
   exitExpiryTicks: 160,
   exitRetryTicks: 10,

@@ -1,5 +1,5 @@
 {
-  "tuningVersion": "mvp-v3",
+  "tuningVersion": "mvp-v4",
   "match": {
     "tickMs": 50,
     "moveTicks": 12,
@@ -10,7 +10,7 @@
     "armTicks": 20,
     "restraintTicks": 60,
     "restraintImmunityTicks": 40,
-    "exchangeExpiryTicks": 40,
+    "exchangeExpiryTicks": 80,
     "traceDelayTicks": 20,
     "traceVisibleTicks": 40,
     "exitMinimumTicks": 40,

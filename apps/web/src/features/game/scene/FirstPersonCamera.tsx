@@ -1,9 +1,10 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { worldActor } from './action-interpolation';
+import { sampleActor } from './action-interpolation';
 import { leadYaw, type TurnLead } from './turn-lead';
-import { CHARACTER } from './scene-model';
+import { leadPosition, type MoveLead } from './move-lead';
+import { CELL, CHARACTER } from './scene-model';
 export const verticalFov = (aspect: number) =>
   (2 * Math.atan(Math.tan((40 * Math.PI) / 180) / Math.max(0.1, aspect)) * 180) / Math.PI;
 /**
@@ -26,18 +27,23 @@ export function FirstPersonCamera({
   self,
   renderTick,
   turnLead = () => null,
+  moveLead = () => null,
 }: {
   self: { cell: Cell; dir: Dir; action?: Action | null };
   renderTick(): number | null;
   /** S15P21C204-388. 보낸 회전을 카메라가 먼저 따라간다. 서버 방향과 맞지 않으면 무시한다. */
   turnLead?(): TurnLead | null;
+  /** S15P21C204-389. 보낸 한 칸 이동을 카메라가 먼저 따라간다. 서버 이동과 맞지 않으면 무시한다. */
+  moveLead?(): MoveLead | null;
 }) {
   const size = useThree((state) => state.size);
   useFrame(({ camera }) => {
     const tick = renderTick();
-    const sample = worldActor(self, tick);
+    const sample = sampleActor(self, tick);
+    const at = leadPosition({ x: sample.x, z: sample.z }, self, moveLead(), tick);
     const placement = cameraPlacement({
-      ...sample,
+      x: at.x * CELL,
+      z: at.z * CELL,
       yaw: leadYaw(sample.yaw, self, turnLead(), tick),
     });
     camera.position.set(...placement.position);

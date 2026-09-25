@@ -1,9 +1,14 @@
 /**
  * Process-wide fair tick coordinator for product rooms. Each room keeps a monotonic `nextDue`;
- * lag L = max(0, now - nextDue) is re-measured right before every execution. A room whose lag
- * exceeds 250ms is not replayed: its overload callback fires once and it must abort via the
- * ABORT_MATCH control. Rooms that are merely late catch up at most 4 rounds per run and then
- * the coordinator yields to the event loop. Observability is emitted through the injected
+ * lag L = max(0, now - nextDue) is re-measured right before every execution. Late rooms catch up
+ * at most 4 rounds per run and then the coordinator yields to the event loop, so the room's tick
+ * count keeps following the wall clock the web synchronises to.
+ *
+ * S15P21C204-389. A lag past 250ms is a stall, not yet an overload: one GC pause or CPU spike
+ * used to void the whole round. A stall is counted once until the lag drops back under 250ms and
+ * the room keeps catching up. Only a lag past 1,000ms, or a third stall within 10s, is an
+ * overload: the room is not replayed, its overload callback fires once and it must abort via
+ * the ABORT_MATCH control. Observability is emitted through the injected
  * F-owned callback; the coordinator never performs IO itself. A tick that throws is contained:
  * `run()` never propagates it, the failing room is not replayed until it re-arms, and every
  * other room in the rotation still ticks. The overload callback is contained the same way: it
@@ -23,12 +28,22 @@ type Registration = TickCallbacks & {
   nextDue: number;
   executed: number;
   overloaded: boolean;
+  /** Inside a stall: counted once, until the lag drops back under `overloadMs`. */
+  stalling: boolean;
+  /** When recent stalls began, pruned to `stallWindowMs`. */
+  stalls: number[];
 };
 
 export type CoordinatorOptions = Readonly<{
   now: () => number;
   tickMs?: number;
+  /** Lag that starts a stall (default 250ms). */
   overloadMs?: number;
+  /** Lag that is an overload at once (default 1,000ms). */
+  abortLagMs?: number;
+  /** Stalls within `stallWindowMs` that make an overload (default 3 in 10,000ms). */
+  stallLimit?: number;
+  stallWindowMs?: number;
   maxRoundsPerRun?: number;
   emitMetric?: EmitMetric;
   /** Diagnostics for a thrown tick. The coordinator itself performs no IO. */
@@ -40,11 +55,17 @@ export class RoomTickCoordinator {
   private rotation = 0;
   readonly tickMs: number;
   readonly overloadMs: number;
+  readonly abortLagMs: number;
+  readonly stallLimit: number;
+  readonly stallWindowMs: number;
   readonly maxRoundsPerRun: number;
 
   constructor(private readonly options: CoordinatorOptions) {
     this.tickMs = options.tickMs ?? 50;
     this.overloadMs = options.overloadMs ?? 250;
+    this.abortLagMs = options.abortLagMs ?? 1000;
+    this.stallLimit = options.stallLimit ?? 3;
+    this.stallWindowMs = options.stallWindowMs ?? 10_000;
     this.maxRoundsPerRun = options.maxRoundsPerRun ?? 4;
   }
 
@@ -56,6 +77,8 @@ export class RoomTickCoordinator {
       nextDue: this.options.now() + this.tickMs,
       executed: 0,
       overloaded: false,
+      stalling: false,
+      stalls: [],
     });
   }
 
@@ -95,7 +118,15 @@ export class RoomTickCoordinator {
         const now = this.options.now();
         const lag = now - room.nextDue;
         if (lag < 0) continue;
-        if (lag > this.overloadMs) {
+        if (lag > this.overloadMs && !room.stalling) {
+          room.stalling = true;
+          room.stalls = room.stalls.filter((at) => now - at < this.stallWindowMs);
+          room.stalls.push(now);
+        } else if (lag <= this.overloadMs) room.stalling = false;
+        if (
+          lag > this.overloadMs &&
+          (lag > this.abortLagMs || room.stalls.length >= this.stallLimit)
+        ) {
           room.overloaded = true;
           room.nextDue = now;
           overloaded.push(id);
@@ -146,6 +177,8 @@ export class RoomTickCoordinator {
     const room = this.rooms.get(id);
     if (!room) return;
     room.overloaded = false;
+    room.stalling = false;
+    room.stalls = [];
     room.nextDue = this.options.now() + this.tickMs;
   }
 

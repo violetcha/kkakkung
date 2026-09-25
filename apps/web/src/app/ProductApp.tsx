@@ -1066,6 +1066,7 @@ export function ProductApp({
                     grabAnimationId={snapshot.grabAnimationId}
                     renderTick={() => runtime.current?.renderTick() ?? null}
                     turnLead={() => runtime.current?.turnLead() ?? null}
+                    moveLead={() => runtime.current?.moveLead() ?? null}
                     {...(metrics.current
                       ? { onMetrics: (frame) => metrics.current?.recordRender(frame) }
                       : {})}
