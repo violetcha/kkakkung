@@ -1044,7 +1044,7 @@ export function ProductApp({
                   payload: role ? { mode, role } : { mode },
                 })
               }
-              rematchAvailable={snapshot.roster?.kind !== 'showcase'}
+              showcase={snapshot.roster?.kind === 'showcase'}
               capacity={snapshot.roster?.capacity ?? 6}
             />
           )}

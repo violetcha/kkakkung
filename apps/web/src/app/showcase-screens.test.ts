@@ -69,7 +69,8 @@ it('keeps six seats for an ordinary roster that carries no capacity', () => {
   expect(html.match(/빈 자리/g)).toHaveLength(4);
 });
 
-it('ends a showcase result without rematch controls or a six-player prompt', () => {
+// S15P21C204-390. 시연 방도 같은 자리로 다시 할 수 있다. 역할 바꾸기는 없다.
+it('offers a showcase host a same-seat restart and the lobby, without a role swap or a six-player prompt', () => {
   const html = renderToStaticMarkup(
     createElement(ResultScreen, {
       round: roundFixture({
@@ -82,15 +83,15 @@ it('ends a showcase result without rematch controls or a six-player prompt', () 
       host: true,
       connectedCount: 4,
       onRematch() {},
-      rematchAvailable: false,
+      showcase: true,
       capacity: 4,
     }),
   );
   expect(html).toContain('도망자 승리');
   expect(html).toContain('탈출이 포획보다 많아');
-  expect(html).toContain('시연이 끝났습니다');
-  expect(html).not.toContain('<button');
-  expect(html).not.toContain('재경기');
+  expect(html).toContain('같은 자리로 다시 시작');
+  expect(html).toContain('로비로 돌아가기');
+  expect(html).not.toContain('역할 바꿔');
   expect(html).not.toContain('/6명');
   // 도망자 둘 중 둘이 탈출했으니 남은 도망자는 0 이다.
   expect(html).toContain('종료 시 남은 도망자 0');
