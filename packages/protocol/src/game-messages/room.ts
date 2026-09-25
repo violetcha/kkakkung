@@ -52,3 +52,23 @@ export const roomMapSchema = z.strictObject({
   size: z.enum(MAP_SIZES),
 });
 export type RoomMapMessage = z.infer<typeof roomMapSchema>;
+
+/**
+ * S15P21C204-401. 대기실에서 준비 완료한 사람의 얼굴을 보여 주는 사진 한 장. 대기실·장치 점검에는
+ * 미디어(LiveKit)가 없다. 그 단계에 미디어를 열면 대기방 30개가 경기 10개 몫의 미디어 좌석을
+ * 먼저 차지하므로, 가공 얼굴(흑백·저해상도) 사진 한 장만 게임 서버가 같은 방에 전한다. 서버는
+ * 메모리에만 두고 나가면 지운다. 원본 카메라 영상은 이 길로 가지 않는다.
+ */
+export const LOBBY_FACE_MAX_CHARS = 6000;
+export const LOBBY_FACE_SIZE_PX = 96;
+const LOBBY_FACE_PATTERN = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
+export const lobbyFaceImageSchema = z.string().max(LOBBY_FACE_MAX_CHARS).regex(LOBBY_FACE_PATTERN);
+/** 클라이언트 → 서버. 내 사진. */
+export const lobbyFaceUploadSchema = z.strictObject({ image: lobbyFaceImageSchema });
+export type LobbyFaceUpload = z.infer<typeof lobbyFaceUploadSchema>;
+/** 서버 → 클라이언트. 다른 사람의 사진. null 이면 그 사람 사진을 지운다. */
+export const lobbyFaceMessageSchema = z.strictObject({
+  playerId: z.string().min(1).max(128),
+  image: lobbyFaceImageSchema.nullable(),
+});
+export type LobbyFaceMessage = z.infer<typeof lobbyFaceMessageSchema>;

@@ -4,6 +4,9 @@ import {
   roomRosterSchema,
   roomAccessSchema,
   ROOM_REMOVED_CLOSE_CODE,
+  LOBBY_FACE_MAX_CHARS,
+  lobbyFaceMessageSchema,
+  lobbyFaceUploadSchema,
 } from '../src/game-messages/room.js';
 import {
   sessionRequestSchema,
@@ -112,5 +115,27 @@ describe('room roster and session contracts', () => {
     expect(
       productJoinOptionsSchema.safeParse({ token: 't', protocolVersion: '0.2.0' }).success,
     ).toBe(false);
+  });
+});
+
+// S15P21C204-401. 대기실 얼굴 사진은 작은 JPEG 데이터 주소 한 장만 받는다.
+describe('lobby face', () => {
+  const image = 'data:image/jpeg;base64,' + 'A'.repeat(100) + '==';
+  it('accepts one small JPEG and refuses anything else', () => {
+    expect(lobbyFaceUploadSchema.safeParse({ image }).success).toBe(true);
+    for (const bad of [
+      'data:image/png;base64,AAAA',
+      'https://example.com/face.jpg',
+      'data:image/jpeg;base64,<script>',
+      'data:image/jpeg;base64,' + 'A'.repeat(LOBBY_FACE_MAX_CHARS),
+    ])
+      expect(lobbyFaceUploadSchema.safeParse({ image: bad }).success).toBe(false);
+    expect(lobbyFaceUploadSchema.safeParse({ image, extra: 1 }).success).toBe(false);
+  });
+
+  it('carries a photo or its removal to the others', () => {
+    expect(lobbyFaceMessageSchema.safeParse({ playerId: 'p1', image }).success).toBe(true);
+    expect(lobbyFaceMessageSchema.safeParse({ playerId: 'p1', image: null }).success).toBe(true);
+    expect(lobbyFaceMessageSchema.safeParse({ playerId: '', image: null }).success).toBe(false);
   });
 });

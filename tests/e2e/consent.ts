@@ -8,7 +8,7 @@
 import type { Page } from '@playwright/test';
 
 export const E2E_CONSENT_STORAGE_KEY = 'kkakkung.media-consent';
-export const E2E_PRIVACY_NOTICE_VERSION = '2026-09-20';
+export const E2E_PRIVACY_NOTICE_VERSION = '2026-09-25';
 
 /** 기기가 이미 동의한 상태로 페이지를 연다. `page.goto` 전에 부른다. */
 export async function seedMediaConsent(page: Page): Promise<void> {

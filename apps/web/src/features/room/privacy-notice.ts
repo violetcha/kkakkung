@@ -8,7 +8,7 @@
  * 동의를 받은 안내문의 판. 문장을 고치면 이 값을 올린다(S15P21C204-292). 올리면 이미 동의한
  * 사람에게도 다시 묻는다. 사람이 읽고 동의한 것은 "그때 그 문장"이지 "안내문"이 아니다.
  */
-export const PRIVACY_NOTICE_VERSION = '2026-09-20';
+export const PRIVACY_NOTICE_VERSION = '2026-09-25';
 
 export interface PrivacyNoticeSentence {
   /** 사용자에게 보이는 문장. */
@@ -46,6 +46,18 @@ export const PRIVACY_NOTICE: readonly PrivacyNoticeSentence[] = [
     ],
   },
   {
+    // S15P21C204-401. 대기실·장치 점검에는 미디어가 없어, 얼굴이 1초 이상 잡히면 가공 면을 96px
+    // JPEG 한 장으로 줄여 게임 서버로 보낸다(lobby-face-snapshot). 서버는 대기실·장치 점검에서만
+    // 받고 메모리에만 두며, 나간 사람 것은 지운다(KkakkungRoom lobbyFaces). 파일·로그에 남기지 않는다.
+    text: '준비를 누른 뒤에는 가공한 얼굴 사진 한 장(흑백 저해상도)이 게임 서버를 거쳐 같은 방 참가자의 대기실 화면에 표시됩니다. 서버는 이 사진을 저장하지 않고 방에 있는 동안만 들고 있다가, 방을 나가면 지웁니다.',
+    evidence: [
+      'apps/web/src/features/media/lobby-face-snapshot.ts',
+      'apps/web/src/app/product-runtime.ts',
+      'packages/protocol/src/game-messages/room.ts',
+      'server/src/rooms/KkakkungRoom.ts',
+    ],
+  },
+  {
     // 검증 전 트랙은 attach·play하지 않지만 SFU가 바이트를 먼저 보낼 수 있다
     // (remote-faces pending). 출력 제어는 듣는 음량·모든 소리 끄기·친구별 목소리
     // 끄기(AudioControls)와 마이크 끄기(LocalControls)다.
@@ -59,8 +71,9 @@ export const PRIVACY_NOTICE: readonly PrivacyNoticeSentence[] = [
   },
   {
     // D-2026-09-11 / D-2026-09-15-01: publisher-permissions 는 서버가 수신 대상을 정하고
-    // 송신 앱이 그것을 적용하는 방식이다. 서버는 미디어 바이트를 받지 않으므로 상대가 보낸
-    // 것이 실제로 가공된 얼굴인지 확인할 수 없고, 결정 기록이 이 위험을 명시적으로 수용했다.
+    // 송신 앱이 그것을 적용하는 방식이다. 서버는 영상 미디어 바이트를 받지 않고, 대기실 사진(401)은
+    // 받아도 가공 여부를 판별하지 않는다. 그래서 상대가 보낸 것이 실제로 가공된 얼굴인지 확인할 수
+    // 없고, 결정 기록이 이 위험을 명시적으로 수용했다.
     // 기획서 §18.2 가 요구하는 "변조 송신 위험 명시"에 해당한다.
     text: '가공은 각자의 기기에서 이뤄집니다. 서비스는 상대가 보낸 것이 실제로 가공된 얼굴인지 검사하지 못하므로, 변조된 프로그램을 쓰는 참가자는 가공되지 않은 영상을 보낼 수도 있습니다.',
     evidence: [

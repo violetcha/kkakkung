@@ -311,6 +311,8 @@ export interface InteractionRuntime {
    * 새 프레임을 주지 않아 대기실 타일이 한 장에서 멈췄다. 면을 직접 그리면 그런 사정이 없다.
    */
   getProcessedFaceSurface?(): HTMLCanvasElement | null;
+  /** S15P21C204-401. 가공 면이 지금 실제 얼굴을 그리는지(기본 얼굴·유지 프레임이 아닌지). */
+  processedFaceLive?(): boolean;
   /** D-15. SDK 구독 사건을 넘긴다. */
   addRemoteTrack(track: RemoteTrack): void;
   removeRemoteTrack(trackSid: string): void;
@@ -697,6 +699,7 @@ export const createInteractionRuntime = (
   let modelReadyAt = 0;
   let lastSnapshot: SensorSnapshot | null = null;
   let compositor: FaceCompositor | null = null;
+  let lastFaceMode: 'live' | 'hold' | 'default' = 'default';
   const safeFace: SafeFacePolicy = createSafeFacePolicy();
   // S15P21C204-240. 준비 단계 기록.
   const readiness: ReadinessRecorder = createReadinessRecorder();
@@ -988,6 +991,7 @@ export const createInteractionRuntime = (
         visibility.removeEventListener('visibilitychange', onVisibilityChange);
         luminance = null;
         safeFace.reset();
+        lastFaceMode = 'default';
         calibrator.reset();
       },
       stopDevices: async () => {
@@ -1068,13 +1072,15 @@ export const createInteractionRuntime = (
     // 탭이 숨으면 새 프레임이 오지 않는다. hold 창을 기다리지 않고 바로 기본 얼굴로 내려
     // 직전 실사 프레임이 게시된 채 남지 않게 한다. 복귀하면 새 표본부터 다시 시작한다.
     if (visibility.isHidden()) {
-      compositor.drawMode(safeFace.forceDefault().mode, null);
+      lastFaceMode = safeFace.forceDefault().mode;
+      compositor.drawMode(lastFaceMode, null);
       luminance?.reset();
       conditionNotifier.reset();
       emitGuidance(null);
       return;
     }
     const decision = safeFace.decide(lastSnapshot, nowMs, runtimeGeneration);
+    lastFaceMode = decision.mode;
     const face = lastSnapshot?.face;
     compositor.drawMode(decision.mode, face?.status === 'valid' ? face.data : null);
     observeFaceCondition(nowMs);
@@ -1759,6 +1765,9 @@ export const createInteractionRuntime = (
     },
     getProcessedFaceSurface() {
       return compositor?.getSurface() ?? null;
+    },
+    processedFaceLive() {
+      return compositor !== null && lastFaceMode === 'live';
     },
 
     /**
