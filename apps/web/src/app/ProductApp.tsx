@@ -38,6 +38,7 @@ import { SettingsWindow } from '../features/game/flow/SettingsWindow';
 import { ControlsPane, DisplayPane, SoundPane } from '../features/game/flow/SettingsPanes';
 import { crosshairState, installHint } from '../features/game/flow/install-hint';
 import { interactPrompt } from '../features/game/flow/interact-prompt';
+import { rejoinNotice } from '../features/game/flow/rejoin-notice';
 import { QualityControl } from '../features/game/flow/QualityControl';
 import { MiniMap } from '../features/game/map/MiniMap';
 import { sessionErrorLabel } from '../features/room/session-error-labels';
@@ -478,6 +479,13 @@ export function ProductApp({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [worldVisible]);
+  // S15P21C204-391. 경기 중 끊긴 연결을 기다리는 동안의 안내.
+  const rejoin = rejoinNotice({
+    reconnecting: snapshot?.reconnecting,
+    phase: snapshot?.round?.phase ?? null,
+    selfId,
+    players: snapshot?.roster?.players,
+  });
   const playerNames = Object.fromEntries(
     snapshot?.roster?.players.map((player) => [player.playerId, player.nickname]) ?? [],
   );
@@ -1297,6 +1305,11 @@ export function ProductApp({
             </div>
           )}
           <CueFlash flash={snapshot.cueFlash} />
+          {rejoin && (
+            <p role="status" className="rejoin-notice">
+              {rejoin}
+            </p>
+          )}
           {/* 문구가 생기고 사라져도 페이지 높이가 바뀌지 않도록 자리를 항상 잡아 둔다 */}
           <p role="status" className="command-feedback">
             {snapshot.request?.type !== 'REMATCH' ? commandFeedback(snapshot.request) : null}

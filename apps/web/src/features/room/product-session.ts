@@ -151,8 +151,21 @@ export async function cancelSessionReservation(
   }).catch(() => undefined);
 }
 
+/**
+ * S15P21C204-391. 경기 중 끊기면 서버가 같은 자리를 25초 비워 둔다(MATCH_REJOIN_GRACE_MS). SDK 의 자동
+ * 재접속으로 그 안에 같은 연결로 돌아간다. 재시도 간격은 0.5초에서 3초까지 늘고 10번이면 약 27초라 서버
+ * 유예를 조금 넘긴다. 끊긴 동안 보낸 명령은 버린다: 돌아간 뒤 오래된 이동·설치가 한꺼번에 도착하면 안 된다.
+ */
+export const ROOM_RECONNECTION = Object.freeze({
+  maxRetries: 10,
+  delay: 500,
+  minDelay: 500,
+  maxDelay: 3000,
+  maxEnqueuedMessages: 0,
+});
+
 export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductRoomPort {
-  room.reconnection.enabled = false;
+  Object.assign(room.reconnection, { enabled: true, ...ROOM_RECONNECTION });
   return {
     get state() {
       return room.state;
@@ -163,17 +176,28 @@ export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductR
       room.onStateChange(handler);
       return () => room.onStateChange.remove(handler);
     },
+    // 끊김(drop)은 재접속을 시도하는 중이라 떠난 것이 아니다. 재시도가 모두 실패해야 onLeave 가 온다.
     onLeave(handler) {
       room.onLeave(handler);
-      room.onDrop(handler);
+      return () => room.onLeave.remove(handler);
+    },
+    onConnection(handler) {
+      const dropped = () => handler('dropped');
+      const restored = () => handler('restored');
+      room.onDrop(dropped);
+      room.onReconnect(restored);
       return () => {
-        room.onLeave.remove(handler);
-        room.onDrop.remove(handler);
+        room.onDrop.remove(dropped);
+        room.onReconnect.remove(restored);
       };
     },
+    // 재접속 시도 중의 소켓 오류는 다음 시도로 넘어가는 과정이다. 그때는 끊김으로 알리지 않는다.
     onError(handler) {
-      room.onError(handler);
-      return () => room.onError.remove(handler);
+      const report = () => {
+        if (!room.reconnection.isReconnecting) handler();
+      };
+      room.onError(report);
+      return () => room.onError.remove(report);
     },
     leave: () => (room.connection.isOpen ? room.leave() : Promise.resolve()),
   };
