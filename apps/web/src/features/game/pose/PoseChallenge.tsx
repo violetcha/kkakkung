@@ -3,6 +3,7 @@ import type { CommandInput } from '../../room/command-lifecycle';
 import type { PoseKind } from '../../input/InteractionRuntime';
 import { exitCandidate, facesExit } from './challenge-controller';
 import type { PoseMissReason } from './pose-evaluator';
+import { PoseFigure } from './PoseFigure';
 export const POSE_LABELS = {
   left: '내 왼팔 들기',
   right: '내 오른팔 들기',
@@ -10,26 +11,26 @@ export const POSE_LABELS = {
 } as const;
 
 /**
- * S15P21C204-344. 팔이 프레임 밖이면 자세가 맞아도 판정이 서지 않는데, 진행 막대만으로는
- * 그 이유를 알 수 없다. 조건을 항상 적어 둔다.
+ * 그림 옆 한 줄. 도전 중에는 긴 문장을 읽을 수 없으므로 지금 할 동작 하나만 짧게 쓴다. 어느 팔인지는
+ * 그림의 화살표가 짚는다. 긴 설명(`poseHintText`)은 화면 낭독용으로 남긴다.
  *
- * 처음에는 팔 가시성을 프레임마다 읽어 안 보일 때만 띄웠다. 그러면 팔이 경계에 걸칠 때마다
- * 문구가 깜빡인다 — S15P21C204-330 과 같은 실수다. 순간 신호를 화면에 그대로 물리지 않는다.
- * 조건은 도전 내내 변하지 않으므로 항상 같은 자리에 같은 문구로 둔다.
- *
- * S15P21C204-354. 한 팔만 드는 자세는 **드는 쪽 팔만** 화면에 들어오면 된다. 내린 팔까지
- * 요구하던 판정을 고쳤으므로 이 문구도 같이 고친다 — 안내가 실제 판정보다 엄하면 사람들이
- * 불필요하게 물러선다. 경기와 혼자 체험이 같은 문구를 쓰도록 여기 한 곳에만 둔다.
+ * 늘 떠 있던 팔 프레이밍 문장(S15P21C204-344)은 뺐다. 팔이 화면 밖이면 원인 코드가 서므로
+ * 그때만 '한 걸음 뒤로'를 띄운다. 늘 보이는 문장은 읽히지 않는다.
  */
-export function PoseArmsNotice({ kind }: { kind: PoseKind }) {
-  return (
-    <p className="pose-arms-notice">
-      {kind === 'y'
-        ? '두 팔의 팔꿈치와 손목이 모두 화면에 들어와야 인식됩니다.'
-        : `${kind === 'left' ? '왼팔' : '오른팔'}의 팔꿈치와 손목이 화면에 들어와야 인식됩니다. 반대쪽 팔은 내려도 됩니다.`}{' '}
-      진행이 오르지 않으면 카메라에서 조금 물러나 주세요.
-    </p>
-  );
+export function poseCueText(
+  hint: PoseMissReason | null,
+  progress: number,
+  waitingMinimum: boolean,
+): string {
+  if (hint === 'sensor') return '카메라를 봐 주세요';
+  if (hint === 'trunk') return '얼굴·어깨가 보이게';
+  if (hint === 'arm-offscreen') return '한 걸음 뒤로';
+  if (hint === 'arm-low') return '팔을 더 높이';
+  if (hint === 'arm-spread') return '팔을 더 벌리기';
+  if (hint === 'other-arm') return '반대 팔은 내리기';
+  if (progress >= 1) return waitingMinimum ? '좋아요, 조금만 더' : '좋아요!';
+  if (progress > 0) return '그대로 유지!';
+  return '그림처럼 팔을 드세요';
 }
 
 /** 디바운스를 거친 원인 코드를 문구로 옮긴다. 판정기는 문구를 모른다. */
@@ -68,37 +69,35 @@ export function PoseChallenge({
     <section className="game-panel" aria-label="출구 도전">
       <h2>{challenge ? POSE_LABELS[challenge.poseKind] : '내 출구'}</h2>
       {challenge ? (
-        <>
-          <p>
-            얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요. 도전 중에도 포획될 수
-            있습니다.
-          </p>
-          <progress aria-label="유효 자세 유지" max={1} value={progress} />
-          <PoseArmsNotice kind={challenge.poseKind} />
-          {/* 왜 진행이 안 오르는지. 컨트롤러가 디바운스한 뒤에만 값이 서므로 깜빡이지 않는다. */}
-          {hint && (
-            <p className="pose-hint" role="status">
-              {poseHintText(hint, challenge.poseKind)}
+        <div className="pose-guide">
+          <PoseFigure kind={challenge.poseKind} progress={progress} hint={hint} />
+          <div className="pose-guide-side">
+            <p className="pose-guide-cue" data-miss={hint ? 'true' : undefined} aria-hidden>
+              {poseCueText(hint, progress, tick < challenge.minSuccessTick)}
             </p>
-          )}
-          <p>
-            {Math.max(0, Math.ceil((challenge.expiresAtTick - tick) / 20))}초 남음
-            {tick < challenge.minSuccessTick ? ' · 최소 수행 시간 확인 중' : ''}
-          </p>
-          <button
-            className="quiet"
-            onClick={() =>
-              send({ type: 'EXIT_CANCEL', payload: { challengeId: challenge.challengeId } })
-            }
-          >
-            도전 취소
-          </button>
-        </>
+            {/* 화면 낭독기는 그림을 못 보므로 같은 내용을 문장으로 준다. */}
+            <p className="a11y-only" role="status">
+              {hint
+                ? poseHintText(hint, challenge.poseKind)
+                : '얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요.'}
+            </p>
+            <progress className="a11y-only" aria-label="유효 자세 유지" max={1} value={progress} />
+            <p className="pose-guide-meta">
+              {Math.max(0, Math.ceil((challenge.expiresAtTick - tick) / 20))}초 · 잡힐 수 있어요
+            </p>
+            <button
+              className="quiet"
+              onClick={() =>
+                send({ type: 'EXIT_CANCEL', payload: { challengeId: challenge.challengeId } })
+              }
+            >
+              Esc 취소
+            </button>
+          </div>
+        </div>
       ) : (
         <>
-          <p>
-            {starting ? '서버의 도전 시작을 확인하고 있습니다.' : '출구 벽을 향한 뒤 시작하세요.'}
-          </p>
+          <p>{starting ? '도전 준비 중…' : '출구 벽을 마주 보고 E'}</p>
           <button
             disabled={
               starting ||
