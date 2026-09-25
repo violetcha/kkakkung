@@ -280,14 +280,28 @@ function drawMarkerShape(
   ctx.fill();
 }
 
+/**
+ * S15P21C204-398. 전체 지도 한 변. 방 맵 크기(15·23·31)를 받되, 이미 본 지형이 그보다 크면 넓힌다.
+ * 방 크기와 다른 템플릿(예: 비교 실행의 32칸)을 골라도 본 칸이 잘리지 않는다.
+ */
+export function fullMapCells(
+  cells: number | undefined,
+  terrain: readonly Readonly<{ x: number; y: number }>[] = [],
+): number {
+  let side = cells ?? MINIMAP_CELLS;
+  for (const item of terrain) side = Math.max(side, item.x + 1, item.y + 1);
+  return side;
+}
+
 export function drawMinimap(ctx: MinimapContext, input: MinimapInput): MinimapLayout {
   const tick = input.tick ?? 0;
   const model = mapDrawModel(input.view, tick, input.operatorExit ?? null);
   const windowed = input.window !== undefined && model !== null;
-  const zoomed = windowed ? zoomedWindow(model!.self, input.window!, input.zoom ?? 0) : null;
+  const full = fullMapCells(input.cells, model?.terrain);
+  const zoomed = windowed ? zoomedWindow(model!.self, input.window!, input.zoom ?? 0, full) : null;
   const layout = minimapLayout(
     input.size,
-    zoomed ? zoomed.cells : (input.cells ?? MINIMAP_CELLS),
+    zoomed ? zoomed.cells : full,
     // 전환 도중에만 소수 칸을 허용한다. 창과 전체 지도에 머무는 동안은 정수 픽셀 그대로다.
     { fractional: zoomed !== null && zoomed.zoom > 0 && zoomed.zoom < 1 },
   );

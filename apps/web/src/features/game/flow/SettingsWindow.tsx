@@ -60,7 +60,12 @@ export function SettingsWindow({
       <div className="pause-body">
         <nav className="pause-tabs" aria-label="설정 갈래">
           {lead && (
-            <button type="button" className="pause-resume" onClick={lead.run}>
+            <button
+              type="button"
+              className="pause-resume"
+              disabled={lead.disabled ?? false}
+              onClick={lead.run}
+            >
               {lead.label}
             </button>
           )}

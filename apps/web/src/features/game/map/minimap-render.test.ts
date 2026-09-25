@@ -14,6 +14,7 @@ import {
   MINIMAP_WINDOW_CELLS,
   MINIMAP_CELLS,
   zoomedWindow,
+  fullMapCells,
   type MinimapContext,
 } from './minimap-render';
 
@@ -465,5 +466,28 @@ describe('drawMinimap zoom', () => {
     expect(at(0)).not.toBe(at(0.4));
     expect(at(0.4)).not.toBe(at(1));
     expect(at(1)).toBe(at(1));
+  });
+});
+
+// S15P21C204-398. 전체 지도는 방 맵 격자를 담는다. 32칸 고정이면 작은 맵이 지도 한쪽에 몰렸다.
+describe('full map size', () => {
+  it('fits the room grid and widens only for terrain already seen beyond it', () => {
+    expect(fullMapCells(15)).toBe(15);
+    expect(fullMapCells(undefined)).toBe(MINIMAP_CELLS);
+    expect(fullMapCells(15, [{ x: 20, y: 3 }])).toBe(21);
+    const { ctx } = recorder();
+    expect(drawMinimap(ctx, { view: after(), size: 300, cells: 15 }).cells).toBe(15);
+  });
+
+  it('zooms the window out to the room grid, not to 32 cells', () => {
+    const { ctx } = recorder();
+    const layout = drawMinimap(ctx, {
+      view: after(),
+      size: 300,
+      cells: 15,
+      window: MINIMAP_WINDOW_CELLS,
+      zoom: 1,
+    });
+    expect(layout.cells).toBe(15);
   });
 });

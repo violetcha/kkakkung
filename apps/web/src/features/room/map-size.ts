@@ -33,3 +33,8 @@ export const MAP_SIZE_OPTIONS: readonly MapSizeOption[] = Object.freeze(
 
 /** 지금 제품 기본값인 `maze-v1`(31x31)과 같은 크기. */
 export const DEFAULT_MAP_SIZE: MapSizeId = 'large';
+
+/** S15P21C204-398. 고른 크기의 실제 미로 격자 한 변. 미니맵 전체 지도가 이 칸 수를 담는다. */
+export function mapGrid(id: MapSizeId): number {
+  return DISPLAY[id].grid;
+}
