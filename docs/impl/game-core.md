@@ -94,7 +94,7 @@
 
 | 값                                                              |  JSON 실제 값 | 검증 규칙·단위                                          |
 | --------------------------------------------------------------- | ------------: | ------------------------------------------------------- |
-| `tuningVersion`                                                 |      `mvp-v3` | 비어 있지 않은 문자열                                   |
+| `tuningVersion`                                                 |      `mvp-v4` | 비어 있지 않은 문자열                                   |
 | `match.tickMs`                                                  |            50 | 정확히 50ms                                             |
 | `match.moveTicks`                                               |            12 | 정수 4~40틱                                             |
 | `match.turnTicks`                                               |             8 | 정수 2~40틱, `moveTicks` 이하                           |
@@ -102,7 +102,7 @@
 | `match.roundTicks`                                              |          3600 | 정확히 3600틱(180초)                                    |
 | `match.installationTicks` / `armTicks`                          |       10 / 20 | 고정. 0.5초 설치, 설치 끝 1초 뒤 무장                   |
 | `match.restraintTicks` / `restraintImmunityTicks`               |       60 / 40 | 고정. 3초 구속, 2초 면역(S15P21C204-386)                |
-| `match.exchangeExpiryTicks`                                     |            40 | 고정. 2초                                               |
+| `match.exchangeExpiryTicks`                                     |            80 | 고정. 4초(S15P21C204-389에서 40→80)                     |
 | `match.traceDelayTicks` / `traceVisibleTicks`                   |       20 / 40 | 고정. 1초 지연, 2초 노출                                |
 | `match.exitMinimumTicks` / `exitExpiryTicks` / `exitRetryTicks` | 40 / 160 / 10 | 고정. 2초 최소, 8초 만료, 0.5초 재시도 제한             |
 | `layout.minRunnerDistance`                                      |            18 | 양의 유한수. 도망자 시작 간 경로 이동 수 하한           |
@@ -116,7 +116,7 @@
 
 근거: [mvp-v1.json:2](../../server/config/tuning/mvp-v1.json#L2), [mvp-v1.json:4](../../server/config/tuning/mvp-v1.json#L4), [mvp-v1.json:21](../../server/config/tuning/mvp-v1.json#L21), [mvp-v1.json:30](../../server/config/tuning/mvp-v1.json#L30), [tuning.ts:13](../../packages/game-core/src/match/tuning.ts#L13), [tuning.ts:34](../../packages/game-core/src/match/tuning.ts#L34), [tuning.ts:100](../../packages/game-core/src/match/tuning.ts#L100), [tuning.ts:111](../../packages/game-core/src/match/tuning.ts#L111), [tuning.ts:115](../../packages/game-core/src/match/tuning.ts#L115), [tuning.ts:127](../../packages/game-core/src/match/tuning.ts#L127), [tuning.ts:131](../../packages/game-core/src/match/tuning.ts#L131), [select-with-fallback.ts:161](../../packages/game-core/src/match/map/select-with-fallback.ts#L161).
 
-`validateTuning`은 문제를 모두 모아 `{ ok: false, issues }`로 돌려주고, 통과하면 동결된 `{ tuningVersion, match, layout, selection }`을 돌려준다. `match.tuningVersion`에는 최상위 버전 문자열이 복사된다. 서버 조립은 검증에 실패하면 `INVALID_PRODUCT_TUNING`으로 기동을 멈춘다. 파일명은 `mvp-v1.json`인데 내부 버전은 `mvp-v3`다.
+`validateTuning`은 문제를 모두 모아 `{ ok: false, issues }`로 돌려주고, 통과하면 동결된 `{ tuningVersion, match, layout, selection }`을 돌려준다. `match.tuningVersion`에는 최상위 버전 문자열이 복사된다. 서버 조립은 검증에 실패하면 `INVALID_PRODUCT_TUNING`으로 기동을 멈춘다. 파일명은 `mvp-v1.json`인데 내부 버전은 `mvp-v4`다.
 
 | 튜닝 오류 코드  | 발생 조건                                                                                                                                                                                                |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -516,7 +516,7 @@
 ## 15. 확인된 한계와 코드 쪽 발견
 
 - 제품 서버는 2:2 쇼케이스 배치를 3:3 선택 뒤 빈 자리를 떼어 만든다. 코어의 `sortRoster`와 폴백 슬롯 결합은 3:3만 받으므로 2:2를 선택기에 직접 넣으면 거절된다.
-- 튜닝 파일명은 `mvp-v1.json`인데 내부 `tuningVersion`은 `mvp-v3`다. 서버 기본 경로도 `mvp-v1.json`이다. 의도는 코드로 판단할 수 없다.
+- 튜닝 파일명은 `mvp-v1.json`인데 내부 `tuningVersion`은 `mvp-v4`다. 서버 기본 경로도 `mvp-v1.json`이다. 의도는 코드로 판단할 수 없다.
 - 탈출 도전 주변에는 `stepMatch`에서 도달할 수 없는 방어 코드가 있다. 도전은 동작이 없을 때만 시작되고 보류 입력을 지운다. 도전 중에는 이동·회전 명령이 거절되고, 대기 동작 재개와 `PLACE_PLAYER`도 도전자를 건너뛴다. 그래서 도전자의 셀·방향은 바뀌지 않고, 완료된 이동이 없으니 함정 후보도 되지 않는다. 출구는 소유자가 개인 종료할 때만 닫히는데, 그때 도전은 이미 지워진다. 도달 불가 분기는 다음과 같다.
 
   | 위치                                           | 도달 불가 분기                                                                     | 실제로 먼저 걸리는 곳                                           |

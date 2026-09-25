@@ -54,26 +54,53 @@ describe('RoomTickCoordinator', () => {
     expect(h.coordinator.run().executed).toBe(1);
   });
 
-  it('invalidates only the room whose lag exceeds 250ms and all rooms on a process-wide stall', () => {
+  // S15P21C204-389. A single stall past 250ms no longer voids the round: the room catches up.
+  it('catches up after one stall and overloads only on a third stall within 10s', () => {
     const h = setup();
     h.register('a');
-    h.clock.set(50);
-    h.coordinator.run();
-    h.clock.set(100);
+    const stall = (to: number) => {
+      h.clock.set(to);
+      const result = h.coordinator.run();
+      // Drain the catch-up so the next stall starts from an on-time room.
+      while (h.coordinator.run().executed > 0);
+      return result;
+    };
+    expect(stall(50 + 300).overloaded).toEqual([]);
+    expect(h.ticks.a!.length).toBeGreaterThanOrEqual(7);
+    expect(h.overloads.a).toEqual([]);
+    expect(stall(1_000).overloaded).toEqual([]);
+    const third = stall(1_700);
+    expect(third.overloaded).toEqual(['a']);
+    expect(h.overloads.a).toHaveLength(1);
+  });
+
+  it('counts one stall once while it catches up, and forgets stalls older than 10s', () => {
+    const h = setup();
+    h.register('a');
+    // One 900ms stall takes several runs to catch up; it is still a single stall.
+    h.clock.set(50 + 900);
+    for (let i = 0; i < 10; i++) expect(h.coordinator.run().overloaded).toEqual([]);
+    h.clock.set(1_500);
+    while (h.coordinator.run().executed > 0);
+    // Keep the room on time until the first stall ages out of the 10s window.
+    for (let at = 1_550; at <= 11_000; at += 50) {
+      h.clock.set(at);
+      h.coordinator.run();
+    }
+    // Only one stall (1,500) is still in the window, so this second one does not overload.
+    h.clock.set(11_050 + 300);
+    expect(h.coordinator.run().overloaded).toEqual([]);
+    expect(h.overloads.a).toEqual([]);
+  });
+
+  it('overloads at once past 1,000ms, and every room on a process-wide stall', () => {
+    const h = setup();
+    h.register('a');
     h.register('b');
-    // a is due at 100, b at 150. At 352 only a exceeds the 250ms limit.
-    h.clock.set(352);
-    const first = h.coordinator.run();
-    expect(first.overloaded).toEqual(['a']);
-    expect(h.overloads.a).toEqual([252]);
-    expect(h.overloads.b).toEqual([]);
-    expect(h.ticks.b).toHaveLength(4);
-    h.coordinator.rearm('a');
-    // Process-wide stall: both rooms fall behind together and each aborts exactly once.
-    h.clock.set(352 + 50 + 300);
-    const second = h.coordinator.run();
-    expect(second.overloaded.sort()).toEqual(['a', 'b']);
-    expect(h.overloads.a).toHaveLength(2);
+    h.clock.set(50 + 1_200);
+    const result = h.coordinator.run();
+    expect(result.overloaded.sort()).toEqual(['a', 'b']);
+    expect(h.overloads.a).toHaveLength(1);
     expect(h.overloads.b).toHaveLength(1);
     expect(h.coordinator.run().overloaded).toEqual([]);
   });
@@ -166,8 +193,9 @@ describe('RoomTickCoordinator', () => {
     });
     const bTicks: number[] = [];
     coordinator.register('b', { onTick: (lag) => bTicks.push(lag), onOverload: () => undefined });
-    clock.set(400);
-    // 'b' is just as late, so it overloads too; only 'a' throws.
+    // S15P21C204-389. Past 1,000ms is an overload at once. 'b' is just as late, so it overloads
+    // too; only 'a' throws.
+    clock.set(1_200);
     let result!: ReturnType<RoomTickCoordinator['run']>;
     expect(() => (result = coordinator.run())).not.toThrow();
     expect(result.overloaded.sort()).toEqual(['a', 'b']);

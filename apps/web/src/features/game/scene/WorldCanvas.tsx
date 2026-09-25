@@ -19,6 +19,7 @@ import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
 import type { TurnLead } from './turn-lead';
+import type { MoveLead } from './move-lead';
 import { CELL } from './scene-model';
 
 /**
@@ -45,6 +46,7 @@ export function WorldCanvas({
   grabAnimationId,
   renderTick = () => null,
   turnLead,
+  moveLead,
   paused = false,
   onMetrics,
 }: {
@@ -64,6 +66,8 @@ export function WorldCanvas({
   renderTick?(): number | null;
   /** S15P21C204-388. 내가 보낸 회전을 카메라가 먼저 따라간다(관전 중에는 쓰지 않는다). */
   turnLead?(): TurnLead | null;
+  /** S15P21C204-389. 내가 보낸 한 칸 이동을 카메라가 먼저 따라간다. */
+  moveLead?(): MoveLead | null;
   /**
    * S15P21C204-295. 멈춘 동안(설정 창) 장면을 그대로 세운다. 마지막 화면은 남으므로 뒤에
    * 복도가 비치는 것은 그대로이고, 느린 기기에서 창 조작이 밀리지 않는다.
@@ -101,6 +105,7 @@ export function WorldCanvas({
               self={viewpoint}
               renderTick={renderTick}
               {...(self && turnLead ? { turnLead } : {})}
+              {...(self && moveLead ? { moveLead } : {})}
             />
             {theme === 'block' ? (
               <BlockLighting self={viewpoint} renderTick={renderTick} />

@@ -181,7 +181,7 @@ describe('map exchange cancel and concurrent requests', () => {
   it('rejects a cancel at the deadline and lets the sweep close the session once', () => {
     const opened = openSession(threeRunners());
     const before = ['r-a', 'r-b'].map((id) => knowledgeSnapshot(opened, id));
-    const expired = step(opened, 141, [command('r-a', 'EXCHANGE_CANCEL', { exchangeId: 'xch-1' })]);
+    const expired = step(opened, 181, [command('r-a', 'EXCHANGE_CANCEL', { exchangeId: 'xch-1' })]);
     expect(expired.outcomes).toEqual([
       expect.objectContaining({ result: 'rejected', code: 'EXPIRED' }),
     ]);
@@ -196,10 +196,10 @@ describe('map exchange cancel and concurrent requests', () => {
 
   it('expires an untouched session on its own tick without any outcome', () => {
     const opened = openSession(threeRunners());
-    const alive = step(opened, 140);
+    const alive = step(opened, 180);
     expect(alive.state.exchanges.size).toBe(1);
     expect(canceledEvents(alive.events)).toEqual([]);
-    const swept = step(alive.state, 141);
+    const swept = step(alive.state, 181);
     expect(swept.outcomes).toEqual([]);
     expect(swept.state.exchanges.size).toBe(0);
     expect(canceledEvents(swept.events)).toEqual([

@@ -67,8 +67,8 @@ describe('map exchange request and accept', () => {
       fromPlayerId: 'r-a',
       toPlayerId: 'r-b',
       requestedTick: 101,
-      // 2 seconds is 40 game ticks.
-      expiresAtTick: 141,
+      // 4 seconds is 80 game ticks (S15P21C204-389).
+      expiresAtTick: 181,
     });
     expect(getPlayerSelf(result.state, 'r-a')).toMatchObject({
       exchange: {
@@ -76,11 +76,11 @@ describe('map exchange request and accept', () => {
         fromPlayerId: 'r-a',
         toPlayerId: 'r-b',
         direction: 'outgoing',
-        expiresAtTick: 141,
+        expiresAtTick: 181,
       },
     });
     expect(getPlayerSelf(result.state, 'r-b')).toMatchObject({
-      exchange: { direction: 'incoming', expiresAtTick: 141 },
+      exchange: { direction: 'incoming', expiresAtTick: 181 },
     });
 
     // The request alone changes no knowledge on either side.
@@ -223,7 +223,7 @@ describe('map exchange request and accept', () => {
       command('r-a', 'EXCHANGE_REQUEST', { targetPlayerId: 'r-b' }),
     ]).state;
     const before = ['r-a', 'r-b'].map((id) => knowledgeSnapshot(opened, id));
-    const expired = step(opened, 141, [command('r-b', 'EXCHANGE_ACCEPT', { exchangeId: 'xch-1' })]);
+    const expired = step(opened, 181, [command('r-b', 'EXCHANGE_ACCEPT', { exchangeId: 'xch-1' })]);
     expect(expired.outcomes).toEqual([
       expect.objectContaining({ result: 'rejected', code: 'EXPIRED' }),
     ]);
