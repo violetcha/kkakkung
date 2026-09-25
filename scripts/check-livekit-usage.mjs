@@ -304,6 +304,16 @@ export async function collectUsage(options) {
   return { window, records };
 }
 
+/**
+ * S15P21C204-394. State to keep after a failed Analytics call. The period is not filled in on a
+ * failed first run: that used to mark the month as started, so the next run skipped the
+ * LIVEKIT_USAGE_BASELINE_MINUTES check and counted this month from zero, the baseline never
+ * applied. A failure only records the failure; the first successful run still takes the baseline.
+ */
+export function failureState(previous, code, atMs) {
+  return { ...previous, lastFailureCode: code, lastFailureNoticeAtMs: atMs };
+}
+
 export function formatFailureNotice(code, label = 'kkakkung') {
   return [
     `:warning: **LiveKit 사용량 확인 실패** · ${label}`,
@@ -445,14 +455,8 @@ async function main() {
   } catch (error) {
     const code = error instanceof UsageMonitorError ? error.code : 'ANALYTICS_FAILED';
     const notice = formatFailureNotice(code, args.label);
-    const failureState = {
-      ...previous,
-      periodId: previous.periodId ?? periodId,
-      lastFailureCode: code,
-      lastFailureNoticeAtMs: nowMs,
-    };
     const delivered = dryRun || (await send(webhook, process.env.LIVEKIT_USAGE_CHANNEL, notice));
-    if (delivered) saveState(statePath, failureState);
+    if (delivered) saveState(statePath, failureState(previous, code, nowMs));
     console.error(`usage: ${code}`);
     return code === 'ANALYTICS_UNAUTHORIZED' ? 3 : delivered ? 1 : 1;
   }

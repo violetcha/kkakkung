@@ -27,6 +27,7 @@ import {
   type RoomMapMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import { mediaFailureText, mediaRequestError } from '../features/media/media-request-error';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import { turnLeadActive, type TurnLead } from '../features/game/scene/turn-lead';
 import { moveLeadActive, moveLeadTarget, type MoveLead } from '../features/game/scene/move-lead';
@@ -586,7 +587,7 @@ export function bindProductRoom(
       cache: 'no-store',
       redirect: 'error',
     });
-    if (!response.ok) throw new Error('MEDIA_UNAVAILABLE');
+    if (!response.ok) throw await mediaRequestError(response);
     if (response.status === 204) return null;
     return response.json() as Promise<unknown>;
   }
@@ -1154,9 +1155,9 @@ export function bindProductRoom(
         if (!current() || !sameMediaScope(grant)) return;
         send('media-bindings-refresh', { ...mediaScope, lastBindingRevision: 0 });
         updateLoading();
-      } catch {
+      } catch (cause) {
         if (current() && (recovery || !recoveryQueued))
-          publish({ error: `미디어 준비에 실패했습니다. (${mediaStage})` });
+          publish({ error: mediaFailureText(mediaStage, cause) });
       }
     });
     await mediaJob;
