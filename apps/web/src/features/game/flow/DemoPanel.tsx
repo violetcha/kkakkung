@@ -80,7 +80,8 @@ export function DemoPanel({
 }) {
   const [options, setOptions] = useState<Record<string, DemoOptionValues>>({});
   const running = demo.running !== null;
-  const beforeGame = phase != null && !['PLAYING', 'RESULT'].includes(phase);
+  // 패널은 팀 연습과 경기 중에만 보인다(ProductApp). 경기 전이면 팀 연습이다(S15P21C204-396).
+  const beforeGame = phase != null && phase !== 'PLAYING';
   const available = demo.available as readonly AvailableScenario[];
   const groups = new Map<string, AvailableScenario[]>();
   for (const scenario of available) {
@@ -120,12 +121,7 @@ export function DemoPanel({
           )}
           {onAbort && (
             // 대본이 도는 중에도 누를 수 있다. 막힌 라운드를 끝내는 유일한 길이 이 단추다(313).
-            <button
-              type="button"
-              className="demo-abort"
-              disabled={beforeGame || phase === 'RESULT'}
-              onClick={onAbort}
-            >
+            <button type="button" className="demo-abort" disabled={beforeGame} onClick={onAbort}>
               라운드 종료
             </button>
           )}

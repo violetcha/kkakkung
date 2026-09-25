@@ -743,6 +743,7 @@ export function createApplication<State = unknown>(
       }, 1000);
       reservationTimer.unref();
       histogram.enable();
+      let lastJournalWritable: boolean | null = null;
       metricsTimer = setInterval(() => {
         sampleProcess();
         if (httpLimiter) {
@@ -754,6 +755,18 @@ export function createApplication<State = unknown>(
               atMs: monotonicNow(),
             });
           }
+        }
+        // S15P21C204-396. The journal alert had no producer. Report only changes: a sample each
+        // second would repeat the same metric log line for nothing.
+        const writable = media?.journalWritable?.() ?? null;
+        if (writable !== null && writable !== lastJournalWritable) {
+          lastJournalWritable = writable;
+          emitMetric({
+            name: 'operations.journal.writable',
+            value: writable ? 1 : 0,
+            unit: 'count',
+            atMs: monotonicNow(),
+          });
         }
         for (const sample of metrics.drain()) {
           alerts.observe(sample);

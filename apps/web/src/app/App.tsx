@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   consumeDemoSession,
   consumeInvitation,
+  consumeMatchRejoin,
   consumeShowcaseSession,
   invitationRoom,
 } from '../features/room/product-session';
@@ -31,6 +32,11 @@ const showcaseSession =
   isDemoAdmin || isShowcase || demoSession
     ? null
     : consumeShowcaseSession(window.location, window.history);
+// S15P21C204-396. 이 탭이 경기 중 새로고침했으면 같은 자리로 돌아간다. 초대·데모·시연 진입이 먼저다.
+const matchRejoin =
+  isDemoAdmin || isShowcase || demoSession || showcaseSession || entryHash
+    ? null
+    : consumeMatchRejoin();
 // S15P21C204-363. 시연·데모 조각의 `room=` 은 그 세션의 방이지 초대 방 코드가 아니다. 입장 폼에
 // "친구 방 참가 + 방 코드" 로 미리 채워지지 않게 한다.
 const initialRoom =
@@ -73,6 +79,7 @@ export default function App() {
       initialRoom={navigation.initialRoom}
       {...(demoSession ? { demoSession } : {})}
       {...(showcaseSession ? { showcaseSession } : {})}
+      {...(matchRejoin ? { matchRejoin } : {})}
     />
   );
 }

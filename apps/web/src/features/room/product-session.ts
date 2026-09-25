@@ -126,9 +126,18 @@ export async function requestDemoRoom(
   return result.data;
 }
 
-export function joinProductRoom(session: SessionResponse) {
+function roomServerUrl() {
   const configured = (import.meta.env.VITE_COLYSEUS_URL as string | undefined)?.trim();
-  const url = configured || (import.meta.env.DEV ? 'ws://127.0.0.1:2567' : window.location.origin);
+  return configured || (import.meta.env.DEV ? 'ws://127.0.0.1:2567' : window.location.origin);
+}
+
+/** S15P21C204-396. 새로고침 뒤 같은 경기 자리로 돌아간다. 서버가 25초 비워 둔 자리다(391). */
+export function reconnectProductRoom(reconnectionToken: string) {
+  return new Client(roomServerUrl()).reconnect<PublicMatchState>(reconnectionToken);
+}
+
+export function joinProductRoom(session: SessionResponse) {
+  const url = roomServerUrl();
   return new Client(url).joinOrCreate<PublicMatchState>('kkakkung', {
     token: session.sessionToken,
     roomCode: session.roomCode,
@@ -349,4 +358,98 @@ export function forgetDemoSession(storage: DemoSessionStorage | null = browserSe
   } catch {
     // 지우지 못해도 서버가 끝난 세션을 거절한다.
   }
+}
+
+/**
+ * S15P21C204-396. 경기 중 새로고침을 넘어 같은 자리로 돌아가기 위한 기록. 서버는 경기(PLAYING) 중 끊긴
+ * 사람의 자리를 25초 비워 두는데(391) 재접속 토큰이 메모리에만 있어 새로고침하면 쓸 수 없었다. 페이지를
+ * 떠나는 순간에만 이 탭의 sessionStorage 에 적고, 다음 페이지가 읽자마자 지운다. 적은 뒤 25초가 지났으면
+ * 서버 자리도 풀렸으므로 버린다. 미디어 세대는 새 페이지가 이전 세대를 이어받아 교체를 요청하는 데 쓴다.
+ */
+export type MatchRejoin = Readonly<{
+  session: SessionResponse;
+  reconnectionToken: string;
+  mediaScope: Readonly<{
+    matchId: string;
+    mediaInstanceId: string;
+    receiverGeneration: number;
+  }> | null;
+  savedAt: number;
+}>;
+const MATCH_REJOIN_KEY = 'kkakkung.match-rejoin';
+export const MATCH_REJOIN_WINDOW_MS = 25_000;
+
+export function rememberMatchRejoin(
+  value: Omit<MatchRejoin, 'savedAt'>,
+  now = Date.now(),
+  storage: DemoSessionStorage | null = browserSessionStorage(),
+) {
+  try {
+    storage?.setItem(MATCH_REJOIN_KEY, JSON.stringify({ ...value, savedAt: now }));
+  } catch {
+    // 적지 못하면 새로고침 뒤 돌아오지 못할 뿐이다. 서버 유예가 끝나면 전처럼 무효다.
+  }
+}
+
+export function forgetMatchRejoin(storage: DemoSessionStorage | null = browserSessionStorage()) {
+  try {
+    storage?.removeItem(MATCH_REJOIN_KEY);
+  } catch {
+    // 지우지 못해도 25초가 지나면 읽는 쪽이 버린다.
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** 이 탭이 방금 떠난 경기로 돌아갈 기록. 읽자마자 지운다. 형식이 틀리거나 25초가 지났으면 null. */
+export function consumeMatchRejoin(
+  now = Date.now(),
+  storage: DemoSessionStorage | null = browserSessionStorage(),
+): MatchRejoin | null {
+  let stored: unknown;
+  try {
+    stored = JSON.parse(storage?.getItem(MATCH_REJOIN_KEY) ?? 'null');
+  } catch {
+    stored = null;
+  }
+  forgetMatchRejoin(storage);
+  if (!isRecord(stored) || !isRecord(stored.session)) return null;
+  const session = stored.session;
+  const scope = stored.mediaScope;
+  if (
+    typeof stored.reconnectionToken !== 'string' ||
+    stored.reconnectionToken === '' ||
+    typeof stored.savedAt !== 'number' ||
+    now - stored.savedAt < 0 ||
+    now - stored.savedAt >= MATCH_REJOIN_WINDOW_MS ||
+    typeof session.sessionToken !== 'string' ||
+    typeof session.playerId !== 'string' ||
+    typeof session.roomCode !== 'string' ||
+    !ROOM_CODE_PATTERN.test(session.roomCode)
+  )
+    return null;
+  const mediaScope =
+    isRecord(scope) &&
+    typeof scope.matchId === 'string' &&
+    typeof scope.mediaInstanceId === 'string' &&
+    typeof scope.receiverGeneration === 'number'
+      ? {
+          matchId: scope.matchId,
+          mediaInstanceId: scope.mediaInstanceId,
+          receiverGeneration: scope.receiverGeneration,
+        }
+      : null;
+  return {
+    session: {
+      sessionToken: session.sessionToken,
+      playerId: session.playerId,
+      roomCode: session.roomCode,
+      expiresAt: typeof session.expiresAt === 'number' ? session.expiresAt : now + 60_000,
+      protocolVersion: PRODUCT_PROTOCOL_VERSION,
+    },
+    reconnectionToken: stored.reconnectionToken,
+    mediaScope,
+    savedAt: stored.savedAt,
+  };
 }

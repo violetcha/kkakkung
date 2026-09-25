@@ -84,6 +84,11 @@ export interface MediaCoordinatorRuntime extends MediaCoordinator {
   allowsNewMatch(): boolean;
   /** The guard's current count, or null when it is not configured. */
   monthlyUsage(): MonthlyUsageSnapshot | null;
+  /**
+   * S15P21C204-396. Whether the operations journal can write, for the JOURNAL_NOT_WRITABLE alert.
+   * Null until the coordinator has initialized: the journal opens during initialization.
+   */
+  journalWritable(): boolean | null;
 }
 
 /** The public EXEC-CONTRACT-3 factory remains structurally compatible. No routes or env IO. */
@@ -515,6 +520,9 @@ class Coordinator implements MediaCoordinatorRuntime {
   readonly isInitialized = () => this.initialized && !this.closed && this.runtime.isInitialized();
   readonly canIssue = (): boolean =>
     !this.closed && this.initialized && this.runtime?.canIssue() === true;
+  journalWritable(): boolean | null {
+    return this.initialized && !this.closed ? this.journal.writable : null;
+  }
   getReadiness() {
     return this.runtime.getReadiness();
   }

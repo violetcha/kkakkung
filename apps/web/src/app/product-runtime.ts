@@ -178,6 +178,11 @@ export function bindProductRoom(
     interactionFactory?: (deps: InteractionDeps) => InteractionRuntime;
     /** Present only when the run collects its own measurements (W06). */
     metrics?: RuntimeMetrics;
+    /**
+     * S15P21C204-396. 새로고침 전 페이지가 받아 둔 미디어 세대. 새 페이지가 이 세대를 이어받아 교체를
+     * 요청한다. 없으면 서버가 이전 세대가 남은 요청을 받지 않아 영상·음성 없이 경기를 이어 가게 된다.
+     */
+    resumeMediaScope?: MediaScope | null;
   },
 ) {
   let active = true;
@@ -258,7 +263,7 @@ export function bindProductRoom(
   let mediaScope: MediaScope | null = null;
   // Connection ownership may be empty during an HTTP request. Preserve the latest issued
   // generation separately so a queued logical phase change can still name its predecessor.
-  let lastIssuedMediaScope: MediaScope | null = null;
+  let lastIssuedMediaScope: MediaScope | null = deps.resumeMediaScope ?? null;
   let mediaViewContext: {
     matchId: string;
     gameScope: PrivateView['gameScope'];
@@ -1560,6 +1565,8 @@ export function bindProductRoom(
     renderTick: clock.renderTick,
     /** S15P21C204-388. 카메라가 먼저 도는 회전. 판정에는 쓰지 않는다. */
     turnLead: currentTurnLead,
+    /** S15P21C204-396. 새로고침 뒤 이어받을 미디어 세대. */
+    mediaScopeForResume: () => lastIssuedMediaScope,
     /** S15P21C204-389. 카메라가 먼저 시작하는 한 칸 이동. 판정에는 쓰지 않는다. */
     moveLead: currentMoveLead,
     getSnapshot: () => snapshot,

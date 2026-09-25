@@ -199,6 +199,43 @@ it('takes one operator through the real phases into a match with five puppets', 
   }
 }, 60_000);
 
+// S15P21C204-396. 일반 방의 "로비로 돌아가기" 재경기도 데모에서 확인한다. 인형이 자리를 지키므로
+// 관리자만 다시 준비하면 새 라운드로 들어가고, 관리자가 고른 역할은 그대로다.
+it('takes the demo room back to the lobby and into a new round with the same operator role', async () => {
+  const f = await fixture();
+  try {
+    const session = demoRoomResponseSchema.parse(await (await f.open({ role: 'tagger' })).json());
+    const room = await f.connect(session);
+    const views: PrivateView[] = [];
+    room.onMessage('private-view', (value: PrivateView) => views.push(value));
+    const toPlaying = async () => {
+      await vi.waitFor(() => expect(room.state.phase).toBe('DEVICE_CHECK'), { timeout: 30_000 });
+      expect((await f.send(room, { type: 'READY', payload: { ready: true } })).status).toBe(
+        'accepted',
+      );
+      expect((await f.send(room, { type: 'ROOM_START', payload: {} })).status).toBe('accepted');
+      await vi.waitFor(() => expect(room.state.phase).toBe('TEAM_PRACTICE'), { timeout: 30_000 });
+      await f.send(room, { type: 'PRACTICE_READY', payload: { ready: true } });
+      await vi.waitFor(() => expect(room.state.phase).toBe('GAME_LOADING'), { timeout: 30_000 });
+      await f.send(room, { type: 'LOAD_READY', payload: loadPayload(views) });
+      await vi.waitFor(() => expect(room.state.phase).toBe('PLAYING'), { timeout: 30_000 });
+    };
+    await toPlaying();
+    const firstMatch = room.state.matchId;
+    room.send('demo-control', { matchId: firstMatch, action: 'abort-round' });
+    await vi.waitFor(() => expect(room.state.phase).toBe('ABORTED'), { timeout: 30_000 });
+    expect((await f.send(room, { type: 'REMATCH', payload: { mode: 'lobby' } })).status).toBe(
+      'accepted',
+    );
+    await toPlaying();
+    expect(room.state.matchId).not.toBe(firstMatch);
+    const self = views.at(-1)?.self;
+    expect(self?.status === 'ACTIVE' && self.role).toBe('tagger');
+  } finally {
+    await f.close();
+  }
+}, 120_000);
+
 function loadPayload(views: readonly PrivateView[]) {
   const loading = views.at(-1)?.self;
   const value = loading?.status === 'ACTIVE' ? loading.loading : null;
