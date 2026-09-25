@@ -21,7 +21,7 @@ export function WorkflowPreview({ screen }: { screen: string }) {
   const challenge = {
     challengeId: 'preview',
     exitId: 'exit',
-    poseKind: 'left' as const,
+    poseKind: 'y' as const,
     startedAtTick: 0,
     minSuccessTick: 40,
     expiresAtTick: 160,
@@ -73,14 +73,31 @@ export function WorkflowPreview({ screen }: { screen: string }) {
           <ExchangePanel view={view} tick={100} selected={null} onSelect={() => {}} send={send} />
         )}
         {screen === '포즈' && (
-          <PoseChallenge
-            view={view}
-            tick={100}
-            progress={0.5}
-            hint={null}
-            starting={false}
-            send={send}
-          />
+          <div className="pose-preview-states">
+            {(
+              [
+                ['y', 0, null],
+                ['y', 0.2, 'arm-low'],
+                ['y', 0.15, 'arm-spread'],
+                ['y', 0.1, 'arm-offscreen'],
+                ['y', 0.65, null],
+                ['y', 1, null],
+                ['left', 0.3, null],
+                ['left', 0.1, 'other-arm'],
+                ['right', 0.2, 'arm-low'],
+              ] as const
+            ).map(([poseKind, progress, hint]) => (
+              <PoseChallenge
+                key={`${poseKind}-${progress}-${hint}`}
+                view={{ ...view, self: { ...view.self, challenge: { ...challenge, poseKind } } }}
+                tick={100}
+                progress={progress}
+                hint={hint}
+                starting={false}
+                send={send}
+              />
+            ))}
+          </div>
         )}
         {screen === '키 도전' && (
           <KeyChallenge

@@ -534,7 +534,12 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 도전 후보는 내 출구이고, 접근 칸이 내 칸이며, 그 벽면이 지금 보이는 출구다. 벽을 마주 봐야(`dir === (wall.side + 2) % 4`) 시작할 수 있다.
 - 모션 모드에서는 `PoseChallenge`(도망자 전용)를 쓴다.
   - 자세 이름은 `내 왼팔 들기`/`내 오른팔 들기`/`양팔 Y자`다.
-  - 안내 `얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요. 도전 중에도 포획될 수 있습니다.`, 진행 막대, 남은 초, `도전 취소`가 있다.
+  - 도전 중 창(S15P21C204-393)은 왼쪽에 `PoseFigure`, 오른쪽에 한 줄 안내·`<남은 초>초 · 잡힐 수 있어요`·`Esc 취소` 단추를 둔다.
+  - `PoseFigure`는 거울처럼 그린 막대 인형이다(내 왼팔이 화면 왼쪽). 드는 팔은 도망자 색, 내린 팔은 흐린 색이다. 둘레 링이 유지 진행(0~1)만큼 채워지고, 0이면 그리지 않는다. 1이면 링과 팔이 성공 색(`data-state="held"`)이 된다.
+  - 한 줄 안내(`poseCueText`)는 원인이 없으면 진행 0 `그림처럼 팔을 드세요`, 진행 중 `그대로 유지!`, 1이면 `좋아요!`(최소 수행 틱 전이면 `좋아요, 조금만 더`)다.
+  - 진행 막대와 긴 안내 문장은 화면 낭독용(`a11y-only`)으로만 둔다. 늘 떠 있던 팔 프레이밍 문장은 없앴다.
+  - 도전 전에는 `출구 벽을 마주 보고 E`(시작 확인 중이면 `도전 준비 중…`)와 `탈출 도전 · E` 단추다.
+  - 혼자 연습도 같은 `PoseFigure`와 한 줄 안내를 쓴다.
   - 실제 카메라 미리보기는 서랍 안 자세 미리보기 자리로 옮겨 붙인다.
 - 판정 규칙:
   - 관절 visibility `0.5` 이상만 쓴다.
@@ -547,7 +552,8 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
   - 자세가 200ms 안에 돌아오면 누적을 유지하되 깨진 구간은 세지 않는다.
   - 1200ms를 채우고 `minSuccessTick`이 지나면 `EXIT_PROGRESS`(`completed: true`)를 보낸다.
   - `NOT_READY`로 거절되면 500ms 뒤 한 번 더 보낸다(최대 2회).
-- 막힌 이유가 같은 값으로 500ms 이상 이어지면 안내 문구를 띄운다.
+- 막힌 이유가 같은 값으로 500ms 이상 이어지면 한 줄 안내를 경고색으로 바꾸고 인형에 화살표를 띄운다. 화면 낭독기에는 아래 긴 문장을 준다.
+  - 한 줄 안내: `sensor` `카메라를 봐 주세요`, `trunk` `얼굴·어깨가 보이게`, `arm-offscreen` `한 걸음 뒤로`, `arm-low` `팔을 더 높이`(든 팔에 위 화살표), `arm-spread` `팔을 더 벌리기`(바깥 화살표), `other-arm` `반대 팔은 내리기`(내린 팔에 아래 화살표).
   - `sensor`: `카메라 자세 인식이 끊겼습니다. 얼굴이 화면에 들어오게 해 주세요.`
   - `trunk`: `얼굴과 양 어깨가 함께 보이게 해 주세요.`
   - `arm-offscreen`: `<팔>의 팔꿈치나 손목이 화면 밖입니다. 카메라에서 조금 물러나 주세요.`
@@ -957,7 +963,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - `features/game/equipment`: `EquipmentHud.tsx`, `equipment-presenter.ts`, `restraint-presenter.ts`
 - `features/game/flow`: `AudioControls.tsx`, `CamcorderOverlay.tsx`, `ConnectionLostScreen.tsx`, `CueFlash.tsx`, `DemoPanel.tsx`, `DeviceCheckScreen.tsx`, `FaceGuidanceNotice.tsx`, `GameHud.tsx`, `Hotbar.tsx`, `LoadingOverlay.tsx`, `LocalControls.tsx`, `PracticeQuests.tsx`, `ResultScreen.tsx`, `SelfCorner.tsx`, `SettingsPanes.tsx`, `SettingsWindow.tsx`, `SpectatorBar.tsx`, `camera-action.ts`, `command-feedback.ts`, `device-check-steps.ts`, `device-readiness.ts`, `event-log.ts`, `hotbar-model.ts`, `install-hint.ts`, `interact-prompt.ts`, `loading-progress.ts`, `match-cues.ts`(플래시·지연 상수만), `motion-check.ts`, `practice-lessons.ts`, `preparation-feedback.ts`, `result-presenter.ts`, 시험 `camcorder-overlay.test.ts`, `device-check-steps.test.ts`, `install-hint.test.ts`, `result-presenter.test.ts`
 - `features/game/map`: `ExchangePanel.tsx`, `MiniMap.tsx`, `exchange-presenter.ts`, `map-draw-model.ts`, `minimap-render.ts`, `minimap-zoom.ts`, `past-event-markers.ts`, 시험 `exchange-presenter.test.ts`, `minimap-zoom.test.ts`
-- `features/game/pose`: `KeyChallenge.tsx`, `PoseChallenge.tsx`, `challenge-controller.ts`, `key-challenge.ts`, `pose-evaluator.ts`, 시험 `key-challenge.test.ts`, `pose-evaluator.test.ts`
+- `features/game/pose`: `KeyChallenge.tsx`, `PoseChallenge.tsx`, `PoseFigure.tsx`, `challenge-controller.ts`, `key-challenge.ts`, `pose-evaluator.ts`, 시험 `key-challenge.test.ts`, `pose-evaluator.test.ts`
 - `features/game/scene`: `FaceAvatar.tsx`, `FirstPersonCamera.tsx`, `VisibleTerrain.tsx`, `WorldCanvas.tsx`, `backrooms-textures.ts`, `block-theme.ts`, `facility-theme.ts`, `primitives.tsx`(텍스처 로드), `quality-presets.ts`, `role-colors.ts`, `scene-model.ts`, `scene-theme.ts`, 시험 `face-textures.test.ts`, `first-person-camera.test.ts`, `quality-presets.test.ts`, `role-colors.test.ts`, `scene-theme.test.ts`
 - `features/game/solo`: `SelfAvatarView.tsx`, `SoloPracticeScreen.tsx`, `solo-session.ts`, `solo-world.ts`, 시험 `solo-session.test.ts`, `solo-world.test.ts`
 - `features/input`: `InteractionRuntime.ts`(키·명령 연결), `gesture-intent.ts`, `input-fallback.ts`, `input-tuning.ts`, `interaction-context.ts`, `move-intent.ts`, `movement-controller.ts`, `turn-intent.ts`, 시험 `gesture-intent.test.ts`, `input-fallback.test.ts`, `interaction-context.test.ts`, `move-intent.test.ts`, `turn-intent.test.ts`

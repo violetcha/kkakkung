@@ -18,7 +18,8 @@ import { WorldCanvas } from '../scene/WorldCanvas';
 import { KeyChallenge } from '../pose/KeyChallenge';
 import { cameraAction } from '../flow/camera-action';
 import { togglesMenu } from '../flow/menu-key';
-import { POSE_LABELS, PoseArmsNotice } from '../pose/PoseChallenge';
+import { POSE_LABELS, poseCueText } from '../pose/PoseChallenge';
+import { PoseFigure } from '../pose/PoseFigure';
 import { createSoloSession, type SoloSnapshot } from './solo-session';
 import { LESSONS, type Lesson } from './solo-world';
 import { SoloPracticeHud } from './SoloPracticeHud';
@@ -272,12 +273,25 @@ export function SoloPracticeScreen({ onExit }: { onExit(): void }) {
     ) : (
       <div>
         <h4>{POSE_LABELS[snapshot.self.challenge.poseKind]}</h4>
-        <p>
-          얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요. Esc로 취소하거나 키보드
-          조작으로 전환할 수 있습니다.
+        {/* 경기와 같은 그림 안내. 여기서 한 번 해 보면 경기에서 처음 보는 화면이 없다. */}
+        <div className="pose-guide">
+          <PoseFigure kind={snapshot.self.challenge.poseKind} progress={snapshot.poseProgress} />
+          <div className="pose-guide-side">
+            <p className="pose-guide-cue" aria-hidden>
+              {poseCueText(null, snapshot.poseProgress, false)}
+            </p>
+            <p className="pose-guide-meta">Esc 취소 · 키보드 조작으로 바꿀 수 있어요</p>
+          </div>
+        </div>
+        <p className="a11y-only">
+          얼굴과 양 어깨가 카메라에 들어오게 하고 자세를 1.2초 유지하세요.
         </p>
-        <progress aria-label="체험 자세 유지" max={1} value={snapshot.poseProgress} />
-        <PoseArmsNotice kind={snapshot.self.challenge.poseKind} />
+        <progress
+          className="a11y-only"
+          aria-label="체험 자세 유지"
+          max={1}
+          value={snapshot.poseProgress}
+        />
         {/* 우상단 창은 상대가 보는 내 아바타라 프레이밍을 알 수 없다. 자세를 잡는 동안에만
             실제 카메라 화면을 옆에 둔다. 이 영상은 어디로도 전송되지 않는다. */}
         <div className="pose-preview" ref={posePreview} aria-label="내 웹캠 미리보기" />
