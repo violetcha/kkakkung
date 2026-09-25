@@ -941,7 +941,6 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 - 입력창 안에서도 방 안 Esc는 설정 창을 연다(게임 키와 달리 입력 문맥을 보지 않는다).
 - `SettingsWindow`는 `lead.disabled`와 `lead.danger`를 읽지 않는다. 입장 창의 `돌아가기`(`disabled: joining`)는 입장 중에도 눌린다.
 - 모션 모드에서는 W/S/A/D·방향키가 이동을 만들지 않는다. 카메라 추적이 살아 있는데 키로 움직이려면 `키보드로 조작`을 먼저 눌러야 한다. 키보드 악용을 막기 위한 의도된 동작이다([결정 정정표](../spec/decisions.md), 2026-09-24).
-- 공개 `albedo.png`·`roughness.png`·`normal.png`는 어떤 코드 경로도 읽지 않는다.
 - 미니맵 전체 지도는 `32`칸 고정이다. 작은 맵(격자 15·23)에서는 지도 일부만 쓴다.
 - manifest의 `bundledNoticesReview`는 `pending`이고, gesture 모델 `license`도 `pending`이다.
 - 데모 세션이 `sessionStorage`에 남아 있으면, 개발 빌드 루트(`/`, hash 없음)에서 진단 화면이 떠 저장된 세션은 쓰이지 않는다.

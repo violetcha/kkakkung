@@ -59,7 +59,7 @@ export function loadPractice(): unknown {
 }
 
 export function loadTuning(): unknown {
-  return loadServerJson('config/tuning/mvp-v1.json').raw;
+  return loadServerJson('config/tuning/mvp-v4.json').raw;
 }
 
 export function loadFallback(): unknown {

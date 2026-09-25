@@ -73,7 +73,7 @@ describe('bundle scan', () => {
     // The tuning version comes from the shipped profile, so a version bump (270: mvp-v2) keeps
     // this leak fixture describing the real sentinel instead of a stale literal.
     const { tuningVersion } = JSON.parse(
-      readFileSync(resolve(root, 'server/config/tuning/mvp-v1.json'), 'utf8'),
+      readFileSync(resolve(root, 'server/config/tuning/mvp-v4.json'), 'utf8'),
     ) as { tuningVersion: string };
     const dir = bundle('leaking', {
       'index.html': '<!doctype html>',

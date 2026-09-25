@@ -68,7 +68,7 @@ export function deriveSentinels(serverRoot = root) {
         });
     }
   }
-  const tuning = read('server/config/tuning/mvp-v1.json');
+  const tuning = read('server/config/tuning/mvp-v4.json');
   if (tuning) {
     const json = JSON.parse(tuning);
     sentinels.push({ id: 'tuning:version', literal: `"tuningVersion":"${json.tuningVersion}"` });

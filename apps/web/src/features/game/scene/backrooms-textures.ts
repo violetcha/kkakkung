@@ -8,10 +8,8 @@ import {
 } from 'three';
 import type { QualityPreset } from './quality-presets';
 
+// S15P21C204-397. 받은 PBR 원본(albedo·roughness·normal)은 타일이 이어지지 않아 쓰지 않았고 삭제했다.
 export const BACKROOMS_TEXTURE_PATHS = Object.freeze({
-  albedo: '/textures/backrooms/albedo.png',
-  roughness: '/textures/backrooms/roughness.png',
-  normal: '/textures/backrooms/normal.png',
   seamless: '/textures/backrooms/seamless.png',
 });
 
@@ -22,8 +20,7 @@ export type BackroomsTexturePaths = Readonly<{
 }>;
 
 export function backroomsTexturePaths(_quality: QualityPreset): BackroomsTexturePaths {
-  // Both qualities use the tileable source. The supplied PBR maps align with the untiled
-  // original, so mixing them would reintroduce a visible cut at every cell boundary.
+  // Both qualities use the tileable source. There are no relief maps that tile with it.
   return { color: BACKROOMS_TEXTURE_PATHS.seamless, roughness: null, normal: null };
 }
 

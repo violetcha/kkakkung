@@ -45,7 +45,7 @@ if (opsToken.length < 16) {
 }
 
 const tuningRaw = JSON.parse(
-  readFileSync(resolve(root, 'server/config/tuning/mvp-v1.json'), 'utf8'),
+  readFileSync(resolve(root, 'server/config/tuning/mvp-v4.json'), 'utf8'),
 );
 const tuning = validateTuning(tuningRaw);
 if (!tuning.ok) {

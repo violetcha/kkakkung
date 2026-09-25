@@ -43,7 +43,7 @@ const environment = z.object({
   SESSION_ADMISSION_MODE: z.enum(['invitation', 'gitlab-sso', 'guest']).optional(),
   PRODUCT_ASSET_VERSION: z.string().min(1).default('c-primitives-1'),
   PRODUCT_CONTENT_DIR: z.string().min(1).default('server/content'),
-  PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v1.json'),
+  PRODUCT_TUNING_PATH: z.string().min(1).default('server/config/tuning/mvp-v4.json'),
   // S15P21C204-267. Which certified template under PRODUCT_CONTENT_DIR the product room plays:
   // maps/<id>.json with placements/<id>-fallback.json. S15P21C204-302 made the corridor maze the
   // default; the open grid master-v1 stays certified and selectable for load and regression runs.
