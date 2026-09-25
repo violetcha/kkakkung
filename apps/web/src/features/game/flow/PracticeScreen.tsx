@@ -13,6 +13,7 @@ export function PracticeScreen({
   readyReported,
   readSensors,
   onReady,
+  showcase = false,
 }: {
   round: PublicRoundState;
   view: PrivateView;
@@ -21,6 +22,8 @@ export function PracticeScreen({
   readyReported: boolean;
   readSensors(): SensorSnapshot | null;
   onReady(): void;
+  /** 시연 방(2:2). 3분이 끝났을 때 탈출과 포획 수로 가린다(S15P21C204-400). */
+  showcase?: boolean;
 }) {
   const model = practicePresenter(round, view, devices);
   const [kind, setKind] = useState<PoseKind>('left');
@@ -55,9 +58,13 @@ export function PracticeScreen({
     <section className="game-panel" aria-label="역할 연습">
       <h2>{model.role === 'runner' ? '도망자' : '술래'} 연습</h2>
       <p>
-        {model.role === 'runner'
-          ? '3분 안에 도망자 2명이 출구의 포즈 도전에 성공하면 승리합니다.'
-          : '도망자 2명을 포획하거나, 3분 동안 도망자 2명의 탈출을 막으면 승리합니다.'}
+        {showcase
+          ? model.role === 'runner'
+            ? '3분이 끝났을 때 탈출이 포획보다 많으면 도망자가 승리합니다.'
+            : '3분이 끝났을 때 포획이 탈출보다 많거나 같으면 술래가 승리합니다.'
+          : model.role === 'runner'
+            ? '3분 안에 도망자 2명이 출구의 포즈 도전에 성공하면 승리합니다.'
+            : '도망자 2명을 포획하거나, 3분 동안 도망자 2명의 탈출을 막으면 승리합니다.'}
       </p>
       {model.role === 'runner' ? (
         <p>가까이 보이는 도망자 아군과 지도를 교환하고 출구에서 사용할 포즈를 연습해 보세요.</p>

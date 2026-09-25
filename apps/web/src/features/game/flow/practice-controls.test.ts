@@ -85,7 +85,7 @@ describe('LocalControls in the practice room', () => {
 });
 
 describe('PracticeScreen', () => {
-  const render = (role: 'runner' | 'tagger') => {
+  const render = (role: 'runner' | 'tagger', showcase = false) => {
     const view = viewFixture();
     return renderToStaticMarkup(
       createElement(PracticeScreen, {
@@ -99,9 +99,22 @@ describe('PracticeScreen', () => {
         readyReported: false,
         readSensors: () => null,
         onReady() {},
+        showcase,
       }),
     );
   };
+
+  // S15P21C204-400. 시연 방 연습에서는 3분이 끝났을 때의 판정 규칙을 알린다.
+  it('explains the showcase time-out rule only in a showcase room', () => {
+    expect(render('runner', true)).toContain(
+      '3분이 끝났을 때 탈출이 포획보다 많으면 도망자가 승리합니다.',
+    );
+    expect(render('tagger', true)).toContain(
+      '3분이 끝났을 때 포획이 탈출보다 많거나 같으면 술래가 승리합니다.',
+    );
+    expect(render('runner', true)).not.toContain('도망자 2명이');
+    expect(render('runner')).toContain('3분 안에 도망자 2명이');
+  });
 
   it('no longer repeats the movement guidance and keeps the role practice and ready button', () => {
     for (const role of ['runner', 'tagger'] as const) {

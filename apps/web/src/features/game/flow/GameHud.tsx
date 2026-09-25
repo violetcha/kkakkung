@@ -9,10 +9,13 @@ export function GameHud({
   round,
   self,
   mode,
+  showcase = false,
 }: {
   round: PublicRoundState;
   self?: ActiveSelf;
   mode?: 'motion' | 'keyboard';
+  /** 시연 방(2:2). 탈출·포획으로 일찍 끝나지 않고 3분이 끝났을 때 두 수로 가린다. */
+  showcase?: boolean;
 }) {
   if (!self) return null;
   const practice = round.phase === 'TEAM_PRACTICE';
@@ -22,6 +25,7 @@ export function GameHud({
       : Math.max(0, Math.ceil((round.deadlineTick - round.serverTick) / 20));
   const seconds = (until: number | null) =>
     until === null ? null : Math.max(0, Math.ceil((until - round.serverTick) / 20));
+  const goal = showcase ? '' : '/2';
   const restraintSeconds = seconds(self.restraintUntilTick);
   const immuneSeconds = seconds(self.restraintImmuneUntilTick);
   // 상태는 문구와 data-state를 함께 쓰고 색만으로 전달하지 않는다(V4).
@@ -50,17 +54,29 @@ export function GameHud({
         </strong>
       </div>
       <p>
-        {self.role === 'runner'
-          ? '팀원 2명이 각자의 출구로 탈출하면 승리'
-          : // S15P21C204-342. 데모 라운드는 시간 초과로 끝나지 않는다(316).
-            remaining === null
-            ? '도망자 2명을 포획하면 승리 · 제한시간 없음'
-            : '도망자 2명을 포획하거나 시간을 버티면 승리'}
+        {/* S15P21C204-400. 시연 방은 3분이 끝났을 때 탈출이 더 많으면 도망자, 아니면 술래다
+            (timeout-only). "2명" 목표가 없다. */}
+        {showcase
+          ? self.role === 'runner'
+            ? '3분이 끝났을 때 탈출이 포획보다 많으면 승리'
+            : '3분이 끝났을 때 포획이 탈출보다 많거나 같으면 승리'
+          : self.role === 'runner'
+            ? '팀원 2명이 각자의 출구로 탈출하면 승리'
+            : // S15P21C204-342. 데모 라운드는 시간 초과로 끝나지 않는다(316).
+              remaining === null
+              ? '도망자 2명을 포획하면 승리 · 제한시간 없음'
+              : '도망자 2명을 포획하거나 시간을 버티면 승리'}
       </p>
       <div className="hud-status">
         <span className="hud-outcomes">
-          <span data-outcome="escape">◇ 탈출 {round.counts.escaped}/2</span>
-          <span data-outcome="capture">◆ 포획 {round.counts.captured}/2</span>
+          <span data-outcome="escape">
+            ◇ 탈출 {round.counts.escaped}
+            {goal}
+          </span>
+          <span data-outcome="capture">
+            ◆ 포획 {round.counts.captured}
+            {goal}
+          </span>
           {/* S15P21C204-276. 구속·면역도 같은 상태 줄에 둔다. 별도 오버레이로 띄우지 않는다. */}
           {restraintSeconds !== null && (
             <span data-outcome="restraint">

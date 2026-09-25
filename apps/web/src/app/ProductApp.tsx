@@ -1199,6 +1199,7 @@ export function ProductApp({
                           {...(activeSelf
                             ? { self: activeSelf, mode: snapshot.interaction.mode }
                             : {})}
+                          showcase={snapshot.roster?.kind === 'showcase'}
                         />
                         {interactiveWorld && <EventLog events={snapshot.events} />}
                       </>
@@ -1301,6 +1302,7 @@ export function ProductApp({
                           round={round}
                           view={view}
                           devices={snapshot.devices}
+                          showcase={snapshot.roster?.kind === 'showcase'}
                           request={snapshot.requests.PRACTICE_READY}
                           readyReported={snapshot.practiceReady}
                           readSensors={readSensors}
