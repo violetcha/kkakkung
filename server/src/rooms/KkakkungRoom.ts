@@ -29,6 +29,7 @@ import {
   SHOWCASE_CLOSED_CLOSE_CODE,
   demoControlSchema,
   demoScenarioRequestSchema,
+  lobbyFaceUploadSchema,
   productJoinOptionsSchema,
   requestStatusSchema,
   type AudioPolicy,
@@ -139,6 +140,8 @@ const DEMO_REJOIN_GRACE_MS = 120_000;
  * as before: CONNECTION_LOST voids the round with GAME_CONNECTION_LOST.
  */
 export const MATCH_REJOIN_GRACE_MS = 25_000;
+/** S15P21C204-401. 한 사람이 대기실 얼굴 사진을 다시 보낼 수 있는 최소 간격. */
+export const LOBBY_FACE_MIN_INTERVAL_MS = 2_000;
 import type { ProductRoomHandle, RoomDirectory } from './RoomDirectory.js';
 
 export type ProductRoomDeps<State> = Readonly<{
@@ -288,6 +291,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      * ended choice falls back to roster order at read time; cleared with every new round.
      */
     private readonly spectateChoices = new Map<string, string>();
+    /**
+     * S15P21C204-401. 대기실에 보여 줄 가공 얼굴 사진(작은 JPEG 데이터 주소). 메모리에만 두고 파일·
+     * 로그에 남기지 않는다. 나간 사람 것은 지우고 남은 사람에게 알린다.
+     */
+    private readonly lobbyFaces = new Map<string, { image: string; atMs: number }>();
     /** S15P21C204-391. Players inside the rejoin grace, with its monotonic deadline. */
     private readonly awaitingRejoin = new Map<string, number>();
     private readonly mediaInstances = new Map<string, string>();
@@ -694,6 +702,13 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         const auth = this.playersByConnection.get(client.sessionId);
         if (auth) this.dispatcher.handleResync(auth.playerId, payload, this.phase);
       });
+      onInbound(PRODUCT_CLIENT_MESSAGES.lobbyFace, (client, payload: unknown) =>
+        this.onLobbyFace(client, payload),
+      );
+      onInbound(PRODUCT_CLIENT_MESSAGES.lobbyFaceSync, (client) => {
+        const auth = this.playersByConnection.get(client.sessionId);
+        if (auth) this.sendLobbyFacesTo(client, auth.playerId);
+      });
       onInbound(PRODUCT_CLIENT_MESSAGES.demoScenario, (client, payload: unknown) => {
         const auth = this.playersByConnection.get(client.sessionId);
         const parsed = demoScenarioRequestSchema.safeParse(payload);
@@ -822,8 +837,40 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       this.lobby.setConnected(auth.playerId, true);
       this.heartbeat.register(client.sessionId, auth.playerId, deps.monotonicNow());
       this.broadcastRoster();
+      this.sendLobbyFacesTo(client, auth.playerId);
       this.dispatcher.publishView(auth.playerId, 'initial', this.phase);
       this.syncPublic();
+    }
+
+    /**
+     * S15P21C204-401. 대기실·장치 점검에서만 받는다. 형식·크기는 계약이 막고, 한 사람이 2초 안에 다시
+     * 보낸 것은 버린다. 받은 사진은 보낸 사람을 뺀 같은 방 사람에게만 전한다.
+     */
+    private onLobbyFace(client: Client, payload: unknown) {
+      const auth = this.playersByConnection.get(client.sessionId);
+      if (!auth || (this.phase !== 'LOBBY' && this.phase !== 'DEVICE_CHECK')) return;
+      const parsed = lobbyFaceUploadSchema.safeParse(payload);
+      if (!parsed.success) return;
+      const now = deps.monotonicNow();
+      const previous = this.lobbyFaces.get(auth.playerId);
+      if (previous && now - previous.atMs < LOBBY_FACE_MIN_INTERVAL_MS) return;
+      this.lobbyFaces.set(auth.playerId, { image: parsed.data.image, atMs: now });
+      this.sendLobbyFace(auth.playerId, parsed.data.image);
+    }
+
+    private sendLobbyFace(playerId: string, image: string | null) {
+      for (const [id, peer] of this.clientsByPlayer)
+        if (id !== playerId) peer.send(PRODUCT_SERVER_MESSAGES.lobbyFace, { playerId, image });
+    }
+
+    /**
+     * 막 들어온 사람은 받을 준비를 마친 뒤 `lobby-face-sync` 로 달라고 한다. 같은 연결로 돌아온
+     * 재접속은 수신 등록이 그대로 남아 있어 서버가 바로 보낸다.
+     */
+    private sendLobbyFacesTo(client: Client, selfId: string) {
+      for (const [playerId, face] of this.lobbyFaces)
+        if (playerId !== selfId)
+          client.send(PRODUCT_SERVER_MESSAGES.lobbyFace, { playerId, image: face.image });
     }
 
     onLeave(client: Client) {
@@ -872,7 +919,10 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
       }
       if (preserveDemoSession && this.clientsByPlayer.size === 0)
         this.demoVacantSince = deps.monotonicNow();
-      if (!preserveDemoSession) this.lobby.remove(auth.playerId);
+      if (!preserveDemoSession) {
+        this.lobby.remove(auth.playerId);
+        if (this.lobbyFaces.delete(auth.playerId)) this.sendLobbyFace(auth.playerId, null);
+      }
       this.queue.forgetActor(auth.playerId);
       this.dispatcher.forget(auth.playerId);
       if (!preserveDemoSession) deps.sessions.invalidate(auth.sessionId);

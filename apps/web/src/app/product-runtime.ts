@@ -11,6 +11,7 @@ import {
   demoStateSchema,
   roomAccessSchema,
   roomMapSchema,
+  lobbyFaceMessageSchema,
   audioPolicySchema,
   mediaBindingsSchema,
   mediaGrantSchema,
@@ -27,6 +28,7 @@ import {
   type RoomMapMessage,
 } from '@kkakkung/protocol/game-messages';
 import { createGameHeartbeat } from '../features/room/game-heartbeat';
+import { captureLobbyFace, LOBBY_FACE_STEADY_MS } from '../features/media/lobby-face-snapshot';
 import { mediaFailureText, mediaRequestError } from '../features/media/media-request-error';
 import type { ChallengeKey } from '../features/game/pose/key-challenge';
 import { turnLeadActive, type TurnLead } from '../features/game/scene/turn-lead';
@@ -133,6 +135,11 @@ export type ProductSnapshot = {
   roomAccess?: RoomAccessMessage | null;
   /** S15P21C204-311. 방이 고른 맵 크기. 방장만 바꾸고 모두가 같은 값을 본다. */
   roomMap?: RoomMapMessage | null;
+  /**
+   * S15P21C204-401. 다른 사람이 올린 대기실 얼굴 사진(JPEG 데이터 주소). 이 방에 붙어 있는 동안
+   * 유지한다. 재경기로 경기가 바뀌어도 서버가 같은 사진을 들고 있으므로 지우지 않는다.
+   */
+  lobbyFaces?: Readonly<Record<string, string>>;
   devices: DeviceStatus;
   media: MediaStatus | null;
   /** GAME_LOADING 에서 내가 아직 못 낸 준비 항목. 보고를 보낸 뒤에는 빈 배열이다. */
@@ -325,6 +332,24 @@ export function bindProductRoom(
       deps.changed(snapshot);
     }
   };
+  // S15P21C204-401. 대기실에서 얼굴이 1초 이상 이어서 잡히면 가공 면 한 장을 찍어 한 번 올린다.
+  let lobbyFaceShared = false;
+  let lobbyFaceLiveSince: number | null = null;
+  function shareLobbyFace() {
+    const phase = snapshot.round?.phase;
+    if (lobbyFaceShared || (phase !== 'LOBBY' && phase !== 'DEVICE_CHECK')) return;
+    const live = bridge.runtime.processedFaceLive?.() ?? false;
+    if (!live) {
+      lobbyFaceLiveSince = null;
+      return;
+    }
+    lobbyFaceLiveSince ??= deps.now();
+    if (deps.now() - lobbyFaceLiveSince < LOBBY_FACE_STEADY_MS) return;
+    const image = captureLobbyFace(bridge.runtime.getProcessedFaceSurface?.() ?? null);
+    if (!image) return;
+    lobbyFaceShared = true;
+    send('lobby-face', { image });
+  }
   let lastViewResync = -Infinity;
   const send = (type: string, value: unknown) => {
     if (type === 'view-resync') {
@@ -1322,6 +1347,18 @@ export function bindProductRoom(
     )
       publish({ roomAccess: result.data });
   });
+  on('lobby-face', (value) => {
+    const result = lobbyFaceMessageSchema.safeParse(value);
+    if (!result.success) return;
+    const { playerId, image } = result.data;
+    const next = { ...snapshot.lobbyFaces };
+    if (image === null) delete next[playerId];
+    else next[playerId] = image;
+    publish({ lobbyFaces: next });
+  });
+  // 받을 준비를 마쳤으니 이미 올라와 있는 사진을 달라고 한다. 서버가 입장 직후 먼저 보내면 느린
+  // 기기에서는 이 등록보다 먼저 닿아 버려졌다.
+  send('lobby-face-sync', {});
   on('room-map', (value) => {
     const result = roomMapSchema.safeParse(value);
     if (
@@ -1411,6 +1448,7 @@ export function bindProductRoom(
       views.poll();
       events.poll();
       updateChallenge();
+      shareLobbyFace();
       // 카운트다운 초가 바뀌는 시점과 미뤄 둔 누계 안내음은 여기서만 잡힌다.
       emitCues();
       promptFirstInstall();

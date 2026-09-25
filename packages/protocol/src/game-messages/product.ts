@@ -19,6 +19,13 @@ export const PRODUCT_CLIENT_MESSAGES = {
   demoScenario: 'demo-scenario',
   /** Operator-only demo room control (S15P21C204-318). */
   demoControl: 'demo-control',
+  /** S15P21C204-401. 대기실에서 보여 줄 내 가공 얼굴 사진 한 장. */
+  lobbyFace: 'lobby-face',
+  /**
+   * S15P21C204-401. 지금 방에 올라와 있는 대기실 사진을 달라는 요청. payload 는 읽지 않는다. 입장
+   * 직후 서버가 먼저 보내면 느린 기기에서는 받을 준비를 하기 전에 닿아 버려졌다.
+   */
+  lobbyFaceSync: 'lobby-face-sync',
 } as const;
 
 export const PRODUCT_SERVER_MESSAGES = {
@@ -37,6 +44,8 @@ export const PRODUCT_SERVER_MESSAGES = {
   audioPolicy: 'audio-policy',
   /** Operator-only demo room: which scenarios exist and what is running. */
   demoState: 'demo-state',
+  /** S15P21C204-401. 같은 방 참가자의 대기실 얼굴 사진. 사진이 null 이면 지운다. */
+  lobbyFace: 'lobby-face',
 } as const;
 
 export const COMMAND_CODES = [

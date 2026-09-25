@@ -1845,3 +1845,51 @@ it('S15P21C204-363: reports a showcase room closed by its host apart from expiry
   });
   await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
 });
+
+// S15P21C204-401. 대기실에서 얼굴이 1초 이상 잡히면 가공 면 한 장을 한 번 올리고, 다른 사람이 올린
+// 사진은 받아 두었다가 지우라는 소식이 오면 지운다.
+it('shares one lobby face after a steady face and keeps the others', () => {
+  const f = fixture();
+  // 받을 준비를 마친 뒤 이미 올라온 사진을 달라고 한 번 요청한다.
+  expect(f.send.mock.calls.filter((call) => call[0] === 'lobby-face-sync')).toEqual([
+    ['lobby-face-sync', {}],
+  ]);
+  f.state({ phase: 'DEVICE_CHECK' });
+  let live = false;
+  const fake = f.fake as InteractionRuntime & {
+    processedFaceLive?: () => boolean;
+    getProcessedFaceSurface?: () => HTMLCanvasElement | null;
+  };
+  fake.processedFaceLive = () => live;
+  fake.getProcessedFaceSurface = () => ({}) as HTMLCanvasElement;
+  vi.stubGlobal('document', {
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage: () => {} }),
+      toDataURL: () => 'data:image/jpeg;base64,AAAA',
+    }),
+  });
+  try {
+    const shared = () => f.send.mock.calls.filter((call) => call[0] === 'lobby-face');
+    f.time(100);
+    expect(shared()).toHaveLength(0);
+    live = true;
+    f.time(200);
+    f.time(900);
+    // 얼굴을 찾은 지 1초가 안 됐다.
+    expect(shared()).toHaveLength(0);
+    f.time(1300);
+    expect(shared()).toEqual([['lobby-face', { image: 'data:image/jpeg;base64,AAAA' }]]);
+    f.time(5000);
+    expect(shared()).toHaveLength(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  f.messages.get('lobby-face')!({ playerId: 'friend', image: 'data:image/jpeg;base64,BBBB' });
+  f.messages.get('lobby-face')!({ playerId: 'bad', image: 'https://example.com/x.jpg' });
+  expect(f.runtime.getSnapshot().lobbyFaces).toEqual({ friend: 'data:image/jpeg;base64,BBBB' });
+  f.messages.get('lobby-face')!({ playerId: 'friend', image: null });
+  expect(f.runtime.getSnapshot().lobbyFaces).toEqual({});
+});

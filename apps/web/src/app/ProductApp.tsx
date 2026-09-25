@@ -55,7 +55,7 @@ import { EMPTY_LESSONS, observeLessons } from '../features/game/flow/practice-le
 import { ExchangePanel } from '../features/game/map/ExchangePanel';
 import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { createDemoFaceTexture } from '../features/game/scene/demo-face';
-import { CanvasTexture, SRGBColorSpace } from 'three';
+import { CanvasTexture, SRGBColorSpace, TextureLoader, type Texture } from 'three';
 import { restraintPresenter } from '../features/game/equipment/restraint-presenter';
 import { RestraintHud } from '../features/game/equipment/RestraintHud';
 import { StageAlert } from '../features/game/flow/StageAlert';
@@ -174,9 +174,44 @@ export function ProductApp({
     },
     [],
   );
+  // S15P21C204-401. 다른 사람이 올린 대기실 얼굴 사진의 텍스처. 사진이 바뀌거나 지워지면 버린다.
+  const lobbyPhotos = useRef(new Map<string, { image: string; texture: Texture }>());
+  useEffect(
+    () => () => {
+      for (const photo of lobbyPhotos.current.values()) photo.texture.dispose();
+      lobbyPhotos.current.clear();
+    },
+    [],
+  );
+  const lobbyFaces = snapshot?.lobbyFaces;
+  const lobbyRoster = snapshot?.roster;
+  const lobbyPhoto = useCallback(
+    (playerId: string) => {
+      const image = lobbyFaces?.[playerId];
+      const cached = lobbyPhotos.current.get(playerId);
+      if (cached && cached.image !== image) {
+        cached.texture.dispose();
+        lobbyPhotos.current.delete(playerId);
+      }
+      if (!image) return null;
+      const kept = lobbyPhotos.current.get(playerId);
+      if (kept) return kept.texture;
+      const texture = new TextureLoader().load(image);
+      texture.colorSpace = SRGBColorSpace;
+      lobbyPhotos.current.set(playerId, { image, texture });
+      return texture;
+    },
+    [lobbyFaces],
+  );
   const lobbyFace = useCallback(
     (playerId: string) => {
-      if (playerId !== selfId) return runtime.current?.faces.get(playerId) ?? null;
+      if (playerId !== selfId) {
+        const live = runtime.current?.faces.get(playerId) ?? null;
+        if (live) return live;
+        // 준비를 마친 사람만 사진을 보인다. 준비를 풀면 칸은 다시 자리표시로 돌아간다.
+        const ready = lobbyRoster?.players.find((player) => player.playerId === playerId)?.ready;
+        return ready ? lobbyPhoto(playerId) : null;
+      }
       const surface = runtime.current?.processedFaceSurface() ?? null;
       if (surface !== selfFace.current.surface) {
         selfFace.current.texture?.dispose();
@@ -188,7 +223,7 @@ export function ProductApp({
       }
       return selfFace.current.texture;
     },
-    [selfId],
+    [selfId, lobbyRoster, lobbyPhoto],
   );
   const [code, setCode] = useState('');
   const [sessionCredential, setSessionCredential] = useState<string | null>(null);
