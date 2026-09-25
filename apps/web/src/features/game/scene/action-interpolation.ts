@@ -1,5 +1,6 @@
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
 import { CELL, directionYaw } from './scene-model';
+import { shownSelfPosition, type MoveChain, type MoveLead } from './move-lead';
 export function sampleAction(action: Action, tick: number) {
   const alpha = Math.min(
     1,
@@ -31,4 +32,26 @@ export function worldActor(
 ) {
   const s = sampleActor(self, tick);
   return { ...s, x: s.x * CELL, z: s.z * CELL };
+}
+
+/**
+ * S15P21C204-399. 다른 사람은 이만큼 늦춰 그린다. 다음 칸 이동 소식이 네트워크 지연만큼 늦게 오므로,
+ * 지금 시각으로 그리면 칸 끝에 섰다가 튄다. 100ms 늦추면 소식이 먼저 도착해 이어서 걷는다.
+ */
+export const REMOTE_RENDER_DELAY_TICKS = 2;
+
+/** S15P21C204-399. 내 위치(미터). 카메라와 손전등이 같은 선반영을 거쳐 서로 어긋나지 않는다. */
+export function shownWorldActor(
+  self: { cell: Cell; dir: Dir; action?: Action | null },
+  tick: number | null,
+  lead: MoveLead | null = null,
+  chain: MoveChain | null = null,
+) {
+  const s = sampleActor(self, tick);
+  const at = shownSelfPosition({ x: s.x, z: s.z }, self, lead, chain, tick);
+  return { ...s, x: at.x * CELL, z: at.z * CELL };
+}
+
+export function remoteTick(tick: number | null) {
+  return tick === null ? null : tick - REMOTE_RENDER_DELAY_TICKS;
 }

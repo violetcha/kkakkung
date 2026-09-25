@@ -2,7 +2,8 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
-import { worldActor } from './action-interpolation';
+import { shownWorldActor } from './action-interpolation';
+import type { MoveChain, MoveLead } from './move-lead';
 import { BLOCK, BLOCK_LIGHTING } from './block-theme';
 
 /**
@@ -13,13 +14,18 @@ import { BLOCK, BLOCK_LIGHTING } from './block-theme';
 export function BlockLighting({
   self,
   renderTick,
+  moveLead,
+  moveChain,
 }: {
   self: { cell: Cell; dir: Dir; action?: Action | null };
   renderTick(): number | null;
+  /** S15P21C204-399. 카메라와 같은 선반영. 관전 중에는 없다. */
+  moveLead?(): MoveLead | null;
+  moveChain?(): MoveChain | null;
 }) {
   const carrier = useRef<Group>(null);
   useFrame(() => {
-    const sample = worldActor(self, renderTick());
+    const sample = shownWorldActor(self, renderTick(), moveLead?.() ?? null, moveChain?.() ?? null);
     carrier.current?.position.set(sample.x, 0, sample.z);
     carrier.current?.rotation.set(0, sample.yaw, 0);
   });

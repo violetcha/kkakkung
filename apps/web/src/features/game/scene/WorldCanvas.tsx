@@ -19,7 +19,8 @@ import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
 import type { TurnLead } from './turn-lead';
-import type { MoveLead } from './move-lead';
+import type { MoveChain, MoveLead } from './move-lead';
+import { remoteTick } from './action-interpolation';
 import { CELL } from './scene-model';
 
 /**
@@ -47,6 +48,7 @@ export function WorldCanvas({
   renderTick = () => null,
   turnLead,
   moveLead,
+  moveChain,
   paused = false,
   onMetrics,
 }: {
@@ -68,6 +70,8 @@ export function WorldCanvas({
   turnLead?(): TurnLead | null;
   /** S15P21C204-389. 내가 보낸 한 칸 이동을 카메라가 먼저 따라간다. */
   moveLead?(): MoveLead | null;
+  /** S15P21C204-399. 누른 채 걸을 때 다음 칸으로 조금 먼저 걸어 둔다. */
+  moveChain?(): MoveChain | null;
   /**
    * S15P21C204-295. 멈춘 동안(설정 창) 장면을 그대로 세운다. 마지막 화면은 남으므로 뒤에
    * 복도가 비치는 것은 그대로이고, 느린 기기에서 창 조작이 밀리지 않는다.
@@ -81,6 +85,9 @@ export function WorldCanvas({
     const world = sceneWorld(theme);
     const self = view.self?.status === 'ACTIVE' ? view.self : null;
     const viewpoint = self ?? view.spectating ?? null;
+    // S15P21C204-399. 다른 사람(관전 중인 시점 포함)은 조금 늦춰 그려 칸 경계에서 튀지 않게 한다.
+    const othersTick = () => remoteTick(renderTick());
+    const viewTick = self ? renderTick : othersTick;
     const tool = self
       ? heldTool === undefined
         ? defaultHeldTool(self)
@@ -103,14 +110,26 @@ export function WorldCanvas({
           <>
             <FirstPersonCamera
               self={viewpoint}
-              renderTick={renderTick}
+              renderTick={viewTick}
               {...(self && turnLead ? { turnLead } : {})}
               {...(self && moveLead ? { moveLead } : {})}
+              {...(self && moveChain ? { moveChain } : {})}
             />
             {theme === 'block' ? (
-              <BlockLighting self={viewpoint} renderTick={renderTick} />
+              <BlockLighting
+                self={viewpoint}
+                renderTick={viewTick}
+                {...(self && moveLead ? { moveLead } : {})}
+                {...(self && moveChain ? { moveChain } : {})}
+              />
             ) : (
-              <FacilityLighting self={viewpoint} renderTick={renderTick} quality={quality} />
+              <FacilityLighting
+                self={viewpoint}
+                renderTick={viewTick}
+                quality={quality}
+                {...(self && moveLead ? { moveLead } : {})}
+                {...(self && moveChain ? { moveChain } : {})}
+              />
             )}
             {theme === 'block' && <HeldTool tool={tool} />}
             {self?.role === 'tagger' && <GrabHand signal={grabAnimationId} />}
@@ -121,7 +140,7 @@ export function WorldCanvas({
           ownerNames={ownerNames}
           faces={faces}
           standIn={standIn}
-          renderTick={renderTick}
+          renderTick={othersTick}
           theme={theme}
           quality={quality}
         />

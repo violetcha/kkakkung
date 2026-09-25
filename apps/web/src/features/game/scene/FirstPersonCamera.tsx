@@ -3,7 +3,7 @@ import { PerspectiveCamera } from 'three';
 import type { Action, Cell, Dir } from '@kkakkung/protocol/game-schema';
 import { sampleActor } from './action-interpolation';
 import { leadYaw, type TurnLead } from './turn-lead';
-import { leadPosition, type MoveLead } from './move-lead';
+import { shownSelfPosition, type MoveChain, type MoveLead } from './move-lead';
 import { CELL, CHARACTER } from './scene-model';
 export const verticalFov = (aspect: number) =>
   (2 * Math.atan(Math.tan((40 * Math.PI) / 180) / Math.max(0.1, aspect)) * 180) / Math.PI;
@@ -28,6 +28,7 @@ export function FirstPersonCamera({
   renderTick,
   turnLead = () => null,
   moveLead = () => null,
+  moveChain = () => null,
 }: {
   self: { cell: Cell; dir: Dir; action?: Action | null };
   renderTick(): number | null;
@@ -35,12 +36,14 @@ export function FirstPersonCamera({
   turnLead?(): TurnLead | null;
   /** S15P21C204-389. 보낸 한 칸 이동을 카메라가 먼저 따라간다. 서버 이동과 맞지 않으면 무시한다. */
   moveLead?(): MoveLead | null;
+  /** S15P21C204-399. 누른 채 걸을 때 다음 칸으로 조금 먼저 걸어 둔다. */
+  moveChain?(): MoveChain | null;
 }) {
   const size = useThree((state) => state.size);
   useFrame(({ camera }) => {
     const tick = renderTick();
     const sample = sampleActor(self, tick);
-    const at = leadPosition({ x: sample.x, z: sample.z }, self, moveLead(), tick);
+    const at = shownSelfPosition({ x: sample.x, z: sample.z }, self, moveLead(), moveChain(), tick);
     const placement = cameraPlacement({
       x: at.x * CELL,
       z: at.z * CELL,
