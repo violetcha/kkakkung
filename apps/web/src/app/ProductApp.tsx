@@ -14,7 +14,7 @@ import {
 import type { SessionAccessResponse, SessionResponse } from '@kkakkung/protocol/game-messages';
 import { LobbyScreen } from '../features/room/LobbyScreen';
 import { LobbyBackdrop } from '../features/room/LobbyBackdrop';
-import { DEFAULT_MAP_SIZE } from '../features/room/map-size';
+import { DEFAULT_MAP_SIZE, mapGrid } from '../features/room/map-size';
 import { RoomInvitationControls } from '../features/room/RoomInvitationControls';
 import { useMediaConsent } from '../features/room/use-media-consent';
 import { ConsentGate } from '../features/room/ConsentGate';
@@ -1247,6 +1247,10 @@ export function ProductApp({
                   tick={renderTick()}
                   ownerNames={playerNames}
                   windowCells={MINIMAP_WINDOW_CELLS}
+                  // S15P21C204-398. 시연 방은 늘 소형 맵이다(376). 나머지는 방장이 고른 크기다.
+                  cells={mapGrid(
+                    showcaseSession ? 'small' : (snapshot.roomMap?.size ?? DEFAULT_MAP_SIZE),
+                  )}
                   renderTick={renderTick}
                   operatorExit={snapshot.demo?.operatorExit ?? null}
                   zoomedOut={mapZoomedOut}

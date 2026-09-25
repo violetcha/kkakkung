@@ -12,6 +12,7 @@ export function MiniMap({
   markers = [],
   tick = 0,
   windowCells,
+  cells,
   renderTick,
   operatorExit = null,
   zoomedOut = false,
@@ -22,6 +23,8 @@ export function MiniMap({
   tick?: number;
   /** S15P21C204-295. 홀수 칸 수를 주면 내 주변만 확대한 창으로 그린다(경기·혼자 연습 화면). */
   windowCells?: number;
+  /** S15P21C204-398. 전체 지도 한 변(방 맵 격자). 없으면 32칸이다. */
+  cells?: number;
   /** 주면 창 모드에서 매 프레임 이 값으로 다시 그려 내 위치가 선형으로 흐른다. */
   renderTick?: () => number | null;
   /** Only the operator demo supplies this; player rooms must leave it absent. */
@@ -69,6 +72,7 @@ export function MiniMap({
           tick: renderTick?.() ?? tick,
           markers,
           operatorExit,
+          ...(cells === undefined ? {} : { cells }),
           ...(windowCells === undefined ? {} : { window: windowCells, zoom: zoom.current.value }),
         };
         const key = minimapDrawKey(input);
@@ -105,8 +109,8 @@ export function MiniMap({
       // 연속 모드는 프레임마다 latest 를 읽으므로 뷰·틱이 바뀔 때 다시 구독하지 않는다.
     },
     continuous
-      ? [windowCells, continuous]
-      : [view, markers, tick, windowCells, continuous, operatorExit],
+      ? [windowCells, continuous, cells]
+      : [view, markers, tick, windowCells, continuous, operatorExit, cells],
   );
   return (
     <figure
