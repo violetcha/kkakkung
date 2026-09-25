@@ -18,6 +18,7 @@ import { resolveSceneTheme, type SceneThemeId } from './scene-theme';
 import { HeldTool } from './HeldTool';
 import { defaultHeldTool, type HeldToolKind } from './held-tool';
 import { GrabHand } from './GrabHand';
+import type { TurnLead } from './turn-lead';
 import { CELL } from './scene-model';
 
 /**
@@ -43,6 +44,7 @@ export function WorldCanvas({
   heldTool,
   grabAnimationId,
   renderTick = () => null,
+  turnLead,
   paused = false,
   onMetrics,
 }: {
@@ -60,6 +62,8 @@ export function WorldCanvas({
   /** 바뀔 때마다 술래의 1인칭 잡기 손 동작을 시작하거나 유지한다. */
   grabAnimationId?: number;
   renderTick?(): number | null;
+  /** S15P21C204-388. 내가 보낸 회전을 카메라가 먼저 따라간다(관전 중에는 쓰지 않는다). */
+  turnLead?(): TurnLead | null;
   /**
    * S15P21C204-295. 멈춘 동안(설정 창) 장면을 그대로 세운다. 마지막 화면은 남으므로 뒤에
    * 복도가 비치는 것은 그대로이고, 느린 기기에서 창 조작이 밀리지 않는다.
@@ -93,7 +97,11 @@ export function WorldCanvas({
         <fog attach="fog" args={[world.background, world.fogNear, world.fogFar]} />
         {viewpoint && (
           <>
-            <FirstPersonCamera self={viewpoint} renderTick={renderTick} />
+            <FirstPersonCamera
+              self={viewpoint}
+              renderTick={renderTick}
+              {...(self && turnLead ? { turnLead } : {})}
+            />
             {theme === 'block' ? (
               <BlockLighting self={viewpoint} renderTick={renderTick} />
             ) : (

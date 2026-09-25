@@ -210,9 +210,10 @@ it.each([29_999, 30_000])(
         expect(f.room.phase).toBe('GAME_LOADING');
         expect(f.room.gameInstance()).not.toBeNull();
       } else {
-        expect(f.room.phase).toBe('ABORTED');
+        // S15P21C204-388. 미디어 회수가 끝난 뒤의 맵 준비 초과는 장치 점검으로 돌아간다.
+        expect(f.room.phase).toBe('DEVICE_CHECK');
         expect(f.room.gameInstance()).toBeNull();
-        expect(f.room.state.rematchState).toBe('available');
+        expect(f.room.state.preparationIssue).toBe('LAYOUT_UNAVAILABLE');
       }
       expect(f.room.pendingRetirements.size).toBe(0);
     } finally {
@@ -245,7 +246,8 @@ it('fails current pending retirement errors after practice detaches, ignoring fo
   }
 });
 
-it('invalidates a slow layout result at the deadline without creating a game after abort', async () => {
+// S15P21C204-388. 미디어가 걸려 있지 않은 맵 준비 초과는 무효가 아니라 장치 점검으로 돌아간다.
+it('returns a slow layout to device check at the deadline without creating a game', async () => {
   let complete!: (value: any) => void;
   const f = fixture(undefined, undefined, {
     loader: {
@@ -260,8 +262,9 @@ it('invalidates a slow layout result at the deadline without creating a game aft
     f.room.tick();
     expect(complete).toBeTypeOf('function');
     f.advance(30_000);
-    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.phase).toBe('DEVICE_CHECK');
     expect(f.room.blockedReason).toBe('MAP_FINALIZING_TIMEOUT');
+    expect(f.room.state.preparationIssue).toBe('LAYOUT_UNAVAILABLE');
     complete({
       status: 'selected',
       layout: {
@@ -269,7 +272,7 @@ it('invalidates a slow layout result at the deadline without creating a game aft
       },
     });
     await f.flush();
-    expect(f.room.phase).toBe('ABORTED');
+    expect(f.room.phase).toBe('DEVICE_CHECK');
     expect(f.room.gameInstance()).toBeNull();
     expect(f.room.pendingLayout).toBeNull();
   } finally {

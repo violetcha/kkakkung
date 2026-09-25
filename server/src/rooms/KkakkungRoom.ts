@@ -1260,10 +1260,11 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
         case 'MAP_FINALIZING': {
           const startedAt = deps.slots.phaseStartedAt(this.roomCode);
           if (startedAt !== null && now - startedAt >= MAP_FINALIZING_TIMEOUT_MS) {
-            this.abortMatch(
-              this.hasUnresolvedMedia() ? 'MEDIA_UNAVAILABLE' : null,
-              'MAP_FINALIZING_TIMEOUT',
-            );
+            // S15P21C204-388. 미디어가 걸려 있지 않으면 맵 준비가 늦었을 뿐이다. 로딩 시간 초과처럼
+            // 장치 점검으로 돌아가 다시 준비하게 한다. 늦게 온 배치는 invalidateLayout 이 버린다.
+            if (this.hasUnresolvedMedia())
+              this.abortMatch('MEDIA_UNAVAILABLE', 'MAP_FINALIZING_TIMEOUT');
+            else this.returnToDeviceCheck('MAP_FINALIZING_TIMEOUT');
             return;
           }
           if (this.hasUnresolvedMedia()) return;
