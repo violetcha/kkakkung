@@ -393,7 +393,9 @@ describe('minimapDrawKey', () => {
     ];
     const at = (tick: number) => minimapDrawKey({ view: tagger, size: 320, tick, markers });
     expect(at(99)).not.toBe(at(100));
-    expect(at(100)).toBe(at(120));
+    // S15P21C204-386. 보이는 동안은 물결·흐려짐 때문에 4분의 1 틱마다 다시 그리고, 그 안에서는 같다.
+    expect(at(100)).toBe(at(100.2));
+    expect(at(100)).not.toBe(at(100.25));
     expect(at(120)).not.toBe(at(140));
   });
 });

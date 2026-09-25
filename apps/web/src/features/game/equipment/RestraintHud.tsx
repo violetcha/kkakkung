@@ -8,8 +8,11 @@ export function RestraintHud({ view, tick }: { view: PrivateView; tick: number }
     <aside className="restraint-hud" aria-label="구속 상태">
       {state.restraintSeconds !== null && (
         <p data-state="restrained">
-          ⛓ {state.restraintSeconds > 0 ? `구속 ${state.restraintSeconds}초` : '서버 해제 확인 중'}
-          {' · '}새로 이동할 수 없습니다. 회전은 가능합니다.
+          ⛓{' '}
+          {state.restraintSeconds > 0
+            ? `덫을 밟았습니다! ${state.restraintSeconds}초 동안 움직일 수 없습니다!`
+            : '서버 해제 확인 중'}
+          <small> 회전은 가능합니다.</small>
         </p>
       )}
       {state.immuneSeconds !== null && (

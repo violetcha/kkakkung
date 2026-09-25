@@ -52,6 +52,8 @@ import { EquipmentHud } from '../features/game/equipment/EquipmentHud';
 import { createDemoFaceTexture } from '../features/game/scene/demo-face';
 import { CanvasTexture, SRGBColorSpace } from 'three';
 import { restraintPresenter } from '../features/game/equipment/restraint-presenter';
+import { RestraintHud } from '../features/game/equipment/RestraintHud';
+import { StageAlert } from '../features/game/flow/StageAlert';
 import { CueFlash } from '../features/game/flow/CueFlash';
 import { WorldCanvas } from '../features/game/scene/WorldCanvas';
 import { SoloPracticeScreen } from '../features/game/solo/SoloPracticeScreen';
@@ -1068,6 +1070,14 @@ export function ProductApp({
                       : {})}
                   />
                 </div>
+                {/* S15P21C204-386. 덫에 걸린 동안 남은 시간·회전 가능 안내, 술래의 장비 발동 알림. */}
+                {activeSelf && view && (
+                  <RestraintHud
+                    view={view}
+                    tick={runtime.current?.renderTick() ?? round?.serverTick ?? 0}
+                  />
+                )}
+                <StageAlert alert={snapshot.stageAlert} />
                 <GameStatusChrome
                   role={activeSelf?.role ?? null}
                   // S15P21C204-369. 시연 방 녹화용 시점 표시. 내가 뛰는 동안은 역할 · 내 이름,

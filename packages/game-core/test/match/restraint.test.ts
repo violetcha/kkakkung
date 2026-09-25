@@ -171,7 +171,7 @@ describe('restraint duration, action locks and re-restraint immunity', () => {
       command('r-a', 'MOVE_INTENT', { direction: 'forward' }),
     ]).state;
     const fired = step(idleUntil(walking, 43, 50), 51);
-    expect(player(fired.state, 'r-a').restraintUntilTick).toBe(81);
+    expect(player(fired.state, 'r-a').restraintUntilTick).toBe(111);
     // No challenge existed, so no personal challenge event is produced.
     expect(challengeEnded(fired.events)).toEqual([]);
     // The exchange session is gone and both slots are clear.

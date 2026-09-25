@@ -4,6 +4,13 @@ import type { Cell, PrivateView, Role } from '@kkakkung/protocol/game-schema';
 import { ROLE_COLORS } from '../scene/role-colors';
 import { mapDrawModel } from './map-draw-model';
 import { pastEventMarkers, type HunterMarker } from './past-event-markers';
+import {
+  edgeArrow,
+  HUNTER_MARKER_STYLES,
+  hunterMarkerPhase,
+  rgba,
+  type MarkerShape,
+} from './hunter-marker-style';
 
 /** 미니맵이 담는 칸 수. 맵 템플릿과 같은 한 변이다. */
 export const MINIMAP_CELLS = 32;
@@ -243,8 +250,34 @@ export function minimapDrawKey(input: MinimapInput): string {
     model.exits.map((exit) => exit.exitId),
     model.operatorExit,
     input.view?.self?.status === 'ACTIVE' ? input.view.self.role : null,
-    pastEventMarkers(input.view, input.markers ?? [], tick).map((marker) => marker.markerId),
+    // 표식은 물결·흐려짐으로 틱마다 모양이 바뀐다. 보이는 동안만 4분의 1 틱 단위로 다시 그린다.
+    pastEventMarkers(input.view, input.markers ?? [], tick).map(
+      (marker) => `${marker.markerId}:${Math.floor((tick - marker.showAtTick) * 4)}`,
+    ),
   ]);
+}
+
+function drawMarkerShape(
+  ctx: MinimapContext,
+  shape: MarkerShape,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (shape === 'triangle') {
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size * 0.9, y + size * 0.7);
+    ctx.lineTo(x - size * 0.9, y + size * 0.7);
+    ctx.closePath();
+  } else if (shape === 'square') {
+    ctx.rect(x - size * 0.75, y - size * 0.75, size * 1.5, size * 1.5);
+  } else {
+    ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
+  }
+  ctx.fill();
 }
 
 export function drawMinimap(ctx: MinimapContext, input: MinimapInput): MinimapLayout {
@@ -439,20 +472,58 @@ export function drawMinimap(ctx: MinimapContext, input: MinimapInput): MinimapLa
   }
   ctx.restore();
 
-  ctx.strokeStyle = MINIMAP_COLORS.marker;
-  ctx.lineWidth = Math.max(1, Math.round(unit / 8));
+  // S15P21C204-386. 종류별 모양·색, 퍼지는 물결, 끝의 흐려짐. 창 밖 사건은 가장자리 화살표.
+  const center = {
+    x: offset + (me.x + 0.5) * unit,
+    y: offset + (me.y + 0.5) * unit,
+  };
   for (const marker of pastEventMarkers(input.view, input.markers ?? [], tick)) {
+    const style = HUNTER_MARKER_STYLES[marker.kind];
+    const phase = hunterMarkerPhase(marker, tick);
     const at = local(marker.point.x, marker.point.y);
-    if (!inside(at.x, at.y)) continue;
-    ctx.beginPath();
-    ctx.arc(
-      offset + (at.x + 0.5) * unit,
-      offset + (at.y + 0.5) * unit,
-      Math.max(2, unit * 0.3),
-      0,
-      Math.PI * 2,
-    );
-    ctx.stroke();
+    const x = offset + (at.x + 0.5) * unit;
+    const y = offset + (at.y + 0.5) * unit;
+    if (inside(at.x, at.y)) {
+      if (style.ripple) {
+        ctx.lineWidth = Math.max(1.5, unit / 6);
+        for (const ring of phase.rings) {
+          ctx.strokeStyle = rgba(style.rgb, ring.alpha);
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(3, unit * ring.radiusCells), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      drawMarkerShape(
+        ctx,
+        style.shape,
+        x,
+        y,
+        Math.max(3, unit * 0.42),
+        rgba(style.rgb, phase.alpha),
+      );
+    } else if (windowed) {
+      const pad = Math.max(6, unit * 0.6);
+      const edge = edgeArrow(center, { x, y }, { min: offset + pad, max: offset + span - pad });
+      if (!edge) continue;
+      const size = Math.max(6, unit * 0.7);
+      ctx.save();
+      ctx.translate(edge.x, edge.y);
+      ctx.rotate(edge.angle);
+      ctx.fillStyle = rgba(style.rgb, phase.alpha * phase.pulse);
+      ctx.beginPath();
+      ctx.moveTo(size * 0.6, 0);
+      ctx.lineTo(-size * 0.5, -size * 0.5);
+      ctx.lineTo(-size * 0.2, 0);
+      ctx.lineTo(-size * 0.5, size * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = rgba(style.rgb, phase.rings[0]!.alpha);
+      ctx.lineWidth = Math.max(1.5, unit / 6);
+      ctx.beginPath();
+      ctx.arc(0, 0, size * (0.6 + phase.rings[0]!.radiusCells / 2), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   if (windowed) ctx.restore();

@@ -1,5 +1,5 @@
 import { AccessToken } from 'livekit-server-sdk';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   confirmRoomSnapshot,
   createdRoomSnapshot,
@@ -175,6 +175,18 @@ describe('same-name room recreation proof', () => {
 
 describe('revocation result token validity', () => {
   it('reads the actual pinned SDK nbf/exp claims without changing its 300-second lifetime', async () => {
+    // SDK 는 nbf 와 exp 를 서로 다른 순간에 초 단위로 내림한다. 그 사이에 초가 넘어가면 299초가
+    // 나와 CI 가 가끔 실패했다. 시계만 한 순간에 고정해 두 값을 같은 초에서 읽는다.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 0, 1, 0, 0, 0, 500));
+    try {
+      await expectPinnedLifetime();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  async function expectPinnedLifetime() {
     const token = new AccessToken('qa-key', 'qa-secret-not-a-real-credential', {
       identity: 'qa',
       ttl: 300,
@@ -183,7 +195,7 @@ describe('revocation result token validity', () => {
     const window = probeTokenWindow(await token.toJwt());
     expect(window.expiresAtEpochMs - window.notBeforeEpochMs).toBe(300_000);
     expect(() => requireValidProbeToken(window, window.notBeforeEpochMs, 10_000)).not.toThrow();
-  });
+  }
 
   it('never treats an expired or not-yet-valid token denial as revocation success', () => {
     const window = { notBeforeEpochMs: 1000, expiresAtEpochMs: 301_000 };

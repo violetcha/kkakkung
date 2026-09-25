@@ -36,6 +36,8 @@ import { createFaceTextures, videoFaceTexture } from '../features/game/scene/fac
 import { createPrivateEvents } from '../features/room/private-events';
 import { debugFeed } from '../features/debug/debug-feed';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
+import { compassFrom } from '../features/game/map/hunter-marker-style';
+import type { StageAlertValue } from '../features/game/flow/StageAlert';
 import { exchangePresenter, permitsExchange } from '../features/game/map/exchange-presenter';
 import { equipmentPresenter } from '../features/game/equipment/equipment-presenter';
 import {
@@ -149,6 +151,8 @@ export type ProductSnapshot = {
   endedSelf: PrivateView['self'];
   /** S15P21C204-261. 마지막 화면 플래시. id 가 바뀔 때마다 한 번 재생하고 화면이 스스로 지운다. */
   cueFlash?: { kind: FlashKind; id: number } | null;
+  /** S15P21C204-386. 술래 화면 위쪽 장비 발동 알림(종류·방향). */
+  stageAlert?: StageAlertValue | null;
   /** 로컬 잡기 입력마다 증가한다. 서버 결과와 무관한 1인칭 손 연출 신호다. */
   grabAnimationId: number;
   /** S15P21C204-276. 좌하단 사건 로그에 그릴 최근 줄. 안내음이 울린 순간과 같다. */
@@ -210,6 +214,10 @@ export function bindProductRoom(
   /** S15P21C204-307. 화면에 이미 낸 효과음. 소리와 같은 서버 eventId 로만 거른다. */
   const shownEffects = new Set<string>();
   let shownEffectsMatch: string | null = null;
+  /** S15P21C204-386. 이미 경보를 낸 표식. 같은 표식이 다시 와도 한 번만 울린다. */
+  const alarmedMarkers = new Set<string>();
+  let alertId = 0;
+  let alarmedMatch: string | null = null;
   let eventId = 0;
   /** S15P21C204-278. 첫 설치 안내를 이미 낸 경기. 한 경기에 한 번만 낸다. */
   let installPromptMatch: string | null = null;
@@ -369,9 +377,32 @@ export function bindProductRoom(
     }
     for (const effect of detectEffectFlashes(effects, shownEffects)) {
       shownEffects.add(effect.eventId);
+      // S15P21C204-386. 술래는 같은 사건을 표식 경보로 이미 받는다(거리 무관). 두 번 띄우지 않는다.
+      if (snapshot.view?.self?.role === 'tagger') continue;
       if (lastFlashAt !== null && deps.now() - lastFlashAt < CUE_FLASH_MS) continue;
       flash(effect.kind);
     }
+  };
+  /**
+   * S15P21C204-386. 술래 팀 경보. 덫·감지기 표식은 서버가 모든 술래에게 보내므로 거리와 상관없이
+   * 소리·플래시·로그 한 줄로 알린다. 표식이 이미 알려 주는 것(종류·위치) 말고는 말하지 않는다.
+   */
+  const alarmMarker = (marker: HunterMarker) => {
+    if (!active || snapshot.lost || marker.kind === 'exchange') return;
+    const matchId = snapshot.round?.matchId ?? null;
+    if (alarmedMatch !== matchId) {
+      alarmedMarkers.clear();
+      alarmedMatch = matchId;
+    }
+    if (alarmedMarkers.has(marker.markerId)) return;
+    alarmedMarkers.add(marker.markerId);
+    bridge.runtime.playCue?.(marker.kind === 'trap' ? 'trap-alarm' : 'sensor-alarm');
+    const self = snapshot.view?.self;
+    const where = self?.status === 'ACTIVE' ? ` · ${compassFrom(self.cell, marker.point)}` : '';
+    const text = marker.kind === 'trap' ? `▲ 덫 작동${where}` : `▣ 감지기 작동${where}`;
+    logEvent(text);
+    publish({ stageAlert: { id: ++alertId, kind: marker.kind, text } });
+    if (lastFlashAt === null || deps.now() - lastFlashAt >= CUE_FLASH_MS) flash(marker.kind);
   };
   const logEvent = (text: string) => {
     publish({ events: appendEvent(snapshot.events, { id: ++eventId, text, atMs: deps.now() }) });
@@ -458,6 +489,7 @@ export function bindProductRoom(
       if (!participating) return;
       if (event.type === 'HUNTER_MARKER' && snapshot.view?.self?.role === 'tagger') {
         const tick = clock.renderTick() ?? snapshot.round?.serverTick ?? 0;
+        if (event.payload.expiresTick > tick) alarmMarker(event.payload);
         if (event.payload.expiresTick > tick)
           publish({
             markers: [

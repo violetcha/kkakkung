@@ -240,7 +240,7 @@ describe('tuning data', () => {
     const result = validateTuning(raw);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.template.tuningVersion).toBe('mvp-v2');
+    expect(result.template.tuningVersion).toBe('mvp-v3');
     // S15P21C204-270. Speed is tuned (12 ticks a cell, 8 a turn, provisional until the six-device
     // session); the shipped values are the fixture defaults so code-built tunings match the JSON.
     expect(result.template.match.moveTicks).toBe(MATCH_TUNING_DEFAULTS.moveTicks);
