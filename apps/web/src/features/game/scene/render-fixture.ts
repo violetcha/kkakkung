@@ -74,8 +74,9 @@ export function renderFixture(
         kind: 'player' as const,
         cell: { x: x!, y: y! },
         dir: 2 as const,
-        // S15P21C204-378. 술래와 도망자를 섞어 세워 두 체형을 나란히 검수한다.
-        role: index % 2 === 0 ? ('tagger' as const) : ('runner' as const),
+        // S15P21C204-378. 술래와 도망자를 섞어 세운다. 서버처럼 같은 편(도망자)에게만 역할을 붙이고
+        // 적(술래)은 역할 없이 둔다. 적의 몸은 웹이 보는 사람 역할의 반대로 고른다.
+        ...(index % 2 === 1 ? { role: 'runner' as const } : {}),
         action: null,
       })),
     );

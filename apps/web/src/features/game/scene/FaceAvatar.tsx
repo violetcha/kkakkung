@@ -311,6 +311,17 @@ function TaggerPreload({ resources }: { resources: ReturnType<typeof createAvata
   );
 }
 
+/**
+ * S15P21C204-378. 서버는 같은 편에게만 역할 표시를 붙여 보낸다(적 ID·명단 대응은 숨긴다, 340).
+ * 역할이 없는 보이는 플레이어는 곧 적이고 역할은 둘뿐이라, 보는 사람 역할의 반대로 몸을 고른다.
+ * 그래야 도망자에게 술래가 괴수 몸으로 보인다. 관전은 같은 편을 보므로 자기 역할이 그대로 기준이다.
+ * 보는 사람 역할을 모르면(대기실 등) 그대로 둔다. 같은 편 배지(ally)는 서버가 준 역할로만 정한다.
+ */
+export function withAvatarRole(player: Player, viewerRole: Role | undefined): Player {
+  if (player.role !== undefined || viewerRole === undefined) return player;
+  return { ...player, role: viewerRole === 'runner' ? 'tagger' : 'runner' };
+}
+
 /** Geometry/materials belong to the scene; face textures still belong to FaceTextures. */
 export function FaceAvatars({
   view,
@@ -331,7 +342,7 @@ export function FaceAvatars({
       {visibilityMask(view).players.map((player) => (
         <Avatar
           key={player.id}
-          player={player}
+          player={withAvatarRole(player, view.self?.role)}
           ally={player.role !== undefined && player.role === view.self?.role}
           faces={faces}
           standIn={standIn}
