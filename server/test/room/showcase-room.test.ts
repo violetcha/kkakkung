@@ -12,6 +12,7 @@ import { expect, it, vi } from 'vitest';
 import { bindFallbackPlayers, matchCore } from '@kkakkung/game-core/match';
 import {
   SHOWCASE_CLOSED_CLOSE_CODE,
+  showcaseSeatRole,
   type RoomRosterMessage,
 } from '@kkakkung/protocol/game-messages';
 import type { CorePort, MatchLayout } from '../../src/game/ports.js';
@@ -107,15 +108,18 @@ function fixture(
   room.broadcast = (type: string, value: unknown) => {
     if (type === 'room-roster') rosters.push(value as RoomRosterMessage);
   };
-  const roles = ['runner', 'tagger', 'tagger', 'runner'] as const;
-  const players = roles.map((role, i) => {
+  // S15P21C204-403. 자리는 입장 순서가 아니라 고른 것이다. 셋째가 술래 1, 둘째가 술래 2 를 골라
+  // 순서와 자리 번호가 어긋나게 둔다.
+  const seats = ['runner-1', 'tagger-2', 'tagger-1', 'runner-2'] as const;
+  const players = seats.map((seat, i) => {
+    const role = showcaseSeatRole(seat);
     const session = sessions.issue({
       nickname: `p${i}`,
       inviteId: 'showcase:fixture',
       roomCode: room.roomCode,
     });
     expect(
-      slots.reserve(room.roomCode, session.playerId, now, { create: i === 0, showcase: { role } }),
+      slots.reserve(room.roomCode, session.playerId, now, { create: i === 0, showcase: { seat } }),
     ).toBe('reserved');
     return { session, role, client: { sessionId: `connection-${i}`, send() {}, leave() {} } };
   });
@@ -381,7 +385,10 @@ it('S15P21C204-360: frees the seats and the room entry on dispose without waitin
     expect(f.slots.showcaseRoomsInUse()).toBe(0);
     // 방 한도가 1 인 이 픽스처에서도 다음 시연 방이 바로 열린다.
     expect(
-      f.slots.reserve('SHOWC2', 'next-host', 1_000, { create: true, showcase: { role: 'runner' } }),
+      f.slots.reserve('SHOWC2', 'next-host', 1_000, {
+        create: true,
+        showcase: { seat: 'runner-1' },
+      }),
     ).toBe('reserved');
 
     // 늦게 온 해제 확인은 소멸한 핸들이 받아 아무것도 건드리지 않는다.
@@ -417,12 +424,13 @@ it('S15P21C204-390: hands the loader seat names, so the same seat gets the same 
         'showcase-seat-tagger-2',
         'showcase-vacant-tagger-3',
       ]);
-      // 자리: 도망자 1 = players[0], 도망자 2 = players[3], 술래 1 = players[1], 술래 2 = players[2].
+      // 자리는 고른 대로다(403): 도망자 1 = players[0], 술래 2 = players[1], 술래 1 = players[2],
+      // 도망자 2 = players[3]. 술래는 둘째가 2, 셋째가 1 을 골라 입장 순서와 반대다.
       const seatOf = new Map([
         [f.players[0]!.session.playerId, 'runner-1'],
         [f.players[3]!.session.playerId, 'runner-2'],
-        [f.players[1]!.session.playerId, 'tagger-1'],
-        [f.players[2]!.session.playerId, 'tagger-2'],
+        [f.players[2]!.session.playerId, 'tagger-1'],
+        [f.players[1]!.session.playerId, 'tagger-2'],
       ]);
       const created = f.core.calls?.find?.((call) => call.method === 'createMatch');
       const layout = (created?.args as any)?.layout ?? f.room.pendingLayout?.layout;

@@ -62,18 +62,20 @@ describe('showcase room admission', () => {
     });
 
   it('refuses a browser without the SSO-asserted identity, including one carrying an operations Bearer', async () => {
-    expect((await post({ role: 'runner' }, {})).status).toBe(401);
+    expect((await post({ seat: 'runner-1' }, {})).status).toBe(401);
     expect(
-      (await post({ role: 'runner' }, { authorization: `Bearer ${TEST_OPS_TOKEN}` })).status,
+      (await post({ seat: 'runner-1' }, { authorization: `Bearer ${TEST_OPS_TOKEN}` })).status,
     ).toBe(401);
     expect(slots.roomCodes().size).toBe(0);
   });
 
-  it('gathers four members into one 2:2 room and turns a third same-role choice away', async () => {
-    const first = await post({ role: 'runner', nickname: '연찡' });
+  it('gathers four members into one 2:2 room by chosen seat, named after the seat', async () => {
+    const first = await post({ seat: 'runner-1' });
     expect(first.status).toBe(201);
     const opened = showcaseRoomResponseSchema.parse(await first.json());
     expect(opened.role).toBe('runner');
+    // S15P21C204-403. 표시 이름은 자리 이름이라 캡션이 대본의 자리를 그대로 가리킨다.
+    expect(sessions.authenticate(opened.sessionToken)?.nickname).toBe('도망자 1');
     expect(opened.entryFragment).toMatch(/^#showcase=.+&room=[A-Z0-9]{6}&player=.+$/);
     expect(opened.entryFragment).toContain(`&room=${opened.roomCode}&`);
     expect(slots.optionsOf(opened.roomCode)).toEqual({
@@ -82,11 +84,11 @@ describe('showcase room admission', () => {
       operatorRole: null,
     });
 
-    // 두 번째 도망자와 술래 둘은 같은 방에 붙는다.
+    // 나머지 세 자리는 같은 방에 붙는다. 술래 2 를 술래 1 보다 먼저 골라도 자리는 고른 대로다.
     const others = await Promise.all([
-      post({ role: 'runner' }),
-      post({ role: 'tagger' }),
-      post({ role: 'tagger' }),
+      post({ seat: 'runner-2' }),
+      post({ seat: 'tagger-2' }),
+      post({ seat: 'tagger-1' }),
     ]);
     for (const response of others) {
       expect(response.status).toBe(201);
@@ -95,17 +97,23 @@ describe('showcase room admission', () => {
       );
     }
     expect(slots.occupied(opened.roomCode)).toBe(4);
-    // 역할별 두 자리씩, 고른 그대로 기억한다.
+    // 자리와 그 역할을 고른 그대로 기억한다.
+    expect([...slots.requestedSeats(opened.roomCode).values()].sort()).toEqual([
+      'runner-1',
+      'runner-2',
+      'tagger-1',
+      'tagger-2',
+    ]);
     const roles = [...slots.requestedRoles(opened.roomCode).values()];
     expect(roles.filter((role) => role === 'runner')).toHaveLength(2);
     expect(roles.filter((role) => role === 'tagger')).toHaveLength(2);
     // 방이 찼으니 다섯째는 새 방도 얻지 못하고 CAPACITY 로 답한다(시연 방은 한 번에 하나).
-    const fifth = await post({ role: 'runner' });
+    const fifth = await post({ seat: 'runner-1' });
     expect(fifth.status).toBe(503);
     expect(await fifth.json()).toEqual({ error: 'CAPACITY' });
   });
 
-  it('answers ROLE_FULL when the chosen side already has two, without spending a seat', async () => {
+  it('answers SEAT_TAKEN when the chosen seat is already held, without spending a seat', async () => {
     const own = new SlotRegistry({ maxRooms: 1 });
     const store = new ProductSessionStore({ now: () => now });
     const app = express();
@@ -123,21 +131,21 @@ describe('showcase room admission', () => {
     );
     const local = await listen(app);
     try {
-      const call = (role: string) =>
+      const call = (seat: string) =>
         fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-demo-admin': 'member' },
-          body: JSON.stringify({ role }),
+          body: JSON.stringify({ seat }),
         });
-      expect((await call('tagger')).status).toBe(201);
-      expect((await call('tagger')).status).toBe(201);
-      const third = await call('tagger');
-      expect(third.status).toBe(409);
-      expect(await third.json()).toEqual({ error: 'ROLE_FULL' });
+      expect((await call('tagger-1')).status).toBe(201);
+      const again = await call('tagger-1');
+      expect(again.status).toBe(409);
+      expect(await again.json()).toEqual({ error: 'SEAT_TAKEN' });
       const [code] = own.roomCodes();
-      expect(own.occupied(code!)).toBe(2);
-      // 다른 역할은 여전히 들어간다.
-      expect((await call('runner')).status).toBe(201);
+      expect(own.occupied(code!)).toBe(1);
+      // 다른 자리는 여전히 들어간다. 같은 역할이라도 자리가 다르면 된다.
+      expect((await call('tagger-2')).status).toBe(201);
+      expect((await call('runner-1')).status).toBe(201);
     } finally {
       await new Promise<void>((resolve) => local.server.close(() => resolve()));
     }
@@ -145,14 +153,16 @@ describe('showcase room admission', () => {
 
   // S15P21C204-367. 로그인 게이트는 SSAFY 계정 전체를 통과시키므로 운영자 판정은 목록이 한다.
   it('refuses a signed-in account that is not on the operator list', async () => {
-    const response = await post({ role: 'runner' }, { 'x-demo-admin': 'student@example.com' });
+    const response = await post({ seat: 'runner-1' }, { 'x-demo-admin': 'student@example.com' });
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'UNAUTHORIZED' });
   });
 
-  it('rejects a request that names no role', async () => {
+  it('rejects a request that names no seat, a role instead of a seat, or a display name', async () => {
     expect((await post({})).status).toBe(400);
-    expect((await post({ role: 'referee' })).status).toBe(400);
+    expect((await post({ seat: 'runner-3' })).status).toBe(400);
+    expect((await post({ role: 'runner' })).status).toBe(400);
+    expect((await post({ seat: 'runner-1', nickname: '연찡' })).status).toBe(400);
   });
 });
 
@@ -166,13 +176,13 @@ describe('showcase rooms disabled', () => {
       const anonymous = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: 'runner' }),
+        body: JSON.stringify({ seat: 'runner-1' }),
       });
       expect(anonymous.status).toBe(401);
       const member = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-demo-admin': 'member' },
-        body: JSON.stringify({ role: 'runner' }),
+        body: JSON.stringify({ seat: 'runner-1' }),
       });
       expect(member.status).toBe(503);
       expect(await member.json()).toEqual({ error: 'SHOWCASE_UNAVAILABLE' });
@@ -190,7 +200,7 @@ describe('showcase rooms disabled', () => {
       const response = await fetch(endpoint + SHOWCASE_ROOM_ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-demo-admin': 'forged' },
-        body: JSON.stringify({ role: 'runner' }),
+        body: JSON.stringify({ seat: 'runner-1' }),
       });
       expect(response.status).toBe(401);
     } finally {
@@ -225,7 +235,7 @@ describe('showcase admission gate (S15P21C204-362)', () => {
         fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...headers },
-          body: JSON.stringify({ role: 'runner' }),
+          body: JSON.stringify({ seat: 'runner-1' }),
         });
       // 인증이 문보다 먼저다. 신원 없는 호출은 서버 상태를 알 수 없다.
       expect((await call({})).status).toBe(401);
@@ -264,11 +274,11 @@ describe('three showcase rooms at once (S15P21C204-361)', () => {
     );
     const local = await listen(app);
     try {
-      const seat = async (role: 'runner' | 'tagger') => {
+      const seat = async (chosen: 'runner-1' | 'runner-2' | 'tagger-1' | 'tagger-2') => {
         const response = await fetch(local.endpoint + SHOWCASE_ROOM_ROUTE, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-demo-admin': 'member' },
-          body: JSON.stringify({ role }),
+          body: JSON.stringify({ seat: chosen }),
         });
         return response.status === 201
           ? showcaseRoomResponseSchema.parse(await response.json()).roomCode
@@ -276,36 +286,36 @@ describe('three showcase rooms at once (S15P21C204-361)', () => {
       };
       const fill = async () => {
         const codes = await Promise.all([
-          seat('runner'),
-          seat('runner'),
-          seat('tagger'),
-          seat('tagger'),
+          seat('runner-1'),
+          seat('runner-2'),
+          seat('tagger-1'),
+          seat('tagger-2'),
         ]);
         expect(new Set(codes).size).toBe(1);
         return codes[0]!;
       };
       // 첫 무리 넷은 한 방. 다섯째는 새 방을 연다(한도 3).
       const first = await fill();
-      const second = await seat('runner');
+      const second = await seat('runner-1');
       expect(second).not.toBe(first);
       expect(own.showcaseRoomsInUse()).toBe(2);
       // 둘째 방에 빈 자리가 있는 동안은 셋째 방을 열지 않고 거기에 앉힌다.
-      expect(await seat('tagger')).toBe(second);
-      expect(await seat('runner')).toBe(second);
-      expect(await seat('tagger')).toBe(second);
+      expect(await seat('tagger-1')).toBe(second);
+      expect(await seat('runner-2')).toBe(second);
+      expect(await seat('tagger-2')).toBe(second);
       expect(own.occupied(second)).toBe(4);
       const third = await fill();
       expect(new Set([first, second, third]).size).toBe(3);
       expect(own.showcaseRoomsInUse()).toBe(3);
       // 셋이 다 쓰이는 중이면 열셋째는 기다린다.
-      expect(await seat('runner')).toBe('503:CAPACITY');
+      expect(await seat('runner-1')).toBe('503:CAPACITY');
       expect(own.roomCodes().size).toBe(3);
       // S15P21C204-372. 경기 중인 시연 방도 LiveKit 을 쓰므로 여전히 센다.
       own.setPhase(first, 'TEAM_PRACTICE', 1_000_000);
-      expect(await seat('runner')).toBe('503:CAPACITY');
+      expect(await seat('runner-1')).toBe('503:CAPACITY');
       // 결과 화면으로 넘어간 방은 세지 않아 다음 시연이 새 방을 연다.
       own.setPhase(first, 'RESULT', 1_000_000);
-      const fourth = await seat('runner');
+      const fourth = await seat('runner-1');
       expect(fourth).not.toBe('503:CAPACITY');
       expect(own.roomCodes().size).toBe(4);
       // 시연 방은 일반 방 예산(maxRooms 10) 밖이다.

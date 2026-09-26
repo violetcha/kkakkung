@@ -72,7 +72,7 @@ import 경계는 ESLint가 아니라 `scripts/check-boundaries.mjs`가 강제한
 | `Dir`                                | 리터럴 `0` \| `1` \| `2` \| `3`                             | 이벤트·뷰                       |
 | `WallFace`                           | `Cell` + `side: Dir`                                        | 이벤트·뷰                       |
 | `TracePoint`                         | `{ x, y }`, 각각 유한 실수 0~31(반 칸 허용)                 | `HUNTER_MARKER`                 |
-| `nickname`                           | 문자열 1~20자                                               | 세션·데모·시연 요청             |
+| `nickname`                           | 문자열 1~20자                                               | 세션·데모 요청                  |
 | `inviteToken`                        | 문자열 16~512자                                             | 세션 요청·초대 응답             |
 | `roomCode`                           | 정규식 `^[A-HJ-NP-Z2-9]{6}$` (I·O·0·1 제외 대문자·숫자 6자) | `ROOM_CODE_PATTERN`             |
 
@@ -518,19 +518,19 @@ Colyseus로 방 전체에 동기화되는 공개 상태는 라운드 메타데�
 
 ### 요청·응답 형상
 
-| 스키마                             | 필드                                                                                                                                 | 제약                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `sessionRequestSchema` 방 만들기   | `nickname`, `inviteToken?`, `createRoom: true`                                                                                       | `roomCode`가 있으면 거절                  |
-| `sessionRequestSchema` 방 들어가기 | `nickname`, `inviteToken?`, `createRoom: false`, `roomCode`                                                                          | `roomCode` 필수                           |
-| `sessionResponseSchema`            | `sessionToken: 1자 이상`, `playerId: 1자 이상`, `roomCode`, `expiresAt: 양의 안전 정수(epoch ms)`, `protocolVersion: '0.2.0'` 리터럴 | 다른 버전 문자열이면 거절                 |
-| `sessionAccessResponseSchema`      | `method`                                                                                                                             | `'invitation' \| 'gitlab-sso' \| 'guest'` |
-| `roomInvitationResponseSchema`     | `inviteToken`, `roomCode`, `expiresAt: 양의 안전 정수`                                                                               | —                                         |
-| `serviceCapacitySchema`            | `matchesInUse`, `matchLimit`, `lobbyRoomsInUse`, `lobbyRoomLimit`                                                                    | 각각 0 이상 정수                          |
-|                                    | `admissionOpen`, `mediaBlocked`                                                                                                      | boolean                                   |
-| `demoRoomRequestSchema`            | `role: 'runner' \| 'tagger'`, `nickname?`                                                                                            | —                                         |
-| `demoRoomResponseSchema`           | `sessionToken`, `playerId`, `roomCode`, `role`, `expiresAt`, `protocolVersion: '0.2.0'`, `entryFragment: 1~1024자`                   | —                                         |
-| `showcaseRoomRequestSchema`        | `role: 'runner' \| 'tagger'`, `nickname?`                                                                                            | —                                         |
-| `showcaseRoomResponseSchema`       | 데모 응답과 같은 7필드                                                                                                               | `entryFragment` 1~1024자                  |
+| 스키마                             | 필드                                                                                                                                                      | 제약                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `sessionRequestSchema` 방 만들기   | `nickname`, `inviteToken?`, `createRoom: true`                                                                                                            | `roomCode`가 있으면 거절                  |
+| `sessionRequestSchema` 방 들어가기 | `nickname`, `inviteToken?`, `createRoom: false`, `roomCode`                                                                                               | `roomCode` 필수                           |
+| `sessionResponseSchema`            | `sessionToken: 1자 이상`, `playerId: 1자 이상`, `roomCode`, `expiresAt: 양의 안전 정수(epoch ms)`, `protocolVersion: '0.2.0'` 리터럴                      | 다른 버전 문자열이면 거절                 |
+| `sessionAccessResponseSchema`      | `method`                                                                                                                                                  | `'invitation' \| 'gitlab-sso' \| 'guest'` |
+| `roomInvitationResponseSchema`     | `inviteToken`, `roomCode`, `expiresAt: 양의 안전 정수`                                                                                                    | —                                         |
+| `serviceCapacitySchema`            | `matchesInUse`, `matchLimit`, `lobbyRoomsInUse`, `lobbyRoomLimit`                                                                                         | 각각 0 이상 정수                          |
+|                                    | `admissionOpen`, `mediaBlocked`                                                                                                                           | boolean                                   |
+| `demoRoomRequestSchema`            | `role: 'runner' \| 'tagger'`, `nickname?`                                                                                                                 | —                                         |
+| `demoRoomResponseSchema`           | `sessionToken`, `playerId`, `roomCode`, `role`, `expiresAt`, `protocolVersion: '0.2.0'`, `entryFragment: 1~1024자`                                        | —                                         |
+| `showcaseRoomRequestSchema`        | `seat: 'runner-1' \| 'runner-2' \| 'tagger-1' \| 'tagger-2'`(`SHOWCASE_SEATS`). 표시 이름은 `SHOWCASE_SEAT_LABELS[seat]`, 역할은 `showcaseSeatRole(seat)` | —                                         |
+| `showcaseRoomResponseSchema`       | 데모 응답과 같은 7필드                                                                                                                                    | `entryFragment` 1~1024자                  |
 
 서버가 만드는 `entryFragment`는 데모가 `#demo=<토큰>&room=<코드>&player=<ID>`, 시연이 `#showcase=<토큰>&room=<코드>&player=<ID>`이다. 세션·초대 응답의 `expiresAt`은 epoch ms다. 데모·시연 응답의 `expiresAt`은 세션 만료가 아니라 첫 연결 전 입장 마감 시각(`admissionExpiresAt`, 없으면 세션 만료)이며 역시 epoch ms다. 미디어 grant의 `expiresAt`은 epoch 초라서 같은 이름의 단위가 다르다.
 
@@ -563,7 +563,7 @@ Colyseus로 방 전체에 동기화되는 공개 상태는 라운드 메타데�
 |                               | `ADMISSION_CLOSED`       | 503       | 서버 준비 안 됨                                                        |
 |                               | `INVALID_REQUEST`        | 400       | 본문 불일치                                                            |
 |                               | `CAPACITY`               | 503       | 시연 방 한도·발급 실패·예약 실패                                       |
-|                               | `ROLE_FULL`              | 409       | 고른 역할 자리가 참                                                    |
+|                               | `SEAT_TAKEN`             | 409       | 고른 자리에 이미 누가 앉음                                             |
 |                               | `SHOWCASE_UNAVAILABLE`   | 503       | 시연 기능이 꺼진 배포                                                  |
 | 데모(목록 없음)               | `UNAUTHORIZED`           | 401       | 운영 Bearer 또는 SSO 관리자 확인 실패                                  |
 |                               | `INVALID_REQUEST`        | 400       | 본문 불일치                                                            |

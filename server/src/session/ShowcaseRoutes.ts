@@ -2,8 +2,9 @@
  * 발표 시연 방(showcase) 발급 경로.
  *
  * 실제 사람 넷이 2:2 로 고정 소형 미로에서 3분을 온전히 뛰는 경기다. `/showcase` 를 연 팀원은
- * 모두 지금 열려 있는 시연 방 하나에 모이고(없으면 새로 연다), 역할은 각자 고른다. 한 역할은
- * 둘까지라 셋째가 같은 역할을 고르면 `ROLE_FULL` 로 다른 역할을 고르게 한다.
+ * 모두 지금 열려 있는 시연 방 하나에 모이고(없으면 새로 연다), 자리(도망자 1·2, 술래 1·2)는
+ * 각자 고른다(S15P21C204-403). 이미 앉은 자리를 고르면 `SEAT_TAKEN` 으로 다른 자리를 고르게
+ * 한다. 표시 이름은 자리 이름이다.
  *
  * 인증은 `/demo` 와 같다. 호스트 nginx 가 GitLab SSO 를 지난 뒤 로그인 이메일로 `X-Demo-Admin`
  * 을 써 주고, 서버는 그 이메일이 운영자 목록에 있을 때만 받는다(S15P21C204-367). `trustedProxy`
@@ -13,7 +14,9 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import {
   SHOWCASE_ROOM_ROUTE,
+  SHOWCASE_SEAT_LABELS,
   showcaseRoomRequestSchema,
+  showcaseSeatRole,
   type ShowcaseErrorCode,
   type ShowcaseRoomResponse,
 } from '@kkakkung/protocol/game-messages';
@@ -62,7 +65,7 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
     try {
       roomCode = existing ?? generateRoomCode((code) => deps.slots.hasRoom(code));
       issued = deps.sessions.issue({
-        nickname: parsed.data.nickname ?? (parsed.data.role === 'runner' ? '도망자' : '술래'),
+        nickname: SHOWCASE_SEAT_LABELS[parsed.data.seat],
         inviteId: 'showcase:' + randomUUID(),
         roomCode,
         admissionTtlMs: deps.admissionTtlMs,
@@ -72,17 +75,17 @@ export function createShowcaseRoutes(deps: ShowcaseRouteDependencies): Router {
     }
     const outcome = deps.slots.reserve(roomCode, issued.playerId, deps.monotonicNow(), {
       create: existing === null,
-      showcase: { role: parsed.data.role },
+      showcase: { seat: parsed.data.seat },
     });
     if (outcome !== 'reserved') {
       deps.sessions.invalidate(issued.sessionId);
-      return outcome === 'ROLE_FULL' ? fail(res, 409, 'ROLE_FULL') : fail(res, 503, 'CAPACITY');
+      return outcome === 'SEAT_TAKEN' ? fail(res, 409, 'SEAT_TAKEN') : fail(res, 503, 'CAPACITY');
     }
     const response: ShowcaseRoomResponse = {
       sessionToken: issued.sessionToken,
       playerId: issued.playerId,
       roomCode,
-      role: parsed.data.role,
+      role: showcaseSeatRole(parsed.data.seat),
       expiresAt: issued.admissionExpiresAt ?? issued.expiresAt,
       protocolVersion: PRODUCT_PROTOCOL_VERSION,
       entryFragment:

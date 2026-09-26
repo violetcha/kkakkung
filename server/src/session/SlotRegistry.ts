@@ -7,6 +7,7 @@
  * small room budget (S15P21C204-312), so a demonstration never takes a room or a seat away. A RETIRING seat still counts; only `releaseConfirmed` (after E confirms retirement)
  * frees it.
  */
+import { showcaseSeatRole, type ShowcaseSeat } from '@kkakkung/protocol/game-messages';
 import type { Phase, Role } from '@kkakkung/protocol/game-schema';
 
 export type SlotState = 'RESERVED' | 'JOINED' | 'RETIRING';
@@ -23,13 +24,13 @@ export type RoomOptions = Readonly<{
   operatorRole: Role | null;
 }>;
 
-/** 시연 방(showcase)은 실제 사람 넷이 2:2 로 뛴다. 역할은 각자 고르고 한 역할에 둘까지다. */
+/** 시연 방(showcase)은 실제 사람 넷이 2:2 로 뛴다. 자리(역할별 1·2)는 각자 고르고 한 자리에 하나다. */
 export const SHOWCASE_CAPACITY = 4;
 
 export type ReserveResult =
   | 'reserved'
   | 'ROOM_FULL'
-  | 'ROLE_FULL'
+  | 'SEAT_TAKEN'
   | 'SERVICE_FULL'
   | 'ROOM_LIMIT'
   | 'DEMO_LIMIT'
@@ -42,8 +43,11 @@ type RoomEntry = {
   capacity: number;
   kind: RoomKind;
   operatorRole: Role | null;
-  /** `role` 은 시연 방에서 참가자가 고른 역할이다. 다른 방은 서버가 배정하므로 없다. */
-  slots: Map<string, { state: SlotState; joinOrder: number; role?: Role }>;
+  /**
+   * `seat` 는 시연 방에서 참가자가 고른 자리(S15P21C204-403)이고 `role` 은 그 자리의 역할이다.
+   * 다른 방은 서버가 역할을 배정하므로 둘 다 없다.
+   */
+  slots: Map<string, { state: SlotState; joinOrder: number; role?: Role; seat?: ShowcaseSeat }>;
   nextJoinOrder: number;
   createdAtMs: number;
   lastActivityMs: number;
@@ -272,8 +276,8 @@ export class SlotRegistry {
     options: {
       create?: boolean;
       demo?: { operatorRole: Role };
-      /** 시연 방 자리. 방을 새로 열 때는 종류를 정하고, 있는 방에서는 고른 역할의 빈자리를 찾는다. */
-      showcase?: { role: Role };
+      /** 시연 방 자리. 방을 새로 열 때는 종류를 정하고, 있는 방에서는 고른 자리가 비었는지 본다. */
+      showcase?: { seat: ShowcaseSeat };
       openedBy?: string | null;
       /** 주체가 출처(게스트)인지 SSO 계정인지. 한도가 다르다. 생략하면 출처. */
       ownerKind?: 'origin' | 'account';
@@ -319,12 +323,17 @@ export class SlotRegistry {
     if (room.kind !== 'demo' && this.playerOccupied() >= this.serviceCapacity)
       return 'SERVICE_FULL';
     if (room.kind === 'showcase') {
-      // 시연 방은 역할을 고르고 들어온다. 고른 역할이 이미 절반을 채웠으면 다른 역할을 고르게 한다.
-      const role = options.showcase?.role;
-      if (!role) return 'ROOM_CLOSED';
-      const sameRole = [...room.slots.values()].filter((slot) => slot.role === role).length;
-      if (sameRole >= room.capacity / 2) return 'ROLE_FULL';
-      room.slots.set(playerId, { state: 'RESERVED', joinOrder: room.nextJoinOrder++, role });
+      // S15P21C204-403. 시연 방은 자리를 고르고 들어온다. 누가 먼저 오든 고른 자리를 받고, 이미
+      // 앉은 자리면 다른 자리를 고르게 한다.
+      const seat = options.showcase?.seat;
+      if (!seat) return 'ROOM_CLOSED';
+      for (const slot of room.slots.values()) if (slot.seat === seat) return 'SEAT_TAKEN';
+      room.slots.set(playerId, {
+        state: 'RESERVED',
+        joinOrder: room.nextJoinOrder++,
+        role: showcaseSeatRole(seat),
+        seat,
+      });
     } else room.slots.set(playerId, { state: 'RESERVED', joinOrder: room.nextJoinOrder++ });
     room.lastActivityMs = nowMs;
     return 'reserved';
@@ -369,13 +378,22 @@ export class SlotRegistry {
     return this.showcaseRoomsInUse() < this.maxShowcaseRooms;
   }
 
-  /** 시연 방 참가자가 고른 역할. 방이 역할을 배정할 때 계획으로 넘긴다. */
+  /** 시연 방 참가자가 고른 자리의 역할. 방이 역할을 배정할 때 계획으로 넘긴다. */
   requestedRoles(roomCode: string): Map<string, Role> {
     const roles = new Map<string, Role>();
     const room = this.rooms.get(roomCode);
     if (!room) return roles;
     for (const [playerId, slot] of room.slots) if (slot.role) roles.set(playerId, slot.role);
     return roles;
+  }
+
+  /** S15P21C204-403. 시연 방 참가자가 고른 자리. 방이 배치 자리 이름을 매길 때 쓴다. */
+  requestedSeats(roomCode: string): Map<string, ShowcaseSeat> {
+    const seats = new Map<string, ShowcaseSeat>();
+    const room = this.rooms.get(roomCode);
+    if (!room) return seats;
+    for (const [playerId, slot] of room.slots) if (slot.seat) seats.set(playerId, slot.seat);
+    return seats;
   }
 
   markJoined(roomCode: string, playerId: string, nowMs: number): boolean {
@@ -412,9 +430,13 @@ export class SlotRegistry {
     return this.rooms.get(roomCode)?.slots.get(playerId)?.joinOrder ?? null;
   }
 
-  members(
-    roomCode: string,
-  ): { playerId: string; state: SlotState; joinOrder: number; role?: Role }[] {
+  members(roomCode: string): {
+    playerId: string;
+    state: SlotState;
+    joinOrder: number;
+    role?: Role;
+    seat?: ShowcaseSeat;
+  }[] {
     const room = this.rooms.get(roomCode);
     if (!room) return [];
     return [...room.slots.entries()]

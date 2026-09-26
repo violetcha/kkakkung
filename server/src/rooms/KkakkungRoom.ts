@@ -1520,19 +1520,24 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
      *
      * S15P21C204-390. 배치는 역할마다 참가자 ID 를 문자열 순으로 정렬해 시작 자리를 나눈다. 시연
      * 방의 ID 는 입장마다 새로 뽑혀, 맵·시드가 같아도 누가 어느 자리·출구를 받는지가 매번 달랐다.
-     * 그래서 시연 방은 배치에 실제 ID 대신 **자리 이름**(역할별로 /showcase 에서 고른 순서 1·2,
-     * 빈 자리 3)을 넘기고, 경기를 만들 때 `showcaseLayout` 이 실제 ID 로 되돌린다. 같은 자리는
-     * 매번 같은 시작 칸·같은 출구를 받는다.
+     * 그래서 시연 방은 배치에 실제 ID 대신 **자리 이름**(/showcase 에서 고른 자리 1·2, 빈 자리 3)을
+     * 넘기고, 경기를 만들 때 `showcaseLayout` 이 실제 ID 로 되돌린다. 같은 자리는 매번 같은
+     * 시작 칸·같은 출구를 받는다.
+     *
+     * S15P21C204-403. 자리 번호는 같은 역할을 고른 순서가 아니라 /showcase 에서 직접 고른 자리다.
+     * 누가 먼저 들어오든 `술래 1` 을 고른 사람이 `showcase-seat-tagger-1` 이다.
      */
     private layoutRoster(): { playerId: string; role: Role }[] {
       const players = [...this.roles.entries()].map(([playerId, role]) => ({ playerId, role }));
       if (!this.showcase) return players;
       this.showcaseSeats = new Map();
+      const chosen = deps.slots.requestedSeats(this.roomCode);
       const seated: { playerId: string; role: Role }[] = [];
       for (const role of ['runner', 'tagger'] as const) {
-        const members = players.filter((p) => p.role === role);
         for (let index = 1; index <= 3; index++) {
-          const member = members[index - 1];
+          const member = players.find(
+            (p) => p.role === role && chosen.get(p.playerId) === `${role}-${index}`,
+          );
           const seatId = member
             ? `${SHOWCASE_SEAT_PREFIX}${role}-${index}`
             : `${SHOWCASE_VACANT_PREFIX}${role}-${index}`;

@@ -30,7 +30,7 @@ it('reports lobby and match room counts without any room detail', async () => {
   slots.reserve('ROOM02', 'b', 0, { create: true });
   slots.setPhase('ROOM02', 'PLAYING', 0);
   // 시연 방은 일반 방 수에 들어가지 않는다.
-  slots.reserve('SHOW01', 's', 0, { create: true, showcase: { role: 'runner' } });
+  slots.reserve('SHOW01', 's', 0, { create: true, showcase: { seat: 'runner-1' } });
   let admission: AdmissionState = 'OPEN';
   let cleaned = 0;
   const endpoint = await serve({
