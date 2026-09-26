@@ -939,10 +939,10 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 **동작 한계**
 
-- 입력창 안에서도 방 안 Esc는 설정 창을 연다(게임 키와 달리 입력 문맥을 보지 않는다).
+- 방 안 Esc는 글자 입력 칸·드롭다운·편집 영역에 포커스가 있으면 설정 창을 건드리지 않는다. 음량 막대·체크 칸·단추에서는 그대로 여닫는다(`menu-key.ts`, S15P21C204-402).
 - 모션 모드에서는 W/S/A/D·방향키가 이동을 만들지 않는다. 카메라 추적이 살아 있는데 키로 움직이려면 `키보드로 조작`을 먼저 눌러야 한다. 키보드 악용을 막기 위한 의도된 동작이다([결정 정정표](../spec/decisions.md), 2026-09-24).
 - manifest의 `bundledNoticesReview`는 `pending`이고, gesture 모델 `license`도 `pending`이다.
-- 데모 세션이 `sessionStorage`에 남아 있으면, 개발 빌드 루트(`/`, hash 없음)에서 진단 화면이 떠 저장된 세션은 쓰이지 않는다.
+- 데모 세션이나 경기 새로고침 재접속 기록(396)이 `sessionStorage`에 남아 있어도, 개발 빌드 루트(`/`, hash 없음)에서는 진단 화면이 떠 쓰이지 않는다. 재접속 기록은 읽자마자 지우므로 그때 버려진다. 개발 빌드에서만 생긴다.
 - `?metrics=1` 계측과 `/preview` 합성 화면은 opt-in 검수 경로다. 카메라·LiveKit·실경기 성능의 통과 증거가 아니다.
 - 저장소 밖 — 확인 불가: 실제 SSO 경계, 운영 `VITE_*`·서버 환경 값, LiveKit Cloud 설정과 사용량, 실장치 결과.
 
@@ -957,7 +957,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 **다룬 파일(본문에서 동작을 설명함)**
 
 - 설정·루트: `.env.example`, `index.html`, `package.json`, `vite.config.ts`, `src/main.tsx`
-- 공개 자산: `public/models/manifest.json`, `public/models/face/face_landmarker.task`, `public/models/pose/pose_landmarker.task`, `public/models/gesture/gesture_recognizer.task`, `public/models/mediapipe/1.0.1/wasm/vision_wasm_internal.js`, `vision_wasm_internal.wasm`, `vision_wasm_module_internal.js`, `vision_wasm_module_internal.wasm`, `vision_wasm_nosimd_internal.js`, `vision_wasm_nosimd_internal.wasm`, `public/textures/backrooms/seamless.png`, `albedo.png`, `normal.png`, `roughness.png`, `public/licenses/index.html`, `public/brand/kkakkung-logo.png`
+- 공개 자산: `public/models/manifest.json`, `public/models/face/face_landmarker.task`, `public/models/pose/pose_landmarker.task`, `public/models/gesture/gesture_recognizer.task`, `public/models/mediapipe/1.0.1/wasm/vision_wasm_internal.js`, `vision_wasm_internal.wasm`, `vision_wasm_module_internal.js`, `vision_wasm_module_internal.wasm`, `vision_wasm_nosimd_internal.js`, `vision_wasm_nosimd_internal.wasm`, `public/textures/backrooms/seamless.png`, `public/licenses/index.html`, `public/brand/kkakkung-logo.png`
 - `src/app`: `App.tsx`, `DemoAdminApp.tsx`, `DevelopmentApp.tsx`, `PreviewApp.tsx`, `ProductApp.tsx`, `RenderPreview.tsx`, `SessionRuntime.ts`, `ShowcaseApp.tsx`, `interaction-bridge.ts`, `product-runtime.ts`, `runtime-metrics.ts`, `schema-runtime.ts`, `showcase-screens.test.ts`
 - `features/debug`: `debug-feed.ts`
 - `features/game/equipment`: `EquipmentHud.tsx`, `equipment-presenter.ts`, `restraint-presenter.ts`

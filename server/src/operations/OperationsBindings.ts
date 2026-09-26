@@ -403,6 +403,12 @@ export class OperationsBindings {
           ? 'LOCKED'
           : readiness.state,
       unresolvedCount,
+      unresolvedRetirementIds: this.options.retries.flatMap((engine) =>
+        engine
+          .snapshot()
+          .filter((intent) => intent.status === 'UNRESOLVED')
+          .map((intent) => intent.retirementId),
+      ),
       ...(providerQuota ? { operatingMode: 'continuous' as const } : {}),
       remainingMinutes: official ? budget.availableMinutes : null,
       remainingBytes: official ? budget.availableBytes : null,

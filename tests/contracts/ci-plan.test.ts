@@ -17,7 +17,7 @@ const vitestArgs = (changed: string[] | null) => step(changed, 'test')!.commands
 
 describe('MR plan', () => {
   it('runs everything an MR can run when the change set is unknown', () => {
-    expect(ids(null)).toEqual(['static', 'test', 'build', 'assets', 'e2e']);
+    expect(ids(null)).toEqual(['static', 'test', 'build', 'bundle', 'assets', 'e2e']);
     // 모르면 렌더링 spec 도, DP-06 로컬판도 돈다.
     expect(step(null, 'e2e')!.env).toBeUndefined();
     expect(vitestArgs(null)).not.toContain(DP06_LOCAL_VITEST);
@@ -32,7 +32,12 @@ describe('MR plan', () => {
   });
 
   it('keeps a server-only change to static checks, vitest and build', () => {
-    expect(ids(['server/src/session/SessionRoutes.ts'])).toEqual(['static', 'test', 'build']);
+    expect(ids(['server/src/session/SessionRoutes.ts'])).toEqual([
+      'static',
+      'test',
+      'build',
+      'bundle',
+    ]);
     expect(vitestArgs(['server/src/session/SessionRoutes.ts'])).toContain(
       `--exclude ${DP06_LOCAL_VITEST}`,
     );

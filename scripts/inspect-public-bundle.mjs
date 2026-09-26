@@ -32,13 +32,32 @@ export const SCANNED_EXTENSIONS = Object.freeze([
  * Builds the sentinel list from the server-only files. Each sentinel has an id (safe to print)
  * and a literal string that must not appear in any public file.
  */
+/**
+ * S15P21C204-402. 미로 한 줄을 표식으로 쓰는 최소 길이. 예전 16칸 기준은 소형 맵(한 줄 15칸)의
+ * 줄을 모두 걸러, 소형 맵이 새어도 잡지 못했다. 12칸 넘는 미로 줄은 일반 코드에 우연히 나오지 않는다.
+ */
+export const MIN_ROW_SENTINEL = 12;
+
+/**
+ * 서버 폴더의 JSON 이름(접미사 제외). 예전에는 맵 이름을 손으로 적어, 311에서 늘어난 소형·중형 맵과
+ * 그 폴백을 검사하지 않았다(402). 이제 폴더에 있는 것은 모두 본다.
+ */
+function serverJsonNames(serverRoot, directory, suffix) {
+  const dir = resolve(serverRoot, directory);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(suffix))
+    .map((name) => name.slice(0, -suffix.length))
+    .sort();
+}
+
 export function deriveSentinels(serverRoot = root) {
   const sentinels = [];
   const read = (p) => {
     const file = resolve(serverRoot, p);
     return existsSync(file) ? readFileSync(file, 'utf8') : null;
   };
-  for (const name of ['master-v1', 'maze-v1', 'practice-v1']) {
+  for (const name of serverJsonNames(serverRoot, 'server/content/maps', '.json')) {
     const raw = read(`server/content/maps/${name}.json`);
     if (!raw) continue;
     const json = JSON.parse(raw);
@@ -50,11 +69,16 @@ export function deriveSentinels(serverRoot = root) {
     });
     const rows = Array.isArray(json.rows) ? json.rows : [];
     for (const [i, row] of rows.entries()) {
-      if (typeof row === 'string' && /[.#]/.test(row) && row.length >= 16 && !/^#+$/.test(row))
+      if (
+        typeof row === 'string' &&
+        /[.#]/.test(row) &&
+        row.length >= MIN_ROW_SENTINEL &&
+        !/^#+$/.test(row)
+      )
         sentinels.push({ id: `map:${name}:row${i}`, literal: row });
     }
   }
-  for (const name of ['master-v1', 'maze-v1']) {
+  for (const name of serverJsonNames(serverRoot, 'server/content/placements', '-fallback.json')) {
     const fallback = read(`server/content/placements/${name}-fallback.json`);
     if (!fallback) continue;
     const json = JSON.parse(fallback);
