@@ -327,8 +327,12 @@ class Coordinator implements MediaCoordinatorRuntime {
         else this.runtime.getReadiness(); // UNKNOWN drains OPEN; retry success never auto-resumes.
       },
       onUnresolved: () => this.metric('media.retirement.unresolved'),
-      onRetirementUnresolved: (g, reason) =>
-        this.event('media.retirement.unresolved', 'warn', { generation: g.generation, reason }),
+      onRetirementUnresolved: (g, reason, retirementId) =>
+        this.event('media.retirement.unresolved', 'warn', {
+          generation: g.generation,
+          reason,
+          ...(retirementId ? { retirementId } : {}),
+        }),
     });
     this.runtime = createReadinessRuntime({
       emitMetric: deps.emitMetric,

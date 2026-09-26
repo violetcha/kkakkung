@@ -277,6 +277,14 @@ export class OperationsController implements OperationsPort {
       ...(value.operatingMode ? { operatingMode: value.operatingMode } : {}),
       // 364. Reported as the media layer counted it; it never changes admission or readiness.
       ...(value.monthlyUsage ? { monthlyUsage: value.monthlyUsage } : {}),
+      // S15P21C204-402. 운영자가 `retry-retirement` 에 넣을 식별자. 문자열만 넘긴다.
+      ...(Array.isArray(value.unresolvedRetirementIds)
+        ? {
+            unresolvedRetirementIds: value.unresolvedRetirementIds.filter(
+              (id): id is string => typeof id === 'string',
+            ),
+          }
+        : {}),
     };
   }
 

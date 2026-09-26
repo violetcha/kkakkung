@@ -272,6 +272,11 @@ afterEach(async () => {
 describe('E-14 operator retry with real E storage, budgets and retirement bindings', () => {
   it('retries only the selected unresolved target and keeps another target reserved', async () => {
     const f = await setup({ targets: 2 });
+    // S15P21C204-402. 운영자가 재시도할 식별자를 상태 응답에서 알 수 있다.
+    expect(f.controller.getStatus().unresolvedRetirementIds).toEqual([
+      'retirement-0',
+      'retirement-1',
+    ]);
     expect(f.submit()).toMatchObject({ status: 'accepted', snapshot: { status: 'pending' } });
     expect(await f.terminal()).toMatchObject({ status: 'succeeded' });
     expect(f.remove).toHaveBeenCalledTimes(1);
@@ -281,7 +286,11 @@ describe('E-14 operator retry with real E storage, budgets and retirement bindin
       'UNRESOLVED',
     ]);
     expect(f.usage.snapshot().reservations[0]?.status).toBe('ACTIVE');
-    expect(f.controller.getStatus()).toMatchObject({ admission: 'DRAINING', unresolvedCount: 1 });
+    expect(f.controller.getStatus()).toMatchObject({
+      admission: 'DRAINING',
+      unresolvedCount: 1,
+      unresolvedRetirementIds: ['retirement-1'],
+    });
   });
 
   it('persists REVOKED and remote-confirmed usage before terminal success without releasing usage', async () => {

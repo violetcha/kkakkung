@@ -54,7 +54,12 @@ export type RevocationRetryBindingsOptions = Readonly<{
   lockIssuance: (reason: 'RETIREMENT_UNRESOLVED' | 'JOURNAL_WRITE_FAILED') => void;
   onUnresolved: (intent: RetryIntent) => void;
   /** Diagnostics only: why a retirement ended UNRESOLVED (a short code, never a message body). */
-  onRetirementUnresolved?: (generation: Generation, reason: string) => void;
+  onRetirementUnresolved?: (
+    generation: Generation,
+    reason: string,
+    /** S15P21C204-402. 운영 재시도에 쓰는 식별자. 아직 재시도 기록이 없으면 null. */
+    retirementId: string | null,
+  ) => void;
   setTimer?: RevocationRetryOptions['setTimer'];
   clearTimer?: RevocationRetryOptions['clearTimer'];
 }>;
@@ -120,7 +125,11 @@ export class RevocationRetryBindings {
       onUnresolved: (generation, reason) => {
         options.lockIssuance('RETIREMENT_UNRESOLVED');
         try {
-          options.onRetirementUnresolved?.(generation, reason);
+          options.onRetirementUnresolved?.(
+            generation,
+            reason,
+            this.retirementIds.get(generation) ?? null,
+          );
         } catch {
           /* Diagnostics never change the latch. */
         }

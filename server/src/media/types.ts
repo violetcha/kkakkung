@@ -265,6 +265,12 @@ export type OperationsStatus = Readonly<{
   admission: 'OPEN' | 'DRAINING' | 'LOCKED';
   readiness: Readiness['state'];
   unresolvedCount: number;
+  /**
+   * S15P21C204-402. 운영 `retry-retirement` 로 다시 시도할 수 있는 미해결 회수의 식별자. 미해결이
+   * 하나라도 있으면 준비 상태가 LOCKED 라 새 입장이 막히는데, 이 값이 저널 파일에만 있어 운영자가
+   * 재시도할 방법이 없었다. 식별자만 싣고 방·참가자 정보는 싣지 않는다.
+   */
+  unresolvedRetirementIds?: readonly string[];
   remainingMinutes: number | null;
   remainingBytes: number | null;
   checkedAtEpochMs: number | null;

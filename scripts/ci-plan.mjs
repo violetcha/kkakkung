@@ -128,6 +128,8 @@ export function planChecks({ mode, changed }) {
       commands: [['pnpm', 'test', ...excluded.flatMap((file) => ['--exclude', file])]],
     },
     { id: 'build', commands: [['pnpm', 'build']] },
+    // S15P21C204-402. 빌드한 웹 번들에 서버 전용 맵·튜닝·비밀 이름이 섞이지 않았는지 본다. 몇 초다.
+    { id: 'bundle', commands: [['pnpm', 'check:bundle']] },
   ];
   if (any(ASSET_PATHS)) plan.push({ id: 'assets', commands: [['pnpm', 'check:product-assets']] });
   // A dependency change anywhere can change what the dev server runs under the browser flows.

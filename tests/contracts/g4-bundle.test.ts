@@ -100,3 +100,28 @@ describe('bundle scan', () => {
     expect(SCANNED_EXTENSIONS).not.toContain('.task');
   });
 });
+
+// S15P21C204-402. 맵 이름을 손으로 적어 소형·중형 맵과 그 폴백을 보지 않았고, 16칸 기준 때문에
+// 한 줄이 15칸인 소형 맵은 목록에 넣어도 잡히지 않았다. 폴더에 있는 맵은 모두 본다.
+describe('every map on the server is guarded', () => {
+  it('derives sentinels for the small and medium maps and their fallbacks', () => {
+    const ids = sentinels.map((s) => s.id);
+    for (const name of ['maze-s-v1', 'maze-m-v1']) {
+      expect(ids).toContain(`map:${name}:templateId`);
+      expect(ids.some((id) => id.startsWith(`map:${name}:row`))).toBe(true);
+      expect(ids).toContain(`fallback:${name}:templateHash`);
+    }
+  });
+
+  it('finds a leaked small map row', () => {
+    const small = JSON.parse(
+      readFileSync(resolve(root, 'server/content/maps/maze-s-v1.json'), 'utf8'),
+    ) as { rows: string[] };
+    const row = small.rows.find((r) => r.includes('.') && r.includes('#'))!;
+    const result = scanBundle(
+      bundle('small-leak', { 'assets/index.js': `const r="${row}";` }),
+      sentinels,
+    );
+    expect(result.findings.some((f) => f.sentinel.startsWith('map:maze-s-v1:row'))).toBe(true);
+  });
+});
