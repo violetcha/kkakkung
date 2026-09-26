@@ -84,7 +84,7 @@ export function ProductApp({
   invitation,
   initialRoom = '',
   demoSession,
-  showcaseSession,
+  showcaseSession: givenShowcaseSession,
   matchRejoin,
 }: {
   invitation: string;
@@ -96,6 +96,10 @@ export function ProductApp({
   /** S15P21C204-396. 경기 중 새로고침한 탭이 돌아갈 자리. */
   matchRejoin?: MatchRejoin;
 }) {
+  // S15P21C204-403. 시연 방에서 새로고침한 탭은 조각이 없어 재입장 기록만이 시연 세션임을 안다.
+  // 그 기록의 세션을 시연 세션으로 삼아 화면 규칙(맵 고정 표시, 나가면 /showcase)을 그대로 쓴다.
+  const showcaseSession =
+    givenShowcaseSession ?? (matchRejoin?.showcase ? matchRejoin.session : undefined);
   // S15P21C204-292. 동의는 장치 점검 화면에서 받지만, 장치 단추는 `LocalControls` 에도 있다.
   // 두 곳이 같은 답을 보도록 여기서 한 번만 들고 있는다.
   const consent = useMediaConsent();
@@ -372,8 +376,9 @@ export function ProductApp({
       runtime.current?.setPageActive(document.visibilityState === 'visible' && document.hasFocus());
     const blur = () => runtime.current?.setPageActive(false);
     const pagehide = () => {
-      // S15P21C204-396. 일반 방 경기 중의 새로고침은 나가는 것이 아니다. 방을 떠난다고 알리면 서버가
-      // 그 자리를 바로 풀어 경기가 무효가 된다. 돌아올 기록만 적고 연결은 그냥 끊기게 둔다(391 유예).
+      // S15P21C204-396. 일반·시연 방 경기 중의 새로고침은 나가는 것이 아니다. 방을 떠난다고 알리면
+      // 서버가 그 자리를 바로 풀어 경기가 무효가 된다. 돌아올 기록만 적고 연결은 그냥 끊기게 둔다
+      // (391 유예). 데모 방은 자리와 세션을 스스로 지킨다.
       const current = runtime.current;
       const room = joinedRoom.current;
       const session = joinedSession.current;
@@ -383,7 +388,6 @@ export function ProductApp({
         room &&
         session &&
         !demoSession &&
-        !showcaseSession &&
         now?.round?.phase === 'PLAYING' &&
         !now.lost &&
         room.reconnectionToken
@@ -392,6 +396,7 @@ export function ProductApp({
           session,
           reconnectionToken: room.reconnectionToken,
           mediaScope: current.mediaScopeForResume(),
+          showcase: !!showcaseSession,
         });
         return;
       }
@@ -429,16 +434,17 @@ export function ProductApp({
   }, [matchRejoin]);
   useEffect(() => {
     // The operator's demo session opens its room straight away: there is no form for it.
-    // 시연 방 세션도 같다: 역할과 이름은 /showcase 에서 이미 골랐다.
+    // 시연 방 세션도 같다: 자리는 /showcase 에서 이미 골랐다. 재입장 기록에서 온 시연 세션은 위의
+    // 재입장 효과가 이미 들어가므로 여기서 다시 들어가지 않는다(403).
     const given = demoSession ?? showcaseSession;
-    if (!given) return;
+    if (!given || matchRejoin) return;
     // S15P21C204-318. StrictMode (dev) tears effects down once and runs them again. The teardown
     // bumps the generation, so the first entry leaves the room it joined; a guard that entered
     // only once then left the page on "입장 중…" for good. Each run waits for the previous entry to
     // settle, so the second joins after the first has let go of the one demo seat. The server
     // keeps that seat for a demo session across a disconnect (312).
     demoEntry.current = demoEntry.current.then(() => enter(given));
-  }, [demoSession, showcaseSession]);
+  }, [demoSession, showcaseSession, matchRejoin]);
   async function join(event: React.FormEvent) {
     event.preventDefault();
     await enter();

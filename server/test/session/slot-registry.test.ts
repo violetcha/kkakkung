@@ -100,7 +100,7 @@ describe('SlotRegistry', () => {
   it('counts showcase seats in the player budget but not showcase rooms in the room budget', () => {
     // S15P21C204-372. 시연 방은 일반 방 수 예산 밖이다. 좌석은 서비스 좌석 한도 안에서 센다.
     const slots = new SlotRegistry({ maxRooms: 1, maxDemoRooms: 1 });
-    expect(slots.reserve('S00001', 'a', 0, { create: true, showcase: { role: 'runner' } })).toBe(
+    expect(slots.reserve('S00001', 'a', 0, { create: true, showcase: { seat: 'runner-1' } })).toBe(
       'reserved',
     );
     expect(slots.reserve('M00001', 'p0', 0, { create: true })).toBe('reserved');
@@ -166,7 +166,7 @@ describe('SlotRegistry', () => {
   it('S15P21C204-361/372: keeps showcase rooms in their own budget, playing ones included', () => {
     // 372 부터 시연 방은 일반 방 예산 밖이다. 발표가 일반 방을 막지도, 일반 방이 발표를 막지도 않는다.
     const slots = new SlotRegistry({ maxRooms: 2, maxShowcaseRooms: 3 });
-    const showcase = { create: true, showcase: { role: 'runner' as const } };
+    const showcase = { create: true, showcase: { seat: 'runner-1' as const } };
     expect(slots.canOpenShowcaseRoom()).toBe(true);
     expect(slots.reserve('SHOW01', 's1', 0, showcase)).toBe('reserved');
     expect(slots.reserve('SHOW02', 's2', 0, showcase)).toBe('reserved');

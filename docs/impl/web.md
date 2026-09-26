@@ -41,7 +41,7 @@ ESLint는 `apps/web/**/*.{ts,tsx}`에서 `@kkakkung/game-core`, `@kkakkung/game-
 | `#demo=<token>&room=<code>&player=<id>`                | 토큰과 player가 있고 room이 `ROOM_CODE_PATTERN`에 맞으면 세션으로 받고 `replaceState`로 hash를 지운다. 세션을 이 탭의 `sessionStorage`에 저장한다(16절). 형식이 깨졌으면 무시하고 hash도 지우지 않는다.            |
 | hash가 없고 `sessionStorage`에 데모 세션이 있음        | 저장된 세션으로 다시 입장한다(새로고침 재입장). 저장값이 잘못됐으면 지운다.                                                                                                                                        |
 | `#showcase=<token>&room=<code>&player=<id>`            | 데모와 같은 검증을 거쳐 소비하고 hash를 지운다. 저장소에는 남기지 않는다.                                                                                                                                          |
-| hash가 없고 `sessionStorage`에 경기 재입장 기록이 있음 | 데모·시연 세션이 없을 때만 읽고 바로 지운다. 적은 지 25초 안이고 형식이 맞으면 그 재접속 토큰으로 같은 자리에 다시 붙는다(5.1).                                                                                    |
+| hash가 없고 `sessionStorage`에 경기 재입장 기록이 있음 | 데모·시연 세션이 없을 때만 읽고 바로 지운다. 적은 지 25초 안이고 형식이 맞으면 그 재접속 토큰으로 같은 자리에 다시 붙는다(5.1). 기록의 `showcase`가 참이면 그 세션을 시연 세션으로 삼는다(S15P21C204-403).         |
 | `#invite=<token>` 또는 `#inviteToken=<token>`          | `inviteToken`을 먼저 읽는다. hash가 있으면 무조건 지운다. `room` 값이 `^[A-HJ-NP-Z2-9]{6}$`이면 입장 폼의 방 코드 힌트로 쓴다.                                                                                     |
 | 입장 뒤 `hashchange`로 `invite`/`inviteToken`이 옴     | 초대를 다시 소비한다. 진단 화면이었으면 제품 화면으로 바꾼다. 아직 Room이 없을 때만 폼을 초대 기준으로 초기화한다(진행 중인 입장을 취소하고 방 코드·참가 모드를 적용). Room에 있으면 다음 입장을 위해 보관만 한다. |
 | `?theme=block` / `?theme=facility`                     | 렌더 테마를 저장값보다 먼저 쓴다(15.2).                                                                                                                                                                            |
@@ -82,7 +82,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 
 ### 2.5 `/demo`와 `/showcase` 발급 화면
 
-두 화면은 역할(`runner`/`tagger`, 기본 `runner`)과 최대 20자의 표시 이름을 받는다. 데모의 기본 이름은 `관리자`, 시연은 빈 값이다. 빈 이름은 보내지 않는다. 발급에 성공하면 `/play` + 응답의 `entryFragment`로 이동한다. SSO 보호는 이 컴포넌트가 하지 않는다. 호스트 경계가 맡는다(저장소 밖).
+`/demo`는 역할(`runner`/`tagger`, 기본 `runner`)과 최대 20자의 표시 이름(기본 `관리자`, 빈 이름은 보내지 않음)을 받는다. `/showcase`는 자리 하나(`runner-1`·`runner-2`·`tagger-1`·`tagger-2`, 기본 `runner-1`, 표시는 `SHOWCASE_SEAT_LABELS`)만 고르고 표시 이름은 받지 않는다(S15P21C204-403). 발급에 성공하면 `/play` + 응답의 `entryFragment`로 이동한다. SSO 보호는 이 컴포넌트가 하지 않는다. 호스트 경계가 맡는다(저장소 밖).
 
 | 화면        | 실패 조건               | 문구                                                                                                             |
 | ----------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -92,7 +92,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 | `/demo`     | 그 밖                   | 데모 방을 열지 못했습니다. 네트워크와 운영 상태를 확인한 뒤 다시 시도해 주세요.                                  |
 | `/showcase` | 코드 `ADMISSION_CLOSED` | 지금은 입장을 받고 있지 않습니다. 서버가 준비되면 다시 시도해 주세요.                                            |
 | `/showcase` | `401`                   | 팀원 로그인을 확인하지 못했습니다. 다시 로그인해 주세요.                                                         |
-| `/showcase` | `409`                   | 그 역할은 이미 두 명이 골랐습니다. 다른 역할을 골라 주세요.                                                      |
+| `/showcase` | `409`                   | 그 자리에는 이미 누가 앉았습니다. 다른 자리를 골라 주세요.                                                       |
 | `/showcase` | `503`                   | 시연 방을 지금 열 수 없습니다. 열려 있는 방이 가득 찼거나 운영 설정이 꺼져 있습니다.                             |
 | `/showcase` | 그 밖                   | 시연 방에 들어가지 못했습니다. 네트워크와 로그인 상태를 확인한 뒤 다시 시도해 주세요.                            |
 
@@ -198,11 +198,11 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 ### 5.1 입장과 예약 취소
 
 1. `enter`는 이미 `joining`이거나 Room이 있거나 혼자 연습 중이면 아무것도 하지 않는다. 입장마다 세대 번호를 올린다.
-2. 폼 입장은 세션을 발급받고 그 예약을 보관한다. 데모·시연 세션은 받은 즉시(`useEffect`) 입장하고, 앞선 입장 시도가 끝난 뒤에 이어 실행한다. 이 세션은 웹이 발급한 것이 아니므로 예약 취소 대상이 아니다.
+2. 폼 입장은 세션을 발급받고 그 예약을 보관한다. 데모·시연 세션은 받은 즉시(`useEffect`) 입장하고, 앞선 입장 시도가 끝난 뒤에 이어 실행한다. 이 세션은 웹이 발급한 것이 아니므로 예약 취소 대상이 아니다. 재입장 기록에서 온 시연 세션은 이 효과가 건너뛰고 6의 재입장만 한다.
 3. Room 연결 주소는 `VITE_COLYSEUS_URL`(trim), 없으면 개발 `ws://127.0.0.1:2567`, 배포 `window.location.origin`이다. `joinOrCreate('kkakkung', { token, roomCode, protocolVersion: PRODUCT_PROTOCOL_VERSION })`으로 들어간다. SDK 자동 재접속은 켜 두되(최대 10회, 0.5초→3초, 약 27초) 끊긴 동안 보낸 명령은 버린다(`ROOM_RECONNECTION`, `maxEnqueuedMessages: 0`). 끊김(`onDrop`)은 `reconnecting`으로만 알리고, 재시도가 모두 실패한 `onLeave`만 연결 상실이다. 재시도 중 소켓 오류는 연결 상실로 치지 않는다. 경기 중 끊긴 사람이 있으면 `rejoinNotice`가 안내를 띄운다(S15P21C204-391).
 4. 세대가 바뀐 뒤 도착한 세션·Room은 버린다. 웹이 발급한 예약이면 `DELETE`로 취소한다.
 5. 입장 뒤 홈 옵션의 품질·음량·음소거를 이 Room에 한 번 적용한다.
-6. 경기 재입장 기록이 있으면 `joinOrCreate` 대신 `new Client(url).reconnect(token)`으로 붙고, 기록의 미디어 세대(`resumeMediaScope`)를 런타임에 넘겨 첫 미디어 요청이 이전 세대를 이어받게 한다. 실패하면 `새로고침 전 경기로 돌아가지 못했습니다…`를 보이고 홈에 남는다(S15P21C204-396).
+6. 경기 재입장 기록이 있으면 `joinOrCreate` 대신 `new Client(url).reconnect(token)`으로 붙고, 기록의 미디어 세대(`resumeMediaScope`)를 런타임에 넘겨 첫 미디어 요청이 이전 세대를 이어받게 한다. 실패하면 `새로고침 전 경기로 돌아가지 못했습니다…`를 보이고 홈에 남는다(S15P21C204-396). 시연 세션의 재입장 실패는 7과 같이 `/showcase`로 이동한다.
 7. 실패하면:
    - 데모 세션은 `sessionStorage`에서 지운다.
    - 시연 세션은 `/showcase`로 이동한다.
@@ -214,7 +214,7 @@ fragment로 받은 데모·시연 세션의 `expiresAt`은 받은 시각에 `600
 ### 5.2 페이지 활성과 주기 작업
 
 - 입력 활성은 `visibilityState === 'visible' && document.hasFocus()`이다. `blur`면 즉시 비활성이다.
-- `pagehide`면 Room을 정리한다(`leave`). 이때 데모 세션은 지우지 않아 새로고침하면 같은 경기로 돌아온다. 일반 방 경기(`PLAYING`) 중이면 나가지 않고 재접속 토큰·세션·미디어 세대를 `sessionStorage`의 `kkakkung.match-rejoin`에 적은 뒤 연결이 그냥 끊기게 둔다. 서버는 그 자리를 25초 비워 둔다(S15P21C204-396).
+- `pagehide`면 Room을 정리한다(`leave`). 이때 데모 세션은 지우지 않아 새로고침하면 같은 경기로 돌아온다. 일반·시연 방 경기(`PLAYING`) 중이면 나가지 않고 재접속 토큰·세션·미디어 세대·시연 여부(`showcase`)를 `sessionStorage`의 `kkakkung.match-rejoin`에 적은 뒤 연결이 그냥 끊기게 둔다. 서버는 그 자리를 25초 비워 둔다(S15P21C204-396·403).
 - ProductApp은 100ms마다 런타임 `poll()`을 부르고 서버 시각을 읽는다.
 
 근거: [ProductApp.tsx:370](../../apps/web/src/app/ProductApp.tsx#L370), [ProductApp.tsx:404](../../apps/web/src/app/ProductApp.tsx#L404)

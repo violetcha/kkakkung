@@ -31,7 +31,7 @@ const scope = { matchId: 'match-1', mediaInstanceId: 'media-1', receiverGenerati
 it('hands the seat back once and forgets it', () => {
   const storage = memory();
   rememberMatchRejoin(
-    { session, reconnectionToken: 'room:token', mediaScope: scope },
+    { session, reconnectionToken: 'room:token', mediaScope: scope, showcase: false },
     10_000,
     storage,
   );
@@ -40,14 +40,35 @@ it('hands the seat back once and forgets it', () => {
     session: { sessionToken: 'session-token', playerId: 'player-1', roomCode: 'ABCDEF' },
     reconnectionToken: 'room:token',
     mediaScope: scope,
+    showcase: false,
   });
   expect(storage.values.size).toBe(0);
   expect(consumeMatchRejoin(10_001, storage)).toBeNull();
 });
 
+// S15P21C204-403. 시연 방에서 새로고침한 탭은 조각이 없어 이 기록만이 시연 세션임을 안다.
+it('remembers that the seat belongs to a showcase room, and reads an older record as an ordinary one', () => {
+  const storage = memory();
+  rememberMatchRejoin(
+    { session, reconnectionToken: 'room:token', mediaScope: null, showcase: true },
+    0,
+    storage,
+  );
+  expect(consumeMatchRejoin(1, storage)?.showcase).toBe(true);
+  storage.setItem(
+    'kkakkung.match-rejoin',
+    JSON.stringify({ session, reconnectionToken: 'room:token', mediaScope: null, savedAt: 0 }),
+  );
+  expect(consumeMatchRejoin(1, storage)?.showcase).toBe(false);
+});
+
 it('goes nowhere once the server grace has passed', () => {
   const storage = memory();
-  rememberMatchRejoin({ session, reconnectionToken: 'room:token', mediaScope: null }, 0, storage);
+  rememberMatchRejoin(
+    { session, reconnectionToken: 'room:token', mediaScope: null, showcase: false },
+    0,
+    storage,
+  );
   expect(consumeMatchRejoin(MATCH_REJOIN_WINDOW_MS, storage)).toBeNull();
   expect(storage.values.size).toBe(0);
 });
@@ -88,7 +109,11 @@ it('keeps the seat without media when the stored generation is malformed', () =>
 
 it('forgets a record the player chose to leave', () => {
   const storage = memory();
-  rememberMatchRejoin({ session, reconnectionToken: 'room:token', mediaScope: null }, 0, storage);
+  rememberMatchRejoin(
+    { session, reconnectionToken: 'room:token', mediaScope: null, showcase: false },
+    0,
+    storage,
+  );
   forgetMatchRejoin(storage);
   expect(consumeMatchRejoin(1, storage)).toBeNull();
 });

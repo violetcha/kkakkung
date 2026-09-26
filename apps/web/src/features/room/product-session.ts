@@ -214,7 +214,7 @@ export function productRoomPort(room: Room<unknown, PublicMatchState>): ProductR
 
 /**
  * 발표 시연 방 자리를 받는다. `/showcase` 의 SSO 경계를 지난 브라우저만 닿고 운영 토큰은 없다.
- * 409 ROLE_FULL 은 고른 역할 두 자리가 찼다는 뜻이라 호출 측이 다른 역할을 고르게 안내한다.
+ * 409 SEAT_TAKEN 은 고른 자리에 이미 누가 앉았다는 뜻이라 호출 측이 다른 자리를 고르게 안내한다.
  */
 export async function requestShowcaseRoom(
   input: ShowcaseRoomRequest,
@@ -365,6 +365,9 @@ export function forgetDemoSession(storage: DemoSessionStorage | null = browserSe
  * 사람의 자리를 25초 비워 두는데(391) 재접속 토큰이 메모리에만 있어 새로고침하면 쓸 수 없었다. 페이지를
  * 떠나는 순간에만 이 탭의 sessionStorage 에 적고, 다음 페이지가 읽자마자 지운다. 적은 뒤 25초가 지났으면
  * 서버 자리도 풀렸으므로 버린다. 미디어 세대는 새 페이지가 이전 세대를 이어받아 교체를 요청하는 데 쓴다.
+ *
+ * S15P21C204-403. 시연 방도 돌아간다. `showcase` 가 참이면 돌아간 페이지가 시연 세션 규칙(맵 고정 표시,
+ * 나가면 `/showcase` 로)을 그대로 쓴다. 시연 조각은 새로고침으로 사라지므로 이 기록만이 그 사실을 안다.
  */
 export type MatchRejoin = Readonly<{
   session: SessionResponse;
@@ -374,6 +377,7 @@ export type MatchRejoin = Readonly<{
     mediaInstanceId: string;
     receiverGeneration: number;
   }> | null;
+  showcase: boolean;
   savedAt: number;
 }>;
 const MATCH_REJOIN_KEY = 'kkakkung.match-rejoin';
@@ -450,6 +454,7 @@ export function consumeMatchRejoin(
     },
     reconnectionToken: stored.reconnectionToken,
     mediaScope,
+    showcase: stored.showcase === true,
     savedAt: stored.savedAt,
   };
 }

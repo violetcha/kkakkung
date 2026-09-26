@@ -119,13 +119,27 @@ export type DemoRoomResponse = z.infer<typeof demoRoomResponseSchema>;
 
 /**
  * 발표 시연 방(showcase). 실제 사람 넷이 2:2 로 고정 소형 미로에서 3분을 온전히 뛰는 경기다.
- * `/showcase` 를 연 팀원이 모두 같은 방에 모이고, 역할은 각자 고른다. 진입은 `/demo` 와 같은
+ * `/showcase` 를 연 팀원이 모두 같은 방에 모이고, 자리는 각자 고른다. 진입은 `/demo` 와 같은
  * GitLab SSO 경계 뒤에 있고 브라우저에 운영 토큰은 전달되지 않는다.
+ *
+ * S15P21C204-403. 발표 대본은 자리(도망자 1·2, 술래 1·2)별로 쓰이고 자리마다 시작 칸·출구가
+ * 고정이다(390). 역할만 고르면 자리 번호가 같은 역할을 고른 순서로 정해져 제출 순서에 따라
+ * 대본과 자리가 엇갈렸다. 그래서 자리를 직접 고르고, 표시 이름은 자리 이름으로 정해진다.
  */
 export const SHOWCASE_ROOM_ROUTE = '/api/showcase/rooms';
+export const SHOWCASE_SEATS = ['runner-1', 'runner-2', 'tagger-1', 'tagger-2'] as const;
+export type ShowcaseSeat = (typeof SHOWCASE_SEATS)[number];
+export const showcaseSeatRole = (seat: ShowcaseSeat): 'runner' | 'tagger' =>
+  seat.startsWith('runner') ? 'runner' : 'tagger';
+/** 자리의 표시 이름. 시연 방 명부·시점 캡션이 이 이름을 그대로 보인다. */
+export const SHOWCASE_SEAT_LABELS: Readonly<Record<ShowcaseSeat, string>> = {
+  'runner-1': '도망자 1',
+  'runner-2': '도망자 2',
+  'tagger-1': '술래 1',
+  'tagger-2': '술래 2',
+};
 export const showcaseRoomRequestSchema = z.strictObject({
-  role: z.enum(['runner', 'tagger']),
-  nickname: nicknameSchema.optional(),
+  seat: z.enum(SHOWCASE_SEATS),
 });
 export type ShowcaseRoomRequest = z.infer<typeof showcaseRoomRequestSchema>;
 export const showcaseRoomResponseSchema = z.strictObject({
@@ -139,11 +153,11 @@ export const showcaseRoomResponseSchema = z.strictObject({
   entryFragment: z.string().min(1).max(1024),
 });
 export type ShowcaseRoomResponse = z.infer<typeof showcaseRoomResponseSchema>;
-/** 시연 방 발급 오류. ROLE_FULL 은 고른 역할 두 자리가 이미 찼다는 뜻이라 다른 역할로 다시 고른다. */
+/** 시연 방 발급 오류. SEAT_TAKEN 은 고른 자리에 이미 누가 앉았다는 뜻이라 다른 자리를 고른다. */
 export const SHOWCASE_ERROR_CODES = [
   'INVALID_REQUEST',
   'UNAUTHORIZED',
-  'ROLE_FULL',
+  'SEAT_TAKEN',
   'CAPACITY',
   'SHOWCASE_UNAVAILABLE',
   // S15P21C204-362. 서버가 입장을 받지 않는 동안(readiness LOCKED, admission 닫힘). 일반 세션 발급과 같다.

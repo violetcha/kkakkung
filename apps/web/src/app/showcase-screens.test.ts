@@ -1,6 +1,6 @@
 /**
- * 발표 시연 방 화면. 진입 페이지는 역할만 고르고, 로비는 방이 알려 준 자리 수(4)로 그리며 맵은
- * 16x16 으로 잠긴 채 보이고, 결과 화면에는 재경기 단추가 없다.
+ * 발표 시연 방 화면. 진입 페이지는 자리만 고르고(403), 로비는 방이 알려 준 자리 수(4)로 그리며 맵은
+ * 16x16 으로 잠긴 채 보이고, 결과 화면에는 같은 자리로 다시 시작만 있다.
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -27,11 +27,16 @@ const roster = {
   })),
 };
 
-it('renders the showcase entry with a role choice and no room code or credential field', () => {
+// S15P21C204-403. 자리를 직접 고른다. 표시 이름은 자리 이름이라 입력 칸이 없다.
+it('renders the showcase entry with four seat choices and no name, room code or credential field', () => {
   const html = renderToStaticMarkup(createElement(ShowcaseApp));
   expect(html).toContain('시연 방 입장');
-  expect(html).toContain('도망자');
-  expect(html).toContain('술래');
+  for (const seat of ['도망자 1', '도망자 2', '술래 1', '술래 2']) expect(html).toContain(seat);
+  expect(html.match(/type="radio"/g)).toHaveLength(4);
+  expect(html).toContain('value="runner-1"');
+  expect(html).toContain('value="tagger-2"');
+  expect(html).not.toContain('화면 표시 이름');
+  expect(html).not.toContain('showcase-nickname');
   expect(html).toContain('16x16');
   expect(html).not.toContain('방 코드');
   expect(html).not.toContain('OPS_TOKEN');
@@ -155,8 +160,8 @@ it('S15P21C204-362: tells a member the server is not admitting instead of blamin
   expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:503:CAPACITY'))).toContain(
     '가득 찼거나',
   );
-  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:409:ROLE_FULL'))).toContain(
-    '다른 역할',
+  expect(showcaseEntryMessage(new Error('SHOWCASE_REQUEST_FAILED:409:SEAT_TAKEN'))).toContain(
+    '다른 자리',
   );
   expect(showcaseEntryMessage(new Error('CONNECTION_FAILED'))).toContain('네트워크');
 });
