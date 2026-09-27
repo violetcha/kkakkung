@@ -40,6 +40,8 @@ export const EVENT_NAMES = Object.freeze([
   'room.load_ready',
   'room.heartbeat_stall',
   'room.media_uncertain_released',
+  /** S15P21C204-408. 방이 미디어 바인딩을 클라이언트에 보내지 않고 버렸다. */
+  'room.media_bindings_dropped',
   'room.uncaught_exception',
   'process.fault',
   'media.prepare_failed',

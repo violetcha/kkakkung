@@ -602,14 +602,29 @@ export function createKkakkungRoom<State>(deps: ProductRoomDeps<State>) {
     private applyBindings(playerId: string, message: MediaBindings) {
       const current = this.playerGenerations.get(playerId);
       const instance = this.context.instanceOf(playerId);
-      if (
-        message.matchId !== this.matchId ||
-        !instance ||
-        this.mediaInstances.get(instance.gameInstanceId) !== message.mediaInstanceId ||
-        current?.mediaInstanceId !== message.mediaInstanceId ||
-        current.receiverGeneration !== message.receiverGeneration
-      )
+      const dropped =
+        message.matchId !== this.matchId
+          ? 'other-match'
+          : !instance
+            ? 'no-instance'
+            : this.mediaInstances.get(instance.gameInstanceId) !== message.mediaInstanceId
+              ? 'other-instance'
+              : current?.mediaInstanceId !== message.mediaInstanceId
+                ? 'generation-not-committed'
+                : current.receiverGeneration !== message.receiverGeneration
+                  ? 'other-generation'
+                  : null;
+      if (dropped) {
+        // S15P21C204-408. 버려진 revision 은 새로고침 요청(lastBindings)으로도 다시 가지 않는다.
+        // 정책이 그 revision 을 가리키면 클라이언트의 게시 권한이 닫힌 채 남는다.
+        this.emitEvent('room.media_bindings_dropped', 'warn', {
+          phase: this.phase,
+          reason: dropped,
+          generation: message.receiverGeneration,
+          count: message.bindingRevision,
+        });
         return;
+      }
       // 340. Enemy participants go out under the alias their visible entity carries.
       const concealed: MediaBindings = {
         ...message,

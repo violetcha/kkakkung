@@ -14,6 +14,17 @@ export type FaceDiagnostics = Readonly<{
   track(input: { playerId: string; attached: boolean; accepted: boolean }): void;
   visible(phase: string | null, ids: readonly string[]): void;
   bound(ids: readonly string[]): void;
+  /**
+   * S15P21C204-408. 게시 권한은 정책이 가리키는 바인딩 revision 이 적용한 revision 과 같을 때만
+   * 열린다. 정책 revision 은 매 프레임 오르므로 줄에 넣지 않는다(바뀔 때만 찍는다).
+   */
+  policy(input: {
+    phase: string | null;
+    accepted: boolean;
+    policyBinding: number;
+    appliedBinding: number | null;
+    permissions: number | null;
+  }): void;
 }>;
 
 const short = (id: string) => id.slice(0, 8);
@@ -47,6 +58,14 @@ export function createFaceDiagnostics(
     },
     bound(ids) {
       emit('얼굴 텍스처', `[${ids.map(short).join(', ')}]`);
+    },
+    policy({ phase, accepted, policyBinding, appliedBinding, permissions }) {
+      emit(
+        '정책',
+        `phase=${phase} ${accepted ? '받음' : '버림(범위·참여 불일치)'} 정책바인딩=${policyBinding} ` +
+          `적용바인딩=${appliedBinding ?? '없음'} ${policyBinding === appliedBinding ? '권한열림' : '권한닫힘'} ` +
+          `권한항목=${permissions ?? '없음'}`,
+      );
     },
   };
 }

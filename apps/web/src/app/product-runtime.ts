@@ -1444,12 +1444,19 @@ export function bindProductRoom(
   });
   on('audio-policy', (value) => {
     const result = audioPolicySchema.safeParse(value);
-    if (
-      result.success &&
+    if (!result.success) return;
+    const accepted =
       result.data.matchId === snapshot.round?.matchId &&
       participating &&
-      sameMediaScope(result.data)
-    ) {
+      sameMediaScope(result.data);
+    faceDiag.policy({
+      phase: snapshot.round?.phase ?? null,
+      accepted,
+      policyBinding: result.data.bindingRevision,
+      appliedBinding: bindings?.bindingRevision ?? null,
+      permissions: result.data.publisherPermissions?.length ?? null,
+    });
+    if (accepted) {
       bridge.runtime.applyAudioPolicy(result.data);
       flashEffects(result.data.matchId, result.data.effects);
     }

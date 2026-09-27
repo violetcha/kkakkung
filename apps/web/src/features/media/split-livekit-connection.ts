@@ -25,7 +25,9 @@ export function createSplitLiveKitConnection(
   const face = grant.facePublication;
   if (grant.subscriptionMode !== 'server-forwarding' || !face)
     throw new Error('INVALID_SPLIT_MEDIA_GRANT');
-  const rooms = [new sdk.Room(), new sdk.Room()];
+  // S15P21C204-408. 서버가 내보낸 연결이 로컬 트랙을 stop() 하지 않게 한다(livekit-adapter 와 같다).
+  const options = { stopLocalTrackOnUnpublish: false } as const;
+  const rooms = [new sdk.Room(options), new sdk.Room(options)];
   const connected = [false, false];
   const settled = [false, false];
   const recovering = [false, false];
