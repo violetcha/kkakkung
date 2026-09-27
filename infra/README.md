@@ -23,19 +23,19 @@
 
 파이프라인은 각 패키지 내부를 모릅니다. 아래 항목에만 의존하니 **바꿀 땐 인프라에 미리 알려주세요.**
 
-| 항목                | 현재 값                                                                                      | 어디서 쓰나                                      |
-| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                           | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile |
-| 검증                | `node scripts/ci-verify.mjs` → `pnpm verify` 1회 (format·lint·typecheck·test·build·자산·e2e) | Jenkins Verify                                   |
-| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                     | Jenkins Build                                    |
-| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                 | Dockerfile                                       |
-| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                          | compose healthcheck, Jenkins 배포 확인           |
-| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                     | `compose.production.yaml` environment            |
-| **NODE_ENV**        | `development` \| `test`만 허용. production은 부팅 거절                                       | 제품 선택은 별도 `SERVER_PROFILE=product`        |
-| **ALLOWED_ORIGINS** | 허용 목록 밖 Origin은 HTTP 403 / WS 거절. Origin 없는 운영·CLI 요청은 별도 인증 유지         | 정확한 배포 출처와 HTTP/WS 경계 검사             |
-| 웹 빌드             | `apps/web/dist` (Vite)                                                                       | Dockerfile.web → nginx 컨테이너                  |
-| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                              | 배포 빌드에 .env 를 넣지 않음                    |
-| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                          | `nginx/default.conf` 가 처리. 프리픽스 없음      |
+| 항목                | 현재 값                                                                                                                                            | 어디서 쓰나                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 런타임              | Node `24.19.0`, pnpm `11.19.0` (`.node-version`, `packageManager`)                                                                                 | Jenkinsfile `NODE_IMAGE`, `PNPM_VER`, Dockerfile |
+| 검증                | `node scripts/ci-verify.mjs` → `ci-plan.mjs` 모드별 계획(MR·배포). 모드가 없으면 `pnpm verify` 1회(format·lint·typecheck·test·build·번들·자산·e2e) | Jenkins Verify                                   |
+| 이미지              | `infra/docker/Dockerfile.game-server`, `Dockerfile.web`, 컨텍스트 = 루트                                                                           | Jenkins Build                                    |
+| 서버 엔트리         | `dist/main.js` (`pnpm --filter @kkakkung/game-server build`)                                                                                       | Dockerfile                                       |
+| 헬스                | `GET /health/live`, `GET /health/ready` (503 → 200)                                                                                                | compose healthcheck, Jenkins 배포 확인           |
+| 서버 환경변수       | `server/src/config/env.ts` 의 zod 스키마                                                                                                           | `compose.production.yaml` environment            |
+| **NODE_ENV**        | `development` \| `test`만 허용. production은 부팅 거절                                                                                             | 제품 선택은 별도 `SERVER_PROFILE=product`        |
+| **ALLOWED_ORIGINS** | 허용 목록 밖 Origin은 HTTP 403 / WS 거절. Origin 없는 운영·CLI 요청은 별도 인증 유지                                                               | 정확한 배포 출처와 HTTP/WS 경계 검사             |
+| 웹 빌드             | `apps/web/dist` (Vite)                                                                                                                             | Dockerfile.web → nginx 컨테이너                  |
+| 웹 접속 주소        | `VITE_API_BASE_URL`, `VITE_COLYSEUS_URL` **비움** → 같은 origin                                                                                    | 배포 빌드에 .env 를 넣지 않음                    |
+| Colyseus 경로       | `/matchmake/*`, `/<processId>/<roomId>` (루트 기준)                                                                                                | `nginx/default.conf` 가 처리. 프리픽스 없음      |
 
 제품 프로필은 `LIVEKIT_*` 설정과 운영 증거를 읽는다. 실제 값은 Jenkins Secret file과 제품 Compose overlay로 주입하며 예시·이미지·소스에는 넣지 않는다. `NODE_ENV`와 `SERVER_PROFILE`은 별개다. 현재 제품 배포도 `NODE_ENV=development`, `SERVER_PROFILE=product`를 사용한다.
 
@@ -80,7 +80,7 @@ team audience에서 서비스의 `/`·`/api`·WebSocket은 **lab.ssafy.com 로�
 push → Jenkins
   Prepare       TAG = 커밋 SHA 8자리, GitLab 이 보낸 SHA 와 체크아웃 대조
   Secret scan   gitleaks (실패 시 중단). 이 빌드가 더한 커밋만 읽는다 (범위를 못 정하면 전체)
-  Verify        scripts/ci-verify.mjs: 도구체인 → SHA 대조 → frozen install → Chromium → pnpm verify 1회 (kkakkung-ci 컨테이너, jenkins uid)
+  Verify        scripts/ci-verify.mjs: 도구체인 → SHA 대조 → frozen install → Chromium → ci-plan.mjs 모드별 계획 (kkakkung-ci 컨테이너, jenkins uid)
   Build images  kkakkung-game:<TAG>, kkakkung-web:<TAG> (revision 라벨 = 커밋 SHA)
                 배포 빌드는 항상, MR 빌드는 이미지에 들어가는 파일을 건드렸을 때만
   Deploy        develop 만. verify-release.mjs → deploy-release.mjs (아래 장벽). 실패 시 러너가 같은 장벽으로 이전 이미지 복귀
