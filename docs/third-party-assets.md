@@ -54,6 +54,7 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 | `licenses/` (고지 화면·원문)   | 고지 페이지·스타일·Apache-2.0 원문 | 페이지는 자체 제작, 원문은 ASF 취득         | 고지 대상 자체   |
 | `brand/kkakkung-logo.png`      | 까꿍 로고                          | 프로젝트 구성원 제공 브랜드 자산            | 없음             |
 | `textures/backrooms/` (PNG 1)  | 백룸 벽지 재질                     | 프로젝트 구성원 제공 렌더 자산              | 없음             |
+| `audio/bgm/match.mp3`          | 경기 배경음                        | Philippe Groarke(Socapex), CC BY-SA 3.0     | 있음 — 고지 화면 |
 
 나눔명조(S15P21C204-295)는 제목용 명조로 `@fontsource/nanum-myeongjo` 5.2.5(Google Fonts 배포본)의
 한글·라틴 400 서브셋 WOFF2 두 개를 그대로 담았다. 그 패키지의 LICENSE 는 저작권자를 Google Inc. 로
@@ -61,8 +62,8 @@ NGINX의 `/licenses/`는 게임 소켓 정규식과 SPA 대체 응답을 우회�
 `fonts/OFL-1.1.txt` 이며, 두 계열의 저작권 표기는 고지 화면에 각각 적는다. 바이트는
 `pnpm check:product-assets` 가 sha256 으로 고정한다.
 
-외부에서 받은 음원 파일은 없다. 새 파일을 `public/` 에 넣으면 이 표에 줄을 추가해야 하며,
-빠뜨리면 `tests/contracts/asset-ledger.test.ts`가 실패한다.
+외부에서 받은 음원 파일은 아래 "경기 배경음" 하나다. 새 파일을 `public/` 에 넣으면 이 표에 줄을
+추가해야 하며, 빠뜨리면 `tests/contracts/asset-ledger.test.ts`가 실패한다.
 
 ### 코드로 만드는 화면·소리
 
@@ -135,6 +136,26 @@ OFL 원문은 배포 의존성과 함께 보존하며, 사용자용 오픈소스
 | 파일           | bytes     | SHA256                                                             |
 | -------------- | --------- | ------------------------------------------------------------------ |
 | `seamless.png` | 2,507,573 | `e3f8176a84b135cd935cbbbbc6e6b64db7c8b5bd97bf4b4544307444cdb26df7` |
+
+### 경기 배경음
+
+`apps/web/public/audio/bgm/match.mp3`는 경기(PLAYING) 동안
+[match-bgm.ts](../apps/web/src/features/media/match-bgm.ts)가 반복 재생하는 배경음이다.
+
+| 항목        | 내용                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| 이름        | Dark ambiance (`Socapex - Dark ambiance.mp3`, Mastered 가 아닌 판)                           |
+| 제작자      | Philippe Groarke (Socapex, OpenGameArt 계정 tarfmagougou). 작가가 지정한 표기는 이름뿐이다   |
+| 출처        | [OpenGameArt](https://opengameart.org/content/dark-ambiance), 2026-09-27 확인                |
+| 라이선스    | CC BY-SA 3.0. 상업 이용·수정·재배포 가능, 저작자 표시와 변경본의 동일 라이선스 배포가 조건   |
+| 변경        | 앞 36초(1,378 MP3 프레임)를 프레임 경계에서 잘라냈다. 재인코딩하지 않아 320kbps CBR 그대로다 |
+| 고지        | 고지 화면에 제목·제작자·출처·라이선스·변경 사실을 적는다                                     |
+| 갱신 책임자 | 웹 UI 담당자                                                                                 |
+
+| 파일                               | bytes      | SHA256                                                             |
+| ---------------------------------- | ---------- | ------------------------------------------------------------------ |
+| 원본 `Socapex - Dark ambiance.mp3` | 10,886,709 | `09575cf57f1c5546522b733327bedd3a428192ae9c29861006698ee057ef081e` |
+| 배포 `match.mp3` (236.07초)        | 9,442,743  | `423a24f2acb9dbe888ada29faebafffa3c4eb7a1a829107faebc2d4b9a3c9380` |
 
 ## 자산 추가 기록
 
