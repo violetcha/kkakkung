@@ -66,9 +66,10 @@ import type { RuntimeMetrics } from './runtime-metrics';
 import {
   DEFAULT_AUDIO_PREFERENCES,
   normalizeAudioPreferences,
+  unitGain,
   type AudioPreferences,
 } from '../features/media/audio-preferences';
-import { createMatchBgm, type MatchBgm } from '../features/media/match-bgm';
+import { createMatchBgm, DEFAULT_BGM_VOLUME, type MatchBgm } from '../features/media/match-bgm';
 import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
@@ -207,6 +208,7 @@ export function bindProductRoom(
   let pageActive = true;
   let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
   const bgm = deps.matchBgm ?? createMatchBgm();
+  let bgmVolume = DEFAULT_BGM_VOLUME;
   let generation = 0;
   /** 가장 최근 준비 단계 기록. runtime 이 직접 읽기를 지원하지 않을 때의 대체값이다. */
   let readinessTrace: ReadinessTrace | null = null;
@@ -351,6 +353,7 @@ export function bindProductRoom(
     bgm.update({
       playing: active && !snapshot.lost && snapshot.round?.phase === 'PLAYING',
       volume: audioPreferences.volume,
+      bgmVolume,
       muted: audioPreferences.muted,
     });
   }
@@ -1631,6 +1634,13 @@ export function bindProductRoom(
       syncBgm();
     },
     playTestTone: () => bridge.runtime.playTestTone(),
+    /** 경기 배경음 음량(0–1). 듣는 음량에 곱한다. 이 방에서만 유효하다. */
+    getBgmVolume: () => bgmVolume,
+    setBgmVolume(value: number) {
+      if (!active || snapshot.lost) return;
+      bgmVolume = unitGain(value);
+      syncBgm();
+    },
     quality: (value: QualityPreset) => quality.select(value),
     /** Asks the server to run a demo scenario. Ordinary rooms ignore the message. */
     runDemoScenario(scenario: DemoScenarioId, options?: DemoScenarioOptions) {

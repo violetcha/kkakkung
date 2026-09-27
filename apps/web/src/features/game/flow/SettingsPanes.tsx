@@ -230,6 +230,28 @@ export function SoundPane({
           </dd>
         </div>
         <div>
+          <dt>
+            배경음 음량 <small>{Math.round(settings.bgmVolume * 100)}%</small>
+          </dt>
+          <dd>
+            <input
+              type="range"
+              aria-label="배경음 음량"
+              min={0}
+              max={100}
+              step={1}
+              value={Math.round(settings.bgmVolume * 100)}
+              disabled={settings.muted}
+              style={
+                {
+                  '--range-fill': `${Math.round(settings.bgmVolume * 100)}%`,
+                } as React.CSSProperties
+              }
+              onChange={(event) => onChange({ bgmVolume: Number(event.target.value) / 100 })}
+            />
+          </dd>
+        </div>
+        <div>
           <dt>모든 소리 끄기</dt>
           <dd>
             <label className="settings-check">
@@ -243,6 +265,7 @@ export function SoundPane({
           </dd>
         </div>
       </dl>
+      <p className="pause-note">배경음은 경기 중에만 나오고, 듣는 음량에 비례해 커집니다.</p>
       {live}
     </>
   );

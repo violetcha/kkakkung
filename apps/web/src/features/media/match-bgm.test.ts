@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMatchBgm, MATCH_BGM_LEVEL, MATCH_BGM_URL, type BgmElement } from './match-bgm';
+import { createMatchBgm, MATCH_BGM_URL, type BgmElement } from './match-bgm';
 
 function fakeElement(play: () => Promise<void> = async () => {}) {
   const element = {
@@ -16,8 +16,8 @@ function fakeElement(play: () => Promise<void> = async () => {}) {
   return element satisfies BgmElement;
 }
 
-const playing = { playing: true, volume: 0.7, muted: false };
-const idle = { playing: false, volume: 0.7, muted: false };
+const playing = { playing: true, volume: 0.7, bgmVolume: 0.25, muted: false };
+const idle = { ...playing, playing: false };
 
 describe('match bgm', () => {
   it('creates nothing before the match plays', () => {
@@ -27,23 +27,27 @@ describe('match bgm', () => {
     expect(createElement).not.toHaveBeenCalled();
   });
 
-  it('loops the fixed file from the start at the preference volume scaled down', () => {
+  it('loops the fixed file from the start at the listening volume times the bgm volume', () => {
     const element = fakeElement();
     const bgm = createMatchBgm({ createElement: () => element });
     bgm.update(playing);
     expect(element.src).toBe(MATCH_BGM_URL);
     expect(element.loop).toBe(true);
     expect(element.currentTime).toBe(0);
-    expect(element.volume).toBeCloseTo(0.7 * MATCH_BGM_LEVEL);
+    expect(element.volume).toBeCloseTo(0.7 * 0.25);
     expect(element.play).toHaveBeenCalledOnce();
   });
 
-  it('follows volume and mute while playing without starting again', () => {
+  it('follows both volumes and mute while playing without starting again', () => {
     const element = fakeElement();
     const bgm = createMatchBgm({ createElement: () => element });
     bgm.update(playing);
     bgm.update({ ...playing, volume: 0.4 });
-    expect(element.volume).toBeCloseTo(0.4 * MATCH_BGM_LEVEL);
+    expect(element.volume).toBeCloseTo(0.4 * 0.25);
+    bgm.update({ ...playing, volume: 0.4, bgmVolume: 1 });
+    expect(element.volume).toBeCloseTo(0.4);
+    bgm.update({ ...playing, bgmVolume: 1.7 });
+    expect(element.volume).toBeCloseTo(0.7);
     bgm.update({ ...playing, muted: true });
     expect(element.volume).toBe(0);
     expect(element.play).toHaveBeenCalledOnce();

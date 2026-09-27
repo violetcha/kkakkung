@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   requestSession,
   requestSessionAccess,
@@ -257,6 +257,14 @@ export function ProductApp({
     async () => (await runtime.current?.playTestTone()) ?? 'unavailable',
     [],
   );
+  // 경기 배경음 음량. 방 안에서 바꾼 값은 듣는 음량처럼 그 방에서만 유효하다.
+  const bgmControl = useMemo(
+    () => ({
+      read: () => runtime.current?.getBgmVolume() ?? null,
+      change: (value: number) => runtime.current?.setBgmVolume(value),
+    }),
+    [],
+  );
   // Demo rooms only: one drawn face shared by every puppet, disposed with the page.
   const demoFace = useRef<ReturnType<typeof createDemoFaceTexture> | null>(null);
   if (demoSession && demoFace.current === null) demoFace.current = createDemoFaceTexture();
@@ -507,6 +515,7 @@ export function ProductApp({
         volume: settings.volume,
         muted: settings.muted,
       });
+      runtime.current.setBgmVolume(settings.bgmVolume);
       setSelfId(session.playerId);
       setCode(session.roomCode);
       setSessionCredential(session.sessionToken);
@@ -753,6 +762,7 @@ export function ProductApp({
           participants={snapshot?.roster?.players.filter((player) => player.playerId !== selfId)}
           canTestTone={['DEVICE_CHECK', 'TEAM_PRACTICE'].includes(round.phase)}
           compact={worldVisible}
+          bgm={bgmControl}
         />
       </>
     ) : null;
@@ -1484,6 +1494,7 @@ export function ProductApp({
                         canTestTone={
                           !!round && ['DEVICE_CHECK', 'TEAM_PRACTICE'].includes(round.phase)
                         }
+                        bgm={bgmControl}
                         bare
                       />
                     ),

@@ -7,9 +7,10 @@ import { unitGain } from './audio-preferences';
  */
 export const MATCH_BGM_URL = '/audio/bgm/match.mp3';
 /**
- * 전체 음량 대비 배경음 크기. 경기 중에는 발소리·장비 소리·근거리 음성이 판단 근거라 작게 둔다.
+ * 배경음 음량 기본값(0–1). 실제 크기는 듣는 음량 × 배경음 음량이다. 경기 중에는 발소리·장비 소리·
+ * 근거리 음성이 판단 근거라 기본은 작게 둔다. 사용자는 소리 설정의 '배경음 음량'으로 바꾼다.
  */
-export const MATCH_BGM_LEVEL = 0.25;
+export const DEFAULT_BGM_VOLUME = 0.25;
 
 /** HTMLAudioElement 의 필요한 부분만. 시험은 가짜를 준다. */
 export type BgmElement = {
@@ -24,7 +25,14 @@ export type BgmElement = {
   load(): void;
 };
 
-export type MatchBgmState = Readonly<{ playing: boolean; volume: number; muted: boolean }>;
+export type MatchBgmState = Readonly<{
+  playing: boolean;
+  /** 듣는 음량(0–1). */
+  volume: number;
+  /** 배경음 음량(0–1). 듣는 음량에 곱한다. */
+  bgmVolume: number;
+  muted: boolean;
+}>;
 
 export interface MatchBgm {
   update(state: MatchBgmState): void;
@@ -54,9 +62,9 @@ export function createMatchBgm(
   let run = 0;
 
   return {
-    update({ playing, volume, muted }) {
+    update({ playing, volume, bgmVolume, muted }) {
       if (disposed) return;
-      const level = muted ? 0 : unitGain(volume) * MATCH_BGM_LEVEL;
+      const level = muted ? 0 : unitGain(volume) * unitGain(bgmVolume);
       if (!playing) {
         if (!started || !element) return;
         started = false;
