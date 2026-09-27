@@ -68,6 +68,7 @@ import {
   normalizeAudioPreferences,
   type AudioPreferences,
 } from '../features/media/audio-preferences';
+import { createMatchBgm, type MatchBgm } from '../features/media/match-bgm';
 import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
@@ -197,12 +198,15 @@ export function bindProductRoom(
      * 요청한다. 없으면 서버가 이전 세대가 남은 요청을 받지 않아 영상·음성 없이 경기를 이어 가게 된다.
      */
     resumeMediaScope?: MediaScope | null;
+    /** 경기 배경음 주입점. 생략하면 audio element 로 `MATCH_BGM_URL` 을 재생한다. */
+    matchBgm?: MatchBgm;
   },
 ) {
   let active = true;
   let participating = true;
   let pageActive = true;
   let audioPreferences = DEFAULT_AUDIO_PREFERENCES;
+  const bgm = deps.matchBgm ?? createMatchBgm();
   let generation = 0;
   /** 가장 최근 준비 단계 기록. runtime 이 직접 읽기를 지원하지 않을 때의 대체값이다. */
   let readinessTrace: ReadinessTrace | null = null;
@@ -339,8 +343,17 @@ export function bindProductRoom(
     if (active) {
       snapshot = { ...snapshot, ...patch };
       deps.changed(snapshot);
+      syncBgm();
     }
   };
+  /** 경기가 PLAYING 인 동안만 배경음을 튼다. 결과·무효·연결 상실·재경기 대기에서는 멈춘다. */
+  function syncBgm() {
+    bgm.update({
+      playing: active && !snapshot.lost && snapshot.round?.phase === 'PLAYING',
+      volume: audioPreferences.volume,
+      muted: audioPreferences.muted,
+    });
+  }
   // S15P21C204-401. 대기실에서 얼굴이 1초 이상 이어서 잡히면 가공 면 한 장을 찍어 한 번 올린다.
   let lobbyFaceShared = false;
   let lobbyFaceLiveSince: number | null = null;
@@ -1223,6 +1236,7 @@ export function bindProductRoom(
     if (!active) return;
     active = false;
     generation++;
+    bgm.dispose();
     heartbeat.dispose();
     clock.clear();
     commands.clear();
@@ -1607,6 +1621,7 @@ export function bindProductRoom(
         mutedPlayerIds: value.mutedPlayerIds.filter((id) => ids.has(id) && id !== session.playerId),
       });
       bridge.runtime.setAudioPreferences(audioPreferences);
+      syncBgm();
     },
     playTestTone: () => bridge.runtime.playTestTone(),
     quality: (value: QualityPreset) => quality.select(value),

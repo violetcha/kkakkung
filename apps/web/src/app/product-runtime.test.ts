@@ -14,6 +14,7 @@ import { DEFAULT_AUDIO_PREFERENCES } from '../features/media/audio-preferences';
 import { MEDIA_ROUTES } from '@kkakkung/protocol/game-messages';
 import { createRuntimeMetrics, type RuntimeMetrics } from './runtime-metrics';
 import { INPUT_TUNING } from '../features/input/input-tuning';
+import type { MatchBgm } from '../features/media/match-bgm';
 
 // 장치를 켜는 시험들이다. 동의 없이는 다리가 장치에 닿지 않으므로(S15P21C204-292) 이미 동의한
 // 기기에서 시작한다. 동의가 없을 때 닿지 않는다는 사실 자체는 consent-bypass 시험이 본다.
@@ -56,6 +57,7 @@ function manualVision() {
 function fixture(
   interactionFactory?: (deps: InteractionDeps) => InteractionRuntime,
   metrics?: RuntimeMetrics,
+  matchBgm?: MatchBgm,
 ) {
   let now = 0;
   let sequence = 0;
@@ -136,6 +138,7 @@ function fixture(
         return interactionFactory?.(deps) ?? fake;
       },
       ...(metrics ? { metrics } : {}),
+      ...(matchBgm ? { matchBgm } : {}),
     },
   );
   return {
@@ -1210,6 +1213,30 @@ it('keeps media and the projected view while spectating, then ends at the round 
 
   f.state({ phase: 'RESULT', stateVersion: 12 });
   await vi.waitFor(() => expect(f.end).toHaveBeenCalledOnce());
+});
+it('plays the match bgm only while the round is PLAYING and follows sound preferences', async () => {
+  const bgm = { update: vi.fn(), dispose: vi.fn() };
+  const f = fixture(undefined, undefined, bgm);
+  const last = () => bgm.update.mock.calls.at(-1)?.[0];
+  expect(last()?.playing ?? false).toBe(false);
+  f.state({ phase: 'COUNTDOWN' });
+  expect(last()).toMatchObject({ playing: false });
+  f.state({ phase: 'PLAYING' });
+  expect(last()).toEqual({ playing: true, volume: 0.7, muted: false });
+  f.runtime.setAudioPreferences({ volume: 0.3, muted: true, mutedPlayerIds: [] });
+  expect(last()).toEqual({ playing: true, volume: 0.3, muted: true });
+  f.state({ phase: 'RESULT', stateVersion: 11 });
+  expect(last()).toMatchObject({ playing: false });
+  await f.runtime.leave();
+  expect(bgm.dispose).toHaveBeenCalledOnce();
+});
+it('stops the match bgm when the room connection is lost', () => {
+  const bgm = { update: vi.fn(), dispose: vi.fn() };
+  const f = fixture(undefined, undefined, bgm);
+  f.state({ phase: 'PLAYING' });
+  expect(bgm.update.mock.calls.at(-1)?.[0]).toMatchObject({ playing: true });
+  f.close(4000);
+  expect(bgm.update.mock.calls.at(-1)?.[0]).toMatchObject({ playing: false });
 });
 it('keeps local sound preferences across rematch, prunes departed players and resets on room loss', async () => {
   const f = fixture();
