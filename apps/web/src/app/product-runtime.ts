@@ -46,6 +46,7 @@ import {
   facesExit,
 } from '../features/game/pose/challenge-controller';
 import { createFaceTextures, videoFaceTexture } from '../features/game/scene/face-textures';
+import { createFaceDiagnostics } from '../features/media/face-diagnostics';
 import { createPrivateEvents } from '../features/room/private-events';
 import { debugFeed } from '../features/debug/debug-feed';
 import type { HunterMarker } from '../features/game/map/past-event-markers';
@@ -257,6 +258,14 @@ export function bindProductRoom(
     !snapshot.lost &&
     ['DEVICE_CHECK', 'TEAM_PRACTICE', 'PLAYING'].includes(snapshot.round?.phase ?? '');
   const faces = createFaceTextures(videoFaceTexture);
+  // S15P21C204-407. 경기 중 원격 얼굴이 회색 판으로만 남는 원인을 가르는 진단 기록.
+  const faceDiag = createFaceDiagnostics();
+  const showFaces = (view: PrivateView | null) => {
+    const ids = visibleFaceIds(view);
+    faces.visible(ids);
+    faceDiag.visible(snapshot.round?.phase ?? null, ids);
+    faceDiag.bound(faces.boundIds());
+  };
   let sensorGeneration = -1;
   let practiceReadyReported = false;
   let turnLead: { fromDir: Dir; direction: 'left' | 'right'; startedAtMs: number } | null = null;
@@ -600,7 +609,7 @@ export function bindProductRoom(
       if (!view || !oldScope || oldScope.revision !== view.gameScope.revision)
         publish({ markers: [], exchangeNotice: null });
       publish({ view });
-      faces.visible(visibleFaceIds(view));
+      showFaces(view);
       events.update(view, snapshot.round?.matchId ?? '');
       if (view) commands.view(view.stateVersion);
       if (view?.self?.status === 'ACTIVE' && view.self.challenge?.exitId === startPending?.exitId) {
@@ -752,8 +761,11 @@ export function bindProductRoom(
         },
         onFaceTrack: (event) => {
           if (live()) deps.metrics?.recordFaceTrack(event.element !== null);
-          if (live() && participating && faces.receive(event))
-            publish({ faceRevision: snapshot.faceRevision + 1 });
+          if (!live() || !participating) return;
+          const accepted = faces.receive(event);
+          faceDiag.track({ playerId: event.playerId, attached: event.element !== null, accepted });
+          faceDiag.bound(faces.boundIds());
+          if (accepted) publish({ faceRevision: snapshot.faceRevision + 1 });
         },
       },
       deps.interactionFactory,
@@ -1384,7 +1396,7 @@ export function bindProductRoom(
       });
       bridge.runtime.setAudioPreferences(audioPreferences);
       publish({ roster: result.data });
-      faces.visible(visibleFaceIds(snapshot.view ?? null));
+      showFaces(snapshot.view ?? null);
     }
   });
   on('private-view', (value) => {
@@ -1392,14 +1404,26 @@ export function bindProductRoom(
   });
   on('media-bindings', (value) => {
     const result = mediaBindingsSchema.safeParse(value);
-    if (
-      !result.success ||
-      result.data.matchId !== snapshot.round?.matchId ||
-      !participating ||
-      !sameMediaScope(result.data) ||
-      (bindings && result.data.bindingRevision <= bindings.bindingRevision)
-    )
-      return;
+    if (!result.success) return;
+    const outcome =
+      result.data.matchId !== snapshot.round?.matchId
+        ? 'other-match'
+        : !participating
+          ? 'not-participating'
+          : !sameMediaScope(result.data)
+            ? 'wrong-scope'
+            : bindings && result.data.bindingRevision <= bindings.bindingRevision
+              ? 'stale'
+              : 'applied';
+    faceDiag.bindings({
+      phase: snapshot.round?.phase ?? null,
+      revision: result.data.bindingRevision,
+      outcome,
+      remote: result.data.participants
+        .filter((p) => p.playerId !== session.playerId)
+        .map((p) => ({ playerId: p.playerId, face: p.faceTrackSid !== undefined })),
+    });
+    if (outcome !== 'applied') return;
     bindings = result.data;
     bridge.runtime.applyMediaBindings(bindings);
     updateLoading();

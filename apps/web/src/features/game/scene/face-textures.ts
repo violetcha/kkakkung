@@ -71,6 +71,10 @@ export function createFaceTextures<T extends Disposable>(factory: (video: HTMLVi
     get count() {
       return textures.size;
     },
+    /** S15P21C204-407. 지금 텍스처가 붙은 참가자 ID(진단용). */
+    boundIds(): string[] {
+      return [...textures.keys()];
+    },
   };
 }
 export type FaceTextures = ReturnType<typeof createFaceTextures<VideoTexture>>;
