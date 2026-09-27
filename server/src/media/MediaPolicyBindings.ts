@@ -35,6 +35,13 @@ export class MediaPolicyBindings {
   private readonly registered = new Map<Generation, AbortController>();
   private readonly failed = new Set<Generation>();
   private readonly participantSids = new Map<Generation, string>();
+  /**
+   * S15P21C204-404. Receivers whose own confirmed participant later answered not_found: they left
+   * the LiveKit room. A participant that is not in the room holds no subscriptions, so their
+   * subscription changes succeed without a remote call. Having skipped those calls, the server no
+   * longer knows their remote state, so a departed receiver that answers again is failed.
+   */
+  private readonly departed = new Set<Generation>();
   private readonly bindingVersions = new Map<
     Generation,
     { revision: number; fingerprint: string }
@@ -67,11 +74,22 @@ export class MediaPolicyBindings {
             signal,
           );
           if (!this.allowed(generation)) throw new Error('STALE_GENERATION');
+          if (this.departed.has(generation)) {
+            this.diagnostic({
+              generation: generation.generation,
+              stage: 'track-validation',
+              code: 'PARTICIPANT_RETURNED',
+            });
+            this.fail(generation);
+            throw new Error('STALE_GENERATION');
+          }
           // TrackRegistry validates SID stability and sources before this is observable as valid.
           this.participantSids.set(generation, participant.sid);
           return participant;
         } catch (error) {
           if (error instanceof GatewayError && error.code === 'not_found') {
+            // Only a participant confirmed earlier has left; one that never joined keeps waiting.
+            if (this.participantSids.has(generation)) this.departed.add(generation);
             this.participantSids.delete(generation);
             return null;
           }
@@ -106,23 +124,37 @@ export class MediaPolicyBindings {
       send: async (request) => {
         const generation = this.findReceiver(request.key);
         if (!generation || !this.allowed(generation)) throw new Error('STALE_GENERATION');
-        await options.gateway.updateSubscriptions(
-          request.key.mediaRoomName,
-          request.key.receiverIdentity,
-          [...request.trackSids],
-          request.subscribe,
-          {
-            requestId: request.requestId,
-            deadlineMs:
-              options.monotonicNow() +
-              (request.subscribe && options.config.subscriptionMode === 'publisher-permissions'
-                ? 5000
-                : 1000),
-            priority: request.subscribe ? 'normal' : 'cleanup',
-            signal: this.registered.get(generation)!.signal,
-            beforeDispatch: request.beforeDispatch,
-          },
-        );
+        // S15P21C204-404. Nothing to change on a participant that is not in the room. The request
+        // still passes the same dispatch check a remote call would, and is refused the same way.
+        if (this.departed.has(generation)) {
+          if (!request.beforeDispatch()) throw new Error('SUPERSEDED');
+          return;
+        }
+        try {
+          await options.gateway.updateSubscriptions(
+            request.key.mediaRoomName,
+            request.key.receiverIdentity,
+            [...request.trackSids],
+            request.subscribe,
+            {
+              requestId: request.requestId,
+              deadlineMs:
+                options.monotonicNow() +
+                (request.subscribe && options.config.subscriptionMode === 'publisher-permissions'
+                  ? 5000
+                  : 1000),
+              priority: request.subscribe ? 'normal' : 'cleanup',
+              signal: this.registered.get(generation)!.signal,
+              beforeDispatch: request.beforeDispatch,
+            },
+          );
+        } catch (error) {
+          // A block answered not_found removed nothing because nothing was there: it holds. An
+          // allow answered not_found stays a failure, the receiver would not get what it needs.
+          if (!request.subscribe && error instanceof GatewayError && error.code === 'not_found')
+            return;
+          throw error;
+        }
       },
       onUnknown: (key) => {
         const generation = this.findReceiver(key);
@@ -181,6 +213,7 @@ export class MediaPolicyBindings {
     this.projection.forget(this.receiver(generation), generation.request.playerId);
     this.bindingVersions.delete(generation);
     this.participantSids.delete(generation);
+    this.departed.delete(generation);
     this.tracks.forget(this.owner(generation));
     const { matchId, mediaInstanceId } = generation.request;
     if (
