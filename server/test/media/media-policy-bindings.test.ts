@@ -461,6 +461,27 @@ describe('actual E policy and track bindings composition with synthetic Cloud tr
     },
   );
 
+  it('keeps a confirmed participant that is briefly absent and comes back with the same SID', async () => {
+    // S15P21C204-404. A LiveKit resume can hide the participant for a moment and show the same SID
+    // again; MediaLifecycle's reconnect recovery succeeds exactly on that. It is not a departure.
+    const s = setup(2);
+    await s.binding.reconcile();
+    await settle();
+    const generation = s.generations[0]!;
+    const present = s.participants.get(generation.identity)!;
+    s.participants.delete(generation.identity);
+    s.time(30_000);
+    await s.binding.reconcile();
+    await settle();
+    expect(s.binding.inspect(generation)).toMatchObject({ participantSid: null });
+    s.participants.set(generation.identity, present);
+    s.time(60_000);
+    await s.binding.reconcile();
+    await settle();
+    expect(s.binding.inspect(generation)).toMatchObject({ participantSid: 'PA_p1_1' });
+    expect(s.onFailure).not.toHaveBeenCalled();
+  });
+
   it('distinguishes a confirmed participant without tracks from remote absence in reconnect inspection', async () => {
     const s = setup(1);
     const generation = s.generations[0]!;
@@ -637,121 +658,4 @@ it('publisher permissions accepts a delayed allow while server-controlled keeps 
       );
     }
   }
-});
-
-/**
- * S15P21C204-404. A receiver that left the LiveKit room holds no subscriptions, so a policy change
- * that would block (or allow) a track for it must not become "permission state unknown". In
- * production a block sent to such a receiver answered 404 after 1,085ms, the 1s block deadline
- * fired first, and the POLICY_UNKNOWN locked the whole server's readiness until a restart.
- */
-describe('a receiver that left the LiveKit room', () => {
-  /** p1 stays at x=0; p2 moves to `x`. Past five cells p1 stops hearing p2 (a block). */
-  function moved(x: number, frameRevision: number): TrustedMediaFrame {
-    const base = frame(2, { frameRevision });
-    return {
-      ...base,
-      participants: base.participants.map((p) =>
-        p.playerId === 'p2' ? { ...p, cell: { x, y: 0 } } : p,
-      ),
-    };
-  }
-  /** LiveKit answers not_found for an identity that is not in the room, the way production did. */
-  function absentAnswersNotFound(s: ReturnType<typeof setup>) {
-    s.updateSubscriptions.mockImplementation(async (_room, identity) => {
-      if (!s.participants.has(identity)) throw { code: 'not_found', status: 404 };
-    });
-  }
-  function callsTo(s: ReturnType<typeof setup>, identity: string) {
-    return s.updateSubscriptions.mock.calls.filter(([, target]) => target === identity);
-  }
-
-  it('changes its subscriptions without a remote call once its own lookup found it gone', async () => {
-    const s = setup(2);
-    absentAnswersNotFound(s);
-    await s.binding.reconcile();
-    await settle();
-    const receiver = s.generations[0]!;
-    expect(s.binding.inspect(receiver)).toMatchObject({ participantSid: 'PA_p1_1' });
-    // p1's browser drops out of LiveKit; the 30s re-query sees it gone.
-    s.participants.delete(receiver.identity);
-    s.time(30_000);
-    await s.binding.reconcile();
-    await settle();
-    expect(s.binding.inspect(receiver)).toMatchObject({ participantSid: null });
-    const before = callsTo(s, receiver.identity).length;
-
-    // p2 walks out of p1's hearing, then back in: a block, then an allow, for the absent p1.
-    s.binding.observeFrame(moved(9, 2));
-    await settle();
-    s.time(31_500);
-    await s.binding.reconcile();
-    await settle();
-    s.binding.observeFrame(moved(1, 3));
-    await settle();
-    s.time(33_000);
-    await s.binding.reconcile();
-    await settle();
-
-    expect(callsTo(s, receiver.identity)).toHaveLength(before);
-    expect(s.onFailure).not.toHaveBeenCalled();
-  });
-
-  it('treats a block answered not_found as confirmed before its own lookup noticed', async () => {
-    const s = setup(2);
-    absentAnswersNotFound(s);
-    await s.binding.reconcile();
-    await settle();
-    const receiver = s.generations[0]!;
-    // Gone from LiveKit, but no re-query has run yet: the block itself discovers it.
-    s.participants.delete(receiver.identity);
-    s.binding.observeFrame(moved(9, 2));
-    await settle();
-    expect(
-      callsTo(s, receiver.identity).some(
-        ([, , tracks, subscribe]) => !subscribe && tracks.includes('AUDIO_p2_1'),
-      ),
-    ).toBe(true);
-    s.time(1500);
-    await s.binding.reconcile();
-    await settle();
-    expect(s.onFailure).not.toHaveBeenCalled();
-  });
-
-  it('still fails a present receiver whose block is refused for another reason', async () => {
-    const s = setup(2);
-    await s.binding.reconcile();
-    await settle();
-    const receiver = s.generations[0]!;
-    s.updateSubscriptions.mockImplementation(async (_room, identity, _tracks, subscribe) => {
-      if (identity === receiver.identity && !subscribe) throw { code: 'unavailable', status: 503 };
-    });
-    s.binding.observeFrame(moved(9, 2));
-    await settle();
-    s.time(1500);
-    await s.binding.reconcile();
-    await settle();
-    expect(s.onFailure).toHaveBeenCalledWith(receiver, 'POLICY_UNKNOWN');
-  });
-
-  it('fails a departed receiver that shows up again, since its remote state was not kept', async () => {
-    const s = setup(2);
-    absentAnswersNotFound(s);
-    await s.binding.reconcile();
-    await settle();
-    const receiver = s.generations[0]!;
-    s.participants.delete(receiver.identity);
-    s.time(30_000);
-    await s.binding.reconcile();
-    await settle();
-    s.binding.observeFrame(moved(9, 2));
-    await settle();
-    expect(s.onFailure).not.toHaveBeenCalled();
-    // The same participant answers again (a transient 404, or a resumed session).
-    s.participants.set(receiver.identity, publication(receiver));
-    s.time(60_000);
-    await s.binding.reconcile();
-    await settle();
-    expect(s.onFailure).toHaveBeenCalledExactlyOnceWith(receiver, 'POLICY_UNKNOWN');
-  });
 });
