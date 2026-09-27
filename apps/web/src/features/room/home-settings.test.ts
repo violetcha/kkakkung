@@ -35,19 +35,36 @@ describe('home settings', () => {
     expect(loadHomeSettings(null)).toEqual(DEFAULT_HOME_SETTINGS);
   });
 
-  it('keeps each stored field only when it is valid and clamps the volume', () => {
+  it('keeps each stored field only when it is valid and clamps the volumes', () => {
     expect(
-      normalizeHomeSettings({ quality: 'low', volume: 1.7, muted: true, backgroundMotion: false }),
-    ).toEqual({ quality: 'low', volume: 1, muted: true, backgroundMotion: false });
-    expect(normalizeHomeSettings({ quality: 'ultra', volume: 'loud', muted: 'yes' })).toEqual(
-      DEFAULT_HOME_SETTINGS,
-    );
+      normalizeHomeSettings({
+        quality: 'low',
+        volume: 1.7,
+        bgmVolume: 7,
+        muted: true,
+        backgroundMotion: false,
+      }),
+    ).toEqual({ quality: 'low', volume: 1, bgmVolume: 3, muted: true, backgroundMotion: false });
+    expect(normalizeHomeSettings({ bgmVolume: -0.5 }).bgmVolume).toBe(0);
+    expect(
+      normalizeHomeSettings({ quality: 'ultra', volume: 'loud', bgmVolume: 'max', muted: 'yes' }),
+    ).toEqual(DEFAULT_HOME_SETTINGS);
+    // 배경음 음량이 생기기 전에 저장된 설정도 그대로 읽고 배경음만 기본값이다.
+    expect(
+      normalizeHomeSettings({ quality: 'low', volume: 0.4, muted: false, backgroundMotion: true }),
+    ).toEqual({ ...DEFAULT_HOME_SETTINGS, quality: 'low', volume: 0.4 });
     expect(normalizeHomeSettings(null)).toEqual(DEFAULT_HOME_SETTINGS);
   });
 
   it('round-trips through storage and ignores a storage that refuses writes', () => {
     const storage = memoryStorage();
-    const value = { quality: 'low', volume: 0.25, muted: false, backgroundMotion: false } as const;
+    const value = {
+      quality: 'low',
+      volume: 0.25,
+      bgmVolume: 2.5,
+      muted: false,
+      backgroundMotion: false,
+    } as const;
     saveHomeSettings(value, storage);
     expect(loadHomeSettings(storage)).toEqual(value);
     expect(() =>

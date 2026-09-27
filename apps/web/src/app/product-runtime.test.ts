@@ -1222,9 +1222,14 @@ it('plays the match bgm only while the round is PLAYING and follows sound prefer
   f.state({ phase: 'COUNTDOWN' });
   expect(last()).toMatchObject({ playing: false });
   f.state({ phase: 'PLAYING' });
-  expect(last()).toEqual({ playing: true, volume: 0.7, muted: false });
+  expect(last()).toEqual({ playing: true, volume: 0.7, bgmVolume: 1, muted: false });
+  f.runtime.setBgmVolume(2.5);
+  expect(f.runtime.getBgmVolume()).toBe(2.5);
+  expect(last()).toEqual({ playing: true, volume: 0.7, bgmVolume: 2.5, muted: false });
+  f.runtime.setBgmVolume(10);
+  expect(last()).toMatchObject({ bgmVolume: 3 });
   f.runtime.setAudioPreferences({ volume: 0.3, muted: true, mutedPlayerIds: [] });
-  expect(last()).toEqual({ playing: true, volume: 0.3, muted: true });
+  expect(last()).toEqual({ playing: true, volume: 0.3, bgmVolume: 3, muted: true });
   f.state({ phase: 'RESULT', stateVersion: 11 });
   expect(last()).toMatchObject({ playing: false });
   await f.runtime.leave();

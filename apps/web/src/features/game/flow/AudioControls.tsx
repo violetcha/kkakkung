@@ -6,6 +6,7 @@ import type {
   LocalAudioStatus,
   TestToneResult,
 } from '../../media/audio-preferences';
+import { MAX_BGM_VOLUME } from '../../media/match-bgm';
 
 type Participant = Readonly<{ playerId: string; nickname: string }>;
 export function AudioControls({
@@ -17,6 +18,7 @@ export function AudioControls({
   compact = false,
   bare = false,
   sections = 'all',
+  bgm,
 }: {
   readStatus(): LocalAudioStatus | null;
   onPreferences(preferences: AudioPreferences): void;
@@ -31,17 +33,23 @@ export function AudioControls({
    * 그린다. 음량과 전체 끄기는 설정 창이 저장소와 함께 맡으므로 같은 줄이 두 번 나오지 않는다.
    */
   sections?: 'all' | 'live';
+  /** 경기 배경음 음량. 방 안에서만 준다. 없으면 줄을 그리지 않는다. */
+  bgm?: Readonly<{ read(): number | null; change(value: number): void }>;
 }) {
   const [status, setStatus] = useState<LocalAudioStatus | null>(readStatus);
+  const [bgmVolume, setBgmVolume] = useState<number | null>(() => bgm?.read() ?? null);
   const [feedback, setFeedback] = useState('');
   const [testing, setTesting] = useState(false);
   const id = useId();
   useEffect(() => {
-    const refresh = () => setStatus(readStatus());
+    const refresh = () => {
+      setStatus(readStatus());
+      setBgmVolume(bgm?.read() ?? null);
+    };
     refresh();
     const timer = window.setInterval(refresh, 100);
     return () => window.clearInterval(timer);
-  }, [readStatus]);
+  }, [readStatus, bgm]);
   const preferences = status?.preferences;
   if (!preferences) return null;
   const change = (patch: Partial<AudioPreferences>) => {
@@ -79,6 +87,31 @@ export function AudioControls({
               />
               모든 소리 끄기
             </label>
+            {bgm && bgmVolume !== null && (
+              <>
+                <label htmlFor={id + '-bgm'}>
+                  배경음 음량 <output>{Math.round(bgmVolume * 100)}%</output>
+                </label>
+                <input
+                  id={id + '-bgm'}
+                  type="range"
+                  min="0"
+                  max={MAX_BGM_VOLUME * 100}
+                  step="1"
+                  value={Math.round(bgmVolume * 100)}
+                  style={
+                    {
+                      '--range-fill': `${Math.round((bgmVolume / MAX_BGM_VOLUME) * 100)}%`,
+                    } as CSSProperties
+                  }
+                  onChange={(event) => {
+                    bgm.change(Number(event.currentTarget.value) / 100);
+                    setBgmVolume(bgm.read());
+                  }}
+                />
+                <small>경기 중에만 나옵니다. 100%가 기본이고 최대 300%입니다.</small>
+              </>
+            )}
           </>
         )}
         <div className="microphone-level">
