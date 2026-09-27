@@ -91,9 +91,17 @@ export interface SdkRoom {
   removeAllListeners(event?: string): unknown;
 }
 
+/**
+ * S15P21C204-408. 서버가 참가자를 내보내면(연습→경기 전환의 회수) SDK 는 이 값대로 로컬 트랙을
+ * stop() 한다. 기본값 true 는 가공 얼굴 Canvas track 과 마이크를 끝내 버려, 다음 세대가 끝난
+ * 트랙을 다시 게시한다(게시 0 fps, 상대 화면은 회색 판). 트랙 수명은 D가 정리한다.
+ */
+export type SdkRoomOptions = Readonly<{ stopLocalTrackOnUnpublish: false }>;
+export const SDK_ROOM_OPTIONS: SdkRoomOptions = Object.freeze({ stopLocalTrackOnUnpublish: false });
+
 /** 어댑터가 실제로 쓰는 SDK 표면만 좁게 적는다. */
 export type LiveKitModule = Readonly<{
-  Room: new () => SdkRoom;
+  Room: new (options?: SdkRoomOptions) => SdkRoom;
   Track: Readonly<{ Source: SdkTrackSourceEnum }>;
 }>;
 
@@ -288,7 +296,7 @@ export function createLiveKitAdapter(
         split = next;
         return next.port;
       }
-      const room = new sdk.Room();
+      const room = new sdk.Room(SDK_ROOM_OPTIONS);
       const state: RoomState = {
         room,
         publisherMode: false,

@@ -92,10 +92,12 @@ function publication(trackSid: string) {
 
 function harness() {
   const rooms: ReturnType<typeof fakeRoom>[] = [];
+  const roomOptions: unknown[] = [];
   const added: RemoteTrack[] = [];
   const removed: string[] = [];
   const sdk: LiveKitModule = {
-    Room: function Room(this: unknown) {
+    Room: function Room(this: unknown, options?: unknown) {
+      roomOptions.push(options);
       const room = fakeRoom();
       rooms.push(room);
       return room as unknown as SdkRoom;
@@ -106,10 +108,17 @@ function harness() {
     onRemoteTrack: (track) => added.push(track),
     onRemoteTrackRemoved: (trackSid) => removed.push(trackSid),
   };
-  return { adapter: createLiveKitAdapter(sdk, hooks), rooms, added, removed };
+  return { adapter: createLiveKitAdapter(sdk, hooks), rooms, roomOptions, added, removed };
 }
 
 describe('livekit adapter · 연결 수명', () => {
+  it('서버가 내보낸 연결이 가공 얼굴·마이크 트랙을 멈추지 않게 Room 을 만든다', () => {
+    // S15P21C204-408. 기본값이면 연습 회수 때 SDK 가 Canvas track 을 stop() 해 경기 게시가 0 fps 가 된다.
+    const { adapter, roomOptions } = harness();
+    adapter.createRoom();
+    expect(roomOptions).toEqual([{ stopLocalTrackOnUnpublish: false }]);
+  });
+
   it('connect는 승인 URL·token과 autoSubscribe 설정을 그대로 넘긴다', async () => {
     const { adapter, rooms } = harness();
     const port = adapter.createRoom();
