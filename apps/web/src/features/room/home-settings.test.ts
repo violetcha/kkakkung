@@ -40,11 +40,12 @@ describe('home settings', () => {
       normalizeHomeSettings({
         quality: 'low',
         volume: 1.7,
-        bgmVolume: -0.5,
+        bgmVolume: 7,
         muted: true,
         backgroundMotion: false,
       }),
-    ).toEqual({ quality: 'low', volume: 1, bgmVolume: 0, muted: true, backgroundMotion: false });
+    ).toEqual({ quality: 'low', volume: 1, bgmVolume: 3, muted: true, backgroundMotion: false });
+    expect(normalizeHomeSettings({ bgmVolume: -0.5 }).bgmVolume).toBe(0);
     expect(
       normalizeHomeSettings({ quality: 'ultra', volume: 'loud', bgmVolume: 'max', muted: 'yes' }),
     ).toEqual(DEFAULT_HOME_SETTINGS);
@@ -60,7 +61,7 @@ describe('home settings', () => {
     const value = {
       quality: 'low',
       volume: 0.25,
-      bgmVolume: 0.6,
+      bgmVolume: 2.5,
       muted: false,
       backgroundMotion: false,
     } as const;

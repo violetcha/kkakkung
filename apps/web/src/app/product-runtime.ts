@@ -66,10 +66,14 @@ import type { RuntimeMetrics } from './runtime-metrics';
 import {
   DEFAULT_AUDIO_PREFERENCES,
   normalizeAudioPreferences,
-  unitGain,
   type AudioPreferences,
 } from '../features/media/audio-preferences';
-import { createMatchBgm, DEFAULT_BGM_VOLUME, type MatchBgm } from '../features/media/match-bgm';
+import {
+  bgmVolumeValue,
+  createMatchBgm,
+  DEFAULT_BGM_VOLUME,
+  type MatchBgm,
+} from '../features/media/match-bgm';
 import { createParticipationLifetime } from './SessionRuntime';
 import { INITIAL_DEVICES, deviceReady } from '../features/game/flow/device-readiness';
 import { practicePresenter } from '../features/game/flow/practice-presenter';
@@ -1634,11 +1638,11 @@ export function bindProductRoom(
       syncBgm();
     },
     playTestTone: () => bridge.runtime.playTestTone(),
-    /** 경기 배경음 음량(0–1). 듣는 음량에 곱한다. 이 방에서만 유효하다. */
+    /** 경기 배경음 음량(0–3, 1 = 100%). 이 방에서만 유효하다. */
     getBgmVolume: () => bgmVolume,
     setBgmVolume(value: number) {
       if (!active || snapshot.lost) return;
-      bgmVolume = unitGain(value);
+      bgmVolume = bgmVolumeValue(value);
       syncBgm();
     },
     quality: (value: QualityPreset) => quality.select(value),

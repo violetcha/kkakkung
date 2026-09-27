@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { Role } from '@kkakkung/protocol/game-schema';
 import type { HomeSettings } from '../../room/home-settings';
 import type { QualityPreset } from '../scene/quality-presets';
+import { MAX_BGM_VOLUME } from '../../media/match-bgm';
 
 /**
  * 접히는 상자로 쓰이던 화면이 설정 창 안으로 들어올 때 쓴다. 창은 갈래 이름이 이미 제목이라
@@ -238,13 +239,13 @@ export function SoundPane({
               type="range"
               aria-label="배경음 음량"
               min={0}
-              max={100}
+              max={MAX_BGM_VOLUME * 100}
               step={1}
               value={Math.round(settings.bgmVolume * 100)}
               disabled={settings.muted}
               style={
                 {
-                  '--range-fill': `${Math.round(settings.bgmVolume * 100)}%`,
+                  '--range-fill': `${Math.round((settings.bgmVolume / MAX_BGM_VOLUME) * 100)}%`,
                 } as React.CSSProperties
               }
               onChange={(event) => onChange({ bgmVolume: Number(event.target.value) / 100 })}
@@ -265,7 +266,10 @@ export function SoundPane({
           </dd>
         </div>
       </dl>
-      <p className="pause-note">배경음은 경기 중에만 나오고, 듣는 음량에 비례해 커집니다.</p>
+      <p className="pause-note">
+        배경음은 경기 중에만 나옵니다. 100%가 기본 크기이고 최대 300%까지 키울 수 있으며, 듣는
+        음량에 비례합니다.
+      </p>
       {live}
     </>
   );

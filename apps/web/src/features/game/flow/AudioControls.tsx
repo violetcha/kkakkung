@@ -6,6 +6,7 @@ import type {
   LocalAudioStatus,
   TestToneResult,
 } from '../../media/audio-preferences';
+import { MAX_BGM_VOLUME } from '../../media/match-bgm';
 
 type Participant = Readonly<{ playerId: string; nickname: string }>;
 export function AudioControls({
@@ -95,16 +96,20 @@ export function AudioControls({
                   id={id + '-bgm'}
                   type="range"
                   min="0"
-                  max="100"
+                  max={MAX_BGM_VOLUME * 100}
                   step="1"
                   value={Math.round(bgmVolume * 100)}
-                  style={{ '--range-fill': `${Math.round(bgmVolume * 100)}%` } as CSSProperties}
+                  style={
+                    {
+                      '--range-fill': `${Math.round((bgmVolume / MAX_BGM_VOLUME) * 100)}%`,
+                    } as CSSProperties
+                  }
                   onChange={(event) => {
                     bgm.change(Number(event.currentTarget.value) / 100);
                     setBgmVolume(bgm.read());
                   }}
                 />
-                <small>경기 중에만 나오고, 듣는 음량에 비례해 커집니다.</small>
+                <small>경기 중에만 나옵니다. 100%가 기본이고 최대 300%입니다.</small>
               </>
             )}
           </>

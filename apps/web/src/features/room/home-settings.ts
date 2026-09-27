@@ -1,14 +1,14 @@
 // S15P21C204-295. 홈 옵션 패널의 설정. 이 기기에만 남고(localStorage) 서버로 가지 않는다.
 // 입장할 때 런타임에 한 번 적용한다: 화면 품질은 quality(), 소리는 setAudioPreferences().
 import { unitGain } from '../media/audio-preferences';
-import { DEFAULT_BGM_VOLUME } from '../media/match-bgm';
+import { bgmVolumeValue, DEFAULT_BGM_VOLUME } from '../media/match-bgm';
 import type { QualityPreset } from '../game/scene/quality-presets';
 
 export type HomeSettings = Readonly<{
   quality: QualityPreset;
   /** 0–1. 원격 얼굴·음성과 안내음의 기본 음량. */
   volume: number;
-  /** 0–1. 경기 배경음 음량. 듣는 음량에 곱한다. */
+  /** 0–3. 경기 배경음 음량. 1 이 기준(100%)이고 최대 세 배(300%)다. */
   bgmVolume: number;
   muted: boolean;
   /** 홈 배경 복도의 움직임과 조명 깜빡임. 기기의 동작 줄이기 설정이 더 우선한다. */
@@ -46,7 +46,7 @@ export function normalizeHomeSettings(value: unknown): HomeSettings {
       typeof object.volume === 'number' ? unitGain(object.volume) : DEFAULT_HOME_SETTINGS.volume,
     bgmVolume:
       typeof object.bgmVolume === 'number'
-        ? unitGain(object.bgmVolume)
+        ? bgmVolumeValue(object.bgmVolume)
         : DEFAULT_HOME_SETTINGS.bgmVolume,
     muted: object.muted === true,
     backgroundMotion: object.backgroundMotion !== false,
