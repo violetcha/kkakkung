@@ -1074,7 +1074,11 @@ class Coordinator implements MediaCoordinatorRuntime {
       code === 'POLICY_UNKNOWN' ? 'policy-unknown' : 'connection-lost',
     );
     this.emitFailure(g, code);
-    if (code === 'POLICY_UNKNOWN') this.runtime.lock('READINESS_UNCONFIRMED');
+    // S15P21C204-406. 구독 상태를 모르면 그 경기만 무효로 하고, 그 경기의 미디어를 모두 회수한다
+    // (MEDIA_FAILED → 방이 경기를 끝내며 세대를 회수). 예전에는 여기서 서버 전체 readiness 를
+    // 잠가, LiveKit 이 1초 넘게 걸려 답한 구독 변경 하나로 모든 방의 입장이 재시작 전까지 막혔다.
+    // 회수가 확인되면 모르던 구독도 함께 사라진다. 회수를 확인하지 못하면 회수 미해결 잠금이,
+    // 방에 실패를 전하지 못하면 emitFailure 의 잠금이 지금처럼 새 입장을 막는다.
   }
   private emitFailure(g: Generation, code: MediaFailureCode): void {
     const failures = this.failures.get(g) ?? new Set<MediaFailureCode>();

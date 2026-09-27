@@ -1279,3 +1279,25 @@ it('reports whether the operations journal can write once initialized', async ()
   await f.coordinator.close();
   expect(f.coordinator.journalWritable()).toBeNull();
 });
+
+// S15P21C204-406. 구독 상태를 모르게 된 한 경기 때문에 서버 전체가 잠기지 않는다. 그 경기는 방이
+// 무효로 하고 미디어를 회수한다. 예전에는 readiness 가 재시작 전까지 LOCKED 였다(운영 2026-09-27).
+it('keeps the server open when one match loses track of a subscription', async () => {
+  const f = await fixture();
+  await open(f);
+  alive(f, game(2));
+  const first = await prepare(f, request('p1'));
+  const second = await prepare(f, request('p2'));
+  f.updateSubscriptions.mockRejectedValue(new Error('SUBSCRIPTION_RESPONSE_LOST'));
+  f.publish(first.grant, 'p1');
+  f.publish(second.grant, 'p2');
+  await f.coordinator.reconcile();
+  await vi.waitFor(() =>
+    expect(f.deps.enqueueControl).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'MEDIA_FAILED', code: 'POLICY_UNKNOWN' }),
+    ),
+  );
+  expect(f.coordinator.getReadiness().state).toBe('READY');
+  expect(f.coordinator.getOperations().getStatus().admission).toBe('OPEN');
+  expect(f.coordinator.canIssue()).toBe(true);
+});
